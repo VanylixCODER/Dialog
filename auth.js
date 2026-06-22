@@ -1,5 +1,8 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { query } from "./db.js";
+import { cacheGet, cacheSet, cacheDel } from "./cache.js";
+
+const SESS_TTL = 3600; // профиль по токену кэшируем на час
 
 function hashPassword(password, salt = randomBytes(16).toString("hex")) {
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -50,16 +53,22 @@ export async function login({ login, password }) {
   return { token, profile: { login: user.login, name: user.name } };
 }
 
-// Профиль по токену или null — джойн сессии с пользователем.
+// Профиль по токену или null — сначала Redis, потом джойн сессии с пользователем.
 export async function userByToken(token) {
   if (!token) return null;
+  const cached = await cacheGet("sess:" + token);
+  if (cached) { try { return JSON.parse(cached); } catch { /* битый кэш — читаем БД */ } }
+
   const rows = await query(
     "SELECT u.login, u.name FROM sessions s JOIN users u ON u.login = s.login WHERE s.token = ?",
     [token]
   );
-  return rows[0] || null;
+  const profile = rows[0] || null;
+  if (profile) await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
+  return profile;
 }
 
 export async function logout(token) {
   await query("DELETE FROM sessions WHERE token = ?", [token]);
+  await cacheDel("sess:" + token);
 }

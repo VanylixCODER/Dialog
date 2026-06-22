@@ -1,4 +1,8 @@
 import mysql from "mysql2/promise";
+import { cacheGet, cacheSet, cacheDel } from "./cache.js";
+
+const HIST_TTL = 60;              // история комнаты живёт в кэше до 60с
+const HIST_MAX_CACHE = 256 * 1024; // не кэшируем тяжёлые (медиа) комнаты
 
 // Подключение через DATABASE_URL либо стандартный URI.
 // По умолчанию — локальный контейнер dialog-mysql.
@@ -77,18 +81,25 @@ export async function saveMessage(m) {
      VALUES (?,?,?,?,?,?,?,?)`,
     [m.room, m.fromLogin, m.name, m.ts, m.type, m.text, m.media, m.mediaName]
   );
+  await cacheDel("hist:" + m.room); // история комнаты изменилась — сбрасываем кэш
   return result.insertId;
 }
 
 // Последние `limit` сообщений комнаты в хронологическом порядке.
 export async function recentMessages(room, limit = 100) {
+  const cached = await cacheGet("hist:" + room);
+  if (cached) { try { return JSON.parse(cached); } catch { /* битый кэш — читаем БД */ } }
+
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100)); // безопасный целый LIMIT
   const rows = await query(
     `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName
      FROM messages WHERE room = ? ORDER BY id DESC LIMIT ${lim}`,
     [room]
   );
-  return rows.reverse();
+  rows.reverse();
+  const json = JSON.stringify(rows);
+  if (json.length < HIST_MAX_CACHE) await cacheSet("hist:" + room, json, HIST_TTL);
+  return rows;
 }
 
 // Проверка доступности БД с ретраями (контейнер мог ещё подниматься).
