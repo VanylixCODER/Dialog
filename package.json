@@ -4,12 +4,16 @@
   "description": "Простой мессенджер с видеозвонками, демонстрацией экрана и медиа",
   "type": "module",
   "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
+    "mysql2": "^3.22.5",
     "socket.io": "^4.7.5"
   }
 }

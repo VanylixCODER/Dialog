@@ -1,0 +1,21 @@
+services:
+  db:
+    image: mysql:8
+    container_name: dialog-mysql
+    environment:
+      MYSQL_DATABASE: dialog
+      MYSQL_USER: dialog
+      MYSQL_PASSWORD: dialog
+      MYSQL_ROOT_PASSWORD: rootpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - dialog_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-udialog", "-pdialog"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dialog_mysql_data:

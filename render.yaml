@@ -1,0 +1,16 @@
+# Render Blueprint — деплой Dialog как Docker-сервиса.
+# В дашборде Render: New → Blueprint → выбрать репозиторий.
+# DATABASE_URL задаётся вручную (секрет) из строки подключения Aiven MySQL.
+services:
+  - type: web
+    name: dialog
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: DB_SSL
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
