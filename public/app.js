@@ -288,9 +288,39 @@ const call = {
 
 async function getLocalStream() {
   if (call.localStream) return call.localStream;
-  call.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const err = new Error("INSECURE");
+    err.name = "InsecureContext";
+    throw err;
+  }
+  try {
+    call.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (e) {
+    // запасной путь — без видео, только микрофон
+    try {
+      call.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      throw e; // отдаём исходную причину
+    }
+  }
   addTile("me", myName + " (вы)", call.localStream, true);
   return call.localStream;
+}
+
+// Понятный текст по типу ошибки доступа к медиа
+function mediaErrorMessage(e) {
+  if (!navigator.mediaDevices || e.name === "InsecureContext")
+    return "Браузер не даёт доступ к камере/микрофону.\nОткрой сайт в обычном Chrome или Firefox (не во встроенном превью редактора).";
+  switch (e.name) {
+    case "NotAllowedError":
+      return "Доступ к камере/микрофону запрещён.\nНажми на 🔒/значок камеры в адресной строке, разреши доступ и обнови страницу.";
+    case "NotFoundError":
+      return "Камера или микрофон на устройстве не найдены.";
+    case "NotReadableError":
+      return "Камера/микрофон заняты другим приложением (закрой Zoom/Meet/др. и попробуй снова).";
+    default:
+      return "Не удалось получить камеру/микрофон: " + (e.name || e.message);
+  }
 }
 
 function ensurePeer(peerId, peerName) {
@@ -336,8 +366,13 @@ function removePeerConn(peerId) {
 $("startCallBtn").onclick = () => { call.active ? endCall() : joinCall(); };
 
 async function joinCall() {
-  try { await getLocalStream(); }
-  catch { alert("Нет доступа к камере/микрофону. На доступе по сети нужен HTTPS."); return; }
+  try {
+    await getLocalStream();
+  } catch (e) {
+    // Не удалось получить камеру/микрофон — предлагаем войти зрителем
+    const ok = confirm(mediaErrorMessage(e) + "\n\nВойти в звонок без камеры и микрофона (только смотреть и слышать других)?");
+    if (!ok) return;
+  }
   call.active = true;
   $("callOverlay").classList.remove("hidden");
   $("startCallBtn").classList.add("in-call");
@@ -436,11 +471,12 @@ $("shareScreen").onclick = async () => {
   try { call.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }); }
   catch { return; }
   const track = call.screenStream.getVideoTracks()[0];
-  for (const { pc } of call.pcs.values()) {
-    const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
-    if (sender) await sender.replaceTrack(track);
+  for (const st of call.pcs.values()) {
+    const sender = st.pc.getSenders().find((s) => s.track && s.track.kind === "video");
+    if (sender) await sender.replaceTrack(track);          // есть камера — подменяем
+    else st.screenSender = st.pc.addTrack(track, call.screenStream); // нет — добавляем дорожку
   }
-  document.querySelector("#tile-me video").srcObject = call.screenStream;
+  addTile("me", myName + " (вы)", call.screenStream, true); // создаст тайл, если его не было
   call.sharing = true;
   $("shareScreen").classList.add("active");
   track.onended = () => stopShare();
@@ -448,11 +484,17 @@ $("shareScreen").onclick = async () => {
 async function stopShare() {
   if (call.screenStream) { call.screenStream.getTracks().forEach((t) => t.stop()); call.screenStream = null; }
   const camTrack = call.localStream?.getVideoTracks()[0];
-  for (const { pc } of call.pcs.values()) {
-    const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
-    if (sender && camTrack) await sender.replaceTrack(camTrack);
+  for (const st of call.pcs.values()) {
+    if (st.screenSender) {                                  // дорожку добавляли — убираем
+      try { st.pc.removeTrack(st.screenSender); } catch {}
+      st.screenSender = null;
+    } else {
+      const sender = st.pc.getSenders().find((s) => s.track && s.track.kind === "video");
+      if (sender && camTrack) await sender.replaceTrack(camTrack);
+    }
   }
-  document.querySelector("#tile-me video").srcObject = call.localStream;
+  if (call.localStream) addTile("me", myName + " (вы)", call.localStream, true);
+  else removeTile("me");
   call.sharing = false;
   $("shareScreen").classList.remove("active");
 }
