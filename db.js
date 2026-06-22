@@ -60,6 +60,14 @@ export async function initSchema() {
       KEY idx_messages_room (room, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token       VARCHAR(64) PRIMARY KEY,
+      login       VARCHAR(24) NOT NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_sessions_login (login)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
 }
 
 // --- История сообщений ---

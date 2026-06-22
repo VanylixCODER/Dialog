@@ -405,6 +405,18 @@ body {
 .toast-close:hover { color: var(--text); }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(124,92,255,0.5);} 50% { box-shadow: 0 0 0 14px rgba(124,92,255,0);} }
 
+/* ---------- Индикатор соединения ---------- */
+.conn-status {
+  position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%);
+  z-index: 200;
+  background: linear-gradient(135deg, #ff4d6d, #ff2d52);
+  color: white; font-size: 13px; font-weight: 500;
+  padding: 8px 18px; border-radius: 0 0 14px 14px;
+  box-shadow: 0 8px 24px rgba(255,45,82,0.4);
+  transition: transform 0.3s cubic-bezier(0.2,0.8,0.2,1);
+}
+.conn-status.show { transform: translate(-50%, 0); }
+
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
