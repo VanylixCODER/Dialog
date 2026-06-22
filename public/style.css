@@ -28,6 +28,7 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -42,6 +43,7 @@ body {
 /* ---------- Login ---------- */
 .login {
   height: 100vh;
+  height: 100dvh;
   display: grid;
   place-items: center;
   position: relative;
@@ -176,7 +178,7 @@ body {
 .welcome b { color: var(--accent-2); }
 
 /* ---------- App layout ---------- */
-.app { display: grid; grid-template-columns: 288px 1fr; height: 100vh; }
+.app { display: grid; grid-template-columns: 288px 1fr; height: 100vh; height: 100dvh; }
 
 .sidebar {
   background: linear-gradient(180deg, var(--bg-2), var(--bg));
@@ -214,9 +216,10 @@ body {
 .me-name { font-weight: 500; font-size: 14px; }
 
 /* ---------- Chat ---------- */
-.chat { display: flex; flex-direction: column; height: 100vh; position: relative; background: var(--bg); }
+.chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; position: relative; background: var(--bg); }
 .chat-head {
   padding: 15px 28px; border-bottom: 1px solid var(--border);
+  padding-top: calc(15px + env(safe-area-inset-top));
   background: rgba(13,13,21,0.7); backdrop-filter: blur(12px);
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
@@ -268,6 +271,7 @@ body {
 .composer {
   display: flex; align-items: flex-end; gap: 8px;
   padding: 16px 20px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: rgba(13,13,21,0.7); backdrop-filter: blur(12px);
 }
@@ -340,7 +344,8 @@ body {
 }
 .call-topbar {
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 18px; color: var(--text-dim); font-size: 14px;
+  padding: 18px; padding-top: calc(18px + env(safe-area-inset-top));
+  color: var(--text-dim); font-size: 14px;
 }
 .call-count {
   background: var(--panel-2); border: 1px solid var(--border);
@@ -371,7 +376,7 @@ body {
 .tile .tile-badge { position: absolute; top: 12px; right: 14px; font-size: 16px; }
 .tile.speaking { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 16px 40px rgba(124,92,255,0.45); }
 
-.call-controls { display: flex; justify-content: center; gap: 16px; padding: 26px; }
+.call-controls { display: flex; justify-content: center; gap: 16px; padding: 26px; padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
 .call-btn {
   width: 62px; height: 62px; border-radius: 50%;
   border: 1px solid var(--border); font-size: 24px; cursor: pointer;
