@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dialog — мессенджер</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Экран входа -->
+  <div id="login" class="login">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">◆</div>
+        <h1>Dialog</h1>
+      </div>
+      <p class="brand-sub">Чат · Групповые видеозвонки · Демонстрация экрана</p>
+
+      <!-- Шаг 1: аутентификация -->
+      <div id="authStage">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-mode="login">Вход</button>
+          <button class="auth-tab" data-mode="register">Регистрация</button>
+        </div>
+
+        <!-- Форма входа -->
+        <form id="loginForm" class="auth-form">
+          <input class="field" name="login" type="text" placeholder="Логин" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" placeholder="Пароль" autocomplete="current-password" />
+          <div class="form-error" id="loginError"></div>
+          <button type="submit" class="btn-primary">Войти</button>
+        </form>
+
+        <!-- Форма регистрации -->
+        <form id="registerForm" class="auth-form hidden">
+          <input class="field" name="name" type="text" placeholder="Отображаемое имя" maxlength="32" autocomplete="name" />
+          <input class="field" name="login" type="text" placeholder="Логин (латиница, 3–24)" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" placeholder="Пароль (от 6 символов)" autocomplete="new-password" />
+          <input class="field" name="password2" type="password" placeholder="Повторите пароль" autocomplete="new-password" />
+          <div class="form-error" id="registerError"></div>
+          <button type="submit" class="btn-primary">Создать аккаунт</button>
+        </form>
+      </div>
+
+      <!-- Шаг 2: выбор комнаты -->
+      <div id="roomStage" class="hidden">
+        <div class="welcome">Привет, <b id="welcomeName">—</b>! 👋</div>
+        <input id="roomInput" class="field" type="text" placeholder="Комната (например: team)" maxlength="32" autocomplete="off" />
+        <button id="joinBtn" class="btn-primary">Войти в комнату</button>
+        <button id="logoutBtn" class="btn-ghost">Выйти из аккаунта</button>
+      </div>
+    </div>
+    <div class="login-bg"></div>
+  </div>
+
+  <!-- Основной интерфейс -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="brand-logo small">◆</div>
+        <div>
+          <div class="room-name" id="roomLabel">—</div>
+          <div class="room-sub">комната</div>
+        </div>
+      </div>
+      <div class="members-title">Участники</div>
+      <ul id="members" class="members"></ul>
+      <div class="me-card">
+        <div class="avatar" id="myAvatar">?</div>
+        <div class="me-name" id="myName">—</div>
+      </div>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-head">
+        <div>
+          <div class="chat-title" id="chatTitle">Общий чат</div>
+          <div class="typing" id="typingIndicator"></div>
+        </div>
+        <button class="call-start" id="startCallBtn" title="Групповой видеозвонок">📹 Звонок</button>
+      </header>
+
+      <div id="messages" class="messages"></div>
+
+      <div class="composer">
+        <button class="icon-btn" id="emojiBtn" title="Эмодзи">😊</button>
+        <button class="icon-btn" id="attachBtn" title="Фото / видео / гиф">📎</button>
+        <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
+        <div class="input-wrap">
+          <textarea id="msgInput" rows="1" placeholder="Напишите сообщение…"></textarea>
+        </div>
+        <button class="icon-btn send" id="sendBtn" title="Отправить">➤</button>
+      </div>
+
+      <!-- Эмодзи-пикер -->
+      <div id="emojiPicker" class="emoji-picker hidden">
+        <div class="emoji-tabs" id="emojiTabs"></div>
+        <div class="emoji-grid" id="emojiGrid"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Окно группового звонка -->
+  <div id="callOverlay" class="call-overlay hidden">
+    <div class="call-topbar">
+      <span id="callRoomLabel">Звонок</span>
+      <span class="call-count" id="callCount">1</span>
+    </div>
+    <div id="videoGrid" class="video-grid"></div>
+    <div class="call-controls">
+      <button class="call-btn" id="toggleMic" title="Микрофон">🎙️</button>
+      <button class="call-btn" id="toggleCam" title="Камера">📷</button>
+      <button class="call-btn" id="shareScreen" title="Демонстрация экрана">🖥️</button>
+      <button class="call-btn end" id="hangUp" title="Выйти из звонка">📞</button>
+    </div>
+  </div>
+
+  <!-- Тост: кто-то начал звонок -->
+  <div id="callToast" class="call-toast hidden">
+    <div class="avatar" id="toastAvatar">?</div>
+    <div class="toast-body">
+      <div class="toast-name" id="toastName">—</div>
+      <div class="toast-sub">начал групповой звонок</div>
+    </div>
+    <button class="toast-join" id="toastJoin">Войти</button>
+    <button class="toast-close" id="toastClose">✕</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="emoji.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
