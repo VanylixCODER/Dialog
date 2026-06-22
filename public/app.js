@@ -167,7 +167,7 @@ socket.on("system", (text) => {
 socket.on("message", (m) => renderMessage(m));
 
 function renderMessage(m, scroll = true) {
-  const mine = m.from === socket.id;
+  const mine = profile && m.fromLogin === profile.login;
   const wrap = document.createElement("div");
   wrap.className = "msg" + (mine ? " me" : "");
 

@@ -14,14 +14,28 @@
 ## Стек
 
 - Бэкенд: Node.js, Express, Socket.IO
+- База данных: MySQL 8 (через `mysql2`) — пользователи и история сообщений
 - Фронтенд: чистый HTML/CSS/JS + WebRTC
-- Аутентификация: `crypto.scrypt`, токены в памяти, профили в `data/users.json`
+- Аутентификация: `crypto.scrypt`, токены сессий в памяти
+
+## База данных
+
+Нужен MySQL 8. Проще всего через Docker:
+
+```bash
+docker compose up -d        # поднимет MySQL на localhost:3306
+```
+
+Строка подключения по умолчанию — `mysql://dialog:dialog@localhost:3306/dialog`.
+Переопределяется переменной `DATABASE_URL`. Таблицы (`users`, `messages`) создаются
+автоматически при старте сервера.
 
 ## Запуск
 
 ```bash
 npm install
-npm start
+docker compose up -d        # база данных
+npm start                   # сервер
 ```
 
 Откройте `https://localhost:3000` (или `http://localhost:3000`, если нет сертификата).
@@ -48,3 +62,4 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 ## Переменные окружения
 
 - `PORT` — порт сервера (по умолчанию `3000`).
+- `DATABASE_URL` — строка подключения к MySQL (по умолчанию `mysql://dialog:dialog@localhost:3306/dialog`).
