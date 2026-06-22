@@ -220,7 +220,8 @@ body {
   background: rgba(13,13,21,0.7); backdrop-filter: blur(12px);
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-.chat-title { font-weight: 600; font-size: 17px; }
+.chat-head > div:first-child { min-width: 0; flex: 1; }
+.chat-title { font-weight: 600; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-start {
   border: none; cursor: pointer;
   background: var(--grad); background-size: 180% 180%;
