@@ -110,6 +110,32 @@ socket.on("auth-error", (msg) => {
   location.reload();
 });
 
+// --- Состояние соединения + автоперезаход в комнату после реконнекта ---
+// Socket.IO сам переподключается, но это НОВОЕ соединение — сервер не знает,
+// в какой мы комнате. Поэтому на каждый connect заново шлём join.
+socket.on("connect", () => {
+  setConnStatus("online");
+  if (token && myRoom) socket.emit("join", { token, room: myRoom });
+});
+socket.on("disconnect", () => setConnStatus("offline"));
+socket.io.on("reconnect_attempt", () => setConnStatus("connecting"));
+
+function setConnStatus(state) {
+  let el = document.getElementById("connStatus");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "connStatus";
+    el.className = "conn-status";
+    document.body.appendChild(el);
+  }
+  if (state === "online") {
+    el.classList.remove("show");
+  } else {
+    el.classList.add("show");
+    el.textContent = state === "connecting" ? "Переподключение…" : "Нет связи — переподключаемся…";
+  }
+}
+
 function initials(n) { return (n || "?").trim().charAt(0).toUpperCase(); }
 
 // ====================== УЧАСТНИКИ ======================

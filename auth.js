@@ -1,9 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { query } from "./db.js";
 
-// token -> login (сессии живут в памяти, сбрасываются при рестарте)
-const sessions = new Map();
-
 function hashPassword(password, salt = randomBytes(16).toString("hex")) {
   const hash = scryptSync(password, salt, 64).toString("hex");
   return { salt, hash };
@@ -14,9 +11,10 @@ function verifyPassword(password, salt, expectedHash) {
   const b = Buffer.from(expectedHash, "hex");
   return a.length === b.length && timingSafeEqual(a, b);
 }
-function issueToken(login) {
+// Токен в БД — переживает рестарт/сон сервера (важно для Render free).
+async function issueToken(login) {
   const token = randomBytes(24).toString("hex");
-  sessions.set(token, login);
+  await query("INSERT INTO sessions (token, login) VALUES (?, ?)", [token, login]);
   return token;
 }
 
@@ -37,7 +35,7 @@ export async function register({ login, name, password }) {
     "INSERT INTO users (login, name, salt, hash) VALUES (?, ?, ?, ?)",
     [login, name, salt, hash]
   );
-  const token = issueToken(login);
+  const token = await issueToken(login);
   return { token, profile: { login, name } };
 }
 
@@ -48,18 +46,20 @@ export async function login({ login, password }) {
   if (!user || !verifyPassword(password || "", user.salt, user.hash)) {
     return { error: "Неверный логин или пароль" };
   }
-  const token = issueToken(login);
+  const token = await issueToken(login);
   return { token, profile: { login: user.login, name: user.name } };
 }
 
-// Профиль по токену или null. Подтягиваем актуальное имя из БД.
+// Профиль по токену или null — джойн сессии с пользователем.
 export async function userByToken(token) {
-  const login = sessions.get(token);
-  if (!login) return null;
-  const rows = await query("SELECT login, name FROM users WHERE login = ?", [login]);
+  if (!token) return null;
+  const rows = await query(
+    "SELECT u.login, u.name FROM sessions s JOIN users u ON u.login = s.login WHERE s.token = ?",
+    [token]
+  );
   return rows[0] || null;
 }
 
-export function logout(token) {
-  sessions.delete(token);
+export async function logout(token) {
+  await query("DELETE FROM sessions WHERE token = ?", [token]);
 }
