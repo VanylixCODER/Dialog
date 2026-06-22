@@ -63,3 +63,6 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 
 - `PORT` — порт сервера (по умолчанию `3000`).
 - `DATABASE_URL` — строка подключения к MySQL (по умолчанию `mysql://dialog:dialog@localhost:3306/dialog`).
+- `REDIS_URL` — необязательная строка подключения к Redis для кэша сессий и истории
+  (напр. `redis://localhost:6379` или `rediss://...` для managed). Не задан — кэш выключен,
+  работает чистый MySQL.
