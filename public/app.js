@@ -329,6 +329,9 @@ async function getLocalStream() {
       throw e; // отдаём исходную причину
     }
   }
+  // Камера выключена по умолчанию — пользователь включит её кнопкой 📷
+  call.localStream.getVideoTracks().forEach((t) => (t.enabled = false));
+  call.camOn = false;
   addTile("me", myName + " (вы)", call.localStream, true);
   return call.localStream;
 }
@@ -405,6 +408,7 @@ async function joinCall() {
   $("startCallBtn").textContent = "✕ Выйти";
   hideToast();
   updateCallCount();
+  $("toggleCam").classList.toggle("off", !call.camOn); // отразить, что камера выключена
   // Сообщаем комнате — кто уже в звонке, тот установит соединение с нами.
   socket.emit("call-invite");
 }
