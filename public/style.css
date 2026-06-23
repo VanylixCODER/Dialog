@@ -365,14 +365,103 @@ input, textarea, button { caret-color: var(--green); }
 }
 .conn-status.show { transform: translate(-50%, 0); }
 
+/* ---------- Селектор языка ---------- */
+.lang-select {
+  position: absolute; top: 14px; right: 14px;
+  background: var(--bg-2); color: var(--green); border: 1px solid var(--border);
+  font-family: inherit; font-size: 12px; padding: 4px 6px; border-radius: 2px; cursor: pointer; outline: none;
+}
+.lang-select.small { position: static; padding: 3px 4px; font-size: 11px; }
+.lang-select:focus { border-color: var(--green); box-shadow: var(--glow); }
+
+/* ---------- Недавние / избранные комнаты ---------- */
+.room-list { margin-top: 16px; text-align: left; }
+.room-list-title { color: var(--text-dim); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+.room-list-title::before { content: "// "; }
+.room-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.room-chip {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  font-family: inherit; font-size: 12px; padding: 6px 11px; border-radius: 2px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.room-chip:hover { border-color: var(--green); background: var(--panel-2); color: var(--green); }
+.room-chip:active { transform: scale(0.95); }
+
+/* ---------- Кнопки back / fav ---------- */
+.back-btn, .fav-btn {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  font-family: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+  width: 32px; height: 32px; border-radius: 2px; flex-shrink: 0;
+  display: grid; place-items: center; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.back-btn:hover, .fav-btn:hover { border-color: var(--green); color: var(--green); background: var(--panel-2); }
+.fav-btn.on { color: var(--green); border-color: var(--green); text-shadow: var(--glow); }
+.back-btn.mobile-only { display: none; }
+
+/* ---------- Тайлы: аватар + контролы (Discord-стиль) ---------- */
+.tile-avatar {
+  position: absolute; inset: 0; display: none; place-items: center;
+  font-size: clamp(28px, 9vw, 56px); font-weight: 700; color: var(--green);
+  background: radial-gradient(circle at 50% 45%, rgba(0,255,90,0.12), #000 70%);
+  text-shadow: var(--glow); z-index: 1;
+}
+.tile.show-avatar .tile-avatar { display: grid; }
+.tile.show-avatar video { opacity: 0; }
+.tile-ctrl {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(0,8,2,0.75); border: 1px solid var(--border); border-radius: 2px; padding: 4px 6px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.tile:hover .tile-ctrl { opacity: 1; }
+.tctrl-mute { border: none; background: transparent; cursor: pointer; font-size: 14px; padding: 0; }
+.tctrl-mute.muted { filter: grayscale(1) brightness(0.7); }
+.tctrl-vol { width: 70px; accent-color: var(--green); cursor: pointer; }
+
+/* ---------- Окно звонка: оконный режим (ПК) ---------- */
+.win-btn {
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  font-family: inherit; cursor: pointer; font-size: 13px; padding: 2px 8px; border-radius: 2px; margin-left: 8px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.win-btn:hover { border-color: var(--green); color: var(--green); }
+.call-overlay.windowed {
+  inset: auto; right: 24px; bottom: 24px;
+  width: 460px; height: 340px; min-width: 280px; min-height: 220px;
+  border: 1px solid var(--border-strong); box-shadow: var(--glow-soft);
+  resize: both; overflow: hidden; backdrop-filter: blur(2px);
+}
+.call-overlay.windowed .video-grid { grid-template-columns: 1fr; padding: 6px; gap: 6px; }
+.call-overlay.windowed .call-controls { padding: 8px; gap: 8px; }
+.call-overlay.windowed .call-btn { width: 42px; height: 42px; font-size: 17px; }
+.call-overlay.windowed .call-topbar { cursor: move; padding: 8px; }
+.call-topbar { user-select: none; }
+
+.desktop-only { display: inline-flex; }
+.mobile-only { display: none; }
+
+/* ---------- Анимации ---------- */
+.btn-primary, .call-start, .icon-btn, .call-btn, .room-chip, .auth-tab { will-change: transform; }
+.tile { animation: tileIn 0.25s ease; }
+@keyframes tileIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .emoji-picker { width: calc(100vw - 36px); }
+  .emoji-picker { width: calc(100vw - 28px); left: 14px; height: 320px; }
   .video-grid { grid-template-columns: 1fr; }
-  .call-start { padding: 8px 12px; font-size: 12px; }
-  .msg { max-width: 88%; }
+  .call-start { padding: 9px 12px; font-size: 12px; }
+  .msg { max-width: 90%; }
   .messages, .chat-head, .composer { padding-left: 14px; padding-right: 14px; }
+  .desktop-only { display: none !important; }
+  .back-btn.mobile-only { display: grid; }
+  .icon-btn { width: 46px; height: 46px; } /* крупнее тач-таргеты */
+  .call-btn { width: 60px; height: 60px; }
+  .call-controls { gap: 12px; }
+  .tile-ctrl { opacity: 1; } /* на тач — всегда видно */
+  .tctrl-vol { width: 60px; }
+  .lang-select { top: 10px; right: 10px; }
+  .call-overlay.windowed { inset: 0; right: 0; bottom: 0; width: auto; height: auto; resize: none; } /* на мобиле всегда полноэкран */
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -69,11 +69,25 @@ io.on("connection", (socket) => {
   let userName = "Аноним";
   let userLogin = null;
 
+  // Выход из текущей комнаты (с уведомлением остальных)
+  function doLeave() {
+    if (!currentRoom) return;
+    const peers = rooms.get(currentRoom);
+    if (peers) { peers.delete(socket.id); if (peers.size === 0) rooms.delete(currentRoom); }
+    socket.leave(currentRoom);
+    socket.to(currentRoom).emit("peer-left", { id: socket.id, name: userName });
+    io.to(currentRoom).emit("system", { key: "left", name: userName });
+    currentRoom = null;
+  }
+
   socket.on("join", async ({ room, token }) => {
     const profile = await auth.userByToken(token);
-    if (!profile) { socket.emit("auth-error", "Сессия истекла, войдите заново"); return; }
+    if (!profile) { socket.emit("auth-error", "Session expired, sign in again"); return; }
 
-    currentRoom = (room || "lobby").trim().slice(0, 32) || "lobby";
+    const newRoom = (room || "lobby").trim().slice(0, 32) || "lobby";
+    if (currentRoom && currentRoom !== newRoom) doLeave(); // сменил комнату — выходим из старой
+
+    currentRoom = newRoom;
     userName = profile.name; // имя берём из профиля — клиент не может его подделать
     userLogin = profile.login;
 
@@ -81,15 +95,16 @@ io.on("connection", (socket) => {
     socket.join(currentRoom);
     peers.set(socket.id, { name: userName });
 
-    // Историю переписки берём из БД
     try {
       socket.emit("history", await recentMessages(currentRoom, HISTORY_LIMIT));
     } catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", peersList(currentRoom).filter((p) => p.id !== socket.id));
 
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName });
-    io.to(currentRoom).emit("system", `${userName} вошёл в чат`);
+    io.to(currentRoom).emit("system", { key: "joined", name: userName });
   });
+
+  socket.on("leave", () => doLeave());
 
   socket.on("message", async (msg) => {
     if (!currentRoom || !userLogin) return;
@@ -123,15 +138,7 @@ io.on("connection", (socket) => {
     socket.to(currentRoom).emit("call-invite", { from: socket.id, name: userName });
   });
 
-  socket.on("disconnect", () => {
-    if (currentRoom && rooms.has(currentRoom)) {
-      const peers = rooms.get(currentRoom);
-      peers.delete(socket.id);
-      socket.to(currentRoom).emit("peer-left", { id: socket.id, name: userName });
-      io.to(currentRoom).emit("system", `${userName} вышел из чата`);
-      if (peers.size === 0) rooms.delete(currentRoom);
-    }
-  });
+  socket.on("disconnect", () => doLeave());
 });
 
 const PORT = process.env.PORT || 3000;
