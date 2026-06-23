@@ -145,6 +145,7 @@
       <div class="composer">
         <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji" title="Emoji">😊</button>
         <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach" title="Photo / video / gif">📎</button>
+        <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice" title="Voice message">🎤</button>
         <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
         <div class="input-wrap">
           <textarea id="msgInput" rows="1" data-i18n-ph="ph_message" placeholder="Write a message…"></textarea>
@@ -185,6 +186,12 @@
     </div>
     <button class="toast-join" id="toastJoin" data-i18n="toast_join">Join</button>
     <button class="toast-close" id="toastClose">✕</button>
+  </div>
+
+  <!-- Лайтбокс для фото -->
+  <div id="lightbox" class="lightbox hidden">
+    <img id="lightboxImg" alt="" draggable="false" />
+    <div class="lightbox-hint" data-i18n="lb_hint">scroll = zoom · drag = move · Esc = close</div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

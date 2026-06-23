@@ -465,6 +465,7 @@ function renderMessage(m, scroll = true, ping = false) {
   if (m.type === "text") inner += `<div class="bubble">${highlightMentions(linkify(escapeHtml(m.text)))}</div>`;
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="${escapeHtml(m.mediaName)}" /></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
+  else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
   inner += `<div class="time">${fmtTime(m.ts)}</div>`;
   wrap.innerHTML = inner;
   messagesEl.appendChild(wrap);
@@ -513,6 +514,57 @@ $("fileInput").addEventListener("change", (e) => {
   reader.readAsDataURL(file);
   e.target.value = "";
 });
+
+// --- Голосовые сообщения ---
+let mediaRecorder = null, recChunks = [], recStream = null, recTimer = null;
+$("voiceBtn").onclick = async () => {
+  if (mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); return; }
+  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { alert(t("err_mic_voice")); return; }
+  recChunks = [];
+  mediaRecorder = new MediaRecorder(recStream);
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    recStream.getTracks().forEach((tr) => tr.stop());
+    clearInterval(recTimer);
+    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+    resetVoiceBtn();
+    if (blob.size < 600) return; // слишком короткое — игнор
+    if (blob.size > 20 * 1024 * 1024) { alert(t("file_too_big")); return; }
+    const reader = new FileReader();
+    reader.onload = () => socket.emit("message", { type: "audio", media: reader.result, mediaName: "voice" });
+    reader.readAsDataURL(blob);
+  };
+  mediaRecorder.start();
+  let sec = 0;
+  $("voiceBtn").classList.add("recording");
+  $("voiceBtn").textContent = "⏹";
+  recTimer = setInterval(() => { sec++; $("voiceBtn").title = sec + "s"; if (sec >= 120) mediaRecorder.stop(); }, 1000);
+};
+function resetVoiceBtn() {
+  $("voiceBtn").classList.remove("recording");
+  $("voiceBtn").textContent = "🎤";
+  $("voiceBtn").title = t("t_voice");
+  mediaRecorder = null;
+}
+
+// --- Лайтбокс (зум фото) ---
+const lb = $("lightbox"), lbImg = $("lightboxImg");
+let lbScale = 1, lbX = 0, lbY = 0, lbDrag = null;
+function applyLb() { lbImg.style.transform = `translate(${lbX}px,${lbY}px) scale(${lbScale})`; }
+function openLightbox(src) { lbImg.src = src; lbScale = 1; lbX = 0; lbY = 0; applyLb(); lb.classList.remove("hidden"); }
+function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; }
+messagesEl.addEventListener("click", (e) => {
+  const img = e.target.closest(".bubble.media img");
+  if (img) openLightbox(img.src);
+});
+lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+lbImg.addEventListener("wheel", (e) => { e.preventDefault(); lbScale = Math.min(8, Math.max(1, lbScale + (e.deltaY < 0 ? 0.25 : -0.25))); if (lbScale === 1) { lbX = 0; lbY = 0; } applyLb(); }, { passive: false });
+lbImg.addEventListener("dblclick", () => { lbScale = lbScale > 1 ? 1 : 2.5; lbX = 0; lbY = 0; applyLb(); });
+lbImg.addEventListener("pointerdown", (e) => { if (lbScale <= 1) return; lbDrag = { x: e.clientX - lbX, y: e.clientY - lbY }; lbImg.setPointerCapture(e.pointerId); });
+lbImg.addEventListener("pointermove", (e) => { if (!lbDrag) return; lbX = e.clientX - lbDrag.x; lbY = e.clientY - lbDrag.y; applyLb(); });
+lbImg.addEventListener("pointerup", () => (lbDrag = null));
 
 // ====================== ЭМОДЗИ-ПИКЕР ======================
 const picker = $("emojiPicker");
@@ -622,7 +674,7 @@ async function joinCall() {
   updateCallCount();
   $("toggleCam").classList.toggle("off", !call.camOn);
   $("toggleMic").classList.toggle("off", !call.micOn);
-  socket.emit("call-invite");
+  socket.emit("call-invite", { title: curTitle });
 }
 function endCall() {
   for (const id of [...call.pcs.keys()]) removePeerConn(id);
@@ -649,6 +701,13 @@ function setCallBtn(inCall) {
 socket.on("call-invite", ({ from, name }) => {
   if (call.active) ensurePeer(from, name);
   else showToast(from, name); // showToast сам запускает рингтон + cava
+});
+
+// Звонок «везде»: приходит участнику группы/ЛС, даже если он в другой комнате
+socket.on("call-ring", (p) => {
+  if (call.active || myRoom === p.room) return; // уже в звонке или call-invite уже показал тост
+  const kind = p.room.startsWith("@grp:") ? "group" : p.room.startsWith("@dm:") ? "dm" : "room";
+  showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 
 socket.on("signal", async ({ from, name, kind, data }) => {
@@ -865,10 +924,13 @@ function stopCava() {
 }
 
 // --- Тост о звонке ---
-let toastTimer;
-function showToast(from, name) {
+let toastTimer, pendingCall = null;
+function showToast(from, name, ctx) {
+  pendingCall = ctx || null; // ctx задан, если звонок в другой комнате (глобальный)
   $("toastName").textContent = name;
   $("toastAvatar").textContent = initials(name);
+  const sub = $("callToast").querySelector(".toast-sub");
+  if (sub) sub.textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
   $("callToast").classList.remove("hidden");
   startRingtone();
   clearTimeout(toastTimer);
@@ -876,10 +938,18 @@ function showToast(from, name) {
 }
 function hideToast() {
   clearTimeout(toastTimer);
+  pendingCall = null;
   $("callToast").classList.add("hidden");
   stopRingtone();
 }
-$("toastJoin").onclick = () => joinCall();
+$("toastJoin").onclick = () => {
+  const pc = pendingCall;
+  if (pc && pc.room !== myRoom) {            // звонок в другой комнате — сначала войти туда
+    hideToast();
+    enterRoom(pc.room, { kind: pc.kind, title: pc.title });
+    setTimeout(joinCall, 500);
+  } else joinCall();
+};
 $("toastClose").onclick = hideToast;
 
 // ====================== УТИЛИТЫ ======================

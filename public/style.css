@@ -382,6 +382,19 @@ input, textarea, button { caret-color: var(--green); }
 .notify-toast.show { transform: none; opacity: 1; }
 .notify-toast::before { content: "✉ "; }
 
+/* Запись голоса */
+.icon-btn.recording { border-color: var(--danger); color: var(--danger); animation: recPulse 1s infinite; }
+@keyframes recPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.5); } 50% { box-shadow: 0 0 0 8px rgba(255,68,68,0); } }
+.bubble.audio { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.bubble.audio audio { height: 34px; max-width: 220px; }
+
+/* Лайтбокс / зум фото */
+.bubble.media img { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 300; background: rgba(0,4,0,0.95); display: grid; place-items: center; backdrop-filter: blur(8px); animation: fadeIn 0.2s ease; }
+.lightbox img { max-width: 92vw; max-height: 86vh; border: 1px solid var(--green); box-shadow: var(--glow-soft); cursor: grab; user-select: none; touch-action: none; }
+.lightbox img:active { cursor: grabbing; }
+.lightbox-hint { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); color: var(--text-dim); font-size: 12px; letter-spacing: 0.5px; }
+
 /* ---------- Селектор языка ---------- */
 .lang-select {
   position: absolute; top: 14px; right: 14px;
