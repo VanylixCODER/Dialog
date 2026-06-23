@@ -627,7 +627,7 @@ function ensurePeer(peerId, peerName) {
     catch (e) { console.error("negotiation", e); } finally { st.makingOffer = false; }
   };
   pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
-  pc.ontrack = (e) => { addTile(peerId, st.name, e.streams[0], false); if (e.track.kind === "video") setupVideoDetect(peerId, e.track); else if (e.track.kind === "audio") setupAudioGain(peerId, e.streams[0]); };
+  pc.ontrack = (e) => { addTile(peerId, st.name, e.streams[0], false); if (e.track.kind === "video") setupVideoDetect(peerId, e.track); };
   pc.onconnectionstatechange = () => { if (["failed", "closed", "disconnected"].includes(pc.connectionState)) removePeerConn(peerId); };
   updateCallCount();
   return st;
@@ -692,11 +692,13 @@ function addTile(id, name, stream, isMe) {
       `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar">${avLogin ? `<img src="${avaUrl(avLogin)}" alt="" onerror="this.style.display='none'">` : ""}<span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>` +
-      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="2" step="0.05" value="1" title="${t("volume")}"></div>`);
+      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
     $("videoGrid").appendChild(tile);
     if (!isMe) wireTileControls(tile, id);
   }
-  tile.querySelector("video").srcObject = stream;
+  const v = tile.querySelector("video");
+  v.srcObject = stream;
+  if (!isMe) { v.muted = false; v.play().catch(() => {}); } // звук собеседника играет через сам элемент
   updateCallCount();
   return tile;
 }
