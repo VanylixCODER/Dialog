@@ -343,7 +343,7 @@ input, textarea, button { caret-color: var(--green); }
 
 /* ---------- Call toast ---------- */
 .call-toast {
-  position: fixed; top: 24px; right: 24px; z-index: 130;
+  position: fixed; top: 24px; right: 24px; z-index: 260;
   display: flex; align-items: center; gap: 12px;
   background: var(--bg-3); border: 1px solid var(--border-strong);
   border-radius: 2px; padding: 13px 15px; box-shadow: var(--glow-soft);

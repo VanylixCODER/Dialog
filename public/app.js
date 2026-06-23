@@ -205,8 +205,9 @@ function tryJoin() {
   const room = ($("roomInput").value.trim() || "lobby").slice(0, 32);
   enterRoom(room, {});
 }
-$("joinBtn").onclick = tryJoin;
-$("roomInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryJoin(); });
+// Публичные комнаты убраны (Discord-стиль): остаются ЛС, группы, друзья
+if ($("joinBtn")) $("joinBtn").onclick = tryJoin;
+if ($("roomInput")) $("roomInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryJoin(); });
 
 function leaveRoom() {
   if (call.active) endCall();
@@ -1009,7 +1010,8 @@ $("callTopbar").addEventListener("pointerup", () => (dragState = null));
 const ring = { audio: null, src: null, analyser: null, raf: 0, data: null, bars: [] };
 function startRingtone() {
   const ctx = ensureAudioCtx();
-  if (!ring.audio) { ring.audio = new Audio("/src/Ringtone.mp3"); ring.audio.loop = true; }
+  if (!ring.audio) ring.audio = new Audio("/src/Ringtone.mp3");
+  ring.audio.loop = true; // зацикленный рингтон — звонит, пока не ответят/закроют
   ring.audio.currentTime = 0;
   const p = ring.audio.play();
   if (p && p.catch) p.catch(() => {});
@@ -1074,7 +1076,7 @@ function showToast(from, name, ctx) {
   $("callToast").classList.remove("hidden");
   startRingtone();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, 35000); // авто-сброс, если не ответили
+  toastTimer = setTimeout(hideToast, 60000); // безопасный предел, если совсем не ответили
 }
 function hideToast() {
   clearTimeout(toastTimer);
