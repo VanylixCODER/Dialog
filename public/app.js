@@ -220,8 +220,16 @@ function leaveRoom() {
   $("login").classList.remove("hidden");
   showRoomStage();
 }
-$("backBtn").onclick = leaveRoom;
-$("backBtnMobile").onclick = leaveRoom;
+// «Назад» открывает хаб-навигатор (ЛС/группы/друзья) поверх чата, не покидая комнату
+function showHub() {
+  showRoomStage();
+  $("hubClose").classList.toggle("hidden", !myRoom);
+  $("login").classList.remove("hidden");
+}
+function closeHub() { if (myRoom) $("login").classList.add("hidden"); }
+$("backBtn").onclick = showHub;
+$("backBtnMobile").onclick = showHub;
+$("hubClose").onclick = closeHub;
 
 // ====================== ЛИЧНЫЕ СООБЩЕНИЯ (DM) ======================
 function dmKey(otherLogin) { return "@dm:" + [profile.login, otherLogin].sort().join("~"); }
