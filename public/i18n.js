@@ -57,6 +57,9 @@ const I18N = {
     sent_requests: "Sent", send_request: "Send request", pending: "pending",
     delete_chat: "Delete chat", leave_group: "Leave group?",
     dm_need_friend: "You can message only friends or members of a shared group. A friend request has been sent.",
+    status_online: "Online", status_dnd: "Do not disturb", status_offline: "Offline", status_invisible: "Invisible",
+    status_label: "Status", description: "About", ph_description: "A few words about you",
+    joined: "Joined {date}", message_btn: "Message",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -115,6 +118,9 @@ const I18N = {
     sent_requests: "Отправленные", send_request: "Отправить заявку", pending: "ожидает",
     delete_chat: "Удалить чат", leave_group: "Выйти из группы?",
     dm_need_friend: "Писать можно только друзьям или участникам общей группы. Заявка в друзья отправлена.",
+    status_online: "В сети", status_dnd: "Не беспокоить", status_offline: "Не в сети", status_invisible: "Невидимый",
+    status_label: "Статус", description: "О себе", ph_description: "Пара слов о себе",
+    joined: "Регистрация: {date}", message_btn: "Написать",
   },
 };
 

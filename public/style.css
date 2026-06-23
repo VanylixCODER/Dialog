@@ -718,3 +718,36 @@ input, textarea, button { caret-color: var(--green); }
 .chat-item:hover .ci-del { opacity: .75; }
 .ci-del:hover { opacity: 1; color: var(--danger); }
 @media (hover: none) { .ci-del { opacity: .5; } }
+
+/* ====================== Статусы / мини-профиль / анимации ====================== */
+.st-dot { position: absolute; bottom: -1px; right: -1px; width: 32%; height: 32%; min-width: 9px; min-height: 9px; border-radius: 50%; border: 2px solid var(--bg-2); background: #555; box-sizing: border-box; }
+.st-online { background: var(--green); }
+.st-dnd { background: var(--danger); }
+.st-offline { background: #4a4a55; }
+
+.status-pick { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
+.status-opt { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 2px; transition: background .15s, border-color .15s; }
+.status-opt .st-dot { position: static; width: 11px; height: 11px; min-width: 11px; min-height: 11px; border: none; }
+.status-opt:hover { background: var(--panel-2); }
+.status-opt.active { border-color: var(--green); box-shadow: var(--glow); }
+
+.mp-card { text-align: center; width: min(320px, 92vw); }
+.mp-name { font-size: 18px; font-weight: 700; color: var(--green); text-shadow: var(--glow); margin-top: 8px; }
+.mp-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); margin: 8px 0; }
+.mp-status .st-dot { position: static; width: 9px; height: 9px; min-width: 9px; min-height: 9px; border: none; }
+.mp-desc { font-size: 13px; color: var(--text); border: 1px dashed var(--border); padding: 8px 10px; margin: 8px 0; white-space: pre-wrap; word-break: break-word; text-align: left; }
+.mp-joined { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+.mp-joined::before { content: "◷ "; }
+#profileDesc { resize: none; }
+
+/* Больше анимаций */
+.modal-card { animation: popIn .22s cubic-bezier(.2,.9,.3,1.15); }
+@keyframes popIn { from { opacity: 0; transform: scale(.93) translateY(10px); } to { opacity: 1; transform: none; } }
+.msg .bubble, .msg.media .bubble { animation: bubbleIn .2s ease; }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+.hicon-btn:active, .icon-btn:active, .call-btn:active, .mini-btn:active, .status-opt:active, .btn-primary:active { transform: scale(.93); }
+.contact-row { animation: itemIn .18s ease; }
+@keyframes itemIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+.st-dot.st-online { animation: dotPulse 2.6s ease-in-out infinite; }
+@keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,90,.55); } 50% { box-shadow: 0 0 0 4px rgba(0,255,90,0); } }
+.chat-item, .member, .mini-btn, .room-chip { transition: background .15s, border-color .15s, color .15s; }
