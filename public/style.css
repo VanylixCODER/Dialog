@@ -751,3 +751,30 @@ input, textarea, button { caret-color: var(--green); }
 .st-dot.st-online { animation: dotPulse 2.6s ease-in-out infinite; }
 @keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,90,.55); } 50% { box-shadow: 0 0 0 4px rgba(0,255,90,0); } }
 .chat-item, .member, .mini-btn, .room-chip { transition: background .15s, border-color .15s, color .15s; }
+
+/* ====================== GIF / демонстрация / статус звонка / пустой экран ====================== */
+#gifBtn { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.gif-panel {
+  position: absolute; bottom: 84px; left: 18px; width: min(360px, calc(100vw - 28px)); height: 380px;
+  background: var(--bg-3); border: 1px solid var(--border-strong); border-radius: 2px;
+  box-shadow: var(--glow-soft); display: flex; flex-direction: column; overflow: hidden; z-index: 20;
+  animation: pickerIn .2s ease;
+}
+.gif-panel .field { margin: 8px; width: auto; }
+.gif-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 8px 8px; }
+.gif-item { width: 100%; border-radius: 2px; cursor: pointer; border: 1px solid transparent; transition: border-color .1s; background: #000; }
+.gif-item:hover { border-color: var(--green); }
+.gif-note { color: var(--text-dim); font-size: 12px; padding: 10px; text-align: center; }
+
+.tile.screen { border-color: var(--green); box-shadow: 0 0 0 1px var(--green), var(--glow-soft); }
+.tile.screen video { object-fit: contain; background: #000; }
+
+.call-status { font-size: 12px; color: var(--text-dim); }
+.call-status.ok { color: var(--green); }
+.call-status.bad { color: var(--danger); }
+.call-status:not(:empty)::before { content: "● "; }
+
+.chats-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px 20px; }
+.chats-empty .btn-primary, .chats-empty .btn-ghost { width: auto; padding: 10px 20px; margin: 0; }
+
+@media (max-width: 720px) { .gif-panel { left: 14px; } }
