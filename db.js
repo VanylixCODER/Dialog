@@ -47,9 +47,12 @@ export async function initSchema() {
       name        VARCHAR(64) NOT NULL,
       salt        CHAR(32) NOT NULL,
       hash        CHAR(128) NOT NULL,
+      avatar      LONGTEXT NULL,
       created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  // Для уже существующих БД добавляем колонку аватара (идемпотентно)
+  try { await pool.query("ALTER TABLE users ADD COLUMN avatar LONGTEXT NULL"); } catch {}
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
       id          BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -120,6 +123,25 @@ export async function getGroupMembers(groupId) {
 export async function getGroup(id) {
   const r = await query("SELECT id, name, owner FROM chat_groups WHERE id = ?", [id]);
   return r[0] || null;
+}
+
+// --- Профиль ---
+export async function updateProfile(login, { name, avatar }) {
+  if (typeof name === "string" && name.trim()) {
+    await execute("UPDATE users SET name = ? WHERE login = ?", [name.trim().slice(0, 32), login]);
+  }
+  if (typeof avatar === "string") {
+    await execute("UPDATE users SET avatar = ? WHERE login = ?", [avatar.slice(0, 400000), login]);
+  }
+}
+export async function getAvatar(login) {
+  const r = await query("SELECT avatar FROM users WHERE login = ?", [login]);
+  return r[0] ? r[0].avatar : null;
+}
+// Токены пользователя — чтобы сбросить кэш профиля при смене ника
+export async function tokensForLogin(login) {
+  const r = await query("SELECT token FROM sessions WHERE login = ?", [login]);
+  return r.map((x) => x.token);
 }
 
 // --- История сообщений ---

@@ -123,6 +123,7 @@
       <div class="me-card">
         <div class="avatar" id="myAvatar">?</div>
         <div class="me-name" id="myName">—</div>
+        <button id="profileBtn" class="hicon-btn" data-i18n-title="profile" title="Profile">⚙</button>
         <select id="langSelect2" class="lang-select small" title="Language">
           <option value="en">EN</option>
           <option value="ru">RU</option>
@@ -186,6 +187,26 @@
     </div>
     <button class="toast-join" id="toastJoin" data-i18n="toast_join">Join</button>
     <button class="toast-close" id="toastClose">✕</button>
+  </div>
+
+  <!-- Личный кабинет -->
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="profile">Profile</div>
+      <div class="profile-ava avatar ava" id="profileAva">
+        <img id="profileAvaImg" alt="" />
+        <span class="ava-fallback" id="profileAvaInit">?</span>
+      </div>
+      <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
+      <input id="avaFile" type="file" accept="image/*" hidden />
+      <div class="profile-login" id="profileLogin">@login</div>
+      <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+      <div class="form-error" id="profileError"></div>
+      <div class="modal-actions">
+        <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
+        <button id="profileCancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <!-- Лайтбокс для фото -->
