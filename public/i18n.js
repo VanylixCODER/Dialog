@@ -104,6 +104,9 @@ const I18N = {
     hub_friends: "Друзья", friends_title: "Друзья", blocked_title: "Заблокированные",
     add_friend: "В друзья", remove_friend: "Убрать из друзей",
     block_user: "Заблокировать", unblock_user: "Разблокировать", blocked_msg: "Сообщение заблокированного — нажми, чтобы показать",
+    new_chat: "Новый чат", search: "Поиск", no_chats: "Чатов пока нет — нажми ✎",
+    pick_chat: "Выберите чат, чтобы начать переписку", info: "Инфо", or: "— или создайте группу —",
+    pv_photo: "Фото", pv_video: "Видео", pv_voice: "Голосовое", members_n: "{n} участников",
   },
 };
 
