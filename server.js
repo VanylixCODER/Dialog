@@ -117,6 +117,16 @@ app.get("/api/presence", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "server error" }); }
 });
 
+// ICE (STUN + TURN) — клиент получает конфиг при загрузке
+app.get("/api/ice", (req, res) => {
+  const servers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  const turnUrl = process.env.TURN_URL;
+  const turnUser = process.env.TURN_USER;
+  const turnPass = process.env.TURN_PASS;
+  if (turnUrl) servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
+  res.json({ iceServers: servers });
+});
+
 // GIPHY — прокси (ключ на сервере, без CORS-проблем)
 const GIPHY_KEY = process.env.GIPHY_KEY || "";
 app.get("/api/gif", async (req, res) => {

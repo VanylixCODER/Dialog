@@ -9,7 +9,8 @@ const peers = new Map();   // id -> {name, login}
 const presence = new Map(); // login -> 'online'|'dnd'|'offline'
 let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
-const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+fetch("/api/ice").then(r => r.json()).then(c => { ICE = c; }).catch(() => {});
 
 // ====================== ЯЗЫК ======================
 function initLang() {
@@ -779,17 +780,29 @@ $("emptyNewChat").onclick = () => $("newChatBtn").click();
 const call = { active: false, localStream: null, screenStream: null, sharing: false, micOn: true, camOn: false, pcs: new Map() };
 
 const NS_AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const LOW_VIDEO = { width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 20, max: 24 } };
 async function getLocalStream() {
   if (call.localStream) return call.localStream;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const err = new Error("INSECURE"); err.name = "InsecureContext"; throw err; }
-  try { call.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: NS_AUDIO }); }
-  catch (e) { try { call.localStream = await navigator.mediaDevices.getUserMedia({ audio: NS_AUDIO }); } catch { throw e; } }
+  // Сначала только аудио — видео добавим при включении камеры
+  try { call.localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: NS_AUDIO }); }
+  catch (e) { throw e; }
   call.ns = true;
-  call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = false));
   call.camOn = false;
   addTile("me", myName + " " + t("you_suffix"), call.localStream, true);
   setTileAvatar("me", true);
   return call.localStream;
+}
+function capBitrate(pc, kind, maxBps) {
+  for (const sender of pc.getSenders()) {
+    if (sender.track?.kind !== kind) continue;
+    try {
+      const p = sender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = maxBps;
+      sender.setParameters(p).catch(() => {});
+    } catch {}
+  }
 }
 function mediaErrorMessage(e) {
   if (!navigator.mediaDevices || e.name === "InsecureContext") return t("err_insecure");
@@ -808,8 +821,11 @@ function ensurePeer(peerId, peerName) {
   call.pcs.set(peerId, st);
   if (call.localStream) call.localStream.getTracks().forEach((tr) => pc.addTrack(tr, call.localStream));
   pc.onnegotiationneeded = async () => {
-    try { st.makingOffer = true; await pc.setLocalDescription(); socket.emit("signal", { to: peerId, kind: "desc", data: pc.localDescription }); }
-    catch (e) { console.error("negotiation", e); } finally { st.makingOffer = false; }
+    try {
+      st.makingOffer = true; await pc.setLocalDescription(); socket.emit("signal", { to: peerId, kind: "desc", data: pc.localDescription });
+      capBitrate(pc, "audio", 32000);   // 32 kbps аудио — Opus и так эффективен
+      capBitrate(pc, "video", 250000);  // 250 kbps видео — достаточно для 360p
+    } catch (e) { console.error("negotiation", e); } finally { st.makingOffer = false; }
   };
   pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
   pc.ontrack = (e) => {
@@ -948,7 +964,26 @@ function wireTileControls(tile, peerId) {
 function updateCallCount() { $("callCount").textContent = (call.active ? 1 : 0) + call.pcs.size; }
 
 $("toggleMic").onclick = () => { if (!call.localStream) return; call.micOn = !call.micOn; call.localStream.getAudioTracks().forEach((tr) => (tr.enabled = call.micOn)); $("toggleMic").classList.toggle("off", !call.micOn); $("toggleMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"]; };
-$("toggleCam").onclick = () => { if (!call.localStream) return; call.camOn = !call.camOn; call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = call.camOn)); $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.sharing) setTileAvatar("me", !call.camOn); };
+$("toggleCam").onclick = async () => {
+  if (!call.localStream) return;
+  call.camOn = !call.camOn;
+  if (call.camOn) {
+    // Камера вкл — запрашиваем видео-трек только когда нужен
+    const vTracks = call.localStream.getVideoTracks();
+    if (!vTracks.length) {
+      try {
+        const vs = await navigator.mediaDevices.getUserMedia({ video: LOW_VIDEO, audio: false });
+        const vt = vs.getVideoTracks()[0];
+        call.localStream.addTrack(vt);
+        for (const st of call.pcs.values()) { st.pc.addTrack(vt, call.localStream); capBitrate(st.pc, "video", 250000); }
+      } catch { call.camOn = false; }
+    } else { vTracks.forEach((tr) => (tr.enabled = true)); }
+  } else {
+    call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = false));
+  }
+  $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
+  if (!call.sharing) setTileAvatar("me", !call.camOn);
+};
 
 // Отдельный тайл для демонстрации экрана (свой и чужой)
 function addScreenTile(id, name, stream) {
@@ -966,10 +1001,18 @@ function addScreenTile(id, name, stream) {
 $("shareScreen").onclick = async () => {
   if (!call.active) return;
   if (call.sharing) { await stopShare(); return; }
-  try { call.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }); } catch { return; }
+  try { call.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: false }); } catch { return; }
   const track = call.screenStream.getVideoTracks()[0];
-  // добавляем ОТДЕЛЬНОЙ дорожкой (не заменяя камеру) — у получателя это второй видеотрек = тайл-скрин
-  for (const st of call.pcs.values()) st.screenSender = st.pc.addTrack(track, call.screenStream);
+  for (const st of call.pcs.values()) {
+    st.screenSender = st.pc.addTrack(track, call.screenStream);
+    // screen share — 500 kbps макс (достаточно для текста/слайдов при 10fps)
+    try {
+      const p = st.screenSender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = 1500000;
+      st.screenSender.setParameters(p).catch(() => {});
+    } catch {}
+  }
   addScreenTile("me", myName + " " + t("you_suffix"), call.screenStream);
   call.sharing = true; $("shareScreen").classList.add("active");
   socket.emit("screen", { on: true });
