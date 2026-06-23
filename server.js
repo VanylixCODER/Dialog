@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createHttpServer } from "http";
 import { createServer as createHttpsServer } from "https";
@@ -116,26 +117,25 @@ app.get("/api/presence", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "server error" }); }
 });
 
-// Tenor GIF — прокси (ключ на сервере, без CORS-проблем)
-const TENOR_KEY = process.env.TENOR_KEY || "";
+// GIPHY — прокси (ключ на сервере, без CORS-проблем)
+const GIPHY_KEY = process.env.GIPHY_KEY || "";
 app.get("/api/gif", async (req, res) => {
   try {
     const me = await authUser(req);
     if (!me) return res.status(401).json({ error: "unauth" });
-    if (!TENOR_KEY) return res.json({ results: [], nokey: true });
+    if (!GIPHY_KEY) return res.json({ results: [], nokey: true });
     const q = String(req.query.q || "").slice(0, 80);
-    const pos = String(req.query.pos || "");
-    const base = q
-      ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}`
-      : `https://tenor.googleapis.com/v2/featured?`;
-    const url = `${base}&key=${TENOR_KEY}&client_key=dialog&limit=24&media_filter=tinygif,gif&contentfilter=medium&pos=${encodeURIComponent(pos)}`;
+    const offset = parseInt(req.query.offset) || 0;
+    const url = q
+      ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(q)}&limit=24&offset=${offset}&rating=pg-13&lang=en`
+      : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_KEY}&limit=24&offset=${offset}&rating=pg-13`;
     const r = await fetch(url);
     const d = await r.json();
-    const results = (d.results || []).map((g) => ({
-      preview: g.media_formats?.tinygif?.url,
-      url: g.media_formats?.gif?.url,
+    const results = (d.data || []).map((g) => ({
+      preview: g.images?.fixed_width_small?.url,
+      url: g.images?.original?.url,
     })).filter((x) => x.url && x.preview);
-    res.json({ results, next: d.next || "" });
+    res.json({ results, next: offset + results.length });
   } catch (e) { console.error("gif", e.message); res.json({ results: [], error: true }); }
 });
 
