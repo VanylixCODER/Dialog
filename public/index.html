@@ -72,15 +72,19 @@
     <aside class="sidebar">
       <div class="sidebar-head">
         <button id="backBtn" class="back-btn" data-i18n-title="back" title="Back">‹</button>
-        <div class="brand-logo small">◆</div>
-        <div style="min-width:0;flex:1">
+        <div class="room-head-info">
           <div class="room-name" id="roomLabel">—</div>
-          <div class="room-sub" data-i18n="room_sub">room</div>
+          <div class="room-sub" id="roomSub" data-i18n="room_sub">room</div>
         </div>
-        <button id="favBtn" class="fav-btn" data-i18n-title="fav_add" title="Add to favorites">☆</button>
+        <button id="muteBtn" class="hicon-btn" data-i18n-title="mute_room" title="Mute room">🔔</button>
+        <button id="favBtn" class="hicon-btn" data-i18n-title="fav_add" title="Add to favorites">☆</button>
       </div>
       <div class="members-title" data-i18n="members_title">Members</div>
       <ul id="members" class="members"></ul>
+      <div id="dmSection" class="hidden">
+        <div class="members-title" data-i18n="dms_title">Direct messages</div>
+        <ul id="dmList" class="members"></ul>
+      </div>
       <div class="me-card">
         <div class="avatar" id="myAvatar">?</div>
         <div class="me-name" id="myName">—</div>

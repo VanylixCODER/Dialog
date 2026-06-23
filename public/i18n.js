@@ -33,6 +33,9 @@ const I18N = {
     t_hangup: "Leave call", t_call: "Group video call", t_window: "Window / fullscreen",
     call_label: "Call", mute_user: "Mute", unmute_user: "Unmute", volume: "Volume",
     fav_add: "Add to favorites", fav_remove: "Remove from favorites",
+    mute_room: "Mute room", unmute_room: "Unmute room",
+    dms_title: "Direct messages", dm_open: "message", dm_self: "you",
+    dm_ping: "{name} messaged you", room_sub_dm: "direct message",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -67,6 +70,9 @@ const I18N = {
     t_hangup: "Выйти из звонка", t_call: "Групповой видеозвонок", t_window: "Окно / весь экран",
     call_label: "Звонок", mute_user: "Заглушить", unmute_user: "Включить звук", volume: "Громкость",
     fav_add: "В избранное", fav_remove: "Убрать из избранного",
+    mute_room: "Заглушить комнату", unmute_room: "Включить уведомления",
+    dms_title: "Личные сообщения", dm_open: "написать", dm_self: "вы",
+    dm_ping: "{name} написал вам", room_sub_dm: "личные сообщения",
   },
 };
 

@@ -213,9 +213,11 @@ input, textarea, button { caret-color: var(--green); }
 .typing { color: var(--green); font-size: 11px; height: 14px; margin-top: 3px; }
 .typing:not(:empty)::before { content: "..."; }
 
-.messages { flex: 1; overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 2px; }
+.messages { flex: 1; overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 2px; width: 100%; max-width: 920px; margin: 0 auto; }
+.messages.room-anim { animation: roomIn 0.35s cubic-bezier(0.2,0.8,0.2,1); }
+@keyframes roomIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-.msg { max-width: min(72%, 620px); display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 12px; animation: msgIn 0.2s ease; }
+.msg { max-width: 78%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 12px; animation: msgIn 0.2s ease; }
 @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .msg.me { align-self: flex-end; align-items: flex-end; }
 .msg .who { font-size: 11px; color: var(--text-dim); padding: 0 4px; }
@@ -233,7 +235,7 @@ input, textarea, button { caret-color: var(--green); }
   white-space: pre-wrap;
 }
 .msg.me .bubble { background: rgba(0, 255, 90, 0.12); border-color: var(--green); color: var(--green-bright); }
-.bubble img, .bubble video { max-width: 300px; max-height: 320px; border-radius: 2px; display: block; border: 1px solid var(--border); }
+.bubble img, .bubble video { width: auto; max-width: 260px; max-height: 260px; border-radius: 2px; display: block; border: 1px solid var(--border); object-fit: contain; }
 .bubble.media { padding: 4px; }
 .msg .time { font-size: 10px; color: var(--text-dim); padding: 0 4px; }
 .system-msg {
@@ -250,6 +252,7 @@ input, textarea, button { caret-color: var(--green); }
   padding-bottom: calc(14px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: var(--bg-2);
+  width: 100%; max-width: 952px; margin: 0 auto;
 }
 .icon-btn {
   width: 44px; height: 44px;
@@ -365,6 +368,17 @@ input, textarea, button { caret-color: var(--green); }
 }
 .conn-status.show { transform: translate(-50%, 0); }
 
+/* Короткое уведомление (ЛС-пинг) */
+.notify-toast {
+  position: fixed; top: 18px; right: 18px; z-index: 210;
+  background: var(--bg-3); border: 1px solid var(--green); color: var(--green);
+  font-size: 13px; padding: 10px 16px; border-radius: 2px;
+  box-shadow: var(--glow-soft); transform: translateX(130%); opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease; max-width: 280px;
+}
+.notify-toast.show { transform: none; opacity: 1; }
+.notify-toast::before { content: "✉ "; }
+
 /* ---------- Селектор языка ---------- */
 .lang-select {
   position: absolute; top: 14px; right: 14px;
@@ -387,16 +401,34 @@ input, textarea, button { caret-color: var(--green); }
 .room-chip:hover { border-color: var(--green); background: var(--panel-2); color: var(--green); }
 .room-chip:active { transform: scale(0.95); }
 
-/* ---------- Кнопки back / fav ---------- */
-.back-btn, .fav-btn {
+/* ---------- Шапка сайдбара: кнопки ---------- */
+.sidebar-head { gap: 7px; }
+.room-head-info { min-width: 0; flex: 1; }
+.back-btn, .hicon-btn {
   border: 1px solid var(--border); background: transparent; color: var(--text);
-  font-family: inherit; font-size: 18px; line-height: 1; cursor: pointer;
-  width: 32px; height: 32px; border-radius: 2px; flex-shrink: 0;
+  font-family: inherit; font-size: 15px; line-height: 1; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 2px; flex-shrink: 0;
   display: grid; place-items: center; transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
-.back-btn:hover, .fav-btn:hover { border-color: var(--green); color: var(--green); background: var(--panel-2); }
-.fav-btn.on { color: var(--green); border-color: var(--green); text-shadow: var(--glow); }
+.back-btn { font-size: 20px; }
+.back-btn:hover, .hicon-btn:hover { border-color: var(--green); color: var(--green); background: var(--panel-2); }
+.hicon-btn.on { color: var(--green); border-color: var(--green); text-shadow: var(--glow); }
 .back-btn.mobile-only { display: none; }
+
+/* Участники кликабельны (открыть ЛС) */
+.member { cursor: pointer; }
+.member .m-dm { opacity: 0; font-size: 12px; color: var(--text-dim); transition: opacity 0.15s; }
+.member:hover .m-dm { opacity: 1; }
+.member.active-dm { background: var(--panel-2); border-left: 2px solid var(--green); }
+.member .badge {
+  background: var(--green); color: #001a08; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; display: grid; place-items: center;
+}
+
+/* Упоминания и пинги */
+.mention { color: var(--green); background: rgba(0,255,90,0.12); padding: 0 3px; border-radius: 2px; font-weight: 700; }
+.msg.ping .bubble { border-color: var(--green); box-shadow: var(--glow); background: rgba(0,255,90,0.1); }
+.msg.ping .bubble::before { content: "@ "; opacity: 0.7; }
 
 /* ---------- Тайлы: аватар + контролы (Discord-стиль) ---------- */
 .tile-avatar {

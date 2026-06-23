@@ -61,7 +61,24 @@ function getPeers(room) {
 }
 function peersList(room) {
   const m = rooms.get(room);
-  return m ? [...m.entries()].map(([id, info]) => ({ id, name: info.name })) : [];
+  return m ? [...m.entries()].map(([id, info]) => ({ id, name: info.name, login: info.login })) : [];
+}
+
+// login -> Set(socketId): чтобы доставлять ЛС-пинги пользователю в любой комнате
+const userSockets = new Map();
+function addUserSocket(login, id) {
+  if (!userSockets.has(login)) userSockets.set(login, new Set());
+  userSockets.get(login).add(id);
+}
+function removeUserSocket(login, id) {
+  const s = userSockets.get(login);
+  if (s) { s.delete(id); if (s.size === 0) userSockets.delete(login); }
+}
+// Партнёр в ЛС-комнате вида "@dm:loginA~loginB"
+function dmPartner(room, me) {
+  if (!room.startsWith("@dm:")) return null;
+  const parts = room.slice(4).split("~");
+  return parts.find((p) => p !== me) || null;
 }
 
 io.on("connection", (socket) => {
@@ -90,17 +107,18 @@ io.on("connection", (socket) => {
     currentRoom = newRoom;
     userName = profile.name; // имя берём из профиля — клиент не может его подделать
     userLogin = profile.login;
+    addUserSocket(userLogin, socket.id);
 
     const peers = getPeers(currentRoom);
     socket.join(currentRoom);
-    peers.set(socket.id, { name: userName });
+    peers.set(socket.id, { name: userName, login: userLogin });
 
     try {
       socket.emit("history", await recentMessages(currentRoom, HISTORY_LIMIT));
     } catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", peersList(currentRoom).filter((p) => p.id !== socket.id));
 
-    socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName });
+    socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
     io.to(currentRoom).emit("system", { key: "joined", name: userName });
   });
 
@@ -122,6 +140,15 @@ io.on("connection", (socket) => {
       payload.id = await saveMessage({ room: currentRoom, ...payload });
     } catch (e) { console.error("saveMessage", e.message); }
     io.to(currentRoom).emit("message", payload);
+
+    // ЛС: уведомляем партнёра, даже если он сейчас в другой комнате
+    const partner = dmPartner(currentRoom, userLogin);
+    if (partner) {
+      const ids = userSockets.get(partner);
+      if (ids) for (const id of ids) {
+        if (id !== socket.id) io.to(id).emit("dm-ping", { room: currentRoom, fromLogin: userLogin, fromName: userName });
+      }
+    }
   });
 
   socket.on("typing", (isTyping) => {
@@ -138,7 +165,7 @@ io.on("connection", (socket) => {
     socket.to(currentRoom).emit("call-invite", { from: socket.id, name: userName });
   });
 
-  socket.on("disconnect", () => doLeave());
+  socket.on("disconnect", () => { doLeave(); if (userLogin) removeUserSocket(userLogin, socket.id); });
 });
 
 const PORT = process.env.PORT || 3000;
