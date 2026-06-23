@@ -82,6 +82,7 @@ $("registerForm").addEventListener("submit", async (e) => {
 
 function enterApp() {
   myName = profile.name;
+  if (token) socket.emit("identify", { token }); // зарегистрировать сокет для звонков/пингов
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("myName").textContent = myName;
@@ -151,7 +152,7 @@ function renderChatList(filter = "") {
     const li = document.createElement("li");
     li.className = "chat-item" + (c.key === activeKey ? " active" : "");
     const ava = c.type === "dm" ? avaHTML(c.login, c.name, 46)
-      : `<span class="avatar grp" style="width:46px;height:46px;font-size:20px">▣</span>`;
+      : `<span class="avatar grp" style="width:46px;height:46px">${window.ICON.users}</span>`;
     li.innerHTML = `${ava}
       <div class="ci-body">
         <div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
@@ -197,7 +198,7 @@ function openChat(c) {
 function setChatAva(c) {
   const el = $("chatAva"); el.classList.add("ava");
   if (c.type === "dm") el.innerHTML = `<img src="${avaUrl(c.login)}" alt="" onerror="this.style.display='none'"><span class="ava-fallback">${initials(c.name)}</span>`;
-  else el.innerHTML = `<span class="ava-fallback">▣</span>`;
+  else el.innerHTML = `<span class="ava-fallback">${window.ICON.users}</span>`;
 }
 function openDM(login, name) {
   if (!login || login === profile.login) return;
@@ -269,7 +270,7 @@ const isMuted = (room) => lsGet("dialog_muted").includes(room);
 function updateMuteBtn() {
   if (!myRoom) return;
   const m = isMuted(myRoom);
-  $("muteBtn").textContent = m ? "🔕" : "🔔";
+  $("muteBtn").innerHTML = window.ICON[m ? "bellOff" : "bell"];
   $("muteBtn").classList.toggle("on", m);
   $("muteBtn").title = t(m ? "unmute_room" : "mute_room");
 }
@@ -380,7 +381,11 @@ async function relation(target, type, action) {
 socket.on("auth-error", (msg) => { alert(msg || "Auth error"); localStorage.removeItem("dialog_token"); location.reload(); });
 
 // --- Соединение + автоперезаход после реконнекта ---
-socket.on("connect", () => { setConnStatus("online"); if (token && myRoom) socket.emit("join", { token, room: myRoom }); });
+socket.on("connect", () => {
+  setConnStatus("online");
+  if (token) socket.emit("identify", { token });        // ловить звонки/пинги где угодно
+  if (token && myRoom) socket.emit("join", { token, room: myRoom });
+});
 socket.on("disconnect", () => setConnStatus("offline"));
 socket.io.on("reconnect_attempt", () => setConnStatus("connecting"));
 function setConnStatus(state) {
@@ -404,8 +409,8 @@ function renderMembers() {
     li.innerHTML = `<span class="dot"></span>${avaHTML(info.login, info.name, 28)}
       <span class="m-name">${escapeHtml(info.name)}</span>
       <span class="m-acts">
-        <button class="m-act" data-act="friend" title="${t("add_friend")}">＋</button>
-        <button class="m-act${isBlk ? " on" : ""}" data-act="block" title="${isBlk ? t("unblock_user") : t("block_user")}">🚫</button>
+        <button class="m-act" data-act="friend" title="${t("add_friend")}">${window.ICON.userPlus}</button>
+        <button class="m-act${isBlk ? " on" : ""}" data-act="block" title="${isBlk ? t("unblock_user") : t("block_user")}">${window.ICON.block}</button>
       </span>`;
     li.onclick = (e) => {
       const act = e.target.closest(".m-act");
@@ -533,10 +538,10 @@ $("voiceBtn").onclick = async () => {
   };
   mediaRecorder.start();
   let sec = 0;
-  $("voiceBtn").classList.add("recording"); $("voiceBtn").textContent = "⏹";
+  $("voiceBtn").classList.add("recording"); $("voiceBtn").innerHTML = window.ICON.stop;
   recTimer = setInterval(() => { sec++; $("voiceBtn").title = sec + "s"; if (sec >= 120) mediaRecorder.stop(); }, 1000);
 };
-function resetVoiceBtn() { $("voiceBtn").classList.remove("recording"); $("voiceBtn").textContent = "🎤"; $("voiceBtn").title = t("t_voice"); mediaRecorder = null; }
+function resetVoiceBtn() { $("voiceBtn").classList.remove("recording"); $("voiceBtn").innerHTML = window.ICON.mic; $("voiceBtn").title = t("t_voice"); mediaRecorder = null; }
 
 // --- Лайтбокс ---
 const lb = $("lightbox"), lbImg = $("lightboxImg");
@@ -687,7 +692,7 @@ function addTile(id, name, stream, isMe) {
       `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar">${avLogin ? `<img src="${avaUrl(avLogin)}" alt="" onerror="this.style.display='none'">` : ""}<span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>` +
-      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">🔊</button><input class="tctrl-vol" type="range" min="0" max="2" step="0.05" value="1" title="${t("volume")}"></div>`);
+      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="2" step="0.05" value="1" title="${t("volume")}"></div>`);
     $("videoGrid").appendChild(tile);
     if (!isMe) wireTileControls(tile, id);
   }
@@ -715,13 +720,13 @@ function wireTileControls(tile, peerId) {
     const v = st.muted ? 0 : st.vol;
     if (st.gain) st.gain.gain.value = v; else { const vid = tile.querySelector("video"); vid.muted = st.muted; vid.volume = Math.min(1, st.vol); }
   };
-  vol.oninput = () => { const st = call.pcs.get(peerId); if (!st) return; st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.textContent = "🔊"; muteBtn.classList.remove("muted"); } applyVol(); };
-  muteBtn.onclick = () => { const st = call.pcs.get(peerId); if (!st) return; st.muted = !st.muted; muteBtn.textContent = st.muted ? "🔇" : "🔊"; muteBtn.classList.toggle("muted", st.muted); applyVol(); };
+  vol.oninput = () => { const st = call.pcs.get(peerId); if (!st) return; st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } applyVol(); };
+  muteBtn.onclick = () => { const st = call.pcs.get(peerId); if (!st) return; st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); applyVol(); };
 }
 function updateCallCount() { $("callCount").textContent = (call.active ? 1 : 0) + call.pcs.size; }
 
-$("toggleMic").onclick = () => { if (!call.localStream) return; call.micOn = !call.micOn; call.localStream.getAudioTracks().forEach((tr) => (tr.enabled = call.micOn)); $("toggleMic").classList.toggle("off", !call.micOn); };
-$("toggleCam").onclick = () => { if (!call.localStream) return; call.camOn = !call.camOn; call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = call.camOn)); $("toggleCam").classList.toggle("off", !call.camOn); if (!call.sharing) setTileAvatar("me", !call.camOn); };
+$("toggleMic").onclick = () => { if (!call.localStream) return; call.micOn = !call.micOn; call.localStream.getAudioTracks().forEach((tr) => (tr.enabled = call.micOn)); $("toggleMic").classList.toggle("off", !call.micOn); $("toggleMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"]; };
+$("toggleCam").onclick = () => { if (!call.localStream) return; call.camOn = !call.camOn; call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = call.camOn)); $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.sharing) setTileAvatar("me", !call.camOn); };
 
 $("shareScreen").onclick = async () => {
   if (!call.active) return;
@@ -834,6 +839,20 @@ function fmtTime(ts) { return new Date(ts).toLocaleTimeString(window.getLang() =
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
 
+// ====================== ИКОНКИ ======================
+function setIcons() {
+  const map = {
+    emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send",
+    muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back",
+    newChatBtn: "edit", profileBtn: "settings",
+    toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phone",
+    windowToggle: "window", newChatCancel: "close", profileCancel: "close",
+    toastClose: "close", infoClose: "close",
+  };
+  for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
+}
+
 // ====================== СТАРТ ======================
 initLang();
+setIcons();
 checkSession();
