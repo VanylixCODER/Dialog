@@ -885,7 +885,7 @@ async function joinCall() {
   hideToast(); updateCallCount();
   $("toggleCam").classList.toggle("off", !call.camOn);
   $("toggleMic").classList.toggle("off", !call.micOn);
-  $("toggleNoise").classList.toggle("active", call.ns);
+  $("noiseToggle").classList.toggle("on", call.ns);
   updateCallStatus();
   socket.emit("call-invite", { title: curTitle });
 }
@@ -898,15 +898,20 @@ function endCall() {
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true });
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("shareScreen").classList.remove("active");
-  $("toggleNoise").classList.remove("active");
+  $("noiseToggle").classList.add("on");
+  $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera;
   $("callStatus").textContent = "";
 }
-// Шумодав (подавление шума браузером) — вкл/выкл
-$("toggleNoise").onclick = async () => {
+// Микрофон дропдаун (Discord-стиль)
+$("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); };
+document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
+// Шумодав
+$("toggleNoise").onclick = async (e) => {
+  e.stopPropagation();
   if (!call.localStream) return;
   call.ns = !call.ns;
-  $("toggleNoise").classList.toggle("active", call.ns);
+  $("noiseToggle").classList.toggle("on", call.ns);
   try {
     for (const tr of call.localStream.getAudioTracks())
       await tr.applyConstraints({ echoCancellation: call.ns, noiseSuppression: call.ns, autoGainControl: call.ns });
@@ -1147,7 +1152,7 @@ function setIcons() {
     emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send",
     muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back",
     newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users",
-    toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phoneOff", toggleNoise: "shield",
+    toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phoneOff",
     windowToggle: "window", newChatCancel: "close", profileCancel: "close",
     toastClose: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close",
   };
