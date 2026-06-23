@@ -72,6 +72,54 @@ export async function initSchema() {
       KEY idx_sessions_login (login)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_groups (
+      id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+      name        VARCHAR(64) NOT NULL,
+      owner       VARCHAR(24) NOT NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS group_members (
+      group_id    BIGINT NOT NULL,
+      login       VARCHAR(24) NOT NULL,
+      PRIMARY KEY (group_id, login),
+      KEY idx_gm_login (login)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+}
+
+// --- Группы ---
+export async function createGroup(name, owner, memberLogins) {
+  let valid = [owner];
+  if (memberLogins.length) {
+    const rows = await query("SELECT login FROM users WHERE login IN (?)", [memberLogins]);
+    valid = [...new Set([owner, ...rows.map((r) => r.login)])];
+  }
+  const res = await execute("INSERT INTO chat_groups (name, owner) VALUES (?, ?)", [name, owner]);
+  const id = res.insertId;
+  for (const m of valid) await execute("INSERT IGNORE INTO group_members (group_id, login) VALUES (?, ?)", [id, m]);
+  return { id, name, members: valid };
+}
+export async function getUserGroups(login) {
+  return query(
+    `SELECT g.id, g.name FROM chat_groups g
+     JOIN group_members m ON m.group_id = g.id WHERE m.login = ? ORDER BY g.id DESC`,
+    [login]
+  );
+}
+export async function isGroupMember(groupId, login) {
+  const r = await query("SELECT 1 FROM group_members WHERE group_id = ? AND login = ?", [groupId, login]);
+  return r.length > 0;
+}
+export async function getGroupMembers(groupId) {
+  const r = await query("SELECT login FROM group_members WHERE group_id = ?", [groupId]);
+  return r.map((x) => x.login);
+}
+export async function getGroup(id) {
+  const r = await query("SELECT id, name, owner FROM chat_groups WHERE id = ?", [id]);
+  return r[0] || null;
 }
 
 // --- История сообщений ---

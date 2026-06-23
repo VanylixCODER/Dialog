@@ -401,6 +401,20 @@ input, textarea, button { caret-color: var(--green); }
 .room-chip:hover { border-color: var(--green); background: var(--panel-2); color: var(--green); }
 .room-chip:active { transform: scale(0.95); }
 
+/* ---------- Хаб входа: вкладки ---------- */
+.hub-tabs { display: flex; margin-bottom: 16px; border: 1px solid var(--border); }
+.hub-tab {
+  flex: 1; padding: 9px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-dim);
+  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  transition: background 0.15s, color 0.15s;
+}
+.hub-tab + .hub-tab { border-left: 1px solid var(--border); }
+.hub-tab.active { background: var(--green); color: #001a08; }
+.hub-pane { animation: fadeIn 0.2s ease; }
+.hub-pane .room-list { margin-top: 14px; }
+#newGroupForm { margin-top: 8px; }
+
 /* ---------- Шапка сайдбара: кнопки ---------- */
 .sidebar-head { gap: 7px; }
 .room-head-info { min-width: 0; flex: 1; }
