@@ -188,7 +188,7 @@ io.on("connection", (socket) => {
     if (peers) { peers.delete(socket.id); if (peers.size === 0) rooms.delete(currentRoom); }
     socket.leave(currentRoom);
     socket.to(currentRoom).emit("peer-left", { id: socket.id, name: userName });
-    io.to(currentRoom).emit("system", { key: "left", name: userName });
+    // системное «вышел из чата» убрано
     currentRoom = null;
   }
 
@@ -226,7 +226,17 @@ io.on("connection", (socket) => {
     socket.emit("peers", peersList(currentRoom).filter((p) => p.id !== socket.id));
 
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
-    io.to(currentRoom).emit("system", { key: "joined", name: userName });
+    // системное «вошёл в чат» убрано — не спамим при каждом открытии чата
+  });
+
+  // Регистрируем сокет глобально (по токену), чтобы звонки/пинги ловились
+  // в любом месте приложения, даже если ни один чат ещё не открыт
+  socket.on("identify", async ({ token }) => {
+    const profile = await auth.userByToken(token);
+    if (!profile) return;
+    userLogin = profile.login;
+    userName = profile.name;
+    addUserSocket(userLogin, socket.id);
   });
 
   socket.on("leave", () => doLeave());

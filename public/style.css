@@ -679,3 +679,13 @@ input, textarea, button { caret-color: var(--green); }
   .info-panel { width: 100%; }
 }
 .call-go.in-call { border-color: var(--danger); color: var(--danger); background: rgba(255,68,68,.12); }
+
+/* ====================== SVG-иконки ====================== */
+.icon-btn svg, .hicon-btn svg, .back-btn svg, .win-btn svg, .hub-close svg, .toast-close svg { width: 20px; height: 20px; display: block; }
+.call-btn svg { width: 24px; height: 24px; display: block; }
+.call-btn.end svg { transform: rotate(135deg); }
+.m-act svg { width: 14px; height: 14px; }
+.tctrl-mute svg { width: 16px; height: 16px; display: block; }
+.tctrl-mute { display: grid; place-items: center; }
+.avatar.grp svg, .ava-fallback svg { width: 54%; height: 54%; }
+.win-btn { display: grid; place-items: center; }
