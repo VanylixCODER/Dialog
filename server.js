@@ -138,7 +138,7 @@ app.get("/api/ice", async (req, res) => {
     );
   } else if (meteredKey) {
     try {
-      const r = await fetch(`https://dialog.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`);
+      const r = await fetch(`https://dialogs.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`);
       const creds = await r.json();
       if (Array.isArray(creds)) servers.push(...creds);
     } catch (e) { console.error("metered", e.message); }
