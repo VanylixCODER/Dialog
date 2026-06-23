@@ -211,9 +211,22 @@ io.on("connection", (socket) => {
   socket.on("signal", ({ to, kind, data }) => {
     io.to(to).emit("signal", { from: socket.id, name: userName, kind, data });
   });
-  socket.on("call-invite", () => {
+  socket.on("call-invite", async ({ title } = {}) => {
     if (!currentRoom) return;
-    socket.to(currentRoom).emit("call-invite", { from: socket.id, name: userName });
+    const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
+    // в самой комнате — для mesh-связи и тоста присутствующим
+    socket.to(currentRoom).emit("call-invite", payload);
+    // глобально — участникам группы / стороне ЛС, даже если они в другой комнате
+    let recipients = [];
+    try {
+      if (currentRoom.startsWith("@grp:")) recipients = await getGroupMembers(currentRoom.slice(5));
+      else if (currentRoom.startsWith("@dm:")) recipients = currentRoom.slice(4).split("~");
+    } catch {}
+    for (const login of recipients) {
+      if (login === userLogin) continue;
+      const ids = userSockets.get(login);
+      if (ids) for (const id of ids) if (id !== socket.id) io.to(id).emit("call-ring", payload);
+    }
   });
 
   socket.on("disconnect", () => { doLeave(); if (userLogin) removeUserSocket(userLogin, socket.id); });
