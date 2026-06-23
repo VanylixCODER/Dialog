@@ -21,8 +21,11 @@ window.addEventListener("langchange", () => {
   ["langSelect", "langSelect2"].forEach((id) => { const el = $(id); if (el) el.value = window.getLang(); });
   setCallBtn(call.active);
   updateFavBtn();
+  updateMuteBtn();
   renderMembers();
   renderRoomLists();
+  renderDMList();
+  if (curDM) { $("roomSub").textContent = t("room_sub_dm"); $("chatTitle").textContent = "@ " + curDM; }
 });
 
 // ====================== ЗВУКИ ======================
@@ -158,23 +161,42 @@ function updateFavBtn() {
 $("favBtn").onclick = () => { toggleFav(myRoom); updateFavBtn(); renderRoomLists(); };
 
 // ====================== ВХОД / ВЫХОД ИЗ КОМНАТЫ ======================
-function tryJoin() {
+let curDM = null; // имя собеседника, если мы в личке
+
+// Общий вход в комнату или ЛС
+function enterRoom(room, opts = {}) {
   if (!token) return;
-  const room = ($("roomInput").value.trim() || "lobby").slice(0, 32);
   myName = profile.name;
   myRoom = room;
-  addRecent(room);
+  curDM = opts.dm ? opts.title : null;
+  if (call.active) endCall();
   socket.emit("join", { token, room });
 
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
-  $("roomLabel").textContent = room;
-  $("chatTitle").textContent = "# " + room;
-  $("callRoomLabel").textContent = t("call_label") + " · # " + room;
+  if (opts.dm) {
+    $("roomLabel").textContent = opts.title;
+    $("roomSub").textContent = t("room_sub_dm");
+    $("chatTitle").textContent = "@ " + opts.title;
+    $("favBtn").style.display = "none";
+  } else {
+    addRecent(room);
+    $("roomLabel").textContent = room;
+    $("roomSub").textContent = t("room_sub");
+    $("chatTitle").textContent = "# " + room;
+    $("favBtn").style.display = "";
+    updateFavBtn();
+  }
+  $("callRoomLabel").textContent = t("call_label") + " · " + (opts.dm ? "@ " + opts.title : "# " + room);
   $("myName").textContent = myName;
   $("myAvatar").textContent = initials(myName);
-  updateFavBtn();
+  updateMuteBtn();
+  renderDMList();
   $("msgInput").focus();
+}
+function tryJoin() {
+  const room = ($("roomInput").value.trim() || "lobby").slice(0, 32);
+  enterRoom(room, {});
 }
 $("joinBtn").onclick = tryJoin;
 $("roomInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryJoin(); });
@@ -182,16 +204,81 @@ $("roomInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryJo
 function leaveRoom() {
   if (call.active) endCall();
   socket.emit("leave");
-  myRoom = "";
+  myRoom = ""; curDM = null;
   peers.clear(); renderMembers();
   messagesEl.innerHTML = "";
   typingUsers.clear(); $("typingIndicator").textContent = "";
+  $("favBtn").style.display = "";
   $("app").classList.add("hidden");
   $("login").classList.remove("hidden");
   showRoomStage();
 }
 $("backBtn").onclick = leaveRoom;
 $("backBtnMobile").onclick = leaveRoom;
+
+// ====================== ЛИЧНЫЕ СООБЩЕНИЯ (DM) ======================
+function dmKey(otherLogin) { return "@dm:" + [profile.login, otherLogin].sort().join("~"); }
+const dmUnread = new Map(); // login -> count
+function saveDM(login, name) {
+  let d = lsGet("dialog_dms").filter((x) => x.login !== login);
+  d.unshift({ login, name });
+  lsSet("dialog_dms", d.slice(0, 12));
+}
+function openDM(login, name) {
+  if (!login || login === profile.login) return;
+  saveDM(login, name);
+  dmUnread.set(login, 0);
+  enterRoom(dmKey(login), { dm: true, title: name });
+}
+function renderDMList() {
+  const ul = $("dmList");
+  if (!ul) return;
+  const d = lsGet("dialog_dms");
+  $("dmSection").classList.toggle("hidden", d.length === 0);
+  ul.innerHTML = "";
+  d.forEach(({ login, name }) => {
+    const li = document.createElement("li");
+    li.className = "member" + (myRoom === dmKey(login) ? " active-dm" : "");
+    const unread = dmUnread.get(login) || 0;
+    li.innerHTML = `<span class="avatar" style="width:26px;height:26px;font-size:12px">${initials(name)}</span>
+      <span class="m-name">${escapeHtml(name)}</span>${unread ? `<span class="badge">${unread}</span>` : ""}`;
+    li.onclick = () => openDM(login, name);
+    ul.appendChild(li);
+  });
+}
+socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
+  saveDM(fromLogin, fromName);
+  if (myRoom !== room) {
+    dmUnread.set(fromLogin, (dmUnread.get(fromLogin) || 0) + 1);
+    sfx.call();
+    notify(t("dm_ping", { name: fromName }));
+  }
+  renderDMList();
+});
+
+// ====================== МЬЮТ КОМНАТЫ ======================
+const isMuted = (room) => lsGet("dialog_muted").includes(room);
+function updateMuteBtn() {
+  if (!myRoom) return;
+  const m = isMuted(myRoom);
+  $("muteBtn").textContent = m ? "🔕" : "🔔";
+  $("muteBtn").classList.toggle("on", m);
+  $("muteBtn").title = t(m ? "unmute_room" : "mute_room");
+}
+$("muteBtn").onclick = () => {
+  let m = lsGet("dialog_muted");
+  m = m.includes(myRoom) ? m.filter((x) => x !== myRoom) : [myRoom, ...m];
+  lsSet("dialog_muted", m);
+  updateMuteBtn();
+};
+
+// Короткое уведомление
+function notify(text) {
+  let el = $("notifyToast");
+  if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); }
+  el.textContent = text; el.classList.add("show");
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500);
+}
 
 socket.on("auth-error", (msg) => {
   alert(msg || "Auth error");
@@ -220,20 +307,21 @@ function renderMembers() {
   const ul = $("members");
   ul.innerHTML = "";
   if (peers.size === 0) {
-    ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`;
+    ul.innerHTML = `<li class="member" style="opacity:.5;cursor:default"><span class="m-name">${t("alone")}</span></li>`;
     return;
   }
-  for (const [, name] of peers) {
+  for (const [, info] of peers) {
     const li = document.createElement("li");
     li.className = "member";
-    li.innerHTML = `<span class="dot"></span><span class="avatar" style="width:28px;height:28px;font-size:13px">${initials(name)}</span>
-      <span class="m-name">${escapeHtml(name)}</span>`;
+    li.innerHTML = `<span class="dot"></span><span class="avatar" style="width:28px;height:28px;font-size:13px">${initials(info.name)}</span>
+      <span class="m-name">${escapeHtml(info.name)}</span><span class="m-dm">${t("dm_open")}</span>`;
+    li.onclick = () => openDM(info.login, info.name);
     ul.appendChild(li);
   }
 }
-socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, p.name)); renderMembers(); });
-socket.on("peer-joined", ({ id, name }) => { peers.set(id, name); renderMembers(); if (myRoom) sfx.join(); });
-socket.on("peer-left", ({ id }) => { peers.delete(id); renderMembers(); if (call.pcs.has(id)) removePeerConn(id); if (myRoom) sfx.leave(); });
+socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); renderMembers(); });
+socket.on("peer-joined", ({ id, name, login }) => { peers.set(id, { name, login }); renderMembers(); if (myRoom && !isMuted(myRoom)) sfx.join(); });
+socket.on("peer-left", ({ id }) => { peers.delete(id); renderMembers(); if (call.pcs.has(id)) removePeerConn(id); if (myRoom && !isMuted(myRoom)) sfx.leave(); });
 
 // ====================== ИСТОРИЯ + ЧАТ ======================
 const messagesEl = $("messages");
@@ -245,8 +333,10 @@ socket.on("history", (list) => {
     sep.textContent = t("prev_messages");
     messagesEl.appendChild(sep);
   }
-  list.forEach((m) => renderMessage(m, false));
+  list.forEach((m) => renderMessage(m, false, isPingForMe(m)));
   scrollDown();
+  // анимация смены комнаты/чата
+  messagesEl.classList.remove("room-anim"); void messagesEl.offsetWidth; messagesEl.classList.add("room-anim");
 });
 socket.on("system", (data) => {
   const div = document.createElement("div");
@@ -256,17 +346,35 @@ socket.on("system", (data) => {
   scrollDown();
 });
 socket.on("message", (m) => {
-  renderMessage(m);
-  if (!(profile && m.fromLogin === profile.login)) sfx.msg();
+  const ping = isPingForMe(m);
+  renderMessage(m, true, ping);
+  const mine = profile && m.fromLogin === profile.login;
+  if (!mine) {
+    if (ping) sfx.call();                       // @упоминание — звук всегда
+    else if (!isMuted(myRoom)) sfx.msg();        // обычное — только если не замьючено
+  }
 });
 
-function renderMessage(m, scroll = true) {
+function isPingForMe(m) {
+  if (m.type !== "text" || !profile) return false;
+  const txt = (m.text || "").toLowerCase();
+  return txt.includes("@" + profile.login.toLowerCase()) ||
+    (profile.name && txt.includes("@" + profile.name.toLowerCase()));
+}
+function highlightMentions(html) {
+  return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => {
+    const me = profile && (name.toLowerCase() === profile.login.toLowerCase() || name.toLowerCase() === (profile.name || "").toLowerCase());
+    return `<span class="mention${me ? " me" : ""}">${full}</span>`;
+  });
+}
+
+function renderMessage(m, scroll = true, ping = false) {
   const mine = profile && m.fromLogin === profile.login;
   const wrap = document.createElement("div");
-  wrap.className = "msg" + (mine ? " me" : "");
+  wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "");
   let inner = "";
   if (!mine) inner += `<div class="who">${escapeHtml(m.name)}</div>`;
-  if (m.type === "text") inner += `<div class="bubble">${linkify(escapeHtml(m.text))}</div>`;
+  if (m.type === "text") inner += `<div class="bubble">${highlightMentions(linkify(escapeHtml(m.text)))}</div>`;
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="${escapeHtml(m.mediaName)}" /></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   inner += `<div class="time">${fmtTime(m.ts)}</div>`;
