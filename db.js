@@ -4,25 +4,32 @@ import { cacheGet, cacheSet, cacheDel } from "./cache.js";
 const HIST_TTL = 60;              // история комнаты живёт в кэше до 60с
 const HIST_MAX_CACHE = 256 * 1024; // не кэшируем тяжёлые (медиа) комнаты
 
-// Подключение через DATABASE_URL либо стандартный URI.
-// По умолчанию — локальный контейнер dialog-mysql.
-const connectionUri =
-  process.env.DATABASE_URL || "mysql://dialog:dialog@localhost:3306/dialog";
-
-// Разбираем URL в конфиг — так можно добавить SSL и лимит пула.
-const u = new URL(connectionUri);
-const config = {
-  host: u.hostname,
-  port: u.port ? Number(u.port) : 3306,
-  user: decodeURIComponent(u.username),
-  password: decodeURIComponent(u.password),
-  database: u.pathname.replace(/^\//, ""),
-  charset: "utf8mb4",
-  connectionLimit: Number(process.env.DB_POOL || 10),
-  waitForConnections: true,
-};
-// Managed MySQL обычно требует TLS — включается через DB_SSL=true.
-if (process.env.DB_SSL === "true") config.ssl = { rejectUnauthorized: false };
+// Конфиг подключения: либо отдельные DB_HOST/DB_USER/... (удобно для TiDB —
+// не надо URL-кодировать пароль), либо единый DATABASE_URL, либо localhost по умолчанию.
+let config;
+if (process.env.DB_HOST) {
+  config = {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT || 4000),
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASS || "",
+    database: process.env.DB_NAME || "test",
+  };
+} else {
+  const u = new URL(process.env.DATABASE_URL || "mysql://dialog:dialog@localhost:3306/dialog");
+  config = {
+    host: u.hostname,
+    port: u.port ? Number(u.port) : 3306,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: u.pathname.replace(/^\//, ""),
+  };
+}
+config.charset = "utf8mb4";
+config.connectionLimit = Number(process.env.DB_POOL || 10);
+config.waitForConnections = true;
+// Managed MySQL/TiDB требует TLS — включается через DB_SSL=true.
+if (process.env.DB_SSL === "true") config.ssl = { minVersion: "TLSv1.2", rejectUnauthorized: false };
 
 export const pool = mysql.createPool(config);
 
