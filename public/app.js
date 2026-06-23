@@ -1124,7 +1124,7 @@ function setIcons() {
     emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send",
     muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back",
     newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users",
-    toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phone", toggleNoise: "shield",
+    toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phoneOff", toggleNoise: "shield",
     windowToggle: "window", newChatCancel: "close", profileCancel: "close",
     toastClose: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close",
   };
