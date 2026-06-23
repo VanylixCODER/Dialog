@@ -6,6 +6,8 @@ let myRoom = "";          // ключ активного чата (@dm:.. / @grp
 let curKind = "dm";       // dm | group
 let curTitle = "";
 const peers = new Map();   // id -> {name, login}
+const presence = new Map(); // login -> 'online'|'dnd'|'offline'
+let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
 const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
 
@@ -92,6 +94,9 @@ function enterApp() {
   renderChatList();
   loadGroups();
   loadRelations();
+  loadMe();
+  refreshPresence();
+  if (!window._presInt) window._presInt = setInterval(refreshPresence, 25000);
 }
 function onAuthSuccess({ token: tk, profile: p }) {
   token = tk; profile = p;
@@ -151,7 +156,7 @@ function renderChatList(filter = "") {
     shown++;
     const li = document.createElement("li");
     li.className = "chat-item" + (c.key === activeKey ? " active" : "");
-    const ava = c.type === "dm" ? avaHTML(c.login, c.name, 46)
+    const ava = c.type === "dm" ? avaHTML(c.login, c.name, 46, true)
       : `<span class="avatar grp" style="width:46px;height:46px">${window.ICON.users}</span>`;
     li.innerHTML = `${ava}
       <div class="ci-body">
@@ -163,6 +168,7 @@ function renderChatList(filter = "") {
     ul.appendChild(li);
   });
   $("chatsEmpty").classList.toggle("hidden", shown > 0 || (f && chats.size));
+  updateDots();
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 
@@ -194,6 +200,7 @@ function openChat(c) {
   updateMuteBtn();
   document.body.classList.add("chat-open"); // мобильный: показать разговор
   renderChatList($("searchInput").value);
+  refreshPresence();
   $("msgInput").focus();
 }
 function setChatAva(c) {
@@ -280,6 +287,10 @@ $("createGroupBtn").onclick = createGroupFromForm;
 // ====================== ИНФО-ПАНЕЛЬ (участники) ======================
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = curTitle; $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
+$("chatAva").onclick = () => {
+  if (curKind === "dm") { const p = myRoom.slice(4).split("~").find((l) => l !== profile.login); openMiniProfile(p, curTitle); }
+  else if (curKind === "group") $("infoBtn").click();
+};
 
 // ====================== МЬЮТ ======================
 const isMuted = (room) => lsGet("dialog_muted").includes(room);
@@ -315,23 +326,32 @@ socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
 // ====================== АВАТАРЫ + ПРОФИЛЬ ======================
 let avaVer = Date.now();
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login) + "?v=" + avaVer; }
-function avaHTML(login, name, size) {
+function avaHTML(login, name, size, dot) {
   const s = size || 28;
   return `<span class="avatar ava" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.4)}px">` +
     `<img src="${avaUrl(login)}" alt="" onerror="this.style.display='none'">` +
-    `<span class="ava-fallback">${initials(name)}</span></span>`;
+    `<span class="ava-fallback">${initials(name)}</span>` +
+    (dot ? `<span class="st-dot st-${presence.get(login) || "offline"}" data-login="${login}"></span>` : "") +
+    `</span>`;
 }
 function setMyAvatar() {
   const el = $("myAvatar"); el.classList.add("ava");
-  el.innerHTML = `<img src="${avaUrl(profile.login)}" alt="" onerror="this.style.display='none'"><span class="ava-fallback">${initials(myName)}</span>`;
+  el.innerHTML = `<img src="${avaUrl(profile.login)}" alt="" onerror="this.style.display='none'"><span class="ava-fallback">${initials(myName)}</span><span class="st-dot st-${presence.get(profile.login) || "online"}" data-login="${profile.login}"></span>`;
 }
 let pendingAvatar = null;
+let pendingStatus = "online";
+document.querySelectorAll(".status-opt").forEach((b) => {
+  b.onclick = () => { pendingStatus = b.dataset.st; document.querySelectorAll(".status-opt").forEach((x) => x.classList.toggle("active", x === b)); };
+});
 $("profileBtn").onclick = () => {
   pendingAvatar = null;
   $("profileLogin").textContent = profile.login;
   $("profileName").value = profile.name;
+  $("profileDesc").value = myDesc;
   $("profileError").textContent = "";
   $("profileAvaInit").textContent = initials(profile.name);
+  pendingStatus = myStatus;
+  document.querySelectorAll(".status-opt").forEach((x) => x.classList.toggle("active", x.dataset.st === myStatus));
   const img = $("profileAvaImg"); img.style.display = ""; img.onerror = () => (img.style.display = "none"); img.src = avaUrl(profile.login);
   $("profileModal").classList.remove("hidden");
 };
@@ -356,18 +376,21 @@ $("avaFile").addEventListener("change", (e) => {
 });
 $("profileSave").onclick = async () => {
   const name = $("profileName").value.trim();
-  const body = {};
+  const desc = $("profileDesc").value.trim();
+  const body = { description: desc };
   if (name && name !== profile.name) body.name = name;
   if (pendingAvatar) body.avatar = pendingAvatar;
-  if (!Object.keys(body).length) { $("profileModal").classList.add("hidden"); return; }
+  if (pendingStatus !== myStatus) body.status = pendingStatus;
   try {
     const res = await fetch("/api/profile", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) { $("profileError").textContent = data.error || "error"; return; }
     profile = data.profile; myName = profile.name; avaVer = Date.now();
+    myDesc = desc; myStatus = pendingStatus;
+    presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
     $("profileModal").classList.add("hidden");
     $("myName").textContent = myName;
-    setMyAvatar(); renderMembers(); renderChatList($("searchInput").value);
+    setMyAvatar(); renderMembers(); renderChatList($("searchInput").value); updateDots();
   } catch { $("profileError").textContent = "error"; }
 };
 
@@ -379,7 +402,7 @@ function applyRelations(d) {
   incomingReqs = d.incoming || []; outgoingReqs = d.outgoing || [];
   blocked = new Set(blocksList.map((x) => x.login));
   $("contactsBtn") && $("contactsBtn").classList.toggle("has-req", incomingReqs.length > 0);
-  renderContacts(); renderMembers();
+  renderContacts(); renderMembers(); refreshPresence();
 }
 async function loadRelations() {
   try {
@@ -402,7 +425,7 @@ async function blockAction(target, action) {
 socket.on("relations-changed", loadRelations);
 
 // Контакты
-$("contactsBtn").onclick = () => { $("reqError").textContent = ""; $("reqInput").value = ""; renderContacts(); $("contactsModal").classList.remove("hidden"); };
+$("contactsBtn").onclick = () => { $("reqError").textContent = ""; $("reqInput").value = ""; renderContacts(); refreshPresence(); $("contactsModal").classList.remove("hidden"); };
 $("contactsCancel").onclick = () => $("contactsModal").classList.add("hidden");
 async function reqSend() {
   const login = $("reqInput").value.trim().toLowerCase();
@@ -419,7 +442,9 @@ $("reqInput").addEventListener("keydown", (e) => { if (e.key === "Enter") reqSen
 function contactRow(login, name, buttons) {
   const row = document.createElement("div");
   row.className = "contact-row";
-  row.innerHTML = `${avaHTML(login, name, 32)}<span class="m-name">${escapeHtml(name)}</span><span class="cr-acts"></span>`;
+  row.innerHTML = `${avaHTML(login, name, 32, true)}<span class="m-name">${escapeHtml(name)}</span><span class="cr-acts"></span>`;
+  row.querySelector(".m-name").onclick = () => openMiniProfile(login, name);
+  row.querySelector(".ava").onclick = () => openMiniProfile(login, name);
   const acts = row.querySelector(".cr-acts");
   buttons.forEach(({ txt, cls, fn }) => { const b = document.createElement("button"); b.className = "mini-btn " + (cls || ""); b.innerHTML = txt; b.onclick = fn; acts.appendChild(b); });
   return row;
@@ -445,6 +470,63 @@ function renderContacts() {
 
 // Сообщение заблокировано (нужна дружба/общая группа)
 socket.on("dm-blocked", () => { notify(t("dm_need_friend")); loadRelations(); });
+
+// ====================== ПРИСУТСТВИЕ (статусы) ======================
+function updateDots() {
+  document.querySelectorAll(".st-dot[data-login]").forEach((el) => {
+    const st = el.dataset.login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(el.dataset.login) || "offline");
+    el.className = "st-dot st-" + st;
+  });
+}
+async function refreshPresence() {
+  const set = new Set();
+  for (const c of chats.values()) if (c.type === "dm" && c.login) set.add(c.login);
+  for (const [, info] of peers) if (info.login) set.add(info.login);
+  friendsList.concat(incomingReqs, outgoingReqs).forEach((x) => set.add(x.login));
+  set.delete(profile.login);
+  if (!set.size) { updateDots(); return; }
+  try {
+    const res = await fetch("/api/presence?ids=" + [...set].join(","), { headers: { Authorization: "Bearer " + token } });
+    if (res.ok) { const d = await res.json(); for (const k in d) presence.set(k, d[k]); }
+  } catch {}
+  updateDots();
+}
+socket.on("presence", ({ login, status }) => { presence.set(login, status); updateDots(); });
+
+async function loadMe() {
+  try {
+    const res = await fetch("/api/profile/" + encodeURIComponent(profile.login), { headers: { Authorization: "Bearer " + token } });
+    if (res.ok) { const c = await res.json(); myStatus = c.status === "offline" ? "invisible" : c.status; myDesc = c.description || ""; updateDots(); }
+  } catch {}
+}
+
+// ====================== МИНИ-ПРОФИЛЬ ======================
+let mpLogin = null;
+async function openMiniProfile(login, name) {
+  if (!login) return;
+  mpLogin = login;
+  $("mpAva").innerHTML = `<img src="${avaUrl(login)}" alt="" onerror="this.style.display='none'"><span class="ava-fallback">${initials(name || login)}</span>`;
+  $("mpName").textContent = name || login;
+  $("mpLogin").textContent = login;
+  $("mpStatus").className = "mp-status"; $("mpStatus").textContent = "";
+  $("mpDesc").textContent = ""; $("mpJoined").textContent = "";
+  $("mpMessage").classList.toggle("hidden", login === profile.login);
+  $("mpModal").classList.remove("hidden");
+  try {
+    const res = await fetch("/api/profile/" + encodeURIComponent(login), { headers: { Authorization: "Bearer " + token } });
+    if (!res.ok) return;
+    const c = await res.json();
+    presence.set(login, c.status);
+    $("mpName").textContent = c.name;
+    $("mpStatus").className = "mp-status st-" + c.status;
+    $("mpStatus").innerHTML = `<span class="st-dot st-${c.status}"></span>${t("status_" + c.status)}`;
+    if (c.description) { $("mpDesc").textContent = c.description; $("mpDesc").classList.remove("hidden"); } else $("mpDesc").classList.add("hidden");
+    const d = new Date(c.createdAt);
+    $("mpJoined").textContent = t("joined", { date: d.toLocaleDateString(window.getLang() === "ru" ? "ru-RU" : "en-GB") });
+  } catch {}
+}
+$("mpCancel").onclick = () => $("mpModal").classList.add("hidden");
+$("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); const name = $("mpName").textContent; openDM(mpLogin, name); };
 
 socket.on("auth-error", (msg) => { alert(msg || "Auth error"); localStorage.removeItem("dialog_token"); location.reload(); });
 
@@ -474,7 +556,7 @@ function renderMembers() {
     const li = document.createElement("li");
     li.className = "member";
     const isBlk = blocked.has(info.login);
-    li.innerHTML = `<span class="dot"></span>${avaHTML(info.login, info.name, 28)}
+    li.innerHTML = `${avaHTML(info.login, info.name, 30, true)}
       <span class="m-name">${escapeHtml(info.name)}</span>
       <span class="m-acts">
         <button class="m-act" data-act="friend" title="${t("add_friend")}">${window.ICON.userPlus}</button>
@@ -483,12 +565,13 @@ function renderMembers() {
     li.onclick = (e) => {
       const act = e.target.closest(".m-act");
       if (act) { e.stopPropagation(); if (act.dataset.act === "friend") friendAction(info.login, "request"); else blockAction(info.login, isBlk ? "remove" : "add"); return; }
-      openDM(info.login, info.name); $("infoPanel").classList.add("hidden");
+      openMiniProfile(info.login, info.name);
     };
     ul.appendChild(li);
   }
+  updateDots();
 }
-socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); renderMembers(); if (curKind === "group") $("chatSub").textContent = t("members_n", { n: peers.size + 1 }); });
+socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); renderMembers(); refreshPresence(); if (curKind === "group") $("chatSub").textContent = t("members_n", { n: peers.size + 1 }); });
 socket.on("peer-joined", ({ id, name, login }) => { peers.set(id, { name, login }); renderMembers(); if (myRoom && !isMuted(myRoom)) sfx.join(); if (curKind === "group") $("chatSub").textContent = t("members_n", { n: peers.size + 1 }); });
 socket.on("peer-left", ({ id }) => { peers.delete(id); renderMembers(); if (call.pcs.has(id)) removePeerConn(id); if (myRoom && !isMuted(myRoom)) sfx.leave(); if (curKind === "group") $("chatSub").textContent = t("members_n", { n: peers.size + 1 }); });
 
@@ -917,7 +1000,7 @@ function setIcons() {
     newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users",
     toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phone",
     windowToggle: "window", newChatCancel: "close", profileCancel: "close",
-    toastClose: "close", infoClose: "close",
+    toastClose: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close",
   };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
 }

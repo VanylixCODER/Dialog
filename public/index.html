@@ -168,6 +168,12 @@
       <input id="avaFile" type="file" accept="image/*" hidden />
       <div class="profile-login" id="profileLogin">login</div>
       <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+      <textarea id="profileDesc" class="field" rows="2" data-i18n-ph="ph_description" maxlength="280"></textarea>
+      <div class="status-pick">
+        <button class="status-opt" data-st="online"><span class="st-dot st-online"></span><span data-i18n="status_online">Online</span></button>
+        <button class="status-opt" data-st="dnd"><span class="st-dot st-dnd"></span><span data-i18n="status_dnd">Do not disturb</span></button>
+        <button class="status-opt" data-st="invisible"><span class="st-dot st-offline"></span><span data-i18n="status_invisible">Invisible</span></button>
+      </div>
       <div class="form-error" id="profileError"></div>
       <div class="modal-actions">
         <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
@@ -202,6 +208,22 @@
     </div>
     <button class="toast-join" id="toastJoin" data-i18n="toast_join">Accept</button>
     <button class="toast-close" id="toastClose">✕</button>
+  </div>
+
+  <!-- Мини-профиль -->
+  <div id="mpModal" class="modal hidden">
+    <div class="modal-card mp-card">
+      <button id="mpCancel" class="hub-close" title="Close">✕</button>
+      <div class="profile-ava avatar ava" id="mpAva"><span class="ava-fallback">?</span></div>
+      <div class="mp-name" id="mpName">—</div>
+      <div class="profile-login" id="mpLogin">login</div>
+      <div class="mp-status" id="mpStatus"></div>
+      <div class="mp-desc" id="mpDesc"></div>
+      <div class="mp-joined" id="mpJoined"></div>
+      <div class="modal-actions">
+        <button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button>
+      </div>
+    </div>
   </div>
 
   <!-- Лайтбокс -->

@@ -51,8 +51,10 @@ export async function initSchema() {
       created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
-  // Для уже существующих БД добавляем колонку аватара (идемпотентно)
+  // Для уже существующих БД добавляем колонки (идемпотентно)
   try { await pool.query("ALTER TABLE users ADD COLUMN avatar LONGTEXT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN description VARCHAR(280) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN status VARCHAR(12) NOT NULL DEFAULT 'online'"); } catch {}
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
       id          BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -199,17 +201,28 @@ export async function getGroup(id) {
 }
 
 // --- Профиль ---
-export async function updateProfile(login, { name, avatar }) {
-  if (typeof name === "string" && name.trim()) {
-    await execute("UPDATE users SET name = ? WHERE login = ?", [name.trim().slice(0, 32), login]);
-  }
-  if (typeof avatar === "string") {
-    await execute("UPDATE users SET avatar = ? WHERE login = ?", [avatar.slice(0, 400000), login]);
-  }
+export async function updateProfile(login, { name, avatar, description, status }) {
+  if (typeof name === "string" && name.trim()) await execute("UPDATE users SET name = ? WHERE login = ?", [name.trim().slice(0, 32), login]);
+  if (typeof avatar === "string") await execute("UPDATE users SET avatar = ? WHERE login = ?", [avatar.slice(0, 400000), login]);
+  if (typeof description === "string") await execute("UPDATE users SET description = ? WHERE login = ?", [description.slice(0, 280), login]);
+  if (typeof status === "string" && ["online", "dnd", "invisible"].includes(status)) await execute("UPDATE users SET status = ? WHERE login = ?", [status, login]);
 }
 export async function getAvatar(login) {
   const r = await query("SELECT avatar FROM users WHERE login = ?", [login]);
   return r[0] ? r[0].avatar : null;
+}
+// Карточка профиля (мини-профиль)
+export async function getProfileCard(login) {
+  const r = await query("SELECT login, name, description, created_at FROM users WHERE login = ?", [login]);
+  return r[0] || null;
+}
+export async function getStatus(login) {
+  const r = await query("SELECT status FROM users WHERE login = ?", [login]);
+  return r[0] ? r[0].status : "online";
+}
+export async function getFriendLogins(login) {
+  const r = await query("SELECT target FROM relations WHERE login = ? AND type = 'friend'", [login]);
+  return r.map((x) => x.target);
 }
 // Токены пользователя — чтобы сбросить кэш профиля при смене ника
 export async function tokensForLogin(login) {

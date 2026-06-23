@@ -7,7 +7,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup, getProfileCard, getStatus, getFriendLogins } from "./db.js";
 import { cacheDel } from "./cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -83,14 +83,37 @@ app.post("/api/profile", async (req, res) => {
   try {
     const me = await authUser(req);
     if (!me) return res.status(401).json({ error: "unauth" });
-    const { name, avatar } = req.body || {};
+    const { name, avatar, description, status } = req.body || {};
     if (typeof avatar === "string" && avatar.length > 400000) return res.status(400).json({ error: "avatar too large" });
-    await updateProfile(me.login, { name, avatar });
+    await updateProfile(me.login, { name, avatar, description, status });
+    if (typeof status === "string") userStatus.set(me.login, status), broadcastPresence(me.login);
     // сбрасываем кэш профиля (имя кэшируется в сессии)
     try { for (const tk of await tokensForLogin(me.login)) await cacheDel("sess:" + tk); } catch {}
     const updated = await auth.getUserByLogin(me.login);
     res.json({ profile: updated });
   } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+
+// Мини-профиль пользователя (имя, логин, описание, дата регистрации, статус)
+app.get("/api/profile/:login", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const card = await getProfileCard((req.params.login || "").toLowerCase());
+    if (!card) return res.status(404).json({ error: "not found" });
+    res.json({ login: card.login, name: card.name, description: card.description || "", createdAt: card.created_at, status: effectiveStatus(card.login) });
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+// Батч-статусы присутствия
+app.get("/api/presence", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const ids = String(req.query.ids || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).slice(0, 200);
+    const out = {};
+    for (const l of ids) out[l] = effectiveStatus(l);
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: "server error" }); }
 });
 
 // Аватар пользователя (бинарно, чтобы работал <img src>)
@@ -203,6 +226,21 @@ function notifyUser(login, event, data) {
   if (ids) for (const id of ids) io.to(id).emit(event, data);
 }
 
+// --- Присутствие (онлайн / dnd / offline) ---
+const userStatus = new Map(); // login -> 'online'|'dnd'|'invisible' (предпочтение)
+function effectiveStatus(login) {
+  if (!userSockets.has(login)) return "offline";
+  const s = userStatus.get(login) || "online";
+  return s === "invisible" ? "offline" : s;
+}
+async function broadcastPresence(login) {
+  const status = effectiveStatus(login);
+  try {
+    const friends = await getFriendLogins(login);
+    for (const f of friends) notifyUser(f, "presence", { login, status });
+  } catch {}
+}
+
 io.on("connection", (socket) => {
   let currentRoom = null;
   let userName = "Аноним";
@@ -263,7 +301,17 @@ io.on("connection", (socket) => {
     if (!profile) return;
     userLogin = profile.login;
     userName = profile.name;
+    const wasOffline = !userSockets.has(userLogin);
     addUserSocket(userLogin, socket.id);
+    if (!userStatus.has(userLogin)) { try { userStatus.set(userLogin, await getStatus(userLogin)); } catch {} }
+    if (wasOffline) broadcastPresence(userLogin); // стал онлайн — сообщить друзьям
+  });
+
+  socket.on("set-status", async ({ status }) => {
+    if (!userLogin || !["online", "dnd", "invisible"].includes(status)) return;
+    userStatus.set(userLogin, status);
+    try { await updateProfile(userLogin, { status }); } catch {}
+    broadcastPresence(userLogin);
   });
 
   socket.on("leave", () => doLeave());
@@ -337,7 +385,13 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => { doLeave(); if (userLogin) removeUserSocket(userLogin, socket.id); });
+  socket.on("disconnect", () => {
+    doLeave();
+    if (userLogin) {
+      removeUserSocket(userLogin, socket.id);
+      if (!userSockets.has(userLogin)) broadcastPresence(userLogin); // ушёл оффлайн
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
