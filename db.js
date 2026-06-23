@@ -91,6 +91,32 @@ export async function initSchema() {
       KEY idx_gm_login (login)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS relations (
+      login   VARCHAR(24) NOT NULL,
+      target  VARCHAR(24) NOT NULL,
+      type    VARCHAR(8) NOT NULL,
+      PRIMARY KEY (login, target, type),
+      KEY idx_rel_login (login)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+}
+
+// --- Друзья / блокировки ---
+export async function setRelation(login, target, type) {
+  await execute("INSERT IGNORE INTO relations (login, target, type) VALUES (?,?,?)", [login, target, type]);
+}
+export async function removeRelation(login, target, type) {
+  await execute("DELETE FROM relations WHERE login=? AND target=? AND type=?", [login, target, type]);
+}
+export async function getRelations(login) {
+  const rows = await query(
+    `SELECT r.target, r.type, u.name FROM relations r JOIN users u ON u.login = r.target WHERE r.login = ?`,
+    [login]
+  );
+  const friends = [], blocks = [];
+  for (const r of rows) (r.type === "friend" ? friends : blocks).push({ login: r.target, name: r.name });
+  return { friends, blocks };
 }
 
 // --- Группы ---

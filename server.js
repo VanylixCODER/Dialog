@@ -7,7 +7,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations } from "./db.js";
 import { cacheDel } from "./cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,6 +103,34 @@ app.get("/api/avatar/:login", async (req, res) => {
     res.set("Cache-Control", "public, max-age=300");
     res.send(Buffer.from(m[2], "base64"));
   } catch (e) { res.status(500).end(); }
+});
+
+// Друзья / блокировки
+app.get("/api/relations", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    res.json(await getRelations(me.login));
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/relations", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const target = String(req.body.target || "").trim().toLowerCase();
+    const type = req.body.type === "block" ? "block" : "friend";
+    const action = req.body.action === "remove" ? "remove" : "add";
+    if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
+    const exists = await auth.getUserByLogin(target);
+    if (!exists) return res.status(404).json({ error: "not found" });
+    if (action === "add") {
+      await setRelation(me.login, target, type);
+      if (type === "block") await removeRelation(me.login, target, "friend"); // блок снимает дружбу
+    } else {
+      await removeRelation(me.login, target, type);
+    }
+    res.json(await getRelations(me.login));
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
 });
 
 // Создать группу
