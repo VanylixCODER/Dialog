@@ -648,7 +648,7 @@ function setCallBtn(inCall) {
 
 socket.on("call-invite", ({ from, name }) => {
   if (call.active) ensurePeer(from, name);
-  else { showToast(from, name); sfx.call(); }
+  else showToast(from, name); // showToast сам запускает рингтон + cava
 });
 
 socket.on("signal", async ({ from, name, kind, data }) => {
@@ -806,13 +806,79 @@ $("callTopbar").addEventListener("pointermove", (e) => {
 });
 $("callTopbar").addEventListener("pointerup", () => (dragState = null));
 
+// --- Рингтон + cava-визуализатор ---
+const ring = { audio: null, src: null, analyser: null, raf: 0, data: null, bars: [] };
+function startRingtone() {
+  const ctx = ensureAudioCtx();
+  if (!ring.audio) { ring.audio = new Audio("/src/Ringtone.mp3"); ring.audio.loop = true; }
+  ring.audio.currentTime = 0;
+  const p = ring.audio.play();
+  if (p && p.catch) p.catch(() => {});
+  // анализатор частот для cava (создаём один раз)
+  if (ctx && !ring.analyser) {
+    try {
+      ring.src = ctx.createMediaElementSource(ring.audio);
+      ring.analyser = ctx.createAnalyser();
+      ring.analyser.fftSize = 128;
+      ring.src.connect(ring.analyser);
+      ring.analyser.connect(ctx.destination);
+      ring.data = new Uint8Array(ring.analyser.frequencyBinCount);
+    } catch {}
+  }
+  startCava();
+}
+function stopRingtone() { if (ring.audio) ring.audio.pause(); stopCava(); }
+function startCava() {
+  const canvas = $("cavaCanvas"), toast = $("callToast");
+  if (!canvas) return;
+  const cx = canvas.getContext("2d");
+  const N = 30;
+  if (ring.bars.length !== N) ring.bars = new Array(N).fill(0);
+  cancelAnimationFrame(ring.raf);
+  const frame = () => {
+    ring.raf = requestAnimationFrame(frame);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = toast.clientWidth * dpr; canvas.height = toast.clientHeight * dpr;
+    const w = canvas.width, h = canvas.height;
+    cx.clearRect(0, 0, w, h);
+    if (ring.analyser) ring.analyser.getByteFrequencyData(ring.data);
+    const bw = w / N;
+    for (let i = 0; i < N; i++) {
+      let target;
+      if (ring.analyser) { const idx = Math.floor((i / N) * ring.data.length * 0.7); target = ring.data[idx] / 255; }
+      else target = 0.25 + 0.55 * Math.abs(Math.sin(Date.now() / 180 + i * 0.5)); // запасная анимация
+      ring.bars[i] = Math.max(target, ring.bars[i] * 0.86); // плавный спад как в cava
+      const bh = Math.max(2 * dpr, ring.bars[i] * h * 0.92);
+      const g = cx.createLinearGradient(0, h, 0, h - bh);
+      g.addColorStop(0, "rgba(0,255,90,0.12)");
+      g.addColorStop(1, "rgba(0,255,90,0.65)");
+      cx.fillStyle = g;
+      cx.fillRect(i * bw + bw * 0.12, h - bh, bw * 0.76, bh);
+    }
+  };
+  frame();
+}
+function stopCava() {
+  cancelAnimationFrame(ring.raf); ring.raf = 0;
+  const c = $("cavaCanvas");
+  if (c) { const cx = c.getContext("2d"); cx && cx.clearRect(0, 0, c.width, c.height); }
+}
+
 // --- Тост о звонке ---
+let toastTimer;
 function showToast(from, name) {
   $("toastName").textContent = name;
   $("toastAvatar").textContent = initials(name);
   $("callToast").classList.remove("hidden");
+  startRingtone();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 35000); // авто-сброс, если не ответили
 }
-function hideToast() { $("callToast").classList.add("hidden"); }
+function hideToast() {
+  clearTimeout(toastTimer);
+  $("callToast").classList.add("hidden");
+  stopRingtone();
+}
 $("toastJoin").onclick = () => joinCall();
 $("toastClose").onclick = hideToast;
 
