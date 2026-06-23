@@ -7,7 +7,8 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin } from "./db.js";
+import { cacheDel } from "./cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -75,6 +76,33 @@ app.get("/api/groups", async (req, res) => {
     if (!me) return res.status(401).json({ error: "unauth" });
     res.json({ groups: await getUserGroups(me.login) });
   } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+
+// Обновить профиль (ник и/или аватар; логин менять нельзя)
+app.post("/api/profile", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const { name, avatar } = req.body || {};
+    if (typeof avatar === "string" && avatar.length > 400000) return res.status(400).json({ error: "avatar too large" });
+    await updateProfile(me.login, { name, avatar });
+    // сбрасываем кэш профиля (имя кэшируется в сессии)
+    try { for (const tk of await tokensForLogin(me.login)) await cacheDel("sess:" + tk); } catch {}
+    const updated = await auth.getUserByLogin(me.login);
+    res.json({ profile: updated });
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+
+// Аватар пользователя (бинарно, чтобы работал <img src>)
+app.get("/api/avatar/:login", async (req, res) => {
+  try {
+    const av = await getAvatar((req.params.login || "").toLowerCase());
+    const m = av && /^data:(.+?);base64,(.+)$/.exec(av);
+    if (!m) return res.status(404).end();
+    res.set("Content-Type", m[1]);
+    res.set("Cache-Control", "public, max-age=300");
+    res.send(Buffer.from(m[2], "base64"));
+  } catch (e) { res.status(500).end(); }
 });
 
 // Создать группу

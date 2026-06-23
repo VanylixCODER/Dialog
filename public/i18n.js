@@ -45,6 +45,8 @@ const I18N = {
     t_voice: "Voice message", err_mic_voice: "No microphone access for voice message",
     lb_hint: "scroll = zoom · drag = move · Esc = close",
     call_in: "calling in {title}",
+    profile: "Profile", upload_avatar: "Upload avatar", save: "Save", cancel: "Cancel",
+    ph_display_name: "Display name",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -91,6 +93,8 @@ const I18N = {
     t_voice: "Голосовое сообщение", err_mic_voice: "Нет доступа к микрофону для голосового",
     lb_hint: "колесо = зум · тащить = двигать · Esc = закрыть",
     call_in: "звонит в {title}",
+    profile: "Профиль", upload_avatar: "Загрузить аватар", save: "Сохранить", cancel: "Отмена",
+    ph_display_name: "Отображаемое имя",
   },
 };
 

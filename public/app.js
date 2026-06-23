@@ -195,7 +195,7 @@ function enterRoom(room, opts = {}) {
   $("app").classList.remove("hidden");
   applyRoomHeader();
   $("myName").textContent = myName;
-  $("myAvatar").textContent = initials(myName);
+  setMyAvatar();
   updateMuteBtn();
   renderDMList();
   $("msgInput").focus();
@@ -246,7 +246,7 @@ function renderDMList() {
     const li = document.createElement("li");
     li.className = "member" + (myRoom === dmKey(login) ? " active-dm" : "");
     const unread = dmUnread.get(login) || 0;
-    li.innerHTML = `<span class="avatar" style="width:26px;height:26px;font-size:12px">${initials(name)}</span>
+    li.innerHTML = `${avaHTML(login, name, 26)}
       <span class="m-name">${escapeHtml(name)}</span>${unread ? `<span class="badge">${unread}</span>` : ""}`;
     li.onclick = () => openDM(login, name);
     ul.appendChild(li);
@@ -368,6 +368,69 @@ async function createGroupFromForm() {
 }
 $("createGroupBtn").onclick = createGroupFromForm;
 
+// ====================== АВАТАРЫ + ЛИЧНЫЙ КАБИНЕТ ======================
+let avaVer = Date.now();
+function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login) + "?v=" + avaVer; }
+function avaHTML(login, name, size) {
+  const s = size || 28;
+  return `<span class="avatar ava" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.42)}px">` +
+    `<img src="${avaUrl(login)}" alt="" onerror="this.style.display='none'">` +
+    `<span class="ava-fallback">${initials(name)}</span></span>`;
+}
+function setMyAvatar() {
+  const el = $("myAvatar");
+  el.classList.add("ava");
+  el.innerHTML = `<img src="${avaUrl(profile.login)}" alt="" onerror="this.style.display='none'"><span class="ava-fallback">${initials(myName)}</span>`;
+}
+
+let pendingAvatar = null;
+$("profileBtn").onclick = () => {
+  pendingAvatar = null;
+  $("profileLogin").textContent = profile.login;
+  $("profileName").value = profile.name;
+  $("profileError").textContent = "";
+  $("profileAvaInit").textContent = initials(profile.name);
+  const img = $("profileAvaImg");
+  img.style.display = ""; img.onerror = () => (img.style.display = "none"); img.src = avaUrl(profile.login);
+  $("profileModal").classList.remove("hidden");
+};
+$("profileCancel").onclick = () => $("profileModal").classList.add("hidden");
+$("avaUploadBtn").onclick = () => $("avaFile").click();
+$("avaFile").addEventListener("change", (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas"); c.width = c.height = 128;
+      const sz = Math.min(im.width, im.height);
+      c.getContext("2d").drawImage(im, (im.width - sz) / 2, (im.height - sz) / 2, sz, sz, 0, 0, 128, 128);
+      pendingAvatar = c.toDataURL("image/jpeg", 0.85);
+      const pi = $("profileAvaImg"); pi.src = pendingAvatar; pi.style.display = "";
+    };
+    im.src = fr.result;
+  };
+  fr.readAsDataURL(file);
+});
+$("profileSave").onclick = async () => {
+  const name = $("profileName").value.trim();
+  const body = {};
+  if (name && name !== profile.name) body.name = name;
+  if (pendingAvatar) body.avatar = pendingAvatar;
+  if (!Object.keys(body).length) { $("profileModal").classList.add("hidden"); return; }
+  try {
+    const res = await fetch("/api/profile", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) { $("profileError").textContent = data.error || "error"; return; }
+    profile = data.profile; myName = profile.name; avaVer = Date.now();
+    $("profileModal").classList.add("hidden");
+    $("myName").textContent = myName;
+    if (myRoom) setMyAvatar();
+    renderMembers(); renderDMList();
+  } catch { $("profileError").textContent = "error"; }
+};
+
 socket.on("auth-error", (msg) => {
   alert(msg || "Auth error");
   localStorage.removeItem("dialog_token");
@@ -401,7 +464,7 @@ function renderMembers() {
   for (const [, info] of peers) {
     const li = document.createElement("li");
     li.className = "member";
-    li.innerHTML = `<span class="dot"></span><span class="avatar" style="width:28px;height:28px;font-size:13px">${initials(info.name)}</span>
+    li.innerHTML = `<span class="dot"></span>${avaHTML(info.login, info.name, 28)}
       <span class="m-name">${escapeHtml(info.name)}</span><span class="m-dm">${t("dm_open")}</span>`;
     li.onclick = () => openDM(info.login, info.name);
     ul.appendChild(li);
@@ -734,9 +797,10 @@ function addTile(id, name, stream, isMe) {
     tile = document.createElement("div");
     tile.id = "tile-" + id;
     tile.className = "tile show-avatar" + (isMe ? " me" : "");
+    const avLogin = isMe ? profile.login : (peers.get(id)?.login || "");
     tile.innerHTML =
       `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
-      `<div class="tile-avatar">${initials(name)}</div>` +
+      `<div class="tile-avatar">${avLogin ? `<img src="${avaUrl(avLogin)}" alt="" onerror="this.style.display='none'">` : ""}<span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>` +
       (isMe ? "" :
         `<div class="tile-ctrl">
