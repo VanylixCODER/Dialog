@@ -9,11 +9,13 @@ const peers = new Map();   // id -> {name, login}
 const presence = new Map(); // login -> 'online'|'dnd'|'offline'
 let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
+const FORCE_RELAY = new URLSearchParams(location.search).has("relay");
 let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 let iceReady = fetch("/api/ice").then(r => r.json()).then(c => {
   ICE = c;
+  if (FORCE_RELAY) ICE.iceTransportPolicy = "relay";
   const hasTurn = c.iceServers.some(s => s.urls?.startsWith("turn"));
-  console.log("ICE servers:", c.iceServers.length, hasTurn ? "(TURN ok)" : "(STUN only)");
+  console.log("ICE servers:", c.iceServers.length, hasTurn ? "(TURN ok)" : "(STUN only)", FORCE_RELAY ? "[FORCE RELAY]" : "");
   c.iceServers.forEach(s => console.log(" ", s.urls));
 }).catch(() => {});
 
@@ -832,7 +834,15 @@ function ensurePeer(peerId, peerName) {
       capBitrate(pc, "video", 250000);  // 250 kbps видео — достаточно для 360p
     } catch (e) { console.error("negotiation", e); } finally { st.makingOffer = false; }
   };
-  pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      const c = e.candidate;
+      if (c.type === "relay") { st.gotRelay = true; console.log("peer", peerId.slice(0,6), "RELAY cand:", c.protocol, c.address || ""); }
+      socket.emit("signal", { to: peerId, kind: "ice", data: c });
+    } else {
+      console.log("peer", peerId.slice(0,6), "ICE gathering done. relay candidates:", st.gotRelay ? "YES ✓" : "NONE ✗ (TURN не отдаёт relay!)");
+    }
+  };
   pc.ontrack = (e) => {
     const stream = e.streams[0];
     if (e.track.kind === "audio") {
