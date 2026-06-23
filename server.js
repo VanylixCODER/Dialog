@@ -119,11 +119,21 @@ app.get("/api/presence", async (req, res) => {
 
 // ICE (STUN + TURN) — клиент получает конфиг при загрузке
 app.get("/api/ice", (req, res) => {
-  const servers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  const servers = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USER;
   const turnPass = process.env.TURN_PASS;
-  if (turnUrl) servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
+  if (turnUrl) {
+    servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
+  } else {
+    servers.push(
+      { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+    );
+  }
   res.json({ iceServers: servers });
 });
 
