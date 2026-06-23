@@ -118,7 +118,11 @@ app.get("/api/presence", async (req, res) => {
 });
 
 // ICE (STUN + TURN) — клиент получает конфиг при загрузке
-app.get("/api/ice", (req, res) => {
+// METERED_API_KEY — бесплатный ключ с metered.ca (500 MB/мес)
+let cachedIce = null, iceExpiry = 0;
+app.get("/api/ice", async (req, res) => {
+  const now = Date.now();
+  if (cachedIce && now < iceExpiry) return res.json(cachedIce);
   const servers = [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
@@ -126,16 +130,22 @@ app.get("/api/ice", (req, res) => {
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USER;
   const turnPass = process.env.TURN_PASS;
+  const meteredKey = process.env.METERED_API_KEY;
   if (turnUrl) {
-    servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
-  } else {
     servers.push(
-      { urls: "turn:standard.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      { urls: "turn:standard.relay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
-      { urls: "turn:standard.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: turnUrl, username: turnUser || "", credential: turnPass || "" },
+      { urls: turnUrl + "?transport=tcp", username: turnUser || "", credential: turnPass || "" },
     );
+  } else if (meteredKey) {
+    try {
+      const r = await fetch(`https://dialog.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`);
+      const creds = await r.json();
+      if (Array.isArray(creds)) servers.push(...creds);
+    } catch (e) { console.error("metered", e.message); }
   }
-  res.json({ iceServers: servers });
+  cachedIce = { iceServers: servers };
+  iceExpiry = now + 12 * 3600 * 1000;
+  res.json(cachedIce);
 });
 
 // GIPHY — прокси (ключ на сервере, без CORS-проблем)
