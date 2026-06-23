@@ -60,6 +60,9 @@ const I18N = {
     status_online: "Online", status_dnd: "Do not disturb", status_offline: "Offline", status_invisible: "Invisible",
     status_label: "Status", description: "About", ph_description: "A few words about you",
     joined: "Joined {date}", message_btn: "Message",
+    gif_search: "Search Tenor GIFs", gif_nokey: "GIFs are off (no TENOR_KEY on server)",
+    noise_suppression: "Noise suppression (Krisp-like)",
+    call_waiting: "Waiting…", call_connecting: "Connecting…", call_connected: "Connected", call_disconnected: "Disconnected",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -121,6 +124,9 @@ const I18N = {
     status_online: "В сети", status_dnd: "Не беспокоить", status_offline: "Не в сети", status_invisible: "Невидимый",
     status_label: "Статус", description: "О себе", ph_description: "Пара слов о себе",
     joined: "Регистрация: {date}", message_btn: "Написать",
+    gif_search: "Искать GIF в Tenor", gif_nokey: "GIF выключены (нет TENOR_KEY на сервере)",
+    noise_suppression: "Шумодав (как Krisp)",
+    call_waiting: "Ожидание…", call_connecting: "Подключение…", call_connected: "Подключено", call_disconnected: "Отключение…",
   },
 };
 

@@ -63,7 +63,11 @@
       </div>
       <input id="searchInput" class="field cl-search" data-i18n-ph="search" placeholder="Search" autocomplete="off" />
       <ul id="chatList" class="chats"></ul>
-      <div id="chatsEmpty" class="chats-empty" data-i18n="no_chats">No chats yet — tap ✎ to start one</div>
+      <div id="chatsEmpty" class="chats-empty">
+        <div data-i18n="no_chats">No chats yet</div>
+        <button id="emptyAddFriend" class="btn-primary" data-i18n="add_friend">Add friend</button>
+        <button id="emptyNewChat" class="btn-ghost" data-i18n="new_chat">New chat</button>
+      </div>
     </aside>
 
     <!-- Разговор -->
@@ -90,6 +94,7 @@
 
       <div class="composer hidden" id="composer">
         <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji" title="Emoji">😊</button>
+        <button class="icon-btn" id="gifBtn" title="GIF">GIF</button>
         <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach" title="Photo / video / gif">📎</button>
         <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice" title="Voice message">🎤</button>
         <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
@@ -102,6 +107,12 @@
       <div id="emojiPicker" class="emoji-picker hidden">
         <div class="emoji-tabs" id="emojiTabs"></div>
         <div class="emoji-grid" id="emojiGrid"></div>
+      </div>
+
+      <div id="gifPanel" class="gif-panel hidden">
+        <input id="gifSearch" class="field" data-i18n-ph="gif_search" placeholder="Search Tenor" autocomplete="off" />
+        <div id="gifGrid" class="gif-grid"></div>
+        <div id="gifNote" class="gif-note hidden" data-i18n="gif_nokey">Set TENOR_KEY on the server to enable GIFs</div>
       </div>
     </main>
 
@@ -187,6 +198,7 @@
     <div class="call-topbar" id="callTopbar">
       <span id="callRoomLabel">Call</span>
       <span class="call-count" id="callCount">1</span>
+      <span id="callStatus" class="call-status"></span>
       <button id="windowToggle" class="win-btn desktop-only" data-i18n-title="t_window" title="Window / fullscreen">▭</button>
     </div>
     <div id="videoGrid" class="video-grid"></div>
@@ -194,6 +206,7 @@
       <button class="call-btn" id="toggleMic" data-i18n-title="t_mic" title="Microphone">🎙️</button>
       <button class="call-btn" id="toggleCam" data-i18n-title="t_cam" title="Camera">📷</button>
       <button class="call-btn" id="shareScreen" data-i18n-title="t_screen" title="Share screen">🖥️</button>
+      <button class="call-btn" id="toggleNoise" data-i18n-title="noise_suppression" title="Noise suppression">🛡️</button>
       <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup" title="Leave call">📞</button>
     </div>
   </div>

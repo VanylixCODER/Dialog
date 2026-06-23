@@ -116,6 +116,29 @@ app.get("/api/presence", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "server error" }); }
 });
 
+// Tenor GIF — прокси (ключ на сервере, без CORS-проблем)
+const TENOR_KEY = process.env.TENOR_KEY || "";
+app.get("/api/gif", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    if (!TENOR_KEY) return res.json({ results: [], nokey: true });
+    const q = String(req.query.q || "").slice(0, 80);
+    const pos = String(req.query.pos || "");
+    const base = q
+      ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}`
+      : `https://tenor.googleapis.com/v2/featured?`;
+    const url = `${base}&key=${TENOR_KEY}&client_key=dialog&limit=24&media_filter=tinygif,gif&contentfilter=medium&pos=${encodeURIComponent(pos)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    const results = (d.results || []).map((g) => ({
+      preview: g.media_formats?.tinygif?.url,
+      url: g.media_formats?.gif?.url,
+    })).filter((x) => x.url && x.preview);
+    res.json({ results, next: d.next || "" });
+  } catch (e) { console.error("gif", e.message); res.json({ results: [], error: true }); }
+});
+
 // Аватар пользователя (бинарно, чтобы работал <img src>)
 app.get("/api/avatar/:login", async (req, res) => {
   try {
@@ -366,6 +389,10 @@ io.on("connection", (socket) => {
   // --- WebRTC сигналинг (mesh: всё адресно по socketId) ---
   socket.on("signal", ({ to, kind, data }) => {
     io.to(to).emit("signal", { from: socket.id, name: userName, kind, data });
+  });
+  // Демонстрация экрана: оповещаем комнату вкл/выкл (тайл-скрин у всех)
+  socket.on("screen", ({ on }) => {
+    if (currentRoom) socket.to(currentRoom).emit("screen", { from: socket.id, on: !!on });
   });
   socket.on("call-invite", async ({ title } = {}) => {
     if (!currentRoom) return;
