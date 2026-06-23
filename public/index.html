@@ -203,10 +203,18 @@
     </div>
     <div id="videoGrid" class="video-grid"></div>
     <div class="call-controls">
-      <button class="call-btn" id="toggleMic" data-i18n-title="t_mic" title="Microphone"></button>
+      <div class="call-btn-group">
+        <button class="call-btn" id="toggleMic" data-i18n-title="t_mic" title="Microphone"></button>
+        <button class="call-drop" id="micDrop" title="Settings">▾</button>
+        <div class="call-dropdown" id="micDropdown">
+          <button class="dd-item" id="toggleNoise">
+            <span data-i18n="noise_suppression">Noise suppression</span>
+            <span class="dd-toggle on" id="noiseToggle"></span>
+          </button>
+        </div>
+      </div>
       <button class="call-btn" id="toggleCam" data-i18n-title="t_cam" title="Camera"></button>
       <button class="call-btn" id="shareScreen" data-i18n-title="t_screen" title="Share screen"></button>
-      <button class="call-btn" id="toggleNoise" data-i18n-title="noise_suppression" title="Noise suppression"></button>
       <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup" title="Leave call"></button>
     </div>
   </div>
