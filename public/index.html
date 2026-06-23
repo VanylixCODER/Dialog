@@ -52,28 +52,13 @@
         <div class="welcome"><span data-i18n="welcome_hi">Hi</span>, <b id="welcomeName">—</b>! 👋</div>
 
         <div class="hub-tabs">
-          <button class="hub-tab active" data-hub="room" data-i18n="hub_room">Room</button>
-          <button class="hub-tab" data-hub="dm" data-i18n="hub_dm">Direct</button>
+          <button class="hub-tab active" data-hub="dm" data-i18n="hub_dm">Direct</button>
           <button class="hub-tab" data-hub="group" data-i18n="hub_group">Groups</button>
           <button class="hub-tab" data-hub="friends" data-i18n="hub_friends">Friends</button>
         </div>
 
-        <!-- Публичная комната -->
-        <div class="hub-pane" data-pane="room">
-          <input id="roomInput" class="field" type="text" data-i18n-ph="ph_room" placeholder="Room (e.g. team)" maxlength="32" autocomplete="off" />
-          <button id="joinBtn" class="btn-primary" data-i18n="btn_join_room">Enter room</button>
-          <div id="favRooms" class="room-list hidden">
-            <div class="room-list-title" data-i18n="favorite_rooms">Favorites</div>
-            <div id="favRoomsList" class="room-chips"></div>
-          </div>
-          <div id="recentRooms" class="room-list hidden">
-            <div class="room-list-title" data-i18n="recent_rooms">Recent</div>
-            <div id="recentRoomsList" class="room-chips"></div>
-          </div>
-        </div>
-
         <!-- Личные сообщения по нику -->
-        <div class="hub-pane hidden" data-pane="dm">
+        <div class="hub-pane" data-pane="dm">
           <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username to message" maxlength="24" autocomplete="off" />
           <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Open DM</button>
           <div class="form-error" id="dmError"></div>
