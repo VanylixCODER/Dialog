@@ -9,8 +9,8 @@ const peers = new Map();   // id -> {name, login}
 const presence = new Map(); // login -> 'online'|'dnd'|'offline'
 let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
-let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
-fetch("/api/ice").then(r => r.json()).then(c => { ICE = c; }).catch(() => {});
+let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }], iceCandidatePoolSize: 4 };
+fetch("/api/ice").then(r => r.json()).then(c => { c.iceCandidatePoolSize = 4; ICE = c; }).catch(() => {});
 
 // ====================== ЯЗЫК ======================
 function initLang() {
@@ -829,13 +829,30 @@ function ensurePeer(peerId, peerName) {
   };
   pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
   pc.ontrack = (e) => {
-    if (e.track.kind === "audio") { addTile(peerId, st.name, e.streams[0], false); return; }
-    // первое видео = камера; второе = демонстрация экрана (Discord-стиль — отдельный тайл)
+    if (e.track.kind === "audio") {
+      addTile(peerId, st.name, e.streams[0], false);
+      return;
+    }
     st.vtracks = (st.vtracks || 0) + 1;
-    if (st.vtracks === 1) { addTile(peerId, st.name, e.streams[0], false); setupVideoDetect(peerId, e.track); }
-    else { addScreenTile(peerId, st.name, e.streams[0]); e.track.onended = () => { removeTile("screen-" + peerId); st.vtracks = Math.max(1, st.vtracks - 1); }; }
+    if (st.vtracks === 1) {
+      const tile = addTile(peerId, st.name, e.streams[0], false);
+      const v = tile.querySelector("video");
+      v.srcObject = e.streams[0];
+      v.play().catch(() => {});
+      setupVideoDetect(peerId, e.track);
+    } else {
+      addScreenTile(peerId, st.name, e.streams[0]);
+      e.track.onended = () => { removeTile("screen-" + peerId); st.vtracks = Math.max(1, st.vtracks - 1); };
+    }
   };
-  pc.onconnectionstatechange = () => { updateCallStatus(); if (["failed", "closed", "disconnected"].includes(pc.connectionState)) removePeerConn(peerId); };
+  pc.onconnectionstatechange = () => {
+    updateCallStatus();
+    if (pc.connectionState === "failed") { pc.restartIce(); }
+    else if (pc.connectionState === "closed") { removePeerConn(peerId); }
+  };
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === "disconnected") setTimeout(() => { if (pc.iceConnectionState === "disconnected") pc.restartIce(); }, 3000);
+  };
   updateCallCount();
   return st;
 }

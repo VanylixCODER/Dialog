@@ -130,8 +130,9 @@ app.get("/api/ice", (req, res) => {
     servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
   } else {
     servers.push(
-      { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:standard.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:standard.relay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:standard.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
     );
   }
   res.json({ iceServers: servers });
