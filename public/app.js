@@ -784,33 +784,36 @@ $("emptyAddFriend").onclick = () => $("contactsBtn").click();
 $("emptyNewChat").onclick = () => $("newChatBtn").click();
 
 // ====================== ЗВОНКИ (mesh WebRTC) ======================
-const call = { active: false, localStream: null, screenStream: null, sharing: false, micOn: true, camOn: false, pcs: new Map() };
+const call = { active: false, localStream: null, meStream: null, camTrack: null, screenStream: null, screenTrack: null, sharing: false, micOn: true, camOn: false, pcs: new Map() };
 
 const NS_AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 const LOW_VIDEO = { width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 20, max: 24 } };
 async function getLocalStream() {
   if (call.localStream) return call.localStream;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const err = new Error("INSECURE"); err.name = "InsecureContext"; throw err; }
-  // Сначала только аудио — видео добавим при включении камеры
-  try { call.localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: NS_AUDIO }); }
-  catch (e) { throw e; }
-  call.ns = true;
-  call.camOn = false;
-  addTile("me", myName + " " + t("you_suffix"), call.localStream, true);
+  // Только аудио (микрофон) — камера/экран добавляются через replaceTrack без ренеготиации
+  call.localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: NS_AUDIO });
+  call.ns = true; call.camOn = false; call.micOn = true;
+  call.meStream = new MediaStream(call.localStream.getAudioTracks());
+  addTile("me", myName + " " + t("you_suffix"), call.meStream, true);
   setTileAvatar("me", true);
   return call.localStream;
 }
-function capBitrate(pc, kind, maxBps) {
-  for (const sender of pc.getSenders()) {
-    if (sender.track?.kind !== kind) continue;
-    try {
-      const p = sender.getParameters();
-      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-      p.encodings[0].maxBitrate = maxBps;
-      sender.setParameters(p).catch(() => {});
-    } catch {}
-  }
+function setSenderBitrate(sender, bps) {
+  if (!sender) return;
+  try {
+    const p = sender.getParameters();
+    if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+    p.encodings[0].maxBitrate = bps;
+    sender.setParameters(p).catch(() => {});
+  } catch {}
 }
+function setBitrates(st) {
+  setSenderBitrate(st.audioTx?.sender, 40000);
+  setSenderBitrate(st.camTx?.sender, 350000);
+  setSenderBitrate(st.screenTx?.sender, 1800000);
+}
+function hasTrack(stream, track) { return stream.getTracks().indexOf(track) !== -1; }
 function mediaErrorMessage(e) {
   if (!navigator.mediaDevices || e.name === "InsecureContext") return t("err_insecure");
   switch (e.name) {
@@ -820,60 +823,78 @@ function mediaErrorMessage(e) {
     default: return t("err_media") + (e.name || e.message);
   }
 }
+// Только инициатор (меньший socket.id) создаёт offer — без glare, ufrag консистентный
+async function makeOffer(st, peerId) {
+  const pc = st.pc;
+  if (st.makingOffer || pc.signalingState !== "stable") return;
+  st.makingOffer = true;
+  try {
+    await pc.setLocalDescription();
+    socket.emit("signal", { to: peerId, kind: "desc", data: pc.localDescription });
+    setBitrates(st);
+  } catch (e) { console.error("offer", e); } finally { st.makingOffer = false; }
+}
+function doRestart(st, peerId) {
+  if (st.restarts >= 4) { console.log("peer", peerId.slice(0,6), "restart limit"); return; }
+  st.restarts++;
+  console.log("peer", peerId.slice(0,6), "ICE restart #" + st.restarts);
+  if (st.initiator) { try { st.pc.restartIce(); } catch {} makeOffer(st, peerId); }
+  else socket.emit("signal", { to: peerId, kind: "need-offer", restart: true });
+}
 function ensurePeer(peerId, peerName) {
   let st = call.pcs.get(peerId);
   if (st) { if (peerName) st.name = peerName; return st; }
   const pc = new RTCPeerConnection(ICE);
-  st = { pc, name: peerName || (peers.get(peerId) || {}).name || "Peer", makingOffer: false, ignoreOffer: false, polite: socket.id < peerId, vol: 1, muted: false };
+  const initiator = socket.id < peerId;   // детерминированный инициатор
+  st = { pc, name: peerName || (peers.get(peerId) || {}).name || "Peer", initiator, makingOffer: false, restarts: 0, iceBuf: [], vol: 1, muted: false };
   call.pcs.set(peerId, st);
-  if (call.localStream) call.localStream.getTracks().forEach((tr) => pc.addTrack(tr, call.localStream));
+  // Фиксированный набор m-линий: аудио, камера, экран. Дальше — только replaceTrack (без ренеготиации).
+  const mic = call.localStream ? call.localStream.getAudioTracks()[0] : null;
+  st.audioTx = pc.addTransceiver(mic || "audio", { direction: "sendrecv" });
+  st.camTx = pc.addTransceiver(call.camTrack || "video", { direction: "sendrecv" });
+  st.screenTx = pc.addTransceiver(call.screenTrack || "video", { direction: "sendrecv" });
   pc.onnegotiationneeded = async () => {
-    try {
-      st.makingOffer = true; await pc.setLocalDescription(); socket.emit("signal", { to: peerId, kind: "desc", data: pc.localDescription });
-      capBitrate(pc, "audio", 32000);   // 32 kbps аудио — Opus и так эффективен
-      capBitrate(pc, "video", 250000);  // 250 kbps видео — достаточно для 360p
-    } catch (e) { console.error("negotiation", e); } finally { st.makingOffer = false; }
+    if (initiator) await makeOffer(st, peerId);
+    else if (pc.remoteDescription) socket.emit("signal", { to: peerId, kind: "need-offer" });  // только при реальной ренеготиации
   };
   pc.onicecandidate = (e) => {
     if (e.candidate) {
       const c = e.candidate;
-      if (c.type === "relay") { st.gotRelay = true; console.log("peer", peerId.slice(0,6), "RELAY cand:", c.protocol, c.address || ""); }
+      if (c.type === "relay") { st.gotRelay = true; console.log("peer", peerId.slice(0,6), "out RELAY", c.protocol); }
       socket.emit("signal", { to: peerId, kind: "ice", data: c });
     } else {
-      console.log("peer", peerId.slice(0,6), "ICE gathering done. relay candidates:", st.gotRelay ? "YES ✓" : "NONE ✗ (TURN не отдаёт relay!)");
+      console.log("peer", peerId.slice(0,6), "gather done, out relay:", st.gotRelay ? "YES" : "NONE", "| in relay:", st.gotRemoteRelay ? "YES" : "NONE");
     }
   };
   pc.ontrack = (e) => {
-    const stream = e.streams[0];
-    if (e.track.kind === "audio") {
-      const tile = addTile(peerId, st.name, stream, false);
-      const v = tile.querySelector("video");
-      v.srcObject = stream; v.muted = false;
-      v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
+    const tx = e.transceiver, track = e.track;
+    if (tx === st.screenTx) {
+      st.screenIn = st.screenIn || new MediaStream();
+      if (!hasTrack(st.screenIn, track)) st.screenIn.addTrack(track);
+      const show = () => addScreenTile(peerId, st.name, st.screenIn);
+      const hide = () => removeTile("screen-" + peerId);
+      track.onunmute = show; track.onmute = hide;
+      track.muted ? hide() : show();
       return;
     }
-    st.vtracks = (st.vtracks || 0) + 1;
-    if (st.vtracks === 1) {
-      const tile = addTile(peerId, st.name, stream, false);
-      const v = tile.querySelector("video");
-      v.srcObject = stream; v.muted = false;
-      v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
-      setupVideoDetect(peerId, e.track);
-    } else {
-      addScreenTile(peerId, st.name, stream);
-      e.track.onended = () => { removeTile("screen-" + peerId); st.vtracks = Math.max(1, st.vtracks - 1); };
-    }
+    // аудио + камера → один основной тайл собеседника
+    st.mainStream = st.mainStream || new MediaStream();
+    if (!hasTrack(st.mainStream, track)) st.mainStream.addTrack(track);
+    const tile = addTile(peerId, st.name, st.mainStream, false);
+    const v = tile.querySelector("video");
+    v.srcObject = st.mainStream; v.muted = false;
+    v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
+    if (tx === st.camTx) setupVideoDetect(peerId, track);  // нет видео → показать аватар
   };
   pc.onconnectionstatechange = () => {
-    console.log("peer", peerId.slice(0,6), "conn:", pc.connectionState, "ice:", pc.iceConnectionState);
+    console.log("peer", peerId.slice(0,6), "conn:", pc.connectionState);
     updateCallStatus();
-    if (pc.connectionState === "failed") { pc.restartIce(); }
-    else if (pc.connectionState === "closed") { removePeerConn(peerId); }
+    if (pc.connectionState === "closed") removePeerConn(peerId);
   };
   pc.oniceconnectionstatechange = () => {
     console.log("peer", peerId.slice(0,6), "ice:", pc.iceConnectionState);
-    if (pc.iceConnectionState === "disconnected") setTimeout(() => { if (pc.iceConnectionState === "disconnected") pc.restartIce(); }, 3000);
-    if (pc.iceConnectionState === "failed") pc.restartIce();
+    if (pc.iceConnectionState === "failed") doRestart(st, peerId);
+    else if (pc.iceConnectionState === "disconnected") setTimeout(() => { if (pc.iceConnectionState === "disconnected") doRestart(st, peerId); }, 3000);
   };
   updateCallCount();
   return st;
@@ -895,7 +916,7 @@ function updateCallStatus() {
 function removePeerConn(peerId) {
   const st = call.pcs.get(peerId);
   if (st) { try { st.pc.close(); } catch {} try { st.audioSrc?.disconnect(); st.gain?.disconnect(); } catch {} call.pcs.delete(peerId); }
-  removeTile(peerId); updateCallCount();
+  removeTile(peerId); removeTile("screen-" + peerId); updateCallCount();
 }
 $("startCallBtn").onclick = () => { if (!myRoom) return; call.active ? endCall() : joinCall(); };
 async function joinCall() {
@@ -915,7 +936,9 @@ async function joinCall() {
 function endCall() {
   for (const id of [...call.pcs.keys()]) removePeerConn(id);
   if (call.localStream) { call.localStream.getTracks().forEach((tr) => tr.stop()); call.localStream = null; }
+  if (call.camTrack) { call.camTrack.stop(); call.camTrack = null; }
   if (call.screenStream) { call.screenStream.getTracks().forEach((tr) => tr.stop()); call.screenStream = null; }
+  call.screenTrack = null; call.meStream = null;
   $("videoGrid").innerHTML = "";
   $("callOverlay").classList.add("hidden"); $("callOverlay").classList.remove("windowed"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
@@ -948,22 +971,27 @@ socket.on("call-ring", (p) => {
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
-socket.on("signal", async ({ from, name, kind, data }) => {
+socket.on("signal", async ({ from, name, kind, data, restart }) => {
   if (!call.active) return;
   const st = ensurePeer(from, name); const pc = st.pc;
   if (!st.iceBuf) st.iceBuf = [];
   try {
-    if (kind === "desc") {
-      const offerCollision = data.type === "offer" && (st.makingOffer || pc.signalingState !== "stable");
-      st.ignoreOffer = !st.polite && offerCollision;
-      if (st.ignoreOffer) return;
+    if (kind === "need-offer") {
+      // не-инициатор просит переофферить (новый трек / рестарт)
+      if (st.initiator) { if (restart) { try { pc.restartIce(); } catch {} } await makeOffer(st, from); }
+    } else if (kind === "desc") {
       await pc.setRemoteDescription(data);
-      if (data.type === "offer") { await pc.setLocalDescription(); socket.emit("signal", { to: from, kind: "desc", data: pc.localDescription }); }
+      if (data.type === "offer") {
+        await pc.setLocalDescription();
+        socket.emit("signal", { to: from, kind: "desc", data: pc.localDescription });
+        setBitrates(st);
+      }
       for (const c of st.iceBuf) { try { await pc.addIceCandidate(c); } catch {} }
       st.iceBuf = [];
     } else if (kind === "ice") {
-      if (!pc.remoteDescription) { st.iceBuf.push(data); }
-      else { try { await pc.addIceCandidate(data); } catch (e) { if (!st.ignoreOffer) throw e; } }
+      if (data && /typ relay/.test(data.candidate || "") && !st.gotRemoteRelay) { st.gotRemoteRelay = true; console.log("peer", from.slice(0,6), "in RELAY received"); }
+      if (!pc.remoteDescription) st.iceBuf.push(data);
+      else { try { await pc.addIceCandidate(data); } catch (e) { console.warn("addIce", e.message); } }
     }
   } catch (e) { console.error("signal", e); }
 });
@@ -1019,18 +1047,18 @@ $("toggleCam").onclick = async () => {
   if (!call.localStream) return;
   call.camOn = !call.camOn;
   if (call.camOn) {
-    // Камера вкл — запрашиваем видео-трек только когда нужен
-    const vTracks = call.localStream.getVideoTracks();
-    if (!vTracks.length) {
-      try {
-        const vs = await navigator.mediaDevices.getUserMedia({ video: LOW_VIDEO, audio: false });
-        const vt = vs.getVideoTracks()[0];
-        call.localStream.addTrack(vt);
-        for (const st of call.pcs.values()) { st.pc.addTrack(vt, call.localStream); capBitrate(st.pc, "video", 250000); }
-      } catch { call.camOn = false; }
-    } else { vTracks.forEach((tr) => (tr.enabled = true)); }
+    if (!call.camTrack) {
+      try { const vs = await navigator.mediaDevices.getUserMedia({ video: LOW_VIDEO, audio: false }); call.camTrack = vs.getVideoTracks()[0]; }
+      catch { call.camOn = false; }
+    }
+    if (call.camTrack) {
+      for (const st of call.pcs.values()) { try { await st.camTx.sender.replaceTrack(call.camTrack); setSenderBitrate(st.camTx.sender, 350000); } catch {} }
+      if (!hasTrack(call.meStream, call.camTrack)) call.meStream.addTrack(call.camTrack);
+      const meV = document.querySelector("#tile-me video"); if (meV) meV.srcObject = call.meStream;
+    }
   } else {
-    call.localStream.getVideoTracks().forEach((tr) => (tr.enabled = false));
+    for (const st of call.pcs.values()) { try { await st.camTx.sender.replaceTrack(null); } catch {} }
+    if (call.camTrack) { call.meStream.removeTrack(call.camTrack); call.camTrack.stop(); call.camTrack = null; }
   }
   $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
   if (!call.sharing) setTileAvatar("me", !call.camOn);
@@ -1053,33 +1081,19 @@ $("shareScreen").onclick = async () => {
   if (!call.active) return;
   if (call.sharing) { await stopShare(); return; }
   try { call.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: false }); } catch { return; }
-  const track = call.screenStream.getVideoTracks()[0];
-  for (const st of call.pcs.values()) {
-    st.screenSender = st.pc.addTrack(track, call.screenStream);
-    // screen share — 500 kbps макс (достаточно для текста/слайдов при 10fps)
-    try {
-      const p = st.screenSender.getParameters();
-      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-      p.encodings[0].maxBitrate = 1500000;
-      st.screenSender.setParameters(p).catch(() => {});
-    } catch {}
-  }
+  call.screenTrack = call.screenStream.getVideoTracks()[0];
+  for (const st of call.pcs.values()) { try { await st.screenTx.sender.replaceTrack(call.screenTrack); setSenderBitrate(st.screenTx.sender, 1800000); } catch {} }
   addScreenTile("me", myName + " " + t("you_suffix"), call.screenStream);
   call.sharing = true; $("shareScreen").classList.add("active");
-  socket.emit("screen", { on: true });
-  track.onended = () => stopShare();
+  call.screenTrack.onended = () => stopShare();
 };
 async function stopShare() {
+  for (const st of call.pcs.values()) { try { await st.screenTx.sender.replaceTrack(null); } catch {} }
   if (call.screenStream) { call.screenStream.getTracks().forEach((tr) => tr.stop()); call.screenStream = null; }
-  for (const st of call.pcs.values()) { if (st.screenSender) { try { st.pc.removeTrack(st.screenSender); } catch {} st.screenSender = null; } }
+  call.screenTrack = null;
   removeTile("screen-me");
   call.sharing = false; $("shareScreen").classList.remove("active");
-  socket.emit("screen", { on: false });
 }
-// Партнёр прекратил демонстрацию — убираем его тайл-скрин
-socket.on("screen", ({ from, on }) => {
-  if (!on) { removeTile("screen-" + from); const st = call.pcs.get(from); if (st && st.vtracks) st.vtracks = Math.max(1, st.vtracks - 1); }
-});
 
 // --- Окно звонка (ПК) ---
 $("windowToggle").onclick = () => {
