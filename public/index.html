@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Dialog — мессенджер</title>
+  <title>Dialog</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -12,44 +12,56 @@
   <!-- Экран входа -->
   <div id="login" class="login">
     <div class="login-card">
+      <select id="langSelect" class="lang-select" title="Language">
+        <option value="en">EN</option>
+        <option value="ru">RU</option>
+      </select>
       <div class="brand">
         <div class="brand-logo">◆</div>
         <h1>Dialog</h1>
       </div>
-      <p class="brand-sub">Чат · Групповые видеозвонки · Демонстрация экрана</p>
+      <p class="brand-sub" data-i18n="brand_sub">Chat · Group video calls · Screen share</p>
 
       <!-- Шаг 1: аутентификация -->
       <div id="authStage">
         <div class="auth-tabs">
-          <button class="auth-tab active" data-mode="login">Вход</button>
-          <button class="auth-tab" data-mode="register">Регистрация</button>
+          <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
+          <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
         </div>
 
-        <!-- Форма входа -->
         <form id="loginForm" class="auth-form">
-          <input class="field" name="login" type="text" placeholder="Логин" maxlength="24" autocomplete="username" />
-          <input class="field" name="password" type="password" placeholder="Пароль" autocomplete="current-password" />
+          <input class="field" name="login" type="text" data-i18n-ph="ph_login" placeholder="Username" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" data-i18n-ph="ph_password" placeholder="Password" autocomplete="current-password" />
           <div class="form-error" id="loginError"></div>
-          <button type="submit" class="btn-primary">Войти</button>
+          <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
         </form>
 
-        <!-- Форма регистрации -->
         <form id="registerForm" class="auth-form hidden">
-          <input class="field" name="name" type="text" placeholder="Отображаемое имя" maxlength="32" autocomplete="name" />
-          <input class="field" name="login" type="text" placeholder="Логин (латиница, 3–24)" maxlength="24" autocomplete="username" />
-          <input class="field" name="password" type="password" placeholder="Пароль (от 6 символов)" autocomplete="new-password" />
-          <input class="field" name="password2" type="password" placeholder="Повторите пароль" autocomplete="new-password" />
+          <input class="field" name="name" type="text" data-i18n-ph="ph_name" placeholder="Display name" maxlength="32" autocomplete="name" />
+          <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" placeholder="Username (a–z, 3–24)" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" placeholder="Password (6+ chars)" autocomplete="new-password" />
+          <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" placeholder="Repeat password" autocomplete="new-password" />
           <div class="form-error" id="registerError"></div>
-          <button type="submit" class="btn-primary">Создать аккаунт</button>
+          <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
         </form>
       </div>
 
       <!-- Шаг 2: выбор комнаты -->
       <div id="roomStage" class="hidden">
-        <div class="welcome">Привет, <b id="welcomeName">—</b>! 👋</div>
-        <input id="roomInput" class="field" type="text" placeholder="Комната (например: team)" maxlength="32" autocomplete="off" />
-        <button id="joinBtn" class="btn-primary">Войти в комнату</button>
-        <button id="logoutBtn" class="btn-ghost">Выйти из аккаунта</button>
+        <div class="welcome"><span data-i18n="welcome_hi">Hi</span>, <b id="welcomeName">—</b>! 👋</div>
+        <input id="roomInput" class="field" type="text" data-i18n-ph="ph_room" placeholder="Room (e.g. team)" maxlength="32" autocomplete="off" />
+        <button id="joinBtn" class="btn-primary" data-i18n="btn_join_room">Enter room</button>
+
+        <div id="favRooms" class="room-list hidden">
+          <div class="room-list-title" data-i18n="favorite_rooms">Favorites</div>
+          <div id="favRoomsList" class="room-chips"></div>
+        </div>
+        <div id="recentRooms" class="room-list hidden">
+          <div class="room-list-title" data-i18n="recent_rooms">Recent</div>
+          <div id="recentRoomsList" class="room-chips"></div>
+        </div>
+
+        <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
       </div>
     </div>
     <div class="login-bg"></div>
@@ -59,42 +71,48 @@
   <div id="app" class="app hidden">
     <aside class="sidebar">
       <div class="sidebar-head">
+        <button id="backBtn" class="back-btn" data-i18n-title="back" title="Back">‹</button>
         <div class="brand-logo small">◆</div>
-        <div>
+        <div style="min-width:0;flex:1">
           <div class="room-name" id="roomLabel">—</div>
-          <div class="room-sub">комната</div>
+          <div class="room-sub" data-i18n="room_sub">room</div>
         </div>
+        <button id="favBtn" class="fav-btn" data-i18n-title="fav_add" title="Add to favorites">☆</button>
       </div>
-      <div class="members-title">Участники</div>
+      <div class="members-title" data-i18n="members_title">Members</div>
       <ul id="members" class="members"></ul>
       <div class="me-card">
         <div class="avatar" id="myAvatar">?</div>
         <div class="me-name" id="myName">—</div>
+        <select id="langSelect2" class="lang-select small" title="Language">
+          <option value="en">EN</option>
+          <option value="ru">RU</option>
+        </select>
       </div>
     </aside>
 
     <main class="chat">
       <header class="chat-head">
+        <button id="backBtnMobile" class="back-btn mobile-only" data-i18n-title="back" title="Back">‹</button>
         <div>
-          <div class="chat-title" id="chatTitle">Общий чат</div>
+          <div class="chat-title" id="chatTitle">Chat</div>
           <div class="typing" id="typingIndicator"></div>
         </div>
-        <button class="call-start" id="startCallBtn" title="Групповой видеозвонок">📹 Звонок</button>
+        <button class="call-start" id="startCallBtn" data-i18n-title="t_call" title="Group video call"><span data-i18n="call_btn">📹 Call</span></button>
       </header>
 
       <div id="messages" class="messages"></div>
 
       <div class="composer">
-        <button class="icon-btn" id="emojiBtn" title="Эмодзи">😊</button>
-        <button class="icon-btn" id="attachBtn" title="Фото / видео / гиф">📎</button>
+        <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji" title="Emoji">😊</button>
+        <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach" title="Photo / video / gif">📎</button>
         <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
         <div class="input-wrap">
-          <textarea id="msgInput" rows="1" placeholder="Напишите сообщение…"></textarea>
+          <textarea id="msgInput" rows="1" data-i18n-ph="ph_message" placeholder="Write a message…"></textarea>
         </div>
-        <button class="icon-btn send" id="sendBtn" title="Отправить">➤</button>
+        <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send" title="Send">➤</button>
       </div>
 
-      <!-- Эмодзи-пикер -->
       <div id="emojiPicker" class="emoji-picker hidden">
         <div class="emoji-tabs" id="emojiTabs"></div>
         <div class="emoji-grid" id="emojiGrid"></div>
@@ -104,16 +122,17 @@
 
   <!-- Окно группового звонка -->
   <div id="callOverlay" class="call-overlay hidden">
-    <div class="call-topbar">
-      <span id="callRoomLabel">Звонок</span>
+    <div class="call-topbar" id="callTopbar">
+      <span id="callRoomLabel">Call</span>
       <span class="call-count" id="callCount">1</span>
+      <button id="windowToggle" class="win-btn desktop-only" data-i18n-title="t_window" title="Window / fullscreen">▭</button>
     </div>
     <div id="videoGrid" class="video-grid"></div>
     <div class="call-controls">
-      <button class="call-btn" id="toggleMic" title="Микрофон">🎙️</button>
-      <button class="call-btn" id="toggleCam" title="Камера">📷</button>
-      <button class="call-btn" id="shareScreen" title="Демонстрация экрана">🖥️</button>
-      <button class="call-btn end" id="hangUp" title="Выйти из звонка">📞</button>
+      <button class="call-btn" id="toggleMic" data-i18n-title="t_mic" title="Microphone">🎙️</button>
+      <button class="call-btn" id="toggleCam" data-i18n-title="t_cam" title="Camera">📷</button>
+      <button class="call-btn" id="shareScreen" data-i18n-title="t_screen" title="Share screen">🖥️</button>
+      <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup" title="Leave call">📞</button>
     </div>
   </div>
 
@@ -122,13 +141,14 @@
     <div class="avatar" id="toastAvatar">?</div>
     <div class="toast-body">
       <div class="toast-name" id="toastName">—</div>
-      <div class="toast-sub">начал групповой звонок</div>
+      <div class="toast-sub" data-i18n="toast_started">started a group call</div>
     </div>
-    <button class="toast-join" id="toastJoin">Войти</button>
+    <button class="toast-join" id="toastJoin" data-i18n="toast_join">Join</button>
     <button class="toast-close" id="toastClose">✕</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="i18n.js"></script>
   <script src="matrix.js"></script>
   <script src="emoji.js"></script>
   <script src="app.js"></script>
