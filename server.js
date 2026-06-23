@@ -131,18 +131,22 @@ app.get("/api/ice", async (req, res) => {
   if (meteredKey) {
     try {
       const r = await fetch(`https://dialogs.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`);
-      servers = await r.json();
-      if (!Array.isArray(servers)) servers = [];
+      const creds = await r.json();
+      if (Array.isArray(creds)) {
+        const stun = creds.filter(c => c.urls?.startsWith("stun:"))[0];
+        const turnTcp = creds.find(c => c.urls?.startsWith("turns:"));
+        const turnUdp = creds.find(c => c.urls?.startsWith("turn:") && !c.urls.includes("transport=tcp"));
+        if (stun) servers.push(stun);
+        if (turnUdp) servers.push(turnUdp);
+        if (turnTcp) servers.push(turnTcp);
+      }
       console.log("Metered TURN:", servers.length, "servers");
-    } catch (e) { console.error("metered", e.message); servers = []; }
+    } catch (e) { console.error("metered", e.message); }
   }
   if (!servers.length) {
-    servers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+    servers.push({ urls: "stun:stun.l.google.com:19302" });
     if (turnUrl) {
-      servers.push(
-        { urls: turnUrl, username: turnUser || "", credential: turnPass || "" },
-        { urls: turnUrl + "?transport=tcp", username: turnUser || "", credential: turnPass || "" },
-      );
+      servers.push({ urls: turnUrl, username: turnUser || "", credential: turnPass || "" });
     }
   }
   cachedIce = { iceServers: servers };
