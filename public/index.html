@@ -53,6 +53,7 @@
       <div class="cl-head">
         <div class="avatar" id="myAvatar">?</div>
         <div class="me-name" id="myName">—</div>
+        <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
         <button id="newChatBtn" class="hicon-btn" data-i18n-title="new_chat" title="New chat">✎</button>
         <button id="profileBtn" class="hicon-btn" data-i18n-title="profile" title="Profile">⚙</button>
         <select id="langSelect2" class="lang-select small" title="Language">
@@ -128,6 +129,29 @@
       <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
       <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
       <div class="form-error" id="groupError"></div>
+    </div>
+  </div>
+
+  <!-- Контакты / заявки в друзья -->
+  <div id="contactsModal" class="modal hidden">
+    <div class="modal-card wide">
+      <button id="contactsCancel" class="hub-close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="contacts">Contacts</div>
+      <div class="req-add">
+        <input id="reqInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username" maxlength="24" autocomplete="off" />
+        <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
+      </div>
+      <div class="form-error" id="reqError"></div>
+
+      <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
+      <div id="reqList" class="contacts-list"></div>
+      <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
+
+      <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
+      <div id="friendsListEl" class="contacts-list"></div>
+
+      <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
+      <div id="sentList" class="contacts-list"></div>
     </div>
   </div>
 

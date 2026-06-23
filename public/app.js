@@ -157,8 +157,9 @@ function renderChatList(filter = "") {
       <div class="ci-body">
         <div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
         <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : ""}</div>
-      </div>`;
-    li.onclick = () => openChat(c);
+      </div>
+      <button class="ci-del" title="${t("delete_chat")}">${window.ICON.close}</button>`;
+    li.onclick = (e) => { if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; } openChat(c); };
     ul.appendChild(li);
   });
   $("chatsEmpty").classList.toggle("hidden", shown > 0 || (f && chats.size));
@@ -206,6 +207,21 @@ function openDM(login, name) {
   persistDMs();
 }
 function enterGroup(id, name) { openChat({ key: "@grp:" + id, type: "group", id, name, last: "", ts: 0, unread: 0 }); }
+
+async function deleteChat(c) {
+  if (c.type === "group") {
+    if (!confirm(t("leave_group"))) return;
+    try { await fetch("/api/groups/" + c.id + "/leave", { method: "POST", headers: { Authorization: "Bearer " + token } }); } catch {}
+  }
+  chats.delete(c.key);
+  if (c.type === "dm") persistDMs();
+  if (activeKey === c.key) {
+    activeKey = null; myRoom = ""; socket.emit("leave");
+    $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden");
+    $("emptyState").classList.remove("hidden"); document.body.classList.remove("chat-open");
+  }
+  renderChatList($("searchInput").value);
+}
 
 $("backBtnMobile").onclick = () => document.body.classList.remove("chat-open");
 
@@ -355,28 +371,80 @@ $("profileSave").onclick = async () => {
   } catch { $("profileError").textContent = "error"; }
 };
 
-// ====================== ДРУЗЬЯ / БЛОКИРОВКИ ======================
+// ====================== ДРУЗЬЯ / ЗАЯВКИ / БЛОК ======================
 let blocked = new Set();
-let friendsList = [], blocksList = [];
+let friendsList = [], blocksList = [], incomingReqs = [], outgoingReqs = [];
+function applyRelations(d) {
+  friendsList = d.friends || []; blocksList = d.blocks || [];
+  incomingReqs = d.incoming || []; outgoingReqs = d.outgoing || [];
+  blocked = new Set(blocksList.map((x) => x.login));
+  $("contactsBtn") && $("contactsBtn").classList.toggle("has-req", incomingReqs.length > 0);
+  renderContacts(); renderMembers();
+}
 async function loadRelations() {
   try {
     const res = await fetch("/api/relations", { headers: { Authorization: "Bearer " + token } });
-    if (!res.ok) return;
-    const d = await res.json();
-    friendsList = d.friends || []; blocksList = d.blocks || [];
-    blocked = new Set(blocksList.map((x) => x.login));
+    if (res.ok) applyRelations(await res.json());
   } catch {}
 }
-async function relation(target, type, action) {
+async function friendAction(target, action) {
   try {
-    const res = await fetch("/api/relations", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ target, type, action }) });
-    if (!res.ok) return;
-    const d = await res.json();
-    friendsList = d.friends || []; blocksList = d.blocks || [];
-    blocked = new Set(blocksList.map((x) => x.login));
-    renderMembers();
+    const res = await fetch("/api/friend", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ target, action }) });
+    if (res.ok) applyRelations(await res.json());
   } catch {}
 }
+async function blockAction(target, action) {
+  try {
+    const res = await fetch("/api/relations", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ target, action }) });
+    if (res.ok) applyRelations(await res.json());
+  } catch {}
+}
+socket.on("relations-changed", loadRelations);
+
+// Контакты
+$("contactsBtn").onclick = () => { $("reqError").textContent = ""; $("reqInput").value = ""; renderContacts(); $("contactsModal").classList.remove("hidden"); };
+$("contactsCancel").onclick = () => $("contactsModal").classList.add("hidden");
+async function reqSend() {
+  const login = $("reqInput").value.trim().toLowerCase();
+  $("reqError").textContent = "";
+  if (!login || login === profile.login) { $("reqError").textContent = t("err_user_not_found"); return; }
+  const res = await fetch("/api/user/" + encodeURIComponent(login), { headers: { Authorization: "Bearer " + token } });
+  if (!res.ok) { $("reqError").textContent = t("err_user_not_found"); return; }
+  $("reqInput").value = "";
+  await friendAction(login, "request");
+}
+$("reqSendBtn").onclick = reqSend;
+$("reqInput").addEventListener("keydown", (e) => { if (e.key === "Enter") reqSend(); });
+
+function contactRow(login, name, buttons) {
+  const row = document.createElement("div");
+  row.className = "contact-row";
+  row.innerHTML = `${avaHTML(login, name, 32)}<span class="m-name">${escapeHtml(name)}</span><span class="cr-acts"></span>`;
+  const acts = row.querySelector(".cr-acts");
+  buttons.forEach(({ txt, cls, fn }) => { const b = document.createElement("button"); b.className = "mini-btn " + (cls || ""); b.innerHTML = txt; b.onclick = fn; acts.appendChild(b); });
+  return row;
+}
+function renderContacts() {
+  if (!$("reqList")) return;
+  const inc = $("reqList"); inc.innerHTML = "";
+  incomingReqs.forEach(({ login, name }) => inc.appendChild(contactRow(login, name, [
+    { txt: "✓", cls: "ok", fn: () => friendAction(login, "accept") },
+    { txt: "✕", cls: "no", fn: () => friendAction(login, "decline") },
+  ])));
+  $("reqEmpty").classList.toggle("hidden", incomingReqs.length > 0);
+  const fr = $("friendsListEl"); fr.innerHTML = "";
+  friendsList.forEach(({ login, name }) => fr.appendChild(contactRow(login, name, [
+    { txt: window.ICON.send, fn: () => { $("contactsModal").classList.add("hidden"); openDM(login, name); } },
+    { txt: "✕", cls: "no", fn: () => friendAction(login, "remove") },
+  ])));
+  const sent = $("sentList"); sent.innerHTML = "";
+  outgoingReqs.forEach(({ login, name }) => sent.appendChild(contactRow(login, name, [
+    { txt: t("pending"), cls: "ghost", fn: () => friendAction(login, "remove") },
+  ])));
+}
+
+// Сообщение заблокировано (нужна дружба/общая группа)
+socket.on("dm-blocked", () => { notify(t("dm_need_friend")); loadRelations(); });
 
 socket.on("auth-error", (msg) => { alert(msg || "Auth error"); localStorage.removeItem("dialog_token"); location.reload(); });
 
@@ -414,7 +482,7 @@ function renderMembers() {
       </span>`;
     li.onclick = (e) => {
       const act = e.target.closest(".m-act");
-      if (act) { e.stopPropagation(); if (act.dataset.act === "friend") relation(info.login, "friend", "add"); else relation(info.login, "block", isBlk ? "remove" : "add"); return; }
+      if (act) { e.stopPropagation(); if (act.dataset.act === "friend") friendAction(info.login, "request"); else blockAction(info.login, isBlk ? "remove" : "add"); return; }
       openDM(info.login, info.name); $("infoPanel").classList.add("hidden");
     };
     ul.appendChild(li);
@@ -846,7 +914,7 @@ function setIcons() {
   const map = {
     emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send",
     muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back",
-    newChatBtn: "edit", profileBtn: "settings",
+    newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users",
     toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phone",
     windowToggle: "window", newChatCancel: "close", profileCancel: "close",
     toastClose: "close", infoClose: "close",
