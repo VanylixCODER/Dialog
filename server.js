@@ -123,28 +123,30 @@ let cachedIce = null, iceExpiry = 0;
 app.get("/api/ice", async (req, res) => {
   const now = Date.now();
   if (cachedIce && now < iceExpiry) return res.json(cachedIce);
-  const servers = [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ];
+  const meteredKey = process.env.METERED_API_KEY;
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USER;
   const turnPass = process.env.TURN_PASS;
-  const meteredKey = process.env.METERED_API_KEY;
-  if (turnUrl) {
-    servers.push(
-      { urls: turnUrl, username: turnUser || "", credential: turnPass || "" },
-      { urls: turnUrl + "?transport=tcp", username: turnUser || "", credential: turnPass || "" },
-    );
-  } else if (meteredKey) {
+  let servers = [];
+  if (meteredKey) {
     try {
       const r = await fetch(`https://dialogs.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`);
-      const creds = await r.json();
-      if (Array.isArray(creds)) servers.push(...creds);
-    } catch (e) { console.error("metered", e.message); }
+      servers = await r.json();
+      if (!Array.isArray(servers)) servers = [];
+      console.log("Metered TURN:", servers.length, "servers");
+    } catch (e) { console.error("metered", e.message); servers = []; }
+  }
+  if (!servers.length) {
+    servers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+    if (turnUrl) {
+      servers.push(
+        { urls: turnUrl, username: turnUser || "", credential: turnPass || "" },
+        { urls: turnUrl + "?transport=tcp", username: turnUser || "", credential: turnPass || "" },
+      );
+    }
   }
   cachedIce = { iceServers: servers };
-  iceExpiry = now + 12 * 3600 * 1000;
+  iceExpiry = now + 3600 * 1000;
   res.json(cachedIce);
 });
 

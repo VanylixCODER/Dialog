@@ -10,7 +10,7 @@ const presence = new Map(); // login -> 'online'|'dnd'|'offline'
 let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
 let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }], iceCandidatePoolSize: 4 };
-fetch("/api/ice").then(r => r.json()).then(c => { c.iceCandidatePoolSize = 4; ICE = c; }).catch(() => {});
+let iceReady = fetch("/api/ice").then(r => r.json()).then(c => { c.iceCandidatePoolSize = 4; ICE = c; console.log("ICE servers:", c.iceServers.length); }).catch(() => {});
 
 // ====================== ЯЗЫК ======================
 function initLang() {
@@ -829,29 +829,36 @@ function ensurePeer(peerId, peerName) {
   };
   pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
   pc.ontrack = (e) => {
+    const stream = e.streams[0];
     if (e.track.kind === "audio") {
-      addTile(peerId, st.name, e.streams[0], false);
+      const tile = addTile(peerId, st.name, stream, false);
+      const v = tile.querySelector("video");
+      v.srcObject = stream; v.muted = false;
+      v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
       return;
     }
     st.vtracks = (st.vtracks || 0) + 1;
     if (st.vtracks === 1) {
-      const tile = addTile(peerId, st.name, e.streams[0], false);
+      const tile = addTile(peerId, st.name, stream, false);
       const v = tile.querySelector("video");
-      v.srcObject = e.streams[0];
-      v.play().catch(() => {});
+      v.srcObject = stream; v.muted = false;
+      v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
       setupVideoDetect(peerId, e.track);
     } else {
-      addScreenTile(peerId, st.name, e.streams[0]);
+      addScreenTile(peerId, st.name, stream);
       e.track.onended = () => { removeTile("screen-" + peerId); st.vtracks = Math.max(1, st.vtracks - 1); };
     }
   };
   pc.onconnectionstatechange = () => {
+    console.log("peer", peerId.slice(0,6), "conn:", pc.connectionState, "ice:", pc.iceConnectionState);
     updateCallStatus();
     if (pc.connectionState === "failed") { pc.restartIce(); }
     else if (pc.connectionState === "closed") { removePeerConn(peerId); }
   };
   pc.oniceconnectionstatechange = () => {
+    console.log("peer", peerId.slice(0,6), "ice:", pc.iceConnectionState);
     if (pc.iceConnectionState === "disconnected") setTimeout(() => { if (pc.iceConnectionState === "disconnected") pc.restartIce(); }, 3000);
+    if (pc.iceConnectionState === "failed") pc.restartIce();
   };
   updateCallCount();
   return st;
@@ -878,6 +885,7 @@ function removePeerConn(peerId) {
 $("startCallBtn").onclick = () => { if (!myRoom) return; call.active ? endCall() : joinCall(); };
 async function joinCall() {
   ensureAudioCtx();
+  await iceReady;
   try { await getLocalStream(); } catch (e) { if (!confirm(mediaErrorMessage(e) + t("viewer_join"))) return; }
   call.active = true;
   $("callOverlay").classList.remove("hidden");
