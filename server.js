@@ -7,7 +7,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup } from "./db.js";
 import { cacheDel } from "./cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -105,31 +105,53 @@ app.get("/api/avatar/:login", async (req, res) => {
   } catch (e) { res.status(500).end(); }
 });
 
-// Друзья / блокировки
+// Друзья / блокировки / заявки
 app.get("/api/relations", async (req, res) => {
   try {
     const me = await authUser(req);
     if (!me) return res.status(401).json({ error: "unauth" });
-    res.json(await getRelations(me.login));
+    res.json(await getRelationsFull(me.login));
   } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
 });
+// Заявки в друзья: request | accept | decline | remove
+app.post("/api/friend", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const target = String(req.body.target || "").trim().toLowerCase();
+    const action = req.body.action;
+    if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
+    if (!(await auth.getUserByLogin(target))) return res.status(404).json({ error: "not found" });
+    if (action === "request") await sendFriendRequest(me.login, target);
+    else if (action === "accept") await acceptFriend(me.login, target);
+    else if (action === "decline") await declineFriend(me.login, target);
+    else if (action === "remove") await removeFriend(me.login, target);
+    else return res.status(400).json({ error: "bad action" });
+    notifyUser(target, "relations-changed", {}); // у собеседника обновятся заявки/друзья
+    res.json(await getRelationsFull(me.login));
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+// Блокировка
 app.post("/api/relations", async (req, res) => {
   try {
     const me = await authUser(req);
     if (!me) return res.status(401).json({ error: "unauth" });
     const target = String(req.body.target || "").trim().toLowerCase();
-    const type = req.body.type === "block" ? "block" : "friend";
     const action = req.body.action === "remove" ? "remove" : "add";
     if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
-    const exists = await auth.getUserByLogin(target);
-    if (!exists) return res.status(404).json({ error: "not found" });
-    if (action === "add") {
-      await setRelation(me.login, target, type);
-      if (type === "block") await removeRelation(me.login, target, "friend"); // блок снимает дружбу
-    } else {
-      await removeRelation(me.login, target, type);
-    }
-    res.json(await getRelations(me.login));
+    if (action === "add") { await setRelation(me.login, target, "block"); await removeFriend(me.login, target); await clearRequests(me.login, target); }
+    else await removeRelation(me.login, target, "block");
+    notifyUser(target, "relations-changed", {});
+    res.json(await getRelationsFull(me.login));
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+// Выйти из группы
+app.post("/api/groups/:id/leave", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    await leaveGroup(req.params.id, me.login);
+    res.json({ ok: true });
   } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
 });
 
@@ -174,6 +196,11 @@ function dmPartner(room, me) {
   if (!room.startsWith("@dm:")) return null;
   const parts = room.slice(4).split("~");
   return parts.find((p) => p !== me) || null;
+}
+// Отправить событие всем сокетам пользователя
+function notifyUser(login, event, data) {
+  const ids = userSockets.get(login);
+  if (ids) for (const id of ids) io.to(id).emit(event, data);
 }
 
 io.on("connection", (socket) => {
@@ -243,6 +270,21 @@ io.on("connection", (socket) => {
 
   socket.on("message", async (msg) => {
     if (!currentRoom || !userLogin) return;
+
+    // Гейтинг ЛС: писать можно только друзьям или тем, с кем есть общая группа.
+    // Иначе сообщение не идёт, а собеседнику уходит заявка в друзья.
+    const dmTo = dmPartner(currentRoom, userLogin);
+    if (dmTo) {
+      const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo));
+      if (!allowed) {
+        const status = await sendFriendRequest(userLogin, dmTo);
+        socket.emit("dm-blocked", { partner: dmTo, status });
+        notifyUser(dmTo, "relations-changed", {});
+        notifyUser(userLogin, "relations-changed", {});
+        return;
+      }
+    }
+
     const payload = {
       from: socket.id,
       fromLogin: userLogin,

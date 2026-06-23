@@ -53,6 +53,10 @@ const I18N = {
     new_chat: "New chat", search: "Search", no_chats: "No chats yet — tap ✎ to start one",
     pick_chat: "Select a chat to start messaging", info: "Info", or: "— or create a group —",
     pv_photo: "Photo", pv_video: "Video", pv_voice: "Voice message", members_n: "{n} members",
+    contacts: "Contacts", friend_requests: "Friend requests", no_requests: "No requests",
+    sent_requests: "Sent", send_request: "Send request", pending: "pending",
+    delete_chat: "Delete chat", leave_group: "Leave group?",
+    dm_need_friend: "You can message only friends or members of a shared group. A friend request has been sent.",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -107,6 +111,10 @@ const I18N = {
     new_chat: "Новый чат", search: "Поиск", no_chats: "Чатов пока нет — нажми ✎",
     pick_chat: "Выберите чат, чтобы начать переписку", info: "Инфо", or: "— или создайте группу —",
     pv_photo: "Фото", pv_video: "Видео", pv_voice: "Голосовое", members_n: "{n} участников",
+    contacts: "Контакты", friend_requests: "Запросы в друзья", no_requests: "Нет запросов",
+    sent_requests: "Отправленные", send_request: "Отправить заявку", pending: "ожидает",
+    delete_chat: "Удалить чат", leave_group: "Выйти из группы?",
+    dm_need_friend: "Писать можно только друзьям или участникам общей группы. Заявка в друзья отправлена.",
   },
 };
 

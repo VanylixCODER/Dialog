@@ -115,8 +115,55 @@ export async function getRelations(login) {
     [login]
   );
   const friends = [], blocks = [];
-  for (const r of rows) (r.type === "friend" ? friends : blocks).push({ login: r.target, name: r.name });
+  for (const r of rows) (r.type === "friend" ? friends : r.type === "block" ? blocks : friends).push({ login: r.target, name: r.name });
   return { friends, blocks };
+}
+
+// Полные отношения: друзья, блок, входящие/исходящие заявки
+export async function getRelationsFull(login) {
+  const friends = await query("SELECT r.target login, u.name FROM relations r JOIN users u ON u.login=r.target WHERE r.login=? AND r.type='friend'", [login]);
+  const blocks = await query("SELECT r.target login, u.name FROM relations r JOIN users u ON u.login=r.target WHERE r.login=? AND r.type='block'", [login]);
+  const outgoing = await query("SELECT r.target login, u.name FROM relations r JOIN users u ON u.login=r.target WHERE r.login=? AND r.type='request'", [login]);
+  const incoming = await query("SELECT r.login login, u.name FROM relations r JOIN users u ON u.login=r.login WHERE r.target=? AND r.type='request'", [login]);
+  return { friends, blocks, outgoing, incoming };
+}
+export async function areFriends(a, b) {
+  const r = await query("SELECT 1 FROM relations WHERE login=? AND target=? AND type='friend'", [a, b]);
+  return r.length > 0;
+}
+export async function shareGroup(a, b) {
+  const r = await query("SELECT 1 FROM group_members m1 JOIN group_members m2 ON m1.group_id=m2.group_id WHERE m1.login=? AND m2.login=? LIMIT 1", [a, b]);
+  return r.length > 0;
+}
+export async function isBlockedBy(a, b) { // a заблокирован пользователем b
+  const r = await query("SELECT 1 FROM relations WHERE login=? AND target=? AND type='block'", [b, a]);
+  return r.length > 0;
+}
+export async function acceptFriend(me, other) {
+  await execute("DELETE FROM relations WHERE type='request' AND ((login=? AND target=?) OR (login=? AND target=?))", [other, me, me, other]);
+  await execute("INSERT IGNORE INTO relations (login,target,type) VALUES (?,?,'friend')", [me, other]);
+  await execute("INSERT IGNORE INTO relations (login,target,type) VALUES (?,?,'friend')", [other, me]);
+}
+export async function declineFriend(me, other) {
+  await execute("DELETE FROM relations WHERE login=? AND target=? AND type='request'", [other, me]);
+}
+export async function removeFriend(me, other) {
+  await execute("DELETE FROM relations WHERE type='friend' AND ((login=? AND target=?) OR (login=? AND target=?))", [me, other, other, me]);
+}
+// Возвращает 'friend' | 'requested' | 'noop'
+export async function sendFriendRequest(from, to) {
+  if (await areFriends(from, to)) return "friend";
+  if (await isBlockedBy(from, to)) return "noop"; // он нас заблокировал
+  const reverse = await query("SELECT 1 FROM relations WHERE login=? AND target=? AND type='request'", [to, from]);
+  if (reverse.length) { await acceptFriend(from, to); return "friend"; }
+  await execute("INSERT IGNORE INTO relations (login,target,type) VALUES (?,?,'request')", [from, to]);
+  return "requested";
+}
+export async function clearRequests(a, b) {
+  await execute("DELETE FROM relations WHERE type='request' AND ((login=? AND target=?) OR (login=? AND target=?))", [a, b, b, a]);
+}
+export async function leaveGroup(id, login) {
+  await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]);
 }
 
 // --- Группы ---
