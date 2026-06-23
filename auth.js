@@ -72,3 +72,11 @@ export async function logout(token) {
   await query("DELETE FROM sessions WHERE token = ?", [token]);
   await cacheDel("sess:" + token);
 }
+
+// Поиск пользователя по логину (для старта ЛС по нику)
+export async function getUserByLogin(login) {
+  login = (login || "").trim().toLowerCase();
+  if (!login) return null;
+  const rows = await query("SELECT login, name FROM users WHERE login = ?", [login]);
+  return rows[0] || null;
+}

@@ -36,6 +36,12 @@ const I18N = {
     mute_room: "Mute room", unmute_room: "Unmute room",
     dms_title: "Direct messages", dm_open: "message", dm_self: "you",
     dm_ping: "{name} messaged you", room_sub_dm: "direct message",
+    hub_room: "Room", hub_dm: "Direct", hub_group: "Groups",
+    ph_dm_user: "Username to message", btn_open_dm: "Open DM",
+    hub_my_groups: "My groups", btn_new_group: "+ New group",
+    ph_group_name: "Group name", ph_group_members: "Members: alice, bob",
+    btn_create_group: "Create group", err_user_not_found: "User not found",
+    err_group_name: "Enter a group name", room_sub_group: "group",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -73,6 +79,12 @@ const I18N = {
     mute_room: "Заглушить комнату", unmute_room: "Включить уведомления",
     dms_title: "Личные сообщения", dm_open: "написать", dm_self: "вы",
     dm_ping: "{name} написал вам", room_sub_dm: "личные сообщения",
+    hub_room: "Комната", hub_dm: "Личные", hub_group: "Группы",
+    ph_dm_user: "Ник для сообщения", btn_open_dm: "Открыть ЛС",
+    hub_my_groups: "Мои группы", btn_new_group: "+ Новая группа",
+    ph_group_name: "Название группы", ph_group_members: "Участники: alice, bob",
+    btn_create_group: "Создать группу", err_user_not_found: "Пользователь не найден",
+    err_group_name: "Введите название группы", room_sub_group: "группа",
   },
 };
 

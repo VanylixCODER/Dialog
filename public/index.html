@@ -46,19 +46,54 @@
         </form>
       </div>
 
-      <!-- Шаг 2: выбор комнаты -->
+      <!-- Шаг 2: хаб входа -->
       <div id="roomStage" class="hidden">
         <div class="welcome"><span data-i18n="welcome_hi">Hi</span>, <b id="welcomeName">—</b>! 👋</div>
-        <input id="roomInput" class="field" type="text" data-i18n-ph="ph_room" placeholder="Room (e.g. team)" maxlength="32" autocomplete="off" />
-        <button id="joinBtn" class="btn-primary" data-i18n="btn_join_room">Enter room</button>
 
-        <div id="favRooms" class="room-list hidden">
-          <div class="room-list-title" data-i18n="favorite_rooms">Favorites</div>
-          <div id="favRoomsList" class="room-chips"></div>
+        <div class="hub-tabs">
+          <button class="hub-tab active" data-hub="room" data-i18n="hub_room">Room</button>
+          <button class="hub-tab" data-hub="dm" data-i18n="hub_dm">Direct</button>
+          <button class="hub-tab" data-hub="group" data-i18n="hub_group">Groups</button>
         </div>
-        <div id="recentRooms" class="room-list hidden">
-          <div class="room-list-title" data-i18n="recent_rooms">Recent</div>
-          <div id="recentRoomsList" class="room-chips"></div>
+
+        <!-- Публичная комната -->
+        <div class="hub-pane" data-pane="room">
+          <input id="roomInput" class="field" type="text" data-i18n-ph="ph_room" placeholder="Room (e.g. team)" maxlength="32" autocomplete="off" />
+          <button id="joinBtn" class="btn-primary" data-i18n="btn_join_room">Enter room</button>
+          <div id="favRooms" class="room-list hidden">
+            <div class="room-list-title" data-i18n="favorite_rooms">Favorites</div>
+            <div id="favRoomsList" class="room-chips"></div>
+          </div>
+          <div id="recentRooms" class="room-list hidden">
+            <div class="room-list-title" data-i18n="recent_rooms">Recent</div>
+            <div id="recentRoomsList" class="room-chips"></div>
+          </div>
+        </div>
+
+        <!-- Личные сообщения по нику -->
+        <div class="hub-pane hidden" data-pane="dm">
+          <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username to message" maxlength="24" autocomplete="off" />
+          <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Open DM</button>
+          <div class="form-error" id="dmError"></div>
+          <div id="dmHub" class="room-list hidden">
+            <div class="room-list-title" data-i18n="dms_title">Direct messages</div>
+            <div id="dmHubChips" class="room-chips"></div>
+          </div>
+        </div>
+
+        <!-- Приватные группы -->
+        <div class="hub-pane hidden" data-pane="group">
+          <div id="groupsHub" class="room-list hidden">
+            <div class="room-list-title" data-i18n="hub_my_groups">My groups</div>
+            <div id="groupsChips" class="room-chips"></div>
+          </div>
+          <button id="newGroupToggle" class="btn-ghost" data-i18n="btn_new_group">+ New group</button>
+          <div id="newGroupForm" class="hidden">
+            <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" placeholder="Group name" maxlength="64" />
+            <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
+            <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
+            <div class="form-error" id="groupError"></div>
+          </div>
         </div>
 
         <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>

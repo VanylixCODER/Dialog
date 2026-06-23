@@ -7,7 +7,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -49,6 +49,45 @@ app.get("/api/me", async (req, res) => {
     if (!profile) return res.status(401).json({ error: "Не авторизован" });
     res.json({ profile });
   } catch (e) { console.error(e); res.status(500).json({ error: "Ошибка сервера" }); }
+});
+
+// Пользователь по token из заголовка
+async function authUser(req) {
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  return auth.userByToken(token);
+}
+
+// Поиск пользователя по нику (для ЛС)
+app.get("/api/user/:login", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const u = await auth.getUserByLogin(req.params.login);
+    if (!u) return res.status(404).json({ error: "not found" });
+    res.json({ login: u.login, name: u.name });
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+
+// Список моих групп
+app.get("/api/groups", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    res.json({ groups: await getUserGroups(me.login) });
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
+});
+
+// Создать группу
+app.post("/api/groups", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    const name = (req.body.name || "").trim().slice(0, 64);
+    const members = (req.body.members || []).map((s) => String(s).trim().toLowerCase()).filter(Boolean).slice(0, 50);
+    if (!name) return res.status(400).json({ error: "Group name required" });
+    const g = await createGroup(name, me.login, members);
+    res.json(g);
+  } catch (e) { console.error(e); res.status(500).json({ error: "server error" }); }
 });
 
 const HISTORY_LIMIT = 100;
@@ -101,7 +140,19 @@ io.on("connection", (socket) => {
     const profile = await auth.userByToken(token);
     if (!profile) { socket.emit("auth-error", "Session expired, sign in again"); return; }
 
-    const newRoom = (room || "lobby").trim().slice(0, 32) || "lobby";
+    const newRoom = (room || "lobby").trim().slice(0, 64) || "lobby";
+
+    // Контроль доступа к приватным комнатам
+    if (newRoom.startsWith("@dm:")) {
+      const parts = newRoom.slice(4).split("~");
+      if (!parts.includes(profile.login)) { socket.emit("auth-error", "No access to this DM"); return; }
+    } else if (newRoom.startsWith("@grp:")) {
+      const gid = newRoom.slice(5);
+      if (!/^\d+$/.test(gid) || !(await isGroupMember(gid, profile.login))) {
+        socket.emit("auth-error", "No access to this group"); return;
+      }
+    }
+
     if (currentRoom && currentRoom !== newRoom) doLeave(); // сменил комнату — выходим из старой
 
     currentRoom = newRoom;

@@ -25,7 +25,9 @@ window.addEventListener("langchange", () => {
   renderMembers();
   renderRoomLists();
   renderDMList();
-  if (curDM) { $("roomSub").textContent = t("room_sub_dm"); $("chatTitle").textContent = "@ " + curDM; }
+  loadGroups();
+  renderDMHub();
+  if (myRoom) applyRoomHeader();
 });
 
 // ====================== ЗВУКИ ======================
@@ -104,6 +106,8 @@ function showRoomStage() {
   $("roomStage").classList.remove("hidden");
   $("welcomeName").textContent = profile.name;
   renderRoomLists();
+  renderDMHub();
+  loadGroups();
   $("roomInput").focus();
 }
 $("logoutBtn").onclick = () => {
@@ -161,33 +165,35 @@ function updateFavBtn() {
 $("favBtn").onclick = () => { toggleFav(myRoom); updateFavBtn(); renderRoomLists(); };
 
 // ====================== ВХОД / ВЫХОД ИЗ КОМНАТЫ ======================
-let curDM = null; // имя собеседника, если мы в личке
+let curKind = "room"; // room | dm | group
+let curTitle = "";
 
-// Общий вход в комнату или ЛС
+function applyRoomHeader() {
+  let prefix = "#", sub = t("room_sub"), showFav = true;
+  if (curKind === "dm") { prefix = "@"; sub = t("room_sub_dm"); showFav = false; }
+  else if (curKind === "group") { prefix = "▣"; sub = t("room_sub_group"); showFav = false; }
+  $("roomLabel").textContent = curTitle;
+  $("roomSub").textContent = sub;
+  $("chatTitle").textContent = prefix + " " + curTitle;
+  $("callRoomLabel").textContent = t("call_label") + " · " + prefix + " " + curTitle;
+  $("favBtn").style.display = showFav ? "" : "none";
+  if (showFav) updateFavBtn();
+}
+
+// Общий вход в комнату / ЛС / группу
 function enterRoom(room, opts = {}) {
   if (!token) return;
   myName = profile.name;
   myRoom = room;
-  curDM = opts.dm ? opts.title : null;
+  curKind = opts.kind || "room";
+  curTitle = opts.title || room;
+  if (curKind === "room") addRecent(room);
   if (call.active) endCall();
   socket.emit("join", { token, room });
 
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
-  if (opts.dm) {
-    $("roomLabel").textContent = opts.title;
-    $("roomSub").textContent = t("room_sub_dm");
-    $("chatTitle").textContent = "@ " + opts.title;
-    $("favBtn").style.display = "none";
-  } else {
-    addRecent(room);
-    $("roomLabel").textContent = room;
-    $("roomSub").textContent = t("room_sub");
-    $("chatTitle").textContent = "# " + room;
-    $("favBtn").style.display = "";
-    updateFavBtn();
-  }
-  $("callRoomLabel").textContent = t("call_label") + " · " + (opts.dm ? "@ " + opts.title : "# " + room);
+  applyRoomHeader();
   $("myName").textContent = myName;
   $("myAvatar").textContent = initials(myName);
   updateMuteBtn();
@@ -204,7 +210,7 @@ $("roomInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryJo
 function leaveRoom() {
   if (call.active) endCall();
   socket.emit("leave");
-  myRoom = ""; curDM = null;
+  myRoom = ""; curKind = "room";
   peers.clear(); renderMembers();
   messagesEl.innerHTML = "";
   typingUsers.clear(); $("typingIndicator").textContent = "";
@@ -228,7 +234,7 @@ function openDM(login, name) {
   if (!login || login === profile.login) return;
   saveDM(login, name);
   dmUnread.set(login, 0);
-  enterRoom(dmKey(login), { dm: true, title: name });
+  enterRoom(dmKey(login), { kind: "dm", title: name });
 }
 function renderDMList() {
   const ul = $("dmList");
@@ -279,6 +285,88 @@ function notify(text) {
   el.textContent = text; el.classList.add("show");
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500);
 }
+
+// ====================== ХАБ ВХОДА (комната / ЛС / группы) ======================
+document.querySelectorAll(".hub-tab").forEach((tab) => {
+  tab.onclick = () => {
+    document.querySelectorAll(".hub-tab").forEach((x) => x.classList.remove("active"));
+    tab.classList.add("active");
+    const h = tab.dataset.hub;
+    document.querySelectorAll(".hub-pane").forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== h));
+    if (h === "group") loadGroups();
+    if (h === "dm") renderDMHub();
+  };
+});
+
+// --- ЛС по нику ---
+async function openDMByNick() {
+  const login = $("dmInput").value.trim().toLowerCase();
+  $("dmError").textContent = "";
+  if (!login) return;
+  if (login === profile.login) { $("dmError").textContent = t("err_user_not_found"); return; }
+  try {
+    const res = await fetch("/api/user/" + encodeURIComponent(login), { headers: { Authorization: "Bearer " + token } });
+    if (!res.ok) { $("dmError").textContent = t("err_user_not_found"); return; }
+    const u = await res.json();
+    $("dmInput").value = "";
+    openDM(u.login, u.name);
+  } catch { $("dmError").textContent = t("err_user_not_found"); }
+}
+$("dmOpenBtn").onclick = openDMByNick;
+$("dmInput").addEventListener("keydown", (e) => { if (e.key === "Enter") openDMByNick(); });
+function renderDMHub() {
+  const d = lsGet("dialog_dms");
+  $("dmHub").classList.toggle("hidden", d.length === 0);
+  const chips = $("dmHubChips");
+  chips.innerHTML = "";
+  d.forEach(({ login, name }) => {
+    const b = document.createElement("button");
+    b.className = "room-chip";
+    b.textContent = "@ " + name;
+    b.onclick = () => openDM(login, name);
+    chips.appendChild(b);
+  });
+}
+
+// --- Группы ---
+async function loadGroups() {
+  try {
+    const res = await fetch("/api/groups", { headers: { Authorization: "Bearer " + token } });
+    if (!res.ok) return;
+    const { groups } = await res.json();
+    $("groupsHub").classList.toggle("hidden", groups.length === 0);
+    const chips = $("groupsChips");
+    chips.innerHTML = "";
+    groups.forEach((g) => {
+      const b = document.createElement("button");
+      b.className = "room-chip";
+      b.textContent = "▣ " + g.name;
+      b.onclick = () => enterGroup(g.id, g.name);
+      chips.appendChild(b);
+    });
+  } catch {}
+}
+function enterGroup(id, name) { enterRoom("@grp:" + id, { kind: "group", title: name }); }
+$("newGroupToggle").onclick = () => $("newGroupForm").classList.toggle("hidden");
+async function createGroupFromForm() {
+  const name = $("groupName").value.trim();
+  $("groupError").textContent = "";
+  if (!name) { $("groupError").textContent = t("err_group_name"); return; }
+  const members = $("groupMembers").value.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  try {
+    const res = await fetch("/api/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ name, members }),
+    });
+    const data = await res.json();
+    if (!res.ok) { $("groupError").textContent = data.error || "error"; return; }
+    $("groupName").value = ""; $("groupMembers").value = "";
+    $("newGroupForm").classList.add("hidden");
+    enterGroup(data.id, data.name);
+  } catch { $("groupError").textContent = "error"; }
+}
+$("createGroupBtn").onclick = createGroupFromForm;
 
 socket.on("auth-error", (msg) => {
   alert(msg || "Auth error");
