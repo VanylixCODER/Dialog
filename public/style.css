@@ -470,6 +470,24 @@ input, textarea, button { caret-color: var(--green); }
   min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; display: grid; place-items: center;
 }
 
+/* Действия над участником (друг/блок) */
+.m-acts { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+.member:hover .m-acts { opacity: 1; }
+.m-act { border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; width: 22px; height: 22px; border-radius: 2px; display: grid; place-items: center; }
+.m-act:hover { border-color: var(--green); color: var(--green); }
+.m-act.on { border-color: var(--danger); color: var(--danger); }
+.chip-x { color: var(--danger); margin-left: 6px; font-weight: 700; }
+
+/* Заблокированные сообщения */
+.msg.blocked > .bubble, .msg.blocked > .time { display: none; }
+.msg.blocked::after {
+  content: attr(data-blocklabel); display: inline-block; margin-top: 2px;
+  padding: 8px 13px; border: 1px dashed var(--border); color: var(--text-dim);
+  font-size: 13px; cursor: pointer; border-radius: 2px;
+}
+.msg.blocked.revealed > .bubble, .msg.blocked.revealed > .time { display: block; }
+.msg.blocked.revealed::after { display: none; }
+
 /* Упоминания и пинги */
 .mention { color: var(--green); background: rgba(0,255,90,0.12); padding: 0 3px; border-radius: 2px; font-weight: 700; }
 .msg.ping .bubble { border-color: var(--green); box-shadow: var(--glow); background: rgba(0,255,90,0.1); }

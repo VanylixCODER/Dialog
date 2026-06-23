@@ -47,6 +47,9 @@ const I18N = {
     call_in: "calling in {title}",
     profile: "Profile", upload_avatar: "Upload avatar", save: "Save", cancel: "Cancel",
     ph_display_name: "Display name",
+    hub_friends: "Friends", friends_title: "Friends", blocked_title: "Blocked",
+    add_friend: "Add friend", remove_friend: "Remove friend",
+    block_user: "Block", unblock_user: "Unblock", blocked_msg: "Blocked message — click to show",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -95,6 +98,9 @@ const I18N = {
     call_in: "звонит в {title}",
     profile: "Профиль", upload_avatar: "Загрузить аватар", save: "Сохранить", cancel: "Отмена",
     ph_display_name: "Отображаемое имя",
+    hub_friends: "Друзья", friends_title: "Друзья", blocked_title: "Заблокированные",
+    add_friend: "В друзья", remove_friend: "Убрать из друзей",
+    block_user: "Заблокировать", unblock_user: "Разблокировать", blocked_msg: "Сообщение заблокированного — нажми, чтобы показать",
   },
 };
 

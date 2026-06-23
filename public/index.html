@@ -54,6 +54,7 @@
           <button class="hub-tab active" data-hub="room" data-i18n="hub_room">Room</button>
           <button class="hub-tab" data-hub="dm" data-i18n="hub_dm">Direct</button>
           <button class="hub-tab" data-hub="group" data-i18n="hub_group">Groups</button>
+          <button class="hub-tab" data-hub="friends" data-i18n="hub_friends">Friends</button>
         </div>
 
         <!-- Публичная комната -->
@@ -93,6 +94,18 @@
             <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
             <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
             <div class="form-error" id="groupError"></div>
+          </div>
+        </div>
+
+        <!-- Друзья / заблокированные -->
+        <div class="hub-pane hidden" data-pane="friends">
+          <div id="friendsHub" class="room-list hidden">
+            <div class="room-list-title" data-i18n="friends_title">Friends</div>
+            <div id="friendsChips" class="room-chips"></div>
+          </div>
+          <div id="blocksHub" class="room-list hidden">
+            <div class="room-list-title" data-i18n="blocked_title">Blocked</div>
+            <div id="blocksChips" class="room-chips"></div>
           </div>
         </div>
 

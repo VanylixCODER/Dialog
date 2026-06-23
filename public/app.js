@@ -100,6 +100,7 @@ function onAuthSuccess({ token: tk, profile: p }) {
   token = tk; profile = p;
   localStorage.setItem("dialog_token", tk);
   showRoomStage();
+  loadRelations();
 }
 function showRoomStage() {
   $("authStage").classList.add("hidden");
@@ -121,7 +122,7 @@ async function checkSession() {
   if (!token) return;
   try {
     const res = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
-    if (res.ok) { profile = (await res.json()).profile; showRoomStage(); }
+    if (res.ok) { profile = (await res.json()).profile; showRoomStage(); loadRelations(); }
     else localStorage.removeItem("dialog_token");
   } catch {}
 }
@@ -295,6 +296,7 @@ document.querySelectorAll(".hub-tab").forEach((tab) => {
     document.querySelectorAll(".hub-pane").forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== h));
     if (h === "group") loadGroups();
     if (h === "dm") renderDMHub();
+    if (h === "friends") renderFriendsHub();
   };
 });
 
@@ -431,6 +433,54 @@ $("profileSave").onclick = async () => {
   } catch { $("profileError").textContent = "error"; }
 };
 
+// ====================== ДРУЗЬЯ / БЛОКИРОВКИ ======================
+let blocked = new Set();
+let friendsList = [], blocksList = [];
+async function loadRelations() {
+  try {
+    const res = await fetch("/api/relations", { headers: { Authorization: "Bearer " + token } });
+    if (!res.ok) return;
+    const d = await res.json();
+    friendsList = d.friends || []; blocksList = d.blocks || [];
+    blocked = new Set(blocksList.map((x) => x.login));
+    renderFriendsHub();
+  } catch {}
+}
+async function relation(target, type, action) {
+  try {
+    const res = await fetch("/api/relations", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ target, type, action }),
+    });
+    if (!res.ok) return;
+    const d = await res.json();
+    friendsList = d.friends || []; blocksList = d.blocks || [];
+    blocked = new Set(blocksList.map((x) => x.login));
+    renderFriendsHub(); renderMembers();
+  } catch {}
+}
+function renderFriendsHub() {
+  const fh = $("friendsHub"), fc = $("friendsChips");
+  if (!fh) return;
+  fh.classList.toggle("hidden", friendsList.length === 0);
+  fc.innerHTML = "";
+  friendsList.forEach(({ login, name }) => {
+    const b = document.createElement("button"); b.className = "room-chip";
+    b.innerHTML = `@ ${escapeHtml(name)} <span class="chip-x" title="${t("remove_friend")}">×</span>`;
+    b.onclick = (e) => { if (e.target.classList.contains("chip-x")) relation(login, "friend", "remove"); else openDM(login, name); };
+    fc.appendChild(b);
+  });
+  const bh = $("blocksHub"), bc = $("blocksChips");
+  bh.classList.toggle("hidden", blocksList.length === 0);
+  bc.innerHTML = "";
+  blocksList.forEach(({ login, name }) => {
+    const b = document.createElement("button"); b.className = "room-chip blocked-chip";
+    b.innerHTML = `🚫 ${escapeHtml(name)} <span class="chip-x" title="${t("unblock_user")}">×</span>`;
+    b.onclick = () => relation(login, "block", "remove");
+    bc.appendChild(b);
+  });
+}
+
 socket.on("auth-error", (msg) => {
   alert(msg || "Auth error");
   localStorage.removeItem("dialog_token");
@@ -464,9 +514,23 @@ function renderMembers() {
   for (const [, info] of peers) {
     const li = document.createElement("li");
     li.className = "member";
+    const isBlk = blocked.has(info.login);
     li.innerHTML = `<span class="dot"></span>${avaHTML(info.login, info.name, 28)}
-      <span class="m-name">${escapeHtml(info.name)}</span><span class="m-dm">${t("dm_open")}</span>`;
-    li.onclick = () => openDM(info.login, info.name);
+      <span class="m-name">${escapeHtml(info.name)}</span>
+      <span class="m-acts">
+        <button class="m-act" data-act="friend" title="${t("add_friend")}">＋</button>
+        <button class="m-act${isBlk ? " on" : ""}" data-act="block" title="${isBlk ? t("unblock_user") : t("block_user")}">🚫</button>
+      </span>`;
+    li.onclick = (e) => {
+      const act = e.target.closest(".m-act");
+      if (act) {
+        e.stopPropagation();
+        if (act.dataset.act === "friend") relation(info.login, "friend", "add");
+        else relation(info.login, "block", isBlk ? "remove" : "add");
+        return;
+      }
+      openDM(info.login, info.name);
+    };
     ul.appendChild(li);
   }
 }
@@ -521,8 +585,10 @@ function highlightMentions(html) {
 
 function renderMessage(m, scroll = true, ping = false) {
   const mine = profile && m.fromLogin === profile.login;
+  const isBlocked = !mine && m.fromLogin && blocked.has(m.fromLogin);
   const wrap = document.createElement("div");
-  wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "");
+  wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isBlocked ? " blocked" : "");
+  if (isBlocked) wrap.dataset.blocklabel = t("blocked_msg");
   let inner = "";
   if (!mine) inner += `<div class="who">${escapeHtml(m.name)}</div>`;
   if (m.type === "text") inner += `<div class="bubble">${highlightMentions(linkify(escapeHtml(m.text)))}</div>`;
@@ -618,6 +684,8 @@ function applyLb() { lbImg.style.transform = `translate(${lbX}px,${lbY}px) scale
 function openLightbox(src) { lbImg.src = src; lbScale = 1; lbX = 0; lbY = 0; applyLb(); lb.classList.remove("hidden"); }
 function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; }
 messagesEl.addEventListener("click", (e) => {
+  const bl = e.target.closest(".msg.blocked:not(.revealed)");
+  if (bl) { bl.classList.add("revealed"); return; }
   const img = e.target.closest(".bubble.media img");
   if (img) openLightbox(img.src);
 });
