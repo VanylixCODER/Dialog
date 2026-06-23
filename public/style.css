@@ -49,13 +49,19 @@ input, textarea, button { caret-color: var(--green); }
 
 /* ---------- Login ---------- */
 .login {
+  position: fixed; inset: 0; z-index: 150;
   height: 100vh;
   height: 100dvh;
   display: grid;
   place-items: center;
-  position: relative;
   overflow: hidden;
 }
+.hub-close {
+  position: absolute; top: 12px; left: 12px; z-index: 3;
+  width: 30px; height: 30px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); cursor: pointer; border-radius: 2px; font-family: inherit;
+}
+.hub-close:hover { border-color: var(--green); color: var(--green); }
 .login-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; background: var(--bg); }
 .matrix-rain { position: absolute; inset: 0; opacity: 0.55; }
 
@@ -564,3 +570,62 @@ input, textarea, button { caret-color: var(--green); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
 }
+
+/* ====================== HUD: Matrix + Jarvis + Hyprland ====================== */
+/* Угловые скобки-рамки (Jarvis) на карточках и тайлах */
+.login-card::after, .modal-card::after, .tile::after {
+  content: ""; position: absolute; inset: 6px; pointer-events: none; z-index: 3;
+  --c: rgba(0,255,90,0.7); --s: 14px; --t: 2px;
+  background:
+    linear-gradient(var(--c),var(--c)) 0 0/var(--s) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 0/var(--t) var(--s) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--s) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--t) var(--s) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--s) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--t) var(--s) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--s) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--t) var(--s) no-repeat;
+}
+.modal-card { position: relative; }
+
+/* Технологичная сетка под чатом (Hyprland/Matrix) */
+.chat { isolation: isolate; }
+.chat::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(0,255,90,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,90,0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: radial-gradient(circle at 50% 40%, #000, transparent 90%);
+          mask-image: radial-gradient(circle at 50% 40%, #000, transparent 90%);
+}
+.chat-head, .messages, .composer, .emoji-picker { position: relative; z-index: 1; }
+
+/* Скан-луч вдоль шапки (Jarvis) */
+.chat-head { overflow: hidden; }
+.chat-head::after {
+  content: ""; position: absolute; left: -30%; bottom: 0; width: 30%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  box-shadow: var(--glow); animation: scanBeam 5s linear infinite;
+}
+@keyframes scanBeam { to { left: 130%; } }
+
+/* Пульсирующее кольцо вокруг логотипа (Jarvis) */
+.brand-logo { position: relative; }
+.brand-logo::after {
+  content: ""; position: absolute; inset: -5px; border: 1px solid rgba(0,255,90,0.35);
+  animation: ringPulse 2.6s ease-in-out infinite;
+}
+@keyframes ringPulse { 0%,100% { opacity: 0.25; transform: scale(1); } 50% { opacity: 0.75; transform: scale(1.1); } }
+
+/* Hyprland-стекло: усиленный blur на оверлеях */
+.call-overlay, .modal, .lightbox, .login-card { backdrop-filter: blur(10px) saturate(130%); }
+
+/* Анимированная неоновая полоса сверху сайдбара */
+.sidebar { position: relative; }
+.sidebar::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--green), var(--accent-2, #22d3ee), var(--green), transparent);
+  background-size: 200% 100%; animation: neonSlide 6s linear infinite; opacity: 0.7;
+}
+@keyframes neonSlide { to { background-position: 200% 0; } }
