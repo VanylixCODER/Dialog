@@ -906,6 +906,7 @@ socket.on("call-ring", (p) => {
 socket.on("signal", async ({ from, name, kind, data }) => {
   if (!call.active) return;
   const st = ensurePeer(from, name); const pc = st.pc;
+  if (!st.iceBuf) st.iceBuf = [];
   try {
     if (kind === "desc") {
       const offerCollision = data.type === "offer" && (st.makingOffer || pc.signalingState !== "stable");
@@ -913,7 +914,12 @@ socket.on("signal", async ({ from, name, kind, data }) => {
       if (st.ignoreOffer) return;
       await pc.setRemoteDescription(data);
       if (data.type === "offer") { await pc.setLocalDescription(); socket.emit("signal", { to: from, kind: "desc", data: pc.localDescription }); }
-    } else if (kind === "ice") { try { await pc.addIceCandidate(data); } catch (e) { if (!st.ignoreOffer) throw e; } }
+      for (const c of st.iceBuf) { try { await pc.addIceCandidate(c); } catch {} }
+      st.iceBuf = [];
+    } else if (kind === "ice") {
+      if (!pc.remoteDescription) { st.iceBuf.push(data); }
+      else { try { await pc.addIceCandidate(data); } catch (e) { if (!st.ignoreOffer) throw e; } }
+    }
   } catch (e) { console.error("signal", e); }
 });
 
