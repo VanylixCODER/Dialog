@@ -342,8 +342,11 @@ input, textarea, button { caret-color: var(--green); }
   background: var(--bg-3); border: 1px solid var(--border-strong);
   border-radius: 2px; padding: 13px 15px; box-shadow: var(--glow-soft);
   animation: slideIn 0.3s ease;
+  overflow: hidden; min-width: 290px; min-height: 72px;
 }
 @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.cava { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.9; }
+.call-toast > .avatar, .call-toast > .toast-body, .call-toast > .toast-join, .call-toast > .toast-close { position: relative; z-index: 1; }
 .toast-body { margin-right: 6px; }
 .toast-name { font-weight: 700; font-size: 14px; color: var(--green); }
 .toast-sub { color: var(--text-dim); font-size: 11px; }
