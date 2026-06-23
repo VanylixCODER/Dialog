@@ -50,6 +50,9 @@ const I18N = {
     hub_friends: "Friends", friends_title: "Friends", blocked_title: "Blocked",
     add_friend: "Add friend", remove_friend: "Remove friend",
     block_user: "Block", unblock_user: "Unblock", blocked_msg: "Blocked message — click to show",
+    new_chat: "New chat", search: "Search", no_chats: "No chats yet — tap ✎ to start one",
+    pick_chat: "Select a chat to start messaging", info: "Info", or: "— or create a group —",
+    pv_photo: "Photo", pv_video: "Video", pv_voice: "Voice message", members_n: "{n} members",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",

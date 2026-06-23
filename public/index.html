@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Экран входа -->
+  <!-- ВХОД -->
   <div id="login" class="login">
     <div class="login-card">
       <select id="langSelect" class="lang-select" title="Language">
@@ -20,22 +20,19 @@
         <div class="brand-logo">◆</div>
         <h1>Dialog</h1>
       </div>
-      <p class="brand-sub" data-i18n="brand_sub">Chat · Group video calls · Screen share</p>
+      <p class="brand-sub" data-i18n="brand_sub">Chat · Voice & video calls · Screen share</p>
 
-      <!-- Шаг 1: аутентификация -->
       <div id="authStage">
         <div class="auth-tabs">
           <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
           <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
         </div>
-
         <form id="loginForm" class="auth-form">
           <input class="field" name="login" type="text" data-i18n-ph="ph_login" placeholder="Username" maxlength="24" autocomplete="username" />
           <input class="field" name="password" type="password" data-i18n-ph="ph_password" placeholder="Password" autocomplete="current-password" />
           <div class="form-error" id="loginError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
         </form>
-
         <form id="registerForm" class="auth-form hidden">
           <input class="field" name="name" type="text" data-i18n-ph="ph_name" placeholder="Display name" maxlength="32" autocomplete="name" />
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" placeholder="Username (a–z, 3–24)" maxlength="24" autocomplete="username" />
@@ -45,104 +42,52 @@
           <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
         </form>
       </div>
-
-      <!-- Шаг 2: хаб входа -->
-      <div id="roomStage" class="hidden">
-        <button id="hubClose" class="hub-close hidden" data-i18n-title="back" title="Back to chat">✕</button>
-        <div class="welcome"><span data-i18n="welcome_hi">Hi</span>, <b id="welcomeName">—</b>! 👋</div>
-
-        <div class="hub-tabs">
-          <button class="hub-tab active" data-hub="dm" data-i18n="hub_dm">Direct</button>
-          <button class="hub-tab" data-hub="group" data-i18n="hub_group">Groups</button>
-          <button class="hub-tab" data-hub="friends" data-i18n="hub_friends">Friends</button>
-        </div>
-
-        <!-- Личные сообщения по нику -->
-        <div class="hub-pane" data-pane="dm">
-          <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username to message" maxlength="24" autocomplete="off" />
-          <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Open DM</button>
-          <div class="form-error" id="dmError"></div>
-          <div id="dmHub" class="room-list hidden">
-            <div class="room-list-title" data-i18n="dms_title">Direct messages</div>
-            <div id="dmHubChips" class="room-chips"></div>
-          </div>
-        </div>
-
-        <!-- Приватные группы -->
-        <div class="hub-pane hidden" data-pane="group">
-          <div id="groupsHub" class="room-list hidden">
-            <div class="room-list-title" data-i18n="hub_my_groups">My groups</div>
-            <div id="groupsChips" class="room-chips"></div>
-          </div>
-          <button id="newGroupToggle" class="btn-ghost" data-i18n="btn_new_group">+ New group</button>
-          <div id="newGroupForm" class="hidden">
-            <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" placeholder="Group name" maxlength="64" />
-            <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
-            <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
-            <div class="form-error" id="groupError"></div>
-          </div>
-        </div>
-
-        <!-- Друзья / заблокированные -->
-        <div class="hub-pane hidden" data-pane="friends">
-          <div id="friendsHub" class="room-list hidden">
-            <div class="room-list-title" data-i18n="friends_title">Friends</div>
-            <div id="friendsChips" class="room-chips"></div>
-          </div>
-          <div id="blocksHub" class="room-list hidden">
-            <div class="room-list-title" data-i18n="blocked_title">Blocked</div>
-            <div id="blocksChips" class="room-chips"></div>
-          </div>
-        </div>
-
-        <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
-      </div>
     </div>
     <div class="login-bg"></div>
   </div>
 
-  <!-- Основной интерфейс -->
+  <!-- ПРИЛОЖЕНИЕ: список чатов + разговор -->
   <div id="app" class="app hidden">
-    <aside class="sidebar">
-      <div class="sidebar-head">
-        <button id="backBtn" class="back-btn" data-i18n-title="back" title="Back">‹</button>
-        <div class="room-head-info">
-          <div class="room-name" id="roomLabel">—</div>
-          <div class="room-sub" id="roomSub" data-i18n="room_sub">room</div>
-        </div>
-        <button id="muteBtn" class="hicon-btn" data-i18n-title="mute_room" title="Mute room">🔔</button>
-        <button id="favBtn" class="hicon-btn" data-i18n-title="fav_add" title="Add to favorites">☆</button>
-      </div>
-      <div class="members-title" data-i18n="members_title">Members</div>
-      <ul id="members" class="members"></ul>
-      <div id="dmSection" class="hidden">
-        <div class="members-title" data-i18n="dms_title">Direct messages</div>
-        <ul id="dmList" class="members"></ul>
-      </div>
-      <div class="me-card">
+    <!-- Список чатов (как в Telegram) -->
+    <aside class="chatlist">
+      <div class="cl-head">
         <div class="avatar" id="myAvatar">?</div>
         <div class="me-name" id="myName">—</div>
+        <button id="newChatBtn" class="hicon-btn" data-i18n-title="new_chat" title="New chat">✎</button>
         <button id="profileBtn" class="hicon-btn" data-i18n-title="profile" title="Profile">⚙</button>
         <select id="langSelect2" class="lang-select small" title="Language">
           <option value="en">EN</option>
           <option value="ru">RU</option>
         </select>
       </div>
+      <input id="searchInput" class="field cl-search" data-i18n-ph="search" placeholder="Search" autocomplete="off" />
+      <ul id="chatList" class="chats"></ul>
+      <div id="chatsEmpty" class="chats-empty" data-i18n="no_chats">No chats yet — tap ✎ to start one</div>
     </aside>
 
-    <main class="chat">
-      <header class="chat-head">
-        <button id="backBtnMobile" class="back-btn mobile-only" data-i18n-title="back" title="Back">‹</button>
-        <div>
-          <div class="chat-title" id="chatTitle">Chat</div>
+    <!-- Разговор -->
+    <main class="chat" id="chatPane">
+      <div id="emptyState" class="empty-state">
+        <div class="es-logo">◆</div>
+        <div data-i18n="pick_chat">Select a chat to start messaging</div>
+      </div>
+
+      <header class="chat-head hidden" id="chatHead">
+        <button id="backBtnMobile" class="back-btn mobile-only" title="Back">‹</button>
+        <div class="avatar ch-ava" id="chatAva">?</div>
+        <div class="ch-info">
+          <div class="chat-title" id="chatTitle">—</div>
+          <div class="chat-sub" id="chatSub"></div>
           <div class="typing" id="typingIndicator"></div>
         </div>
-        <button class="call-start" id="startCallBtn" data-i18n-title="t_call" title="Group video call"><span data-i18n="call_btn">📹 Call</span></button>
+        <button class="hicon-btn" id="muteBtn" data-i18n-title="mute_room" title="Mute">🔔</button>
+        <button class="hicon-btn call-go" id="startCallBtn" data-i18n-title="t_call" title="Call">📞</button>
+        <button class="hicon-btn" id="infoBtn" data-i18n-title="info" title="Info">ⓘ</button>
       </header>
 
-      <div id="messages" class="messages"></div>
+      <div id="messages" class="messages hidden"></div>
 
-      <div class="composer">
+      <div class="composer hidden" id="composer">
         <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji" title="Emoji">😊</button>
         <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach" title="Photo / video / gif">📎</button>
         <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice" title="Voice message">🎤</button>
@@ -158,9 +103,56 @@
         <div class="emoji-grid" id="emojiGrid"></div>
       </div>
     </main>
+
+    <!-- Инфо-панель (участники / профиль собеседника) -->
+    <aside id="infoPanel" class="info-panel hidden">
+      <div class="info-head">
+        <span id="infoTitle" data-i18n="info">Info</span>
+        <button id="infoClose" class="hicon-btn">✕</button>
+      </div>
+      <ul id="members" class="members"></ul>
+    </aside>
   </div>
 
-  <!-- Окно группового звонка -->
+  <!-- Новый чат -->
+  <div id="newChatModal" class="modal hidden">
+    <div class="modal-card">
+      <button id="newChatCancel" class="hub-close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="new_chat">New chat</div>
+      <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username to message" maxlength="24" autocomplete="off" />
+      <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
+      <div class="form-error" id="dmError"></div>
+      <div id="friendsQuick" class="room-chips"></div>
+      <div class="modal-sep" data-i18n="or">— or create a group —</div>
+      <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" placeholder="Group name" maxlength="64" />
+      <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
+      <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
+      <div class="form-error" id="groupError"></div>
+    </div>
+  </div>
+
+  <!-- Личный кабинет -->
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-card">
+      <button id="profileCancel" class="hub-close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="profile">Profile</div>
+      <div class="profile-ava avatar ava" id="profileAva">
+        <img id="profileAvaImg" alt="" />
+        <span class="ava-fallback" id="profileAvaInit">?</span>
+      </div>
+      <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
+      <input id="avaFile" type="file" accept="image/*" hidden />
+      <div class="profile-login" id="profileLogin">login</div>
+      <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+      <div class="form-error" id="profileError"></div>
+      <div class="modal-actions">
+        <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
+        <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Окно звонка -->
   <div id="callOverlay" class="call-overlay hidden">
     <div class="call-topbar" id="callTopbar">
       <span id="callRoomLabel">Call</span>
@@ -176,39 +168,19 @@
     </div>
   </div>
 
-  <!-- Тост: кто-то начал звонок -->
+  <!-- Входящий звонок -->
   <div id="callToast" class="call-toast hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
     <div class="avatar" id="toastAvatar">?</div>
     <div class="toast-body">
       <div class="toast-name" id="toastName">—</div>
-      <div class="toast-sub" data-i18n="toast_started">started a group call</div>
+      <div class="toast-sub" data-i18n="toast_started">incoming call</div>
     </div>
-    <button class="toast-join" id="toastJoin" data-i18n="toast_join">Join</button>
+    <button class="toast-join" id="toastJoin" data-i18n="toast_join">Accept</button>
     <button class="toast-close" id="toastClose">✕</button>
   </div>
 
-  <!-- Личный кабинет -->
-  <div id="profileModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-title" data-i18n="profile">Profile</div>
-      <div class="profile-ava avatar ava" id="profileAva">
-        <img id="profileAvaImg" alt="" />
-        <span class="ava-fallback" id="profileAvaInit">?</span>
-      </div>
-      <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
-      <input id="avaFile" type="file" accept="image/*" hidden />
-      <div class="profile-login" id="profileLogin">@login</div>
-      <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
-      <div class="form-error" id="profileError"></div>
-      <div class="modal-actions">
-        <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
-        <button id="profileCancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Лайтбокс для фото -->
+  <!-- Лайтбокс -->
   <div id="lightbox" class="lightbox hidden">
     <img id="lightboxImg" alt="" draggable="false" />
     <div class="lightbox-hint" data-i18n="lb_hint">scroll = zoom · drag = move · Esc = close</div>
