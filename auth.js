@@ -1,82 +1,64 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { query } from "./db.js";
+// Аутентификация: scrypt-хеш паролей + токен-сессии в БД (с кэшем в Redis).
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { promisify } from "util";
+import * as db from "./db.js";
 import { cacheGet, cacheSet, cacheDel } from "./cache.js";
 
-const SESS_TTL = 3600; // профиль по токену кэшируем на час
+const scryptAsync = promisify(scrypt);
+const SESS_TTL = 7 * 24 * 3600; // кэш сессии — неделя
 
-function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return { salt, hash };
-}
-function verifyPassword(password, salt, expectedHash) {
-  const { hash } = hashPassword(password, salt);
-  const a = Buffer.from(hash, "hex");
-  const b = Buffer.from(expectedHash, "hex");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-// Токен в БД — переживает рестарт/сон сервера (важно для Render free).
-async function issueToken(login) {
-  const token = randomBytes(24).toString("hex");
-  await query("INSERT INTO sessions (token, login) VALUES (?, ?)", [token, login]);
-  return token;
+const hashPw = async (password, salt) => (await scryptAsync(password, salt, 64)).toString("hex");
+
+export async function register(login, name, password) {
+  login = String(login || "").trim().toLowerCase();
+  name = String(name || "").trim() || login;
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) throw new Error("Логин: латиница/цифры, 3–24");
+  if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
+  if (await db.getUser(login)) throw new Error("Логин занят");
+  const salt = randomBytes(16).toString("hex");
+  const hash = await hashPw(password, salt);
+  await db.createUser(login, name, salt, hash);
+  return issueToken(login);
 }
 
-export async function register({ login, name, password }) {
-  login = (login || "").trim().toLowerCase();
-  name = (name || "").trim().slice(0, 32);
-  if (!/^[a-z0-9_.-]{3,24}$/.test(login)) {
-    return { error: "Логин: 3–24 символа, латиница, цифры, . _ -" };
-  }
-  if (!name) return { error: "Укажите отображаемое имя" };
-  if (!password || password.length < 6) return { error: "Пароль минимум 6 символов" };
-
-  const exists = await query("SELECT 1 FROM users WHERE login = ?", [login]);
-  if (exists.length > 0) return { error: "Такой логин уже занят" };
-
-  const { salt, hash } = hashPassword(password);
-  await query(
-    "INSERT INTO users (login, name, salt, hash) VALUES (?, ?, ?, ?)",
-    [login, name, salt, hash]
-  );
-  const token = await issueToken(login);
-  return { token, profile: { login, name } };
+export async function login(loginName, password) {
+  loginName = String(loginName || "").trim().toLowerCase();
+  const u = await db.getUser(loginName);
+  if (!u) throw new Error("Неверный логин или пароль");
+  const calc = Buffer.from(await hashPw(password, u.salt), "hex");
+  const stored = Buffer.from(u.hash, "hex");
+  if (calc.length !== stored.length || !timingSafeEqual(calc, stored)) throw new Error("Неверный логин или пароль");
+  return issueToken(loginName);
 }
 
-export async function login({ login, password }) {
-  login = (login || "").trim().toLowerCase();
-  const rows = await query("SELECT login, name, salt, hash FROM users WHERE login = ?", [login]);
-  const user = rows[0];
-  if (!user || !verifyPassword(password || "", user.salt, user.hash)) {
-    return { error: "Неверный логин или пароль" };
-  }
-  const token = await issueToken(login);
-  return { token, profile: { login: user.login, name: user.name } };
+async function issueToken(loginName) {
+  const token = randomBytes(32).toString("hex");
+  await db.saveSession(token, loginName);
+  const u = await db.getUser(loginName);
+  const profile = profileOf(u);
+  await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
+  return { token, profile };
 }
 
-// Профиль по токену или null — сначала Redis, потом джойн сессии с пользователем.
 export async function userByToken(token) {
   if (!token) return null;
   const cached = await cacheGet("sess:" + token);
-  if (cached) { try { return JSON.parse(cached); } catch { /* битый кэш — читаем БД */ } }
-
-  const rows = await query(
-    "SELECT u.login, u.name FROM sessions s JOIN users u ON u.login = s.login WHERE s.token = ?",
-    [token]
-  );
-  const profile = rows[0] || null;
-  if (profile) await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
+  if (cached) { try { return JSON.parse(cached); } catch {} }
+  const login = await db.sessionLogin(token);
+  if (!login) return null;
+  const u = await db.getUser(login);
+  if (!u) return null;
+  const profile = profileOf(u);
+  await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
   return profile;
 }
 
 export async function logout(token) {
-  await query("DELETE FROM sessions WHERE token = ?", [token]);
+  await db.deleteSession(token);
   await cacheDel("sess:" + token);
 }
 
-// Поиск пользователя по логину (для старта ЛС по нику)
-export async function getUserByLogin(login) {
-  login = (login || "").trim().toLowerCase();
-  if (!login) return null;
-  const rows = await query("SELECT login, name FROM users WHERE login = ?", [login]);
-  return rows[0] || null;
+function profileOf(u) {
+  return { login: u.login, name: u.name, description: u.description || "", status: u.status || "online",
+           created_at: u.created_at };
 }

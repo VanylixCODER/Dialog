@@ -18,43 +18,32 @@
   <!-- ВХОД -->
   <div id="login" class="login">
     <div class="login-card">
-      <select id="langSelect" class="lang-select" title="Language">
-        <option value="en">EN</option>
-        <option value="ru">RU</option>
-      </select>
-      <div class="brand">
-        <div class="brand-logo">◆</div>
-        <h1>Dialog</h1>
+      <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
+      <div class="brand"><div class="brand-logo">◆</div><h1>Dialog</h1></div>
+      <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
+        <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
       </div>
-      <p class="brand-sub" data-i18n="brand_sub">Chat · Voice & video calls · Screen share</p>
-
-      <div id="authStage">
-        <div class="auth-tabs">
-          <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
-          <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
-        </div>
-        <form id="loginForm" class="auth-form">
-          <input class="field" name="login" type="text" data-i18n-ph="ph_login" placeholder="Username" maxlength="24" autocomplete="username" />
-          <input class="field" name="password" type="password" data-i18n-ph="ph_password" placeholder="Password" autocomplete="current-password" />
-          <div class="form-error" id="loginError"></div>
-          <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
-        </form>
-        <form id="registerForm" class="auth-form hidden">
-          <input class="field" name="name" type="text" data-i18n-ph="ph_name" placeholder="Display name" maxlength="32" autocomplete="name" />
-          <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" placeholder="Username (a–z, 3–24)" maxlength="24" autocomplete="username" />
-          <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" placeholder="Password (6+ chars)" autocomplete="new-password" />
-          <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" placeholder="Repeat password" autocomplete="new-password" />
-          <div class="form-error" id="registerError"></div>
-          <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
-        </form>
-      </div>
+      <form id="loginForm" class="auth-form">
+        <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
+        <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
+        <div class="form-error" id="loginError"></div>
+        <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
+        <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
+        <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
+        <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" />
+        <div class="form-error" id="registerError"></div>
+        <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
+      </form>
     </div>
-    <div class="login-bg"></div>
   </div>
 
-  <!-- ПРИЛОЖЕНИЕ: список чатов + разговор -->
+  <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="app hidden">
-    <!-- Список чатов (как в Telegram) -->
     <aside class="chatlist">
       <div class="cl-head">
         <div class="avatar" id="myAvatar">?</div>
@@ -62,12 +51,9 @@
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
         <button id="newChatBtn" class="hicon-btn" data-i18n-title="new_chat" title="New chat">✎</button>
         <button id="profileBtn" class="hicon-btn" data-i18n-title="profile" title="Profile">⚙</button>
-        <select id="langSelect2" class="lang-select small" title="Language">
-          <option value="en">EN</option>
-          <option value="ru">RU</option>
-        </select>
+        <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
-      <input id="searchInput" class="field cl-search" data-i18n-ph="search" placeholder="Search" autocomplete="off" />
+      <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
       <ul id="chatList" class="chats"></ul>
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
@@ -76,13 +62,8 @@
       </div>
     </aside>
 
-    <!-- Разговор -->
     <main class="chat" id="chatPane">
-      <div id="emptyState" class="empty-state">
-        <div class="es-logo">◆</div>
-        <div data-i18n="pick_chat">Select a chat to start messaging</div>
-      </div>
-
+      <div id="emptyState" class="empty-state"><div class="es-logo">◆</div><div data-i18n="pick_chat">Select a chat</div></div>
       <header class="chat-head hidden" id="chatHead">
         <button id="backBtnMobile" class="back-btn mobile-only" title="Back">‹</button>
         <div class="avatar ch-ava" id="chatAva">?</div>
@@ -95,122 +76,94 @@
         <button class="hicon-btn call-go" id="startCallBtn" data-i18n-title="t_call" title="Call">📞</button>
         <button class="hicon-btn" id="infoBtn" data-i18n-title="info" title="Info">ⓘ</button>
       </header>
-
       <div id="messages" class="messages hidden"></div>
-
       <div class="composer hidden" id="composer">
-        <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji" title="Emoji">😊</button>
+        <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji">😊</button>
         <button class="icon-btn" id="gifBtn" title="GIF">GIF</button>
-        <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach" title="Photo / video / gif">📎</button>
-        <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice" title="Voice message">🎤</button>
+        <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach">📎</button>
+        <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice">🎤</button>
         <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
-        <div class="input-wrap">
-          <textarea id="msgInput" rows="1" data-i18n-ph="ph_message" placeholder="Write a message…"></textarea>
-        </div>
-        <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send" title="Send">➤</button>
+        <div class="input-wrap"><textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea></div>
+        <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
       </div>
-
-      <div id="emojiPicker" class="emoji-picker hidden">
-        <div class="emoji-tabs" id="emojiTabs"></div>
-        <div class="emoji-grid" id="emojiGrid"></div>
-      </div>
-
+      <div id="emojiPicker" class="emoji-picker hidden"><div class="emoji-tabs" id="emojiTabs"></div><div class="emoji-grid" id="emojiGrid"></div></div>
       <div id="gifPanel" class="gif-panel hidden">
-        <input id="gifSearch" class="field" data-i18n-ph="gif_search" placeholder="Search Tenor" autocomplete="off" />
+        <input id="gifSearch" class="field" data-i18n-ph="gif_search" autocomplete="off" />
         <div id="gifGrid" class="gif-grid"></div>
-        <div id="gifNote" class="gif-note hidden" data-i18n="gif_nokey">Set TENOR_KEY on the server to enable GIFs</div>
+        <div id="gifNote" class="gif-note hidden" data-i18n="gif_nokey">GIFs off (no GIPHY_KEY)</div>
       </div>
     </main>
 
-    <!-- Инфо-панель (участники / профиль собеседника) -->
     <aside id="infoPanel" class="info-panel hidden">
-      <div class="info-head">
-        <span id="infoTitle" data-i18n="info">Info</span>
-        <button id="infoClose" class="hicon-btn">✕</button>
-      </div>
+      <div class="info-head"><span id="infoTitle" data-i18n="info">Info</span><button id="infoClose" class="hicon-btn">✕</button></div>
       <ul id="members" class="members"></ul>
     </aside>
   </div>
 
   <!-- Новый чат -->
-  <div id="newChatModal" class="modal hidden">
-    <div class="modal-card">
-      <button id="newChatCancel" class="hub-close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="new_chat">New chat</div>
-      <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username to message" maxlength="24" autocomplete="off" />
-      <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
-      <div class="form-error" id="dmError"></div>
-      <div id="friendsQuick" class="room-chips"></div>
-      <div class="modal-sep" data-i18n="or">— or create a group —</div>
-      <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" placeholder="Group name" maxlength="64" />
-      <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" placeholder="Members: alice, bob" />
-      <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
-      <div class="form-error" id="groupError"></div>
+  <div id="newChatModal" class="modal hidden"><div class="modal-card">
+    <button id="newChatCancel" class="hub-close">✕</button>
+    <div class="modal-title" data-i18n="new_chat">New chat</div>
+    <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
+    <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
+    <div class="form-error" id="dmError"></div>
+    <div id="friendsQuick" class="room-chips"></div>
+    <div class="modal-sep" data-i18n="or">— or create a group —</div>
+    <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
+    <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" />
+    <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
+    <div class="form-error" id="groupError"></div>
+  </div></div>
+
+  <!-- Контакты / заявки -->
+  <div id="contactsModal" class="modal hidden"><div class="modal-card wide">
+    <button id="contactsCancel" class="hub-close">✕</button>
+    <div class="modal-title" data-i18n="contacts">Contacts</div>
+    <div class="req-add">
+      <input id="reqInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
+      <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
     </div>
-  </div>
+    <div class="form-error" id="reqError"></div>
+    <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
+    <div id="reqList" class="contacts-list"></div>
+    <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
+    <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
+    <div id="friendsListEl" class="contacts-list"></div>
+    <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
+    <div id="sentList" class="contacts-list"></div>
+  </div></div>
 
-  <!-- Контакты / заявки в друзья -->
-  <div id="contactsModal" class="modal hidden">
-    <div class="modal-card wide">
-      <button id="contactsCancel" class="hub-close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="contacts">Contacts</div>
-      <div class="req-add">
-        <input id="reqInput" class="field" type="text" data-i18n-ph="ph_dm_user" placeholder="Username" maxlength="24" autocomplete="off" />
-        <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
-      </div>
-      <div class="form-error" id="reqError"></div>
-
-      <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
-      <div id="reqList" class="contacts-list"></div>
-      <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
-
-      <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
-      <div id="friendsListEl" class="contacts-list"></div>
-
-      <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
-      <div id="sentList" class="contacts-list"></div>
+  <!-- Профиль -->
+  <div id="profileModal" class="modal hidden"><div class="modal-card">
+    <button id="profileCancel" class="hub-close">✕</button>
+    <div class="modal-title" data-i18n="profile">Profile</div>
+    <div class="profile-ava avatar ava" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
+    <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
+    <input id="avaFile" type="file" accept="image/*" hidden />
+    <div class="profile-login" id="profileLogin">login</div>
+    <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+    <textarea id="profileDesc" class="field" rows="2" data-i18n-ph="ph_description" maxlength="280"></textarea>
+    <div class="status-pick">
+      <button class="status-opt" data-st="online"><span class="st-dot st-online"></span><span data-i18n="status_online">Online</span></button>
+      <button class="status-opt" data-st="dnd"><span class="st-dot st-dnd"></span><span data-i18n="status_dnd">Do not disturb</span></button>
+      <button class="status-opt" data-st="invisible"><span class="st-dot st-offline"></span><span data-i18n="status_invisible">Invisible</span></button>
     </div>
-  </div>
+    <div class="form-error" id="profileError"></div>
+    <div class="modal-actions"><button id="profileSave" class="btn-primary" data-i18n="save">Save</button><button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button></div>
+  </div></div>
 
-  <!-- Личный кабинет -->
-  <div id="profileModal" class="modal hidden">
-    <div class="modal-card">
-      <button id="profileCancel" class="hub-close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="profile">Profile</div>
-      <div class="profile-ava avatar ava" id="profileAva">
-        <img id="profileAvaImg" alt="" />
-        <span class="ava-fallback" id="profileAvaInit">?</span>
-      </div>
-      <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
-      <input id="avaFile" type="file" accept="image/*" hidden />
-      <div class="profile-login" id="profileLogin">login</div>
-      <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
-      <textarea id="profileDesc" class="field" rows="2" data-i18n-ph="ph_description" maxlength="280"></textarea>
-      <div class="status-pick">
-        <button class="status-opt" data-st="online"><span class="st-dot st-online"></span><span data-i18n="status_online">Online</span></button>
-        <button class="status-opt" data-st="dnd"><span class="st-dot st-dnd"></span><span data-i18n="status_dnd">Do not disturb</span></button>
-        <button class="status-opt" data-st="invisible"><span class="st-dot st-offline"></span><span data-i18n="status_invisible">Invisible</span></button>
-      </div>
-      <div class="form-error" id="profileError"></div>
-      <div class="modal-actions">
-        <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
-        <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Окно звонка (Discord-стиль) -->
+  <!-- Звонок (Discord-стиль) -->
   <div id="callOverlay" class="call-overlay hidden">
     <div class="call-topbar" id="callTopbar">
       <span id="callRoomLabel">Call</span>
       <span id="callStatus" class="call-status"></span>
       <span class="call-count" id="callCount">1</span>
-      <button id="windowToggle" class="win-btn desktop-only" data-i18n-title="t_window" title="Window / fullscreen">▭</button>
+      <button id="windowToggle" class="win-btn desktop-only" data-i18n-title="t_window" title="Window">▭</button>
     </div>
     <div id="videoGrid" class="video-grid"></div>
     <div class="call-controls">
       <div class="call-btn-group">
-        <button class="call-btn" id="toggleMic" data-i18n-title="t_mic" title="Microphone"></button>
+        <button class="call-btn" id="toggleMic" data-i18n-title="t_mic"></button>
         <button class="call-drop" id="micDrop" title="Settings">▾</button>
         <div class="call-dropdown" id="micDropdown">
           <div class="dd-label" data-i18n="mic_device">Microphone</div>
@@ -218,49 +171,40 @@
           <div class="dd-label" data-i18n="spk_device">Speaker</div>
           <select class="dd-select" id="spkSelect"></select>
           <div class="dd-sep"></div>
-          <button class="dd-item" id="toggleNoise">
-            <span data-i18n="noise_suppression">Noise suppression</span>
-            <span class="dd-toggle on" id="noiseToggle"></span>
-          </button>
+          <button class="dd-item" id="toggleNoise"><span data-i18n="noise_suppression">Noise suppression</span><span class="dd-toggle on" id="noiseToggle"></span></button>
         </div>
       </div>
-      <button class="call-btn" id="toggleCam" data-i18n-title="t_cam" title="Camera"></button>
-      <button class="call-btn" id="shareScreen" data-i18n-title="t_screen" title="Share screen"></button>
-      <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup" title="Leave call"></button>
+      <button class="call-btn" id="toggleCam" data-i18n-title="t_cam"></button>
+      <button class="call-btn" id="shareScreen" data-i18n-title="t_screen"></button>
+      <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup"></button>
     </div>
   </div>
 
-  <!-- Входящий звонок (полноэкранный поп-ап) -->
+  <!-- Входящий звонок (полноэкранный) -->
   <div id="callToast" class="call-incoming hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
     <div class="ci-card">
-      <div class="ci-ava-wrap">
-        <div class="avatar ci-ava" id="toastAvatar">?</div>
-      </div>
+      <div class="ci-ava-wrap"><div class="avatar ci-ava" id="toastAvatar">?</div></div>
       <div class="ci-name" id="toastName">—</div>
       <div class="ci-sub" id="toastSub" data-i18n="toast_started">incoming call</div>
       <div class="ci-actions">
-        <button class="ci-btn decline" id="toastClose" data-i18n-title="t_hangup" title="Decline"></button>
-        <button class="ci-btn accept" id="toastJoin" data-i18n-title="toast_join" title="Accept"></button>
+        <button class="ci-btn decline" id="toastClose" data-i18n-title="t_hangup"></button>
+        <button class="ci-btn accept" id="toastJoin" data-i18n-title="toast_join"></button>
       </div>
     </div>
   </div>
 
   <!-- Мини-профиль -->
-  <div id="mpModal" class="modal hidden">
-    <div class="modal-card mp-card">
-      <button id="mpCancel" class="hub-close" title="Close">✕</button>
-      <div class="profile-ava avatar ava" id="mpAva"><span class="ava-fallback">?</span></div>
-      <div class="mp-name" id="mpName">—</div>
-      <div class="profile-login" id="mpLogin">login</div>
-      <div class="mp-status" id="mpStatus"></div>
-      <div class="mp-desc" id="mpDesc"></div>
-      <div class="mp-joined" id="mpJoined"></div>
-      <div class="modal-actions">
-        <button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button>
-      </div>
-    </div>
-  </div>
+  <div id="mpModal" class="modal hidden"><div class="modal-card mp-card">
+    <button id="mpCancel" class="hub-close">✕</button>
+    <div class="profile-ava avatar ava" id="mpAva"><span class="ava-fallback">?</span></div>
+    <div class="mp-name" id="mpName">—</div>
+    <div class="profile-login" id="mpLogin">login</div>
+    <div class="mp-status" id="mpStatus"></div>
+    <div class="mp-desc" id="mpDesc"></div>
+    <div class="mp-joined" id="mpJoined"></div>
+    <div class="modal-actions"><button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button></div>
+  </div></div>
 
   <!-- Лайтбокс -->
   <div id="lightbox" class="lightbox hidden">
