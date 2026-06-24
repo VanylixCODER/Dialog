@@ -282,10 +282,17 @@ input, textarea, button { caret-color:var(--green); }
 .mp-status { font-size:12px; color:var(--text-dim); } .mp-desc { font-size:13px; } .mp-joined { font-size:11px; color:var(--text-dim); }
 
 /* ---------- Звонок (Discord + Matrix) ---------- */
-/* Встроенный стейдж звонка: тайлы сверху переписки, плавающая панель снизу */
+/* Стейдж звонка. По умолчанию (телефон/стек) — блок сверху; на ПК — левая колонка переписки (см. .chat.has-call) */
 .call-stage { position:relative; display:flex; flex-direction:column; max-height:46vh; overflow:hidden;
   background:var(--bg-2); border-bottom:1px solid var(--border); z-index:2; }
 .call-stage.fullscreen { position:fixed; inset:0; z-index:200; max-height:none; background:var(--bg); }
+/* ПК: звонок — левая колонка чата, переписка адаптивно справа (сообщения НЕ под звонком) */
+.chat.has-call { display:grid; grid-template-columns:minmax(300px,34%) 1fr; grid-template-rows:auto 1fr auto; }
+.chat.has-call > #callStage { grid-column:1; grid-row:1 / -1; max-height:none; height:100%; border-bottom:none; border-right:1px solid var(--border-strong); }
+.chat.has-call > .chat-head { grid-column:2; grid-row:1; }
+.chat.has-call > #messages { grid-column:2; grid-row:2; }
+.chat.has-call > .composer { grid-column:2; grid-row:3; }
+.chat.has-call > .emoji-picker, .chat.has-call > .gif-panel { grid-column:2; }
 .call-matrix { position:absolute; inset:0; z-index:0; opacity:.13; pointer-events:none; }
 .call-count { background:var(--panel-2); border:1px solid var(--border); padding:1px 8px; color:var(--green); font-weight:700; font-size:11px; border-radius:10px; }
 .call-status { font-size:11px; } .call-status.ok { color:var(--green); } .call-status.bad { color:var(--danger); }

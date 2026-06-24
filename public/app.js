@@ -735,14 +735,15 @@ function updateCallButton() {
   btn.innerHTML = inThis ? window.ICON.phoneOff : window.ICON.phone;
 }
 // Показ/сворачивание оверлея звонка в зависимости от просматриваемого чата и флага minimized
-// Встроенный звонок (Discord-стиль): тайлы сверху переписки в комнате звонка; в другом чате — мини-панель сверху
+// Звонок = левая колонка переписки (ПК): сообщения адаптивно справа, не под звонком. Телефон — стек сверху.
 function syncCallUI() {
-  const stage = $("callStage"), vb = $("voiceBar");
-  if (!call.active) { stage.classList.add("hidden", "fullscreen"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); return; }
+  const stage = $("callStage"), vb = $("voiceBar"), pane = $("chatPane");
+  if (!call.active) { stage.classList.add("hidden"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); pane.classList.remove("has-call"); return; }
   const here = myRoom === call.roomKey;
+  const fs = stage.classList.contains("fullscreen");
   stage.classList.toggle("hidden", !here);
   if (!here) stage.classList.remove("fullscreen");
-  // мини-панель «голос подключён» — когда в звонке, но смотришь другой чат
+  pane.classList.toggle("has-call", here && !fs && !isMobile()); // ПК: звонок — левая колонка чата
   vb.classList.toggle("hidden", here);
   updateVoiceBar();
 }
@@ -865,7 +866,7 @@ $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; i
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
 // ⛶ Фуллскрин стейджа звонка (ПК)
-$("expandBtn").onclick = () => { const fs = $("callStage").classList.toggle("fullscreen"); $("expandBtn").classList.toggle("active", fs); };
+$("expandBtn").onclick = () => { const fs = $("callStage").classList.toggle("fullscreen"); $("expandBtn").classList.toggle("active", fs); $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile()); };
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // ⧉ Поп-аут звонка в отдельное окно (Document PiP) — только ПК/Chrome
