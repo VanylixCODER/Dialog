@@ -300,10 +300,19 @@ input, textarea, button { caret-color:var(--green); }
 .dd-toggle.on { background:var(--green); }
 .dd-toggle::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .2s; }
 .dd-toggle.on::after { transform:translateX(16px); }
-.call-overlay.windowed { inset:auto; right:24px; bottom:24px; width:460px; height:340px; min-width:280px; min-height:220px;
-  border:1px solid var(--border-strong); box-shadow:var(--glow-soft); resize:both; overflow:hidden; }
-.call-overlay.windowed .video-grid { grid-template-columns:1fr; padding:4px; gap:4px; }
-.call-overlay.windowed .call-topbar { cursor:move; padding:8px 12px; }
+.call-overlay.windowed { inset:auto; right:24px; bottom:24px; width:380px; height:300px; min-width:260px; min-height:200px;
+  border:1px solid var(--border-strong); box-shadow:var(--glow-soft); resize:both; overflow:hidden; display:flex; flex-direction:column; }
+.call-overlay.windowed .video-grid { grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); padding:4px; gap:4px; align-content:start; }
+.call-overlay.windowed .tile { aspect-ratio:1/1; }
+.call-overlay.windowed .tile.screen { grid-column:1/-1; aspect-ratio:16/9; }
+.call-overlay.windowed .tile-avatar { width:48px; height:48px; font-size:20px; }
+.call-overlay.windowed .tile .tile-name { font-size:9px; padding:2px 6px; bottom:4px; left:4px; }
+.call-overlay.windowed .call-topbar { cursor:move; padding:6px 10px; font-size:11px; }
+.call-overlay.windowed .call-controls { padding:6px; gap:5px; }
+.call-overlay.windowed .call-btn { width:34px; height:34px; }
+.call-overlay.windowed .call-btn svg { width:16px; height:16px; }
+.call-overlay.windowed .call-btn.end { width:42px; }
+.call-overlay.windowed .call-drop { width:16px; height:34px; }
 
 /* ---------- Входящий звонок (полноэкранный) ---------- */
 .call-incoming { position:fixed; inset:0; z-index:400; display:flex; align-items:center; justify-content:center;
@@ -372,10 +381,16 @@ input, textarea, button { caret-color:var(--green); }
   .chat { display:none; } .app.in-chat .chat { display:flex; }
   .info-panel { position:fixed; inset:0; width:auto; z-index:120; }
   .emoji-picker, .gif-panel { width:calc(100vw - 28px); left:14px; }
-  .messages, .chat-head, .composer { padding-left:14px; padding-right:14px; }
+  .messages, .composer { padding-left:14px; padding-right:14px; }
+  .chat-head { padding-left:8px; padding-right:8px; gap:6px; }
+  .chat-head .avatar.ch-ava { width:34px; height:34px; }
   .msg { max-width:90%; }
   .desktop-only { display:none !important; } .back-btn.mobile-only { display:grid; }
   .icon-btn { width:46px; height:46px; }
+  /* крупнее тач-таргеты в хедере, чтобы кнопка звонка точно нажималась */
+  .hicon-btn { width:40px; height:40px; flex-shrink:0; }
+  .hicon-btn svg { width:20px; height:20px; }
+  .chat-title { font-size:14px; }
   /* Звонок — вертикальный скроллящийся стек, тайлы во всю ширину */
   .video-grid { display:flex; flex-direction:column; gap:8px; padding:8px; align-content:stretch; justify-content:flex-start; grid-template-columns:none; overflow-y:auto; }
   .video-grid .tile { width:100%; flex:0 0 auto; aspect-ratio:16/9; }
