@@ -45,6 +45,10 @@ const httpServer = useHttps
 // Поднимаем лимит payload: фото/видео/гифки летят как data-URL по сокету.
 const io = new Server(httpServer, { maxHttpBufferSize: 25e6 });
 
+// Digital Asset Links для TWA (Android-обёртка) — express.static по умолчанию не отдаёт .well-known
+app.get("/.well-known/assetlinks.json", (req, res) => {
+  res.sendFile(join(__dirname, "public", ".well-known", "assetlinks.json"), (e) => { if (e) res.status(404).json([]); });
+});
 app.use(express.static(join(__dirname, "public")));
 
 // --- API аутентификации ---
