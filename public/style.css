@@ -58,6 +58,7 @@ input, textarea, button { caret-color:var(--green); }
 
 /* ---------- App grid (Telegram) ---------- */
 .app { display:grid; grid-template-columns:330px 1fr; height:100vh; height:100dvh; }
+.app:has(#infoPanel:not(.hidden)) { grid-template-columns:330px 1fr 260px; } /* правая панель участников */
 .chatlist { background:var(--bg-2); border-right:1px solid var(--border); display:flex; flex-direction:column; min-width:0; position:relative; }
 .cl-head { display:flex; align-items:center; gap:8px; padding:12px; padding-top:calc(12px + env(safe-area-inset-top)); border-bottom:1px solid var(--border); }
 .cl-head .me-name { flex:1; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -281,26 +282,21 @@ input, textarea, button { caret-color:var(--green); }
 .mp-status { font-size:12px; color:var(--text-dim); } .mp-desc { font-size:13px; } .mp-joined { font-size:11px; color:var(--text-dim); }
 
 /* ---------- Звонок (Discord + Matrix) ---------- */
-.call-overlay { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column;
-  background-image:radial-gradient(circle at 50% 50%, rgba(0,255,90,.04) 0%, transparent 70%),
-    linear-gradient(rgba(0,255,90,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,90,.02) 1px, transparent 1px);
-  background-size:100% 100%, 40px 40px, 40px 40px; }
-.call-topbar { display:flex; align-items:center; gap:12px; padding:14px 20px; padding-top:calc(14px + env(safe-area-inset-top));
-  color:var(--text-dim); font-size:13px; background:var(--bg-2); border-bottom:1px solid var(--border); user-select:none; }
-#callRoomLabel { font-weight:700; color:var(--green); text-shadow:var(--glow); flex:1; }
-.call-count { background:var(--panel-2); border:1px solid var(--border); padding:2px 10px; color:var(--green); font-weight:700; font-size:11px; border-radius:10px; }
-.call-status { font-size:12px; } .call-status.ok { color:var(--green); } .call-status.bad { color:var(--danger); }
-.call-status:not(:empty)::before { content:"● "; }
-.win-btn { border:1px solid var(--border); background:transparent; color:var(--text-dim); font-family:inherit; cursor:pointer;
-  font-size:13px; padding:2px 8px; border-radius:2px; margin-left:8px; }
-.win-btn:hover { border-color:var(--green); color:var(--green); }
+/* Встроенный стейдж звонка: тайлы сверху переписки, плавающая панель снизу */
+.call-stage { position:relative; display:flex; flex-direction:column; max-height:46vh; overflow:hidden;
+  background:var(--bg-2); border-bottom:1px solid var(--border); z-index:2; }
+.call-stage.fullscreen { position:fixed; inset:0; z-index:200; max-height:none; background:var(--bg); }
 .call-matrix { position:absolute; inset:0; z-index:0; opacity:.13; pointer-events:none; }
-.call-topbar, .video-grid, .call-controls { position:relative; z-index:1; }
-.video-grid { flex:1; display:grid; gap:8px; padding:8px; align-content:center; justify-content:center;
-  grid-template-columns:repeat(auto-fit, minmax(min(100%,320px),1fr)); max-width:1400px; width:100%; margin:0 auto; overflow-y:auto; }
-.video-grid:has(.tile:only-child) { grid-template-columns:1fr; max-width:640px; }
+.call-count { background:var(--panel-2); border:1px solid var(--border); padding:1px 8px; color:var(--green); font-weight:700; font-size:11px; border-radius:10px; }
+.call-status { font-size:11px; } .call-status.ok { color:var(--green); } .call-status.bad { color:var(--danger); }
+.call-status:not(:empty)::before { content:"● "; }
+.video-grid { position:relative; z-index:1; flex:1 1 auto; display:flex; flex-wrap:wrap; gap:8px; padding:10px;
+  align-content:flex-start; justify-content:center; overflow-y:auto; }
+.video-grid .tile { width:210px; }
+.call-stage.fullscreen .video-grid { align-content:center; }
+.call-stage.fullscreen .video-grid .tile { width:min(45%,440px); }
 .tile { position:relative; overflow:hidden; background:var(--bg-3); border:2px solid var(--border); border-radius:12px;
-  aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; transition:border-color .3s, box-shadow .3s; animation:tileIn .25s ease; }
+  aspect-ratio:16/9; flex:0 0 auto; display:flex; align-items:center; justify-content:center; transition:border-color .3s, box-shadow .3s; animation:tileIn .25s ease; }
 @keyframes tileIn { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:none} }
 .tile video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:var(--bg-3); }
 .tile.me video { transform:scaleX(-1); }
@@ -308,7 +304,8 @@ input, textarea, button { caret-color:var(--green); }
 .tile .tile-name { position:absolute; bottom:8px; left:10px; background:rgba(0,4,0,.75); border:1px solid var(--border);
   padding:3px 10px; border-radius:4px; font-size:12px; color:var(--text); font-weight:600; z-index:3; }
 .tile.speaking { border-color:var(--green); box-shadow:0 0 0 2px rgba(0,255,90,.3), 0 0 16px rgba(0,255,90,.15); }
-.tile.screen { grid-column:1/-1; aspect-ratio:16/9; max-height:70vh; border-color:var(--green); box-shadow:0 0 16px rgba(0,255,90,.12); }
+.tile.screen { width:100% !important; aspect-ratio:16/9; max-height:36vh; order:-1; border-color:var(--green); box-shadow:0 0 16px rgba(0,255,90,.12); }
+.call-stage.fullscreen .tile.screen { max-height:70vh; }
 .tile.screen video { object-fit:contain; cursor:zoom-in; } .tile.screen .tile-name { color:var(--green); }
 .tile-expand { position:absolute; top:8px; right:8px; z-index:5; width:28px; height:28px; border:none; border-radius:6px;
   background:rgba(0,4,0,.72); color:var(--green); cursor:pointer; font-size:14px; opacity:0; transition:opacity .15s; }
@@ -325,8 +322,9 @@ input, textarea, button { caret-color:var(--green); }
 .tile:hover .tile-ctrl { opacity:1; }
 .tctrl-mute { border:none; background:transparent; cursor:pointer; font-size:14px; padding:2px; color:var(--text); }
 .tctrl-mute.muted { color:var(--danger); } .tctrl-vol { width:60px; accent-color:var(--green); cursor:pointer; }
-.call-controls { display:flex; justify-content:center; align-items:center; gap:8px; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom));
-  background:var(--bg-2); border-top:1px solid var(--border); }
+.call-bar { position:relative; z-index:3; display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:8px 12px; background:rgba(0,8,2,.86); border-top:1px solid var(--border); }
+.call-bar .call-status, .call-bar .call-count { margin-right:2px; }
 .call-btn { width:48px; height:48px; border-radius:50%; border:none; font-size:20px; cursor:pointer; background:var(--panel-2);
   color:var(--text); display:grid; place-items:center; transition:.15s; }
 .call-btn svg { width:22px; height:22px; }
@@ -360,19 +358,16 @@ input, textarea, button { caret-color:var(--green); }
   background:rgba(0,4,0,.75); border:1px solid var(--danger); display:grid; place-items:center; color:var(--danger); }
 .tile-mic svg { width:14px; height:14px; }
 
-/* Свёрнутый звонок — докнутая колонка (после списка чатов), чат виден справа, тайлы скроллятся */
-/* Докнутая колонка: высота по контенту — кнопки сразу под участниками, без пустоты внизу */
-.call-overlay.windowed { inset:auto; left:330px; top:0; bottom:auto; right:auto; width:400px; height:auto;
-  min-width:280px; max-width:72vw; max-height:100dvh; border:1px solid var(--border-strong); border-radius:0 0 10px 0;
-  box-shadow:var(--glow-soft); resize:horizontal; overflow:hidden; display:flex; flex-direction:column; }
-.call-overlay.windowed .video-grid { flex:0 1 auto; display:flex; flex-direction:column; gap:8px; padding:8px;
-  grid-template-columns:none; align-content:flex-start; justify-content:flex-start; overflow-y:auto; max-height:calc(100dvh - 120px); }
-.call-overlay.windowed .video-grid .tile { width:100%; flex:0 0 auto; aspect-ratio:16/9; }
-.call-overlay.windowed .tile.screen { aspect-ratio:16/9; max-height:none; order:-1; }
-.call-overlay.windowed .call-topbar { cursor:default; padding:8px 12px; }
-.call-overlay.windowed .call-controls { padding:10px 8px; gap:6px; }
-.call-overlay.windowed .call-btn { width:42px; height:42px; }
-.call-overlay.windowed .call-btn.end { width:52px; }
+/* Мини-панель «голос подключён» вверху списка чатов (когда в звонке, но смотришь другой чат) */
+.voice-bar { display:flex; align-items:center; gap:6px; margin:8px 10px 0; padding:6px 10px;
+  background:rgba(0,255,90,.1); border:1px solid var(--green); border-radius:8px; }
+.vb-info { flex:1; min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--green); font-size:12px; font-weight:600; }
+.vb-info .vb-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vb-info .vb-label::before { content:"🔊 "; }
+.vb-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); animation:stPulse 1.5s infinite; flex-shrink:0; }
+.vb-btn { width:30px; height:30px; border:none; border-radius:6px; background:var(--panel-2); color:var(--text); cursor:pointer; display:grid; place-items:center; flex-shrink:0; }
+.vb-btn svg { width:16px; height:16px; } .vb-btn:hover { background:var(--panel-3); } .vb-btn.off { color:var(--danger); }
+.vb-btn.end { background:var(--danger); color:#fff; }
 
 /* ---------- Входящий звонок (полноэкранный) ---------- */
 .call-incoming { position:fixed; inset:0; z-index:400; display:flex; align-items:center; justify-content:center;
@@ -451,13 +446,12 @@ input, textarea, button { caret-color:var(--green); }
   .hicon-btn { width:40px; height:40px; flex-shrink:0; }
   .hicon-btn svg { width:20px; height:20px; }
   .chat-title { font-size:14px; }
-  /* Звонок — вертикальный скроллящийся стек, тайлы во всю ширину */
-  .video-grid { display:flex; flex-direction:column; gap:8px; padding:8px; align-content:stretch; justify-content:flex-start; grid-template-columns:none; overflow-y:auto; }
-  .video-grid .tile { width:100%; flex:0 0 auto; aspect-ratio:16/9; }
-  .tile.screen { aspect-ratio:16/9; max-height:none; order:-1; }
+  /* Звонок на телефоне — стейдж побольше, тайлы во всю ширину */
+  .call-stage { max-height:55vh; }
+  .video-grid .tile { width:100%; }
   .tile-avatar { width:64px; height:64px; font-size:26px; }
-  .call-btn { width:52px; height:52px; } .call-btn.end { width:60px; }
-  .call-overlay.windowed { inset:0; right:0; bottom:0; width:auto; height:auto; resize:none; }
+  .call-btn { width:46px; height:46px; } .call-btn.end { width:54px; }
+  .info-panel { position:fixed; }
   .lang-select { top:10px; right:10px; }
 }
 @media (prefers-reduced-motion:reduce) { * { animation:none !important; } }
