@@ -261,6 +261,12 @@ const socketRoom = new Map();   // socketId -> room
 const userStatus = new Map();   // login -> 'online'|'dnd'|'invisible'
 const callRooms = new Map();    // room -> Map(socketId -> {name, login}) — кто СЕЙЧАС в звонке
 const getCall = (room) => { if (!callRooms.has(room)) callRooms.set(room, new Map()); return callRooms.get(room); };
+function callStatePayload(room) {
+  const c = callRooms.get(room);
+  const logins = c ? [...new Set([...c.values()].map((v) => v.login))] : [];
+  return { room, count: logins.length, logins };
+}
+function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
 
 const getPeers = (room) => { if (!rooms.has(room)) rooms.set(room, new Map()); return rooms.get(room); };
 function addUserSocket(login, id) { if (!userSockets.has(login)) userSockets.set(login, new Set()); userSockets.get(login).add(id); }
@@ -325,6 +331,7 @@ io.on("connection", (socket) => {
     try { socket.emit("history", await recentMessages(currentRoom, HISTORY_LIMIT)); }
     catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", [...peers.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, ...v })));
+    socket.emit("call-state", callStatePayload(currentRoom)); // идёт ли тут звонок прямо сейчас
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
     broadcastPresence(userLogin);
   });
@@ -382,12 +389,13 @@ io.on("connection", (socket) => {
   });
 
   // ----- Звонок: только ringing (медиа — через LiveKit SFU) -----
-  function callLeave() { if (!currentRoom) return; const c = callRooms.get(currentRoom); if (c) { c.delete(socket.id); if (!c.size) callRooms.delete(currentRoom); } }
+  function callLeave() { if (!currentRoom) return; const room = currentRoom; const c = callRooms.get(room); if (c) { c.delete(socket.id); if (!c.size) callRooms.delete(room); broadcastCallState(room); } }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
     const wasEmpty = c.size === 0;
     c.set(socket.id, { name: userName, login: userLogin });
+    broadcastCallState(currentRoom);
     if (!wasEmpty) return; // звонок уже идёт — звонить не нужно
     const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
     let recips = [];
