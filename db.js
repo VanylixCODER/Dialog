@@ -111,6 +111,29 @@ export async function initSchema() {
       KEY idx_rel_login (login)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subs (
+      endpoint  VARCHAR(512) PRIMARY KEY,
+      login     VARCHAR(24) NOT NULL,
+      sub       TEXT NOT NULL,
+      KEY idx_push_login (login)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+}
+
+// --- Web Push подписки ---
+export async function savePushSub(login, sub) {
+  await execute(
+    "INSERT INTO push_subs (endpoint, login, sub) VALUES (?,?,?) ON DUPLICATE KEY UPDATE login=VALUES(login), sub=VALUES(sub)",
+    [sub.endpoint.slice(0, 512), login, JSON.stringify(sub)]
+  );
+}
+export async function getPushSubs(login) {
+  const rows = await query("SELECT sub FROM push_subs WHERE login=?", [login]);
+  return rows.map((r) => { try { return JSON.parse(r.sub); } catch { return null; } }).filter(Boolean);
+}
+export async function deletePushSub(endpoint) {
+  await execute("DELETE FROM push_subs WHERE endpoint=?", [endpoint.slice(0, 512)]);
 }
 
 // --- Друзья / блокировки ---

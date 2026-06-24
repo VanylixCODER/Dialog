@@ -7,9 +7,25 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
+import webpush from "web-push";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup, getProfileCard, getStatus, getFriendLogins } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup, getProfileCard, getStatus, getFriendLogins, savePushSub, getPushSubs, deletePushSub } from "./db.js";
 import { cacheDel } from "./cache.js";
+
+// --- Web Push (уведомления о звонках и сообщениях) ---
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE || "";
+const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+if (pushEnabled) webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@dialog.app", VAPID_PUBLIC, VAPID_PRIVATE);
+async function sendPush(login, payload) {
+  if (!pushEnabled) return;
+  let subs = [];
+  try { subs = await getPushSubs(login); } catch { return; }
+  const body = JSON.stringify(payload);
+  await Promise.all(subs.map((sub) =>
+    webpush.sendNotification(sub, body).catch((e) => { if (e.statusCode === 404 || e.statusCode === 410) deletePushSub(sub.endpoint).catch(() => {}); })
+  ));
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -120,6 +136,18 @@ app.get("/api/presence", async (req, res) => {
 // ICE (STUN + TURN) — клиент получает конфиг при загрузке
 // METERED_API_KEY — бесплатный ключ с metered.ca (500 MB/мес)
 let cachedIce = null, iceExpiry = 0;
+// --- Web Push: публичный ключ + подписка ---
+app.get("/api/push/key", (req, res) => res.json({ key: pushEnabled ? VAPID_PUBLIC : "" }));
+app.post("/api/push/subscribe", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.status(401).json({ error: "unauth" });
+    if (!req.body || !req.body.endpoint) return res.status(400).json({ error: "bad sub" });
+    await savePushSub(me.login, req.body);
+    res.json({ ok: true });
+  } catch (e) { console.error("push sub", e.message); res.status(500).json({ error: "server error" }); }
+});
+
 app.get("/api/ice", async (req, res) => {
   const now = Date.now();
   if (cachedIce && now < iceExpiry) return res.json(cachedIce);
@@ -266,6 +294,7 @@ function peersList(room) {
 
 // login -> Set(socketId): чтобы доставлять ЛС-пинги пользователю в любой комнате
 const userSockets = new Map();
+const socketRoom = new Map(); // socketId -> текущая комната (для push: не слать тем, кто уже в чате)
 function addUserSocket(login, id) {
   if (!userSockets.has(login)) userSockets.set(login, new Set());
   userSockets.get(login).add(id);
@@ -273,6 +302,13 @@ function addUserSocket(login, id) {
 function removeUserSocket(login, id) {
   const s = userSockets.get(login);
   if (s) { s.delete(id); if (s.size === 0) userSockets.delete(login); }
+}
+// Пользователь активно смотрит эту комнату хотя бы в одной вкладке?
+function isUserInRoom(login, room) {
+  const ids = userSockets.get(login);
+  if (!ids) return false;
+  for (const id of ids) if (socketRoom.get(id) === room) return true;
+  return false;
 }
 // Партнёр в ЛС-комнате вида "@dm:loginA~loginB"
 function dmPartner(room, me) {
@@ -314,6 +350,7 @@ io.on("connection", (socket) => {
     socket.leave(currentRoom);
     socket.to(currentRoom).emit("peer-left", { id: socket.id, name: userName });
     // системное «вышел из чата» убрано
+    socketRoom.delete(socket.id);
     currentRoom = null;
   }
 
@@ -337,6 +374,7 @@ io.on("connection", (socket) => {
     if (currentRoom && currentRoom !== newRoom) doLeave(); // сменил комнату — выходим из старой
 
     currentRoom = newRoom;
+    socketRoom.set(socket.id, newRoom);
     userName = profile.name; // имя берём из профиля — клиент не может его подделать
     userLogin = profile.login;
     addUserSocket(userLogin, socket.id);
@@ -416,6 +454,20 @@ io.on("connection", (socket) => {
         if (id !== socket.id) io.to(id).emit("dm-ping", { room: currentRoom, fromLogin: userLogin, fromName: userName });
       }
     }
+
+    // Push-уведомление о сообщении — тем, кто сейчас НЕ в этой комнате
+    let recips = [];
+    try {
+      if (partner) recips = [partner];
+      else if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
+    } catch {}
+    const preview = msg.type === "text" ? (msg.text || "").slice(0, 120)
+      : msg.type === "image" || msg.type === "gif" ? "🖼 Photo"
+      : msg.type === "video" ? "🎬 Video" : msg.type === "audio" ? "🎤 Voice" : "Media";
+    for (const login of recips) {
+      if (login === userLogin || isUserInRoom(login, currentRoom)) continue;
+      sendPush(login, { kind: "msg", title: userName, body: preview, room: currentRoom });
+    }
   });
 
   socket.on("typing", (isTyping) => {
@@ -467,6 +519,8 @@ io.on("connection", (socket) => {
       if (login === userLogin) continue;
       const ids = userSockets.get(login);
       if (ids) for (const id of ids) if (id !== socket.id) io.to(id).emit("call-ring", payload);
+      // push-уведомление о звонке (даже если приложение закрыто)
+      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom });
     }
   });
 

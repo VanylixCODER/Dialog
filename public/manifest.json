@@ -1,0 +1,15 @@
+{
+  "name": "Dialog",
+  "short_name": "Dialog",
+  "description": "Chat · Group video calls · Screen share",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000700",
+  "theme_color": "#00ff5a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
