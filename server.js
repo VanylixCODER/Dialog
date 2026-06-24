@@ -19,6 +19,11 @@ const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 if (pushEnabled) webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@dialog.app", VAPID_PUBLIC, VAPID_PRIVATE);
 async function sendPush(login, payload) {
   if (!pushEnabled) return;
+  // «не беспокоить» — не шлём уведомления (статус из памяти, иначе из БД)
+  try {
+    const st = userStatus.has(login) ? userStatus.get(login) : await getStatus(login);
+    if (st === "dnd") return;
+  } catch {}
   let subs = [];
   try { subs = await getPushSubs(login); } catch { return; }
   const body = JSON.stringify(payload);
