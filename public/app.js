@@ -625,6 +625,7 @@ function renderMessage(m, scroll = true, ping = false) {
   const isBlocked = !mine && m.fromLogin && blocked.has(m.fromLogin);
   const wrap = document.createElement("div");
   wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isBlocked ? " blocked" : "");
+  wrap.dataset.id = m.id != null ? m.id : "";
   if (isBlocked) wrap.dataset.blocklabel = t("blocked_msg");
   let inner = "";
   if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
@@ -632,10 +633,79 @@ function renderMessage(m, scroll = true, ping = false) {
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="${escapeHtml(m.mediaName)}" /></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
-  inner += `<div class="time">${fmtTime(m.ts)}</div>`;
+  inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span></div>`;
+  inner += `<div class="reactions"></div>`;
+  if (m.id != null && !isBlocked) {
+    inner += `<div class="msg-actions">` +
+      `<button class="ma-btn ma-react" title="${t("react")}">${window.ICON.smile}</button>` +
+      (mine && m.type === "text" ? `<button class="ma-btn ma-edit" title="${t("edit")}">${window.ICON.edit}</button>` : "") +
+      (mine ? `<button class="ma-btn ma-del" title="${t("delete_msg")}">${window.ICON.trash}</button>` : "") +
+      `</div>`;
+  }
   wrap.innerHTML = inner;
+  renderReactions(wrap, m.reactions || {});
   messagesEl.appendChild(wrap);
   if (scroll) scrollDown();
+}
+function renderReactions(wrap, reactions) {
+  const bar = wrap.querySelector(".reactions"); if (!bar) return;
+  bar.innerHTML = "";
+  for (const [emoji, logins] of Object.entries(reactions || {})) {
+    if (!logins || !logins.length) continue;
+    const mineR = profile && logins.includes(profile.login);
+    const chip = document.createElement("button");
+    chip.className = "reaction" + (mineR ? " mine" : "");
+    chip.innerHTML = `<span class="r-emoji">${emoji}</span><span class="r-count">${logins.length}</span>`;
+    chip.title = logins.join(", ");
+    chip.onclick = () => socket.emit("msg-react", { id: Number(wrap.dataset.id), emoji });
+    bar.appendChild(chip);
+  }
+}
+// Реакция-пикер (общий плавающий)
+const REACT_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "👎"];
+let reactPicker;
+function openReactPicker(btn, id) {
+  if (!reactPicker) {
+    reactPicker = document.createElement("div");
+    reactPicker.className = "react-picker hidden";
+    REACT_EMOJIS.forEach((em) => {
+      const b = document.createElement("button");
+      b.textContent = em;
+      b.onclick = () => { socket.emit("msg-react", { id: reactPicker._id, emoji: em }); closeReactPicker(); };
+      reactPicker.appendChild(b);
+    });
+    document.body.appendChild(reactPicker);
+  }
+  reactPicker._id = id;
+  reactPicker.classList.remove("hidden");
+  const r = btn.getBoundingClientRect();
+  reactPicker.style.left = Math.min(r.left, window.innerWidth - reactPicker.offsetWidth - 8) + "px";
+  reactPicker.style.top = (r.top - reactPicker.offsetHeight - 6) + "px";
+}
+function closeReactPicker() { if (reactPicker) reactPicker.classList.add("hidden"); }
+document.addEventListener("click", (e) => { if (reactPicker && !reactPicker.contains(e.target) && !e.target.closest(".ma-react")) closeReactPicker(); });
+// Инлайн-редактирование
+function startEdit(wrap) {
+  const bubble = wrap.querySelector(".bubble"); if (!bubble || wrap.querySelector(".edit-box")) return;
+  const old = bubble.textContent;
+  const box = document.createElement("div"); box.className = "edit-box";
+  const ta = document.createElement("textarea"); ta.value = old; ta.rows = 1;
+  const hint = document.createElement("div"); hint.className = "edit-hint"; hint.textContent = t("edit_hint");
+  box.appendChild(ta); box.appendChild(hint);
+  bubble.style.display = "none"; bubble.after(box);
+  ta.focus(); ta.setSelectionRange(old.length, old.length);
+  ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px";
+  ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
+  const finish = (save) => {
+    const v = ta.value.trim();
+    box.remove(); bubble.style.display = "";
+    if (save && v && v !== old) socket.emit("msg-edit", { id: Number(wrap.dataset.id), text: v });
+  };
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(true); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  });
+  ta.addEventListener("blur", () => finish(true));
 }
 
 function sendText() {
@@ -709,10 +779,28 @@ function applyLb() { lbImg.style.transform = `translate(${lbX}px,${lbY}px) scale
 function openLightbox(src) { lbImg.src = src; lbScale = 1; lbX = 0; lbY = 0; applyLb(); lb.classList.remove("hidden"); }
 function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; }
 messagesEl.addEventListener("click", (e) => {
+  const reactBtn = e.target.closest(".ma-react");
+  if (reactBtn) { e.stopPropagation(); openReactPicker(reactBtn, Number(reactBtn.closest(".msg").dataset.id)); return; }
+  const editBtn = e.target.closest(".ma-edit");
+  if (editBtn) { startEdit(editBtn.closest(".msg")); return; }
+  const delBtn = e.target.closest(".ma-del");
+  if (delBtn) { const w = delBtn.closest(".msg"); if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id: Number(w.dataset.id) }); return; }
   const bl = e.target.closest(".msg.blocked:not(.revealed)");
   if (bl) { bl.classList.add("revealed"); return; }
   const img = e.target.closest(".bubble.media img");
   if (img) openLightbox(img.src);
+});
+// Применение изменений сообщений с сервера
+socket.on("msg-deleted", ({ id }) => {
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove();
+});
+socket.on("msg-edited", ({ id, text }) => {
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return;
+  const b = el.querySelector(".bubble"); if (b) b.innerHTML = highlightMentions(linkify(escapeHtml(text)));
+  const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited");
+});
+socket.on("msg-reaction", ({ id, reactions }) => {
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) renderReactions(el, reactions);
 });
 lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });

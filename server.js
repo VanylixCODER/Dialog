@@ -8,7 +8,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import * as auth from "./auth.js";
-import { initSchema, waitForDb, saveMessage, recentMessages, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup, getProfileCard, getStatus, getFriendLogins } from "./db.js";
+import { initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction, createGroup, getUserGroups, isGroupMember, getGroupMembers, updateProfile, getAvatar, tokensForLogin, setRelation, removeRelation, getRelations, getRelationsFull, areFriends, shareGroup, acceptFriend, declineFriend, removeFriend, sendFriendRequest, clearRequests, leaveGroup, getProfileCard, getStatus, getFriendLogins } from "./db.js";
 import { cacheDel } from "./cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -421,6 +421,24 @@ io.on("connection", (socket) => {
   socket.on("typing", (isTyping) => {
     if (!currentRoom) return;
     socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping });
+  });
+
+  // Удаление / редактирование / реакции
+  socket.on("msg-delete", async ({ id }) => {
+    if (!currentRoom || !userLogin) return;
+    try { if (await deleteMessage(id, userLogin)) io.to(currentRoom).emit("msg-deleted", { id }); } catch (e) { console.error("msg-delete", e.message); }
+  });
+  socket.on("msg-edit", async ({ id, text }) => {
+    if (!currentRoom || !userLogin) return;
+    const txt = String(text || "").trim().slice(0, 4000);
+    if (!txt) return;
+    try { if (await editMessage(id, userLogin, txt)) io.to(currentRoom).emit("msg-edited", { id, text: txt }); } catch (e) { console.error("msg-edit", e.message); }
+  });
+  socket.on("msg-react", async ({ id, emoji }) => {
+    if (!currentRoom || !userLogin) return;
+    const e = String(emoji || "").slice(0, 8);
+    if (!e) return;
+    try { const r = await toggleReaction(id, userLogin, e, currentRoom); if (r) io.to(currentRoom).emit("msg-reaction", { id, reactions: r.reactions }); } catch (err) { console.error("msg-react", err.message); }
   });
 
   // --- WebRTC сигналинг (mesh: всё адресно по socketId) ---

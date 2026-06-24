@@ -223,9 +223,54 @@ input, textarea, button { caret-color: var(--green); }
 .messages.room-anim { animation: roomIn 0.35s cubic-bezier(0.2,0.8,0.2,1); }
 @keyframes roomIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-.msg { max-width: 78%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 12px; animation: msgIn 0.2s ease; }
+.msg { position: relative; max-width: 78%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 12px; animation: msgIn 0.2s ease; }
 @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .msg.me { align-self: flex-end; align-items: flex-end; }
+
+/* Тулбар действий над сообщением (hover) */
+.msg-actions {
+  position: absolute; top: -12px; z-index: 4;
+  display: flex; gap: 2px; padding: 2px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.msg:not(.me) .msg-actions { right: 6px; }
+.msg.me .msg-actions { left: 6px; }
+.msg:hover .msg-actions { opacity: 1; pointer-events: auto; }
+.ma-btn { width: 26px; height: 26px; display: grid; place-items: center; border: none; background: transparent; color: var(--text-dim); cursor: pointer; border-radius: 4px; padding: 0; }
+.ma-btn:hover { background: var(--panel-2); color: var(--green); }
+.ma-btn svg { width: 15px; height: 15px; }
+
+/* Реакции под сообщением */
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; }
+.reactions:empty { display: none; }
+.reaction {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px;
+  padding: 1px 8px; cursor: pointer; font-family: inherit; font-size: 12px; color: var(--text);
+  transition: background 0.12s, border-color 0.12s;
+}
+.reaction:hover { background: var(--panel-3); }
+.reaction.mine { border-color: var(--green); background: rgba(0,255,90,0.14); color: var(--green); }
+.reaction .r-count { font-weight: 700; font-size: 11px; }
+
+/* Плавающий пикер реакций */
+.react-picker {
+  position: fixed; z-index: 300; display: flex; gap: 2px; padding: 6px;
+  background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+.react-picker button { border: none; background: transparent; cursor: pointer; font-size: 20px; padding: 4px; border-radius: 6px; line-height: 1; transition: transform 0.1s, background 0.1s; }
+.react-picker button:hover { background: var(--panel-2); transform: scale(1.25); }
+
+/* Инлайн-редактирование */
+.edit-box { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+.edit-box textarea {
+  width: 100%; min-width: 200px; resize: none; font-family: inherit; font-size: 14px; line-height: 1.5;
+  background: var(--bg-3); border: 1px solid var(--green); border-radius: 2px; color: var(--green-bright);
+  padding: 9px 13px; outline: none;
+}
+.edit-hint { font-size: 10px; color: var(--text-dim); padding: 0 4px; }
 .msg .who { font-size: 11px; color: var(--text-dim); padding: 0 4px; }
 .msg .who::after { content: ":~$"; opacity: 0.6; }
 .bubble {
@@ -564,7 +609,8 @@ input, textarea, button { caret-color: var(--green); }
 .chip-x { color: var(--danger); margin-left: 6px; font-weight: 700; }
 
 /* Заблокированные сообщения */
-.msg.blocked > .bubble, .msg.blocked > .time { display: none; }
+.msg.blocked > .bubble, .msg.blocked > .time, .msg.blocked > .reactions { display: none; }
+.msg.blocked .msg-actions { display: none; }
 .msg.blocked::after {
   content: attr(data-blocklabel); display: inline-block; margin-top: 2px;
   padding: 8px 13px; border: 1px dashed var(--border); color: var(--text-dim);
