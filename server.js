@@ -13,6 +13,7 @@ import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction,
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
+  isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, deleteGroup,
   updateProfile, getAvatar, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend,
@@ -138,6 +139,54 @@ app.post("/api/groups/:id/leave", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   await leaveGroup(req.params.id, me.login); res.json({ ok: true });
 });
+// Инфо о группе + участники (только для членов)
+app.get("/api/groups/:id", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = req.params.id;
+  if (!(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
+  const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
+  res.json({ id: g.id, name: g.name, owner: g.owner, members: await getGroupMembersDetailed(id) });
+});
+// Аватар группы (бинарно)
+app.get("/api/group-avatar/:id", async (req, res) => {
+  try {
+    const dataUrl = await getGroupAvatar(req.params.id);
+    if (!dataUrl) return res.status(404).end();
+    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl); if (!m) return res.status(404).end();
+    res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60"); res.send(Buffer.from(m[2], "base64"));
+  } catch { res.status(500).end(); }
+});
+// Управление (только владелец): rename / avatar / add / remove / delete
+async function notifyGroup(id, event, data) { try { for (const l of await getGroupMembers(id)) notifyUser(l, event, data); } catch {} }
+app.post("/api/groups/:id", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = req.params.id;
+  if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+  const { name, avatar } = req.body || {};
+  if (typeof name === "string" && name.trim()) await renameGroup(id, name.trim().slice(0, 64));
+  if (typeof avatar === "string") await setGroupAvatar(id, avatar.slice(0, 3_000_000));
+  await notifyGroup(id, "group-updated", { id }); res.json({ ok: true });
+});
+app.post("/api/groups/:id/members", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = req.params.id;
+  if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+  const before = await getGroupMembers(id);
+  if (Array.isArray(req.body.add)) await addGroupMembers(id, req.body.add.map((l) => String(l).toLowerCase()));
+  if (req.body.remove) await removeGroupMember(id, String(req.body.remove).toLowerCase());
+  const after = await getGroupMembers(id);
+  for (const l of new Set([...before, ...after])) notifyUser(l, "group-updated", { id });
+  res.json({ ok: true });
+});
+app.delete("/api/groups/:id", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = req.params.id;
+  if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+  const members = await getGroupMembers(id);
+  await deleteGroup(id);
+  for (const l of members) notifyUser(l, "group-deleted", { id });
+  res.json({ ok: true });
+});
 
 // ---------- REST: друзья / блокировки ----------
 app.get("/api/relations", async (req, res) => {
@@ -218,6 +267,34 @@ app.get("/api/gif", async (req, res) => {
     const results = (d.data || []).map((g) => ({ preview: g.images?.fixed_width_small?.url, url: g.images?.original?.url })).filter((x) => x.url && x.preview);
     res.json({ results });
   } catch (e) { console.error("gif", e.message); res.json({ results: [], error: true }); }
+});
+
+// ---------- REST: Link preview (OpenGraph) ----------
+const lpCache = new Map();
+app.get("/api/link-preview", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const url = String(req.query.url || "");
+    if (!/^https?:\/\//i.test(url)) return res.json({});
+    if (/\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url)) return res.json({});
+    if (lpCache.has(url)) return res.json(lpCache.get(url));
+    const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 5000);
+    let html = "";
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; DialogBot/1.0)" } });
+      clearTimeout(tm);
+      if (!(r.headers.get("content-type") || "").includes("text/html")) { lpCache.set(url, {}); return res.json({}); }
+      html = Buffer.from((await r.arrayBuffer()).slice(0, 200000)).toString("utf8");
+    } catch { clearTimeout(tm); return res.json({}); }
+    const meta = (p) => { const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${p}["'][^>]+content=["']([^"']*)["']`, "i")) || html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${p}["']`, "i")); return m ? m[1] : ""; };
+    const dec = (s) => (s || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
+    const title = dec(meta("og:title") || (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || "");
+    const data = { site: dec(meta("og:site_name")) || new URL(url).hostname.replace(/^www\./, ""), title, description: dec(meta("og:description") || meta("description")).slice(0, 200), image: meta("og:image"), url };
+    const out = (data.title || data.image) ? data : {};
+    if (lpCache.size > 500) lpCache.clear();
+    lpCache.set(url, out);
+    res.json(out);
+  } catch { res.json({}); }
 });
 
 // ---------- REST: LiveKit (SFU) токен ----------
