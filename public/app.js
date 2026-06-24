@@ -743,7 +743,8 @@ function syncCallUI() {
   const fs = stage.classList.contains("fullscreen");
   stage.classList.toggle("hidden", !here);
   if (!here) stage.classList.remove("fullscreen");
-  pane.classList.toggle("has-call", here && !fs && !isMobile()); // ПК: звонок — левая колонка чата
+  pane.classList.toggle("has-call", here && !fs && !isMobile()); // ПК: звонок — колонка/полоса чата
+  applyDock();
   vb.classList.toggle("hidden", here);
   updateVoiceBar();
 }
@@ -758,6 +759,24 @@ $("vbInfo").onclick = () => { const c = chats.get(call.roomKey); if (c) openChat
 $("vbMic").onclick = () => setMic(!call.micOn);
 $("vbDeafen").onclick = () => $("toggleDeafen").click();
 $("vbHang").onclick = endCall;
+
+// Док звонка: лево / право / верх — перетаскиванием грипа, сохраняется
+let callDock = localStorage.getItem("dialog_dock") || "left";
+function applyDock() { const p = $("chatPane"); p.classList.remove("dock-left", "dock-right", "dock-top"); p.classList.add("dock-" + callDock); }
+(function () {
+  const grip = $("callGrip"), pane = $("chatPane"); let hint = null, dragging = false;
+  const zoneAt = (x, y) => { const r = pane.getBoundingClientRect(); if ((y - r.top) / r.height < 0.28) return "top"; return (x - r.left) / r.width < 0.5 ? "left" : "right"; };
+  function showHint(zone) {
+    if (!hint) { hint = document.createElement("div"); hint.className = "dock-hint"; pane.appendChild(hint); }
+    let s = { left: "8px", right: "auto", top: "8px", bottom: "auto", width: "calc(34% - 16px)", height: "calc(100% - 16px)" };
+    if (zone === "right") { s.left = "auto"; s.right = "8px"; }
+    if (zone === "top") { s = { left: "8px", right: "8px", top: "8px", bottom: "auto", width: "auto", height: "40%" }; }
+    Object.assign(hint.style, s); hint.classList.add("show");
+  }
+  grip.addEventListener("pointerdown", (e) => { dragging = true; grip.setPointerCapture(e.pointerId); showHint(callDock); });
+  grip.addEventListener("pointermove", (e) => { if (dragging) showHint(zoneAt(e.clientX, e.clientY)); });
+  grip.addEventListener("pointerup", (e) => { if (!dragging) return; dragging = false; if (hint) hint.classList.remove("show"); callDock = zoneAt(e.clientX, e.clientY); localStorage.setItem("dialog_dock", callDock); applyDock(); });
+})();
 async function joinCall() {
   ensureAudioCtx();
   const { ok, data } = await api("/api/livekit/token?room=" + encodeURIComponent(myRoom), null, "GET");
@@ -792,7 +811,7 @@ async function joinCall() {
 function endCall() {
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
-  if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; returnGridHome(); }
+  if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; clearInterval(pipPoll); returnGridHome(); }
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   vGrid.innerHTML = "";
@@ -869,18 +888,30 @@ $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioE
 $("expandBtn").onclick = () => { const fs = $("callStage").classList.toggle("fullscreen"); $("expandBtn").classList.toggle("active", fs); $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile()); };
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
-// ⧉ Поп-аут звонка в отдельное окно (Document PiP) — только ПК/Chrome
-let pipWin = null;
+// ⧉ Поп-аут звонка: Document PiP (Chrome, поверх всех) или обычное окно window.open (Firefox и пр.)
+let pipWin = null, pipPoll = 0;
+function mountGridIn(win) {
+  document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
+  win.document.body.style.cssText = "margin:0;background:#000700;overflow:auto";
+  win.document.body.appendChild(vGrid);
+}
 $("popoutBtn").onclick = async () => {
   if (!call.active) return;
-  if (!("documentPictureInPicture" in window)) { alert(t("pip_unsupported")); return; }
-  if (pipWin) { pipWin.close(); return; }
+  if (pipWin) { try { pipWin.close(); } catch {} return; }
   try {
-    pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });
-    document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => pipWin.document.head.appendChild(s.cloneNode(true)));
-    pipWin.document.body.style.cssText = "margin:0;background:var(--bg);overflow:auto";
-    pipWin.document.body.appendChild(vGrid);
-    pipWin.addEventListener("pagehide", () => { returnGridHome(); pipWin = null; });
+    if ("documentPictureInPicture" in window) {
+      pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });
+      mountGridIn(pipWin);
+      pipWin.addEventListener("pagehide", () => { returnGridHome(); pipWin = null; });
+    } else {
+      // Firefox / без Document PiP — обычное окно
+      pipWin = window.open("", "dialogCall", "width=380,height=520,menubar=no,toolbar=no");
+      if (!pipWin) { alert(t("pip_unsupported")); return; }
+      pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
+      mountGridIn(pipWin);
+      clearInterval(pipPoll);
+      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); returnGridHome(); pipWin = null; } }, 700);
+    }
   } catch (e) { console.log("pip", e.message); pipWin = null; }
 };
 

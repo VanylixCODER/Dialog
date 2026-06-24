@@ -87,31 +87,33 @@
         </div>
       </header>
 
-      <!-- Встроенный звонок (Discord-стиль): тайлы сверху + плавающая панель кнопок -->
+      <!-- Звонок: тайлы (1 в ряд, скролл) + ровная панель кнопок снизу -->
       <div id="callStage" class="call-stage hidden">
         <canvas id="callMatrix" class="call-matrix"></canvas>
+        <div class="call-grip" id="callGrip" title="Drag to dock left / right / top"><span></span><span></span></div>
         <div id="videoGrid" class="video-grid"></div>
         <div class="call-bar">
-          <span id="callStatus" class="call-status"></span>
-          <span class="call-count" id="callCount">1</span>
-          <div class="call-btn-group">
-            <button class="call-btn" id="toggleMic" data-i18n-title="t_mic"></button>
-            <button class="call-drop" id="micDrop" title="Settings">▾</button>
-            <div class="call-dropdown" id="micDropdown">
-              <div class="dd-label" data-i18n="mic_device">Microphone</div>
-              <select class="dd-select" id="micSelect"></select>
-              <div class="dd-label" data-i18n="spk_device">Speaker</div>
-              <select class="dd-select" id="spkSelect"></select>
-              <div class="dd-sep"></div>
-              <button class="dd-item" id="toggleNoise"><span data-i18n="noise_suppression">Noise suppression</span><span class="dd-toggle on" id="noiseToggle"></span></button>
+          <div class="call-meta"><span id="callStatus" class="call-status"></span><span class="call-count" id="callCount">1</span></div>
+          <div class="call-actions">
+            <div class="call-btn-group">
+              <button class="call-btn" id="toggleMic" data-i18n-title="t_mic"></button>
+              <button class="call-drop" id="micDrop" title="Settings">▾</button>
+              <div class="call-dropdown" id="micDropdown">
+                <div class="dd-label" data-i18n="mic_device">Microphone</div>
+                <select class="dd-select" id="micSelect"></select>
+                <div class="dd-label" data-i18n="spk_device">Speaker</div>
+                <select class="dd-select" id="spkSelect"></select>
+                <div class="dd-sep"></div>
+                <button class="dd-item" id="toggleNoise"><span data-i18n="noise_suppression">Noise suppression</span><span class="dd-toggle on" id="noiseToggle"></span></button>
+              </div>
             </div>
+            <button class="call-btn" id="toggleCam" data-i18n-title="t_cam"></button>
+            <button class="call-btn" id="shareScreen" data-i18n-title="t_screen"></button>
+            <button class="call-btn" id="toggleDeafen" data-i18n-title="t_deafen"></button>
+            <button class="call-btn desktop-only" id="popoutBtn" data-i18n-title="popout" title="Pop out">⧉</button>
+            <button class="call-btn desktop-only" id="expandBtn" data-i18n-title="fullscreen" title="Fullscreen">⛶</button>
+            <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup"></button>
           </div>
-          <button class="call-btn" id="toggleCam" data-i18n-title="t_cam"></button>
-          <button class="call-btn" id="shareScreen" data-i18n-title="t_screen"></button>
-          <button class="call-btn" id="toggleDeafen" data-i18n-title="t_deafen"></button>
-          <button class="call-btn desktop-only" id="popoutBtn" data-i18n-title="popout" title="Pop out">⧉</button>
-          <button class="call-btn desktop-only" id="expandBtn" data-i18n-title="fullscreen" title="Fullscreen">⛶</button>
-          <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup"></button>
         </div>
       </div>
 
