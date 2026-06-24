@@ -24,7 +24,17 @@ function beep(freq, dur, vol = 0.05) {
   o.connect(g); g.connect(ctx.destination); o.start();
   g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur); o.stop(ctx.currentTime + dur);
 }
-const sfx = { msg: () => beep(660, 0.12), call: () => beep(880, 0.18) };
+function beepSeq(notes) { let dt = 0; notes.forEach(([f, d, v]) => { setTimeout(() => beep(f, d, v ?? 0.05), dt); dt += d * 900; }); }
+const sfx = {
+  msg: () => beep(660, 0.12),
+  call: () => beep(880, 0.18),
+  start: () => beepSeq([[440, 0.1], [660, 0.1], [880, 0.13]]),   // вход в звонок
+  end: () => beepSeq([[523, 0.12], [330, 0.18]]),                // выход из звонка
+  join: () => beepSeq([[523, 0.09], [784, 0.12]]),               // участник зашёл
+  leave: () => beepSeq([[784, 0.09], [415, 0.13]]),              // участник вышел
+  mute: () => beep(300, 0.07),
+  unmute: () => beep(560, 0.07),
+};
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
 // ---------- Язык ----------
@@ -138,8 +148,7 @@ function deleteChat(c) {
 function openChat(c) {
   c = upsertChat(c);
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
-  if (call.active) endCall();
-  socket.emit("join", { token, room: c.key });
+  socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
   $("messages").innerHTML = "";
@@ -149,7 +158,12 @@ function openChat(c) {
   $("chatAva").innerHTML = c.type === "group" ? "#" : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
   $("app").classList.add("in-chat");
+  // боковая панель участников для групп (на десктопе)
+  if (c.type === "group" && !isMobile()) { renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.remove("hidden"); }
+  else if (c.type === "dm") $("infoPanel").classList.add("hidden");
   renderChatList($("searchInput").value);
+  if (call.active && c.key === call.roomKey) call.minimized = false; // открыли чат звонка — разворачиваем
+  syncCallUI(); updateCallButton();
 }
 $("backBtnMobile").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
@@ -284,17 +298,23 @@ socket.on("relations-changed", () => loadRelations());
 // ---------- Участники (инфо-панель) ----------
 function renderMembers() {
   const ul = $("members"); if (!ul) return; ul.innerHTML = "";
-  if (peers.size === 0) { ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`; return; }
-  for (const [, info] of peers) {
+  const inCall = new Set((activeCalls.get(myRoom) || {}).logins || []);
+  // объединяем присутствующих в чате и тех, кто в звонке
+  const byLogin = new Map();
+  for (const [, info] of peers) if (info.login) byLogin.set(info.login, info.name);
+  inCall.forEach((l) => { if (!byLogin.has(l)) byLogin.set(l, l); });
+  if (byLogin.size === 0) { ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`; return; }
+  for (const [login, name] of byLogin) {
     const li = document.createElement("li"); li.className = "member";
-    li.innerHTML = `<div class="avatar" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(info.login)}" onerror="this.remove()">${initials(info.name)}</div><span class="m-name">${escapeHtml(info.name)}</span>`;
-    li.onclick = () => info.login && openMiniProfile(info.login);
+    const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : "";
+    li.innerHTML = `<div class="avatar" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${escapeHtml(name)}</span>${callIcon}`;
+    li.onclick = () => openMiniProfile(login);
     ul.appendChild(li);
   }
 }
-socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); });
-socket.on("peer-joined", (p) => { peers.set(p.id, { name: p.name, login: p.login }); }); // присутствие в чате (звонок — через call-*)
-socket.on("peer-left", (p) => { peers.delete(p.id); });
+socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); if (!$("infoPanel").classList.contains("hidden")) renderMembers(); });
+socket.on("peer-joined", (p) => { peers.set(p.id, { name: p.name, login: p.login }); if (!$("infoPanel").classList.contains("hidden")) renderMembers(); });
+socket.on("peer-left", (p) => { peers.delete(p.id); if (!$("infoPanel").classList.contains("hidden")) renderMembers(); });
 
 // ---------- Сообщения ----------
 const messagesEl = $("messages");
@@ -476,8 +496,10 @@ async function loadGifs(q) {
 document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn")) gifPanel.classList.add("hidden"); });
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
 const audioEls = new Map(); // identity -> <audio> (звук участника)
+const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
+const isMobile = () => matchMedia("(max-width:720px)").matches;
 
 function lkTile(identity) { return "p-" + identity.replace(/[^a-zA-Z0-9_]/g, ""); }
 function ensureTile(identity, name, isMe) {
@@ -535,8 +557,8 @@ function wireRoom(room, LK) {
   const E = LK.RoomEvent;
   room.on(E.TrackSubscribed, attachTrack);
   room.on(E.TrackUnsubscribed, detachTrack);
-  room.on(E.ParticipantConnected, (p) => ensureTile(p.identity, p.name || p.identity, false));
-  room.on(E.ParticipantDisconnected, (p) => removeParticipant(p.identity));
+  room.on(E.ParticipantConnected, (p) => { ensureTile(p.identity, p.name || p.identity, false); sfx.join(); });
+  room.on(E.ParticipantDisconnected, (p) => { removeParticipant(p.identity); sfx.leave(); });
   room.on(E.ActiveSpeakersChanged, (speakers) => {
     const ids = new Set(speakers.map((s) => s.isLocal ? "me" : lkTile(s.identity)));
     $("videoGrid").querySelectorAll(".tile:not(.screen)").forEach((tl) => tl.classList.toggle("speaking", ids.has(tl.id.replace("tile-", ""))));
@@ -564,7 +586,50 @@ function setMicIndicator(tileId, muted) {
   else if (ind) ind.remove();
 }
 
-$("startCallBtn").onclick = () => { if (!myRoom) return; call.active ? endCall() : joinCall(); };
+// Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
+$("startCallBtn").onclick = () => {
+  if (!myRoom) return;
+  if (call.active && call.roomKey === myRoom) { endCall(); return; }
+  if (call.active && call.roomKey !== myRoom) endCall(); // выходим из звонка в другой комнате
+  joinCall();
+};
+// Состояние звонка в комнате (для кнопки «войти» и боковой панели)
+socket.on("call-state", ({ room, count, logins }) => {
+  if (count > 0) activeCalls.set(room, { count, logins }); else activeCalls.delete(room);
+  updateCallButton(); if (!$("infoPanel").classList.contains("hidden")) renderMembers();
+});
+function updateCallButton() {
+  const btn = $("startCallBtn"); if (!btn) return;
+  const inThis = call.active && call.roomKey === myRoom;
+  const ongoing = !inThis && activeCalls.has(myRoom);
+  btn.classList.toggle("in-call", inThis);
+  btn.classList.toggle("join-call", ongoing);
+  btn.title = inThis ? t("t_hangup") : ongoing ? t("join_call") : t("t_call");
+  btn.innerHTML = inThis ? window.ICON.phoneOff : window.ICON.phone;
+}
+// Показ/сворачивание оверлея звонка в зависимости от просматриваемого чата и флага minimized
+function syncCallUI() {
+  const ov = $("callOverlay");
+  if (!call.active) { ov.classList.add("hidden"); ov.classList.remove("windowed"); hideReturnPill(); return; }
+  const away = call.minimized || myRoom !== call.roomKey;
+  if (!away) { ov.classList.remove("hidden", "windowed"); hideReturnPill(); }
+  else if (isMobile()) { ov.classList.add("hidden"); ov.classList.remove("windowed"); showReturnPill(); } // мобайл: прячем, пилюля «вернуться»
+  else { ov.classList.remove("hidden"); ov.classList.add("windowed"); hideReturnPill(); }               // десктоп: докнутая колонка
+}
+let returnPill;
+function showReturnPill() {
+  if (!returnPill) { returnPill = document.createElement("button"); returnPill.id = "returnPill"; returnPill.className = "return-pill"; returnPill.onclick = returnToCall; document.body.appendChild(returnPill); }
+  returnPill.innerHTML = window.ICON.phone + "<span>" + t("return_call") + "</span>";
+  returnPill.classList.add("show");
+}
+function hideReturnPill() { if (returnPill) returnPill.classList.remove("show"); }
+function returnToCall() {
+  call.minimized = false;
+  const c = chats.get(call.roomKey);
+  if (c && c.key !== myRoom) openChat(c);
+  else if (!c && call.roomKey) openRoomByKey(call.roomKey, call.roomTitle);
+  else syncCallUI();
+}
 async function joinCall() {
   ensureAudioCtx();
   const { ok, data } = await api("/api/livekit/token?room=" + encodeURIComponent(myRoom), null, "GET");
@@ -572,9 +637,9 @@ async function joinCall() {
   const LK = window.LivekitClient;
   if (!LK) { alert(t("call_disabled")); return; }
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  call.room = room; call.active = true; wireRoom(room, LK);
-  $("callOverlay").classList.remove("hidden"); $("startCallBtn").classList.add("in-call"); hideToast();
-  $("callRoomLabel").textContent = curTitle; updateCallStatus();
+  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK);
+  $("callOverlay").classList.remove("hidden", "windowed"); $("startCallBtn").classList.add("in-call"); hideToast();
+  $("callRoomLabel").textContent = curTitle; updateCallStatus(); sfx.start();
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   try {
     await room.connect(data.url, data.token);
@@ -593,21 +658,24 @@ async function joinCall() {
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
-  populateDevices(); startKeepAlive(); updateCallStatus();
-  socket.emit("call-join", { title: curTitle }); // ring others
+  populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
+  $("toggleDeafen").classList.remove("off"); $("toggleDeafen").innerHTML = window.ICON.headphones;
+  socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
 }
 function endCall() {
+  const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   $("videoGrid").innerHTML = "";
   $("callOverlay").classList.remove("hidden", "windowed"); $("callOverlay").classList.add("hidden"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
-  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true });
-  krispNode = null;
+  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
+  krispNode = null; hideReturnPill();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
-  stopKeepAlive();
+  stopKeepAlive(); updateCallButton();
+  if (wasActive) sfx.end();
 }
 $("hangUp").onclick = endCall;
 
@@ -619,7 +687,7 @@ async function setMic(on) {
   call.micOn = on;
   try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {}
   $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
-  setMicIndicator("me", !on);
+  setMicIndicator("me", !on); (on ? sfx.unmute : sfx.mute)();
 }
 $("toggleMic").onclick = () => { if (!call.room) return; setMic(!call.micOn); };
 // Заглушить наушники (deafen) — глушим входящий звук; по-дискордовски выключаем и свой микрофон
@@ -668,8 +736,8 @@ async function populateDevices() {
 $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } };
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
-// Свернуть/развернуть звонок (докнутая колонка ↔ полный экран)
-$("windowToggle").onclick = () => { $("callOverlay").classList.toggle("windowed"); $("callOverlay").style.cssText = ""; };
+// Свернуть/развернуть звонок (ПК — докнутая колонка, мобайл — скрыть + пилюля «вернуться»)
+$("windowToggle").onclick = () => { call.minimized = !call.minimized; $("callOverlay").style.cssText = ""; syncCallUI(); };
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;

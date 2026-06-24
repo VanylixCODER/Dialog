@@ -47,6 +47,7 @@ const I18N = {
     mic_device: "Microphone", spk_device: "Speaker",
     call_disabled: "Calls are not configured (no LiveKit on server)",
     t_deafen: "Deafen (mute headphones)",
+    join_call: "Join call", return_call: "Return to call", in_call: "in call", call_ongoing: "Call in progress",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -95,6 +96,7 @@ const I18N = {
     mic_device: "Микрофон", spk_device: "Динамик",
     call_disabled: "Звонки не настроены (нет LiveKit на сервере)",
     t_deafen: "Заглушить наушники",
+    join_call: "Войти в звонок", return_call: "Вернуться в звонок", in_call: "в звонке", call_ongoing: "Идёт звонок",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";
