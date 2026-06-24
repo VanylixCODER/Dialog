@@ -300,19 +300,23 @@ input, textarea, button { caret-color:var(--green); }
 .dd-toggle.on { background:var(--green); }
 .dd-toggle::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .2s; }
 .dd-toggle.on::after { transform:translateX(16px); }
-.call-overlay.windowed { inset:auto; right:24px; bottom:24px; width:380px; height:300px; min-width:260px; min-height:200px;
-  border:1px solid var(--border-strong); box-shadow:var(--glow-soft); resize:both; overflow:hidden; display:flex; flex-direction:column; }
-.call-overlay.windowed .video-grid { grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); padding:4px; gap:4px; align-content:start; }
-.call-overlay.windowed .tile { aspect-ratio:1/1; }
-.call-overlay.windowed .tile.screen { grid-column:1/-1; aspect-ratio:16/9; }
-.call-overlay.windowed .tile-avatar { width:48px; height:48px; font-size:20px; }
-.call-overlay.windowed .tile .tile-name { font-size:9px; padding:2px 6px; bottom:4px; left:4px; }
-.call-overlay.windowed .call-topbar { cursor:move; padding:6px 10px; font-size:11px; }
-.call-overlay.windowed .call-controls { padding:6px; gap:5px; }
-.call-overlay.windowed .call-btn { width:34px; height:34px; }
-.call-overlay.windowed .call-btn svg { width:16px; height:16px; }
-.call-overlay.windowed .call-btn.end { width:42px; }
-.call-overlay.windowed .call-drop { width:16px; height:34px; }
+/* Индикатор «микрофон выключен» на тайле */
+.tile-mic { position:absolute; top:8px; right:8px; z-index:4; width:24px; height:24px; border-radius:50%;
+  background:rgba(0,4,0,.75); border:1px solid var(--danger); display:grid; place-items:center; color:var(--danger); }
+.tile-mic svg { width:14px; height:14px; }
+
+/* Свёрнутый звонок — докнутая колонка (после списка чатов), чат виден справа, тайлы скроллятся */
+.call-overlay.windowed { inset:auto; left:330px; top:0; bottom:0; right:auto; width:400px; height:auto;
+  min-width:280px; max-width:72vw; border-right:1px solid var(--border-strong); box-shadow:var(--glow-soft);
+  resize:horizontal; overflow:hidden; display:flex; flex-direction:column; }
+.call-overlay.windowed .video-grid { flex:1; display:flex; flex-direction:column; gap:8px; padding:8px;
+  grid-template-columns:none; align-content:flex-start; justify-content:flex-start; overflow-y:auto; }
+.call-overlay.windowed .video-grid .tile { width:100%; flex:0 0 auto; aspect-ratio:16/9; }
+.call-overlay.windowed .tile.screen { aspect-ratio:16/9; max-height:none; order:-1; }
+.call-overlay.windowed .call-topbar { cursor:default; padding:8px 12px; }
+.call-overlay.windowed .call-controls { padding:8px; gap:6px; }
+.call-overlay.windowed .call-btn { width:40px; height:40px; }
+.call-overlay.windowed .call-btn.end { width:50px; }
 
 /* ---------- Входящий звонок (полноэкранный) ---------- */
 .call-incoming { position:fixed; inset:0; z-index:400; display:flex; align-items:center; justify-content:center;
