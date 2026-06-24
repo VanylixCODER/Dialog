@@ -185,7 +185,9 @@ Socket события:
 - `message` / `typing` / `msg-delete` / `msg-edit` / `msg-react`.
 - `signal {to, kind, data}` — relay WebRTC (адресно по socketId).
 - `media {to?, kind:"cam"|"screen", on}` — явное состояние камеры/экрана (см. §7).
-- `call-invite {title}` → `call-invite` (в комнате) + `call-ring` (глобально членам).
+- `call-join {title}` → сервер ведёт callRooms[room]; вступающему шлёт `call-participants`
+  (кто уже в звонке), остальным `call-peer-joined`; первому — звонит членам (`call-ring` + push).
+  `call-leave` / disconnect → `call-peer-left`. См. §7.0 — это убирает гонку активности.
 - `set-status` — присутствие.
 
 Сервер шлёт: `history`, `message`, `msg-deleted/edited/reaction`, `dm-ping`,
@@ -196,6 +198,16 @@ Socket события:
 ## 7. WebRTC — КРИТИЧЕСКИЕ УРОКИ (читать до написания звонков!)
 
 Это место съело больше всего итераций. Делай сразу правильно:
+
+0. **Модель «сессии звонка» — против гонки активности (САМОЕ важное для надёжности).**
+   НЕ создавай peer-соединение по факту входа в КОМНАТУ (peer-joined): при приёме
+   входящего получатель входит в комнату чуть раньше, чем становится `call.active`,
+   и offer инициатора попадает в зазор и теряется (`if(!call.active) return`). Вместо
+   этого сервер ведёт список активных участников ЗВОНКА (`callRooms[room]`). При
+   `call-join` вступающему отдаётся `call-participants` (кто уже в звонке), остальным —
+   `call-peer-joined`. Обе стороны вызывают `ensurePeer` и обе гарантированно
+   `call.active` ДО обмена offer'ами. Плюс на реконнекте (`socket.connect`, новый
+   socket.id) — снести все pcs и заново `call-join`: звонок сам восстанавливается.
 
 1. **Детерминированный инициатор, НЕ perfect-negotiation с glare.**
    Когда оба участника одновременно создают offer (glare), после неявного rollback

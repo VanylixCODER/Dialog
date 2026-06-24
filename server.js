@@ -234,6 +234,8 @@ const rooms = new Map();        // room -> Map(socketId -> {name, login})
 const userSockets = new Map();  // login -> Set(socketId)
 const socketRoom = new Map();   // socketId -> room
 const userStatus = new Map();   // login -> 'online'|'dnd'|'invisible'
+const callRooms = new Map();    // room -> Map(socketId -> {name, login}) — кто СЕЙЧАС в звонке
+const getCall = (room) => { if (!callRooms.has(room)) callRooms.set(room, new Map()); return callRooms.get(room); };
 
 const getPeers = (room) => { if (!rooms.has(room)) rooms.set(room, new Map()); return rooms.get(room); };
 function addUserSocket(login, id) { if (!userSockets.has(login)) userSockets.set(login, new Set()); userSockets.get(login).add(id); }
@@ -266,6 +268,7 @@ io.on("connection", (socket) => {
 
   function doLeave() {
     if (!currentRoom) return;
+    callLeave();
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
     socket.leave(currentRoom);
@@ -361,21 +364,38 @@ io.on("connection", (socket) => {
     if (to) io.to(to).emit("media", payload); else if (currentRoom) socket.to(currentRoom).emit("media", payload);
   });
 
-  socket.on("call-invite", async ({ title } = {}) => {
+  // ----- Сессия звонка (надёжный mesh без гонок) -----
+  // Вступление в звонок: обе стороны гарантированно активны до обмена offer'ами.
+  function callLeave() {
     if (!currentRoom) return;
-    const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
-    socket.to(currentRoom).emit("call-invite", payload); // присутствующим в комнате (mesh + тост)
-    let recips = [];
-    try {
-      if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
-      else if (currentRoom.startsWith("@dm:")) recips = currentRoom.slice(4).split("~");
-    } catch {}
-    for (const login of recips) {
-      if (login === userLogin) continue;
-      notifyUser(login, "call-ring", payload);                                   // глобальный тост
-      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom }); // push
+    const c = callRooms.get(currentRoom);
+    if (c && c.delete(socket.id)) { if (!c.size) callRooms.delete(currentRoom); socket.to(currentRoom).emit("call-peer-left", { id: socket.id }); }
+  }
+  socket.on("call-join", async ({ title } = {}) => {
+    if (!currentRoom || !userLogin) return;
+    const c = getCall(currentRoom);
+    const wasEmpty = c.size === 0;
+    // список уже находящихся в звонке (для меша) — отдаём вступающему
+    const participants = [...c.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, name: v.name }));
+    c.set(socket.id, { name: userName, login: userLogin });
+    socket.emit("call-participants", participants);
+    socket.to(currentRoom).emit("call-peer-joined", { id: socket.id, name: userName });
+    // звоним остальным членам комнаты (тост + push), только когда звонок инициируется
+    if (wasEmpty) {
+      const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
+      let recips = [];
+      try {
+        if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
+        else if (currentRoom.startsWith("@dm:")) recips = currentRoom.slice(4).split("~");
+      } catch {}
+      for (const login of recips) {
+        if (login === userLogin) continue;
+        notifyUser(login, "call-ring", payload);
+        sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom });
+      }
     }
   });
+  socket.on("call-leave", () => callLeave());
 
   socket.on("set-status", async (status) => {
     if (!userLogin || !["online", "dnd", "invisible"].includes(status)) return;

@@ -77,7 +77,13 @@ function enterApp() {
   refreshPresence(); if (!window._presInt) window._presInt = setInterval(refreshPresence, 25000);
   initPush();
 }
-socket.on("connect", () => { if (token) { socket.emit("identify", { token }); if (myRoom) socket.emit("join", { token, room: myRoom }); } });
+socket.on("connect", () => {
+  if (!token) return;
+  socket.emit("identify", { token });
+  if (myRoom) socket.emit("join", { token, room: myRoom });
+  // восстановление звонка после реконнекта: socket.id новый — пересоздаём пиров
+  if (call.active) { for (const id of [...call.pcs.keys()]) removePeerConn(id); setTimeout(() => socket.emit("call-join", { title: curTitle }), 300); }
+});
 socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Хранилище чатов (ЛС в localStorage, группы с сервера) ----------
@@ -288,8 +294,8 @@ function renderMembers() {
   }
 }
 socket.on("peers", (list) => { peers.clear(); list.forEach((p) => peers.set(p.id, { name: p.name, login: p.login })); });
-socket.on("peer-joined", (p) => { peers.set(p.id, { name: p.name, login: p.login }); if (call.active) ensurePeer(p.id, p.name); });
-socket.on("peer-left", (p) => { peers.delete(p.id); removePeerConn(p.id); });
+socket.on("peer-joined", (p) => { peers.set(p.id, { name: p.name, login: p.login }); }); // присутствие в чате (звонок — через call-*)
+socket.on("peer-left", (p) => { peers.delete(p.id); });
 
 // ---------- Сообщения ----------
 const messagesEl = $("messages");
@@ -551,9 +557,10 @@ async function joinCall() {
   $("callRoomLabel").textContent = curTitle;
   $("toggleCam").classList.toggle("off", !call.camOn); $("toggleMic").classList.toggle("off", !call.micOn); $("noiseToggle").classList.toggle("on", call.ns);
   populateDevices(); startKeepAlive(); updateCallStatus();
-  socket.emit("call-invite", { title: curTitle });
+  socket.emit("call-join", { title: curTitle });
 }
 function endCall() {
+  if (call.active) socket.emit("call-leave");
   for (const id of [...call.pcs.keys()]) removePeerConn(id);
   if (call.localStream) { call.localStream.getTracks().forEach((t) => t.stop()); call.localStream = null; }
   if (call.camTrack) { call.camTrack.stop(); call.camTrack = null; }
@@ -569,8 +576,11 @@ function endCall() {
 $("hangUp").onclick = endCall;
 
 // Сигналинг
-socket.on("call-invite", ({ from, name }) => { if (call.active) ensurePeer(from, name); else showToast(from, name); });
-socket.on("call-ring", (p) => { if (call.active || myRoom === p.room) return; const kind = p.room.startsWith("@grp:") ? "group" : "dm"; showToast(p.from, p.name, { room: p.room, title: p.title, kind }); });
+// Сессия звонка: обе стороны активны до обмена offer'ами (инициатор оффертит сам через onnegotiationneeded)
+socket.on("call-participants", (list) => { if (!call.active) return; list.forEach((p) => ensurePeer(p.id, p.name)); });
+socket.on("call-peer-joined", ({ id, name }) => { if (call.active) ensurePeer(id, name); });
+socket.on("call-peer-left", ({ id }) => removePeerConn(id));
+socket.on("call-ring", (p) => { if (call.active) return; const kind = p.room.startsWith("@grp:") ? "group" : "dm"; showToast(p.from, p.name, { room: p.room, title: p.title, kind }); });
 socket.on("media", ({ from, kind, on }) => { if (!call.active) return; const st = call.pcs.get(from); if (!st) return; if (kind === "cam") { st.remoteCam = on; applyCamView(from, st); } else if (kind === "screen") { st.remoteScreen = on; applyScreenView(from, st); } });
 socket.on("signal", async ({ from, name, kind, data, restart }) => {
   if (!call.active) return;
