@@ -30,3 +30,9 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
