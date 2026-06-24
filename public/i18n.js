@@ -45,6 +45,7 @@ const I18N = {
     edit: "Edit", delete_msg: "Delete", react: "React", edited: "edited",
     confirm_delete: "Delete this message?", edit_hint: "Enter — save · Esc — cancel",
     mic_device: "Microphone", spk_device: "Speaker",
+    call_disabled: "Calls are not configured (no LiveKit on server)",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -91,6 +92,7 @@ const I18N = {
     edit: "Изменить", delete_msg: "Удалить", react: "Реакция", edited: "изменено",
     confirm_delete: "Удалить это сообщение?", edit_hint: "Enter — сохранить · Esc — отмена",
     mic_device: "Микрофон", spk_device: "Динамик",
+    call_disabled: "Звонки не настроены (нет LiveKit на сервере)",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";

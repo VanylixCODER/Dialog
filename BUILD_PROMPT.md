@@ -197,6 +197,17 @@ Socket события:
 
 ## 7. WebRTC — КРИТИЧЕСКИЕ УРОКИ (читать до написания звонков!)
 
+> **ПРОДАКШЕН-ВЫБОР: LiveKit Cloud (SFU).** Mesh-WebRTC на бесплатном TURN ненадёжен
+> при симметричном NAT (мобильные сети). Поэтому медиа идёт через бесплатный SFU LiveKit:
+> сервер генерит JWT (`livekit-server-sdk`, эндпоинт `/api/livekit/token`, env
+> `LIVEKIT_URL/API_KEY/API_SECRET`), клиент — `livekit-client` (CDN UMD), `room.connect`,
+> `setMicrophoneEnabled/CameraEnabled/ScreenShareEnabled`, события `TrackSubscribed`/
+> `ActiveSpeakersChanged`. Ringing остаётся на нашем Socket.IO (`call-join`→`call-ring`+push),
+> на приём — подключение к той же LiveKit-комнате (имя = base64url(roomKey)). UI/тайлы те же.
+> SFU имеет публичный IP — NAT не проблема, и медиа не зависит от сна Render free.
+>
+> Уроки ниже (§7.0–§7.9) актуальны, если когда-нибудь делать собственный P2P-mesh:
+
 Это место съело больше всего итераций. Делай сразу правильно:
 
 0. **Модель «сессии звонка» — против гонки активности (САМОЕ важное для надёжности).**

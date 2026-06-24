@@ -81,8 +81,7 @@ socket.on("connect", () => {
   if (!token) return;
   socket.emit("identify", { token });
   if (myRoom) socket.emit("join", { token, room: myRoom });
-  // восстановление звонка после реконнекта: socket.id новый — пересоздаём пиров
-  if (call.active) { for (const id of [...call.pcs.keys()]) removePeerConn(id); setTimeout(() => socket.emit("call-join", { title: curTitle }), 300); }
+  // звонок (LiveKit) переподключается сам — наш сокет лишь восстанавливает чат
 });
 socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
 
@@ -476,97 +475,113 @@ async function loadGifs(q) {
 }
 document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn")) gifPanel.classList.add("hidden"); });
 
-// ====================== ЗВОНКИ (mesh WebRTC, см. §7) ======================
-let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }], iceCandidatePoolSize: 4 };
-const FORCE_RELAY = new URLSearchParams(location.search).has("relay");
-let iceReady = fetch("/api/ice").then((r) => r.json()).then((c) => { ICE = c; ICE.iceCandidatePoolSize = 4; if (FORCE_RELAY) ICE.iceTransportPolicy = "relay"; console.log("ICE:", c.iceServers.map((s) => s.urls).join(", ")); }).catch(() => {});
+// ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
+const call = { active: false, room: null, micOn: true, camOn: false, sharing: false, ns: true, audioInId: null, audioOutId: null };
+const audioEls = new Map(); // identity -> <audio> (звук участника)
 
-const call = { active: false, localStream: null, meStream: null, camTrack: null, screenStream: null, screenTrack: null, sharing: false, micOn: true, camOn: false, ns: true, pcs: new Map(), audioInId: null, audioOutId: null };
-const NS_AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const LOW_VIDEO = { width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 22, max: 24 } };
-
-async function getLocalStream() {
-  if (call.localStream) return call.localStream;
-  if (!navigator.mediaDevices?.getUserMedia) { const e = new Error("INSECURE"); e.name = "InsecureContext"; throw e; }
-  call.localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: NS_AUDIO });
-  call.ns = true; call.camOn = false; call.micOn = true;
-  call.meStream = new MediaStream(call.localStream.getAudioTracks());
-  addTile("me", myName + " " + t("you_suffix"), call.meStream, true); setTileAvatar("me", true);
-  return call.localStream;
+function lkTile(identity) { return "p-" + identity.replace(/[^a-zA-Z0-9_]/g, ""); }
+function ensureTile(identity, name, isMe) {
+  const id = isMe ? "me" : lkTile(identity);
+  let tile = $("tile-" + id);
+  if (!tile) {
+    tile = document.createElement("div"); tile.id = "tile-" + id; tile.className = "tile show-avatar" + (isMe ? " me" : "");
+    tile.dataset.identity = identity;
+    tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
+      `<div class="tile-avatar"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
+      `<div class="tile-name">${escapeHtml(name)}</div>`;
+    $("videoGrid").appendChild(tile);
+  }
+  updateCallCount(); return tile;
 }
-function mediaErr(e) { if (!navigator.mediaDevices || e.name === "InsecureContext") return t("err_insecure"); return { NotAllowedError: t("err_denied"), NotFoundError: t("err_notfound"), NotReadableError: t("err_inuse") }[e.name] || t("err_media") + (e.name || e.message); }
-function setSenderBitrate(sender, bps) { if (!sender) return; try { const p = sender.getParameters(); if (!p.encodings?.length) p.encodings = [{}]; p.encodings[0].maxBitrate = bps; sender.setParameters(p).catch(() => {}); } catch {} }
-function setBitrates(st) { setSenderBitrate(st.audioTx?.sender, 40000); setSenderBitrate(st.camTx?.sender, 350000); setSenderBitrate(st.screenTx?.sender, 1800000); }
-const hasTrack = (s, tr) => s.getTracks().includes(tr);
-
-async function makeOffer(st, peerId) {
-  const pc = st.pc; if (st.makingOffer || pc.signalingState !== "stable") return;
-  st.makingOffer = true;
-  try { await pc.setLocalDescription(); socket.emit("signal", { to: peerId, kind: "desc", data: pc.localDescription }); setBitrates(st); }
-  catch (e) { console.error("offer", e); } finally { st.makingOffer = false; }
-}
-function doRestart(st, peerId) {
-  if (st.restarts >= 4) return; st.restarts++;
-  if (st.initiator) { try { st.pc.restartIce(); } catch {} makeOffer(st, peerId); }
-  else socket.emit("signal", { to: peerId, kind: "need-offer", restart: true });
-}
-function ensurePeer(peerId, peerName) {
-  let st = call.pcs.get(peerId);
-  if (st) { if (peerName) st.name = peerName; return st; }
-  const pc = new RTCPeerConnection(ICE);
-  const initiator = socket.id < peerId;
-  st = { pc, name: peerName || (peers.get(peerId) || {}).name || "Peer", initiator, makingOffer: false, restarts: 0, iceBuf: [], vol: 1, muted: false };
-  call.pcs.set(peerId, st);
-  const mic = call.localStream ? call.localStream.getAudioTracks()[0] : null;
-  st.audioTx = pc.addTransceiver(mic || "audio", { direction: "sendrecv" });
-  st.camTx = pc.addTransceiver(call.camTrack || "video", { direction: "sendrecv" });
-  st.screenTx = pc.addTransceiver(call.screenTrack || "video", { direction: "sendrecv" });
-  pc.onnegotiationneeded = async () => { if (initiator) await makeOffer(st, peerId); else if (pc.remoteDescription) socket.emit("signal", { to: peerId, kind: "need-offer" }); };
-  pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { to: peerId, kind: "ice", data: e.candidate }); };
-  pc.ontrack = (e) => {
-    const tx = e.transceiver, track = e.track;
-    if (tx === st.screenTx) { st.screenIn = st.screenIn || new MediaStream(); if (!hasTrack(st.screenIn, track)) st.screenIn.addTrack(track); applyScreenView(peerId, st); return; }
-    st.mainStream = st.mainStream || new MediaStream(); if (!hasTrack(st.mainStream, track)) st.mainStream.addTrack(track);
-    const tile = addTile(peerId, st.name, st.mainStream, false); const v = tile.querySelector("video");
-    v.srcObject = st.mainStream; v.muted = false; applySinkId(v); v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
-    if (tx === st.camTx) applyCamView(peerId, st);
-  };
-  pc.onconnectionstatechange = () => {
-    updateCallStatus();
-    if (pc.connectionState === "connected") { if (call.camOn) socket.emit("media", { to: peerId, kind: "cam", on: true }); if (call.sharing) socket.emit("media", { to: peerId, kind: "screen", on: true }); }
-    else if (pc.connectionState === "closed") removePeerConn(peerId);
-  };
-  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") doRestart(st, peerId); else if (pc.iceConnectionState === "disconnected") setTimeout(() => { if (pc.iceConnectionState === "disconnected") doRestart(st, peerId); }, 3000); };
+function removeParticipant(identity) {
+  const id = lkTile(identity); removeTile(id); removeTile("screen-" + id);
+  const a = audioEls.get(identity); if (a) { a.srcObject = null; a.remove(); audioEls.delete(identity); }
   updateCallCount();
-  return st;
 }
+function removeTile(id) { const t = $("tile-" + id); if (t) t.remove(); }
+function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
+function addScreenTile(id, name, mediaTrack) {
+  let tile = $("tile-screen-" + id);
+  if (!tile) { tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen"; tile.innerHTML = `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video><div class="tile-name">🖥 ${escapeHtml(name)}</div>`; $("videoGrid").appendChild(tile); }
+  const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
+}
+function updateCallCount() { $("callCount").textContent = $("videoGrid").querySelectorAll(".tile:not(.screen)").length; }
 function updateCallStatus() {
-  const el = $("callStatus"); if (!el || !call.active) return;
-  const states = [...call.pcs.values()].map((s) => s.pc.connectionState);
-  let key = "call_waiting";
-  if (states.length) { if (states.some((s) => s === "connected")) key = "call_connected"; else if (states.some((s) => s === "disconnected" || s === "failed")) key = "call_disconnected"; else key = "call_connecting"; }
-  el.textContent = t(key); el.className = "call-status " + (key === "call_connected" ? "ok" : key === "call_disconnected" ? "bad" : "");
+  const el = $("callStatus"); if (!el) return;
+  const s = call.room ? call.room.state : ""; // 'connecting'|'connected'|'reconnecting'|'disconnected'
+  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected" };
+  el.textContent = call.active ? t(map[s] || "call_waiting") : "";
+  el.className = "call-status " + (s === "connected" ? "ok" : s === "reconnecting" || s === "disconnected" ? "bad" : "");
 }
-function removePeerConn(peerId) { const st = call.pcs.get(peerId); if (st) { try { st.pc.close(); } catch {} call.pcs.delete(peerId); } removeTile(peerId); removeTile("screen-" + peerId); updateCallCount(); }
+
+function attachTrack(track, pub, participant) {
+  const identity = participant.identity, name = participant.name || identity;
+  if (track.kind === "video") {
+    if (pub.source === "screen_share") { addScreenTile(lkTile(identity), name, track); }
+    else { const tile = ensureTile(identity, name, false); track.attach(tile.querySelector("video")); setTileAvatar(lkTile(identity), false); }
+  } else if (track.kind === "audio") {
+    let a = audioEls.get(identity); if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(identity, a); }
+    track.attach(a); applySinkId(a);
+  }
+}
+function detachTrack(track, pub, participant) {
+  const identity = participant.identity;
+  if (track.kind === "video") { if (pub.source === "screen_share") removeTile("screen-" + lkTile(identity)); else { track.detach(); setTileAvatar(lkTile(identity), true); } }
+  else if (track.kind === "audio") { track.detach(); }
+}
+function wireRoom(room, LK) {
+  const E = LK.RoomEvent;
+  room.on(E.TrackSubscribed, attachTrack);
+  room.on(E.TrackUnsubscribed, detachTrack);
+  room.on(E.ParticipantConnected, (p) => ensureTile(p.identity, p.name || p.identity, false));
+  room.on(E.ParticipantDisconnected, (p) => removeParticipant(p.identity));
+  room.on(E.ActiveSpeakersChanged, (speakers) => {
+    const ids = new Set(speakers.map((s) => s.isLocal ? "me" : lkTile(s.identity)));
+    $("videoGrid").querySelectorAll(".tile:not(.screen)").forEach((tl) => tl.classList.toggle("speaking", ids.has(tl.id.replace("tile-", ""))));
+  });
+  room.on(E.LocalTrackPublished, (pub) => {
+    if (pub.track.kind === "video") {
+      if (pub.source === "screen_share") addScreenTile("me", myName + " " + t("you_suffix"), pub.track);
+      else { const tile = ensureTile(profile.login, myName, true); pub.track.attach(tile.querySelector("video")); setTileAvatar("me", false); }
+    }
+  });
+  room.on(E.LocalTrackUnpublished, (pub) => {
+    if (pub.source === "screen_share") removeTile("screen-me");
+    else if (pub.track && pub.track.kind === "video") setTileAvatar("me", true);
+  });
+  room.on(E.ConnectionStateChanged, updateCallStatus);
+  room.on(E.Disconnected, () => { if (call.active) endCall(); });
+}
 
 $("startCallBtn").onclick = () => { if (!myRoom) return; call.active ? endCall() : joinCall(); };
 async function joinCall() {
-  ensureAudioCtx(); await iceReady;
-  try { await getLocalStream(); } catch (e) { if (!confirm(mediaErr(e) + t("viewer_join"))) return; }
-  call.active = true; $("callOverlay").classList.remove("hidden"); $("startCallBtn").classList.add("in-call"); hideToast(); updateCallCount();
-  $("callRoomLabel").textContent = curTitle;
-  $("toggleCam").classList.toggle("off", !call.camOn); $("toggleMic").classList.toggle("off", !call.micOn); $("noiseToggle").classList.toggle("on", call.ns);
+  ensureAudioCtx();
+  const { ok, data } = await api("/api/livekit/token?room=" + encodeURIComponent(myRoom), null, "GET");
+  if (!ok || !data.enabled) { alert(t("call_disabled")); return; }
+  const LK = window.LivekitClient;
+  if (!LK) { alert(t("call_disabled")); return; }
+  const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  call.room = room; call.active = true; wireRoom(room, LK);
+  $("callOverlay").classList.remove("hidden"); $("startCallBtn").classList.add("in-call"); hideToast();
+  $("callRoomLabel").textContent = curTitle; updateCallStatus();
+  ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
+  try {
+    await room.connect(data.url, data.token);
+    await room.localParticipant.setMicrophoneEnabled(true);
+    if (call.audioInId) await room.switchActiveDevice("audioinput", call.audioInId).catch(() => {});
+  } catch (e) { console.error("livekit connect", e); alert(t("err_media") + (e.message || "")); endCall(); return; }
+  call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
+  $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
+  $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
   populateDevices(); startKeepAlive(); updateCallStatus();
-  socket.emit("call-join", { title: curTitle });
+  socket.emit("call-join", { title: curTitle }); // ring others
 }
 function endCall() {
   if (call.active) socket.emit("call-leave");
-  for (const id of [...call.pcs.keys()]) removePeerConn(id);
-  if (call.localStream) { call.localStream.getTracks().forEach((t) => t.stop()); call.localStream = null; }
-  if (call.camTrack) { call.camTrack.stop(); call.camTrack = null; }
-  if (call.screenStream) { call.screenStream.getTracks().forEach((t) => t.stop()); call.screenStream = null; }
-  call.screenTrack = null; call.meStream = null;
-  $("videoGrid").innerHTML = ""; $("callOverlay").classList.add("hidden", "windowed"); $("callOverlay").classList.remove("windowed"); $("callOverlay").style.cssText = "";
+  if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
+  for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
+  $("videoGrid").innerHTML = "";
+  $("callOverlay").classList.remove("hidden", "windowed"); $("callOverlay").classList.add("hidden"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true });
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
@@ -575,89 +590,18 @@ function endCall() {
 }
 $("hangUp").onclick = endCall;
 
-// Сигналинг
-// Сессия звонка: обе стороны активны до обмена offer'ами (инициатор оффертит сам через onnegotiationneeded)
-socket.on("call-participants", (list) => { if (!call.active) return; list.forEach((p) => ensurePeer(p.id, p.name)); });
-socket.on("call-peer-joined", ({ id, name }) => { if (call.active) ensurePeer(id, name); });
-socket.on("call-peer-left", ({ id }) => removePeerConn(id));
+// Ringing (через Socket.IO + push) — медиа поднимает LiveKit
 socket.on("call-ring", (p) => { if (call.active) return; const kind = p.room.startsWith("@grp:") ? "group" : "dm"; showToast(p.from, p.name, { room: p.room, title: p.title, kind }); });
-socket.on("media", ({ from, kind, on }) => { if (!call.active) return; const st = call.pcs.get(from); if (!st) return; if (kind === "cam") { st.remoteCam = on; applyCamView(from, st); } else if (kind === "screen") { st.remoteScreen = on; applyScreenView(from, st); } });
-socket.on("signal", async ({ from, name, kind, data, restart }) => {
-  if (!call.active) return;
-  const st = ensurePeer(from, name); const pc = st.pc; if (!st.iceBuf) st.iceBuf = [];
-  try {
-    if (kind === "need-offer") { if (st.initiator) { if (restart) { try { pc.restartIce(); } catch {} } await makeOffer(st, from); } }
-    else if (kind === "desc") {
-      await pc.setRemoteDescription(data);
-      if (data.type === "offer") { await pc.setLocalDescription(); socket.emit("signal", { to: from, kind: "desc", data: pc.localDescription }); setBitrates(st); }
-      for (const c of st.iceBuf) { try { await pc.addIceCandidate(c); } catch {} } st.iceBuf = [];
-    } else if (kind === "ice") { if (!pc.remoteDescription) st.iceBuf.push(data); else { try { await pc.addIceCandidate(data); } catch (e) { console.warn("addIce", e.message); } } }
-  } catch (e) { console.error("signal", e); }
-});
 
-// Тайлы
-function addTile(id, name, stream, isMe) {
-  let tile = $("tile-" + id);
-  if (!tile) {
-    tile = document.createElement("div"); tile.id = "tile-" + id; tile.className = "tile show-avatar" + (isMe ? " me" : "");
-    const avLogin = isMe ? profile.login : (peers.get(id) || {}).login || "";
-    tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
-      `<div class="tile-avatar">${avLogin ? `<img src="${avaUrl(avLogin)}" onerror="this.style.display='none'">` : ""}<span>${initials(name)}</span></div>` +
-      `<div class="tile-name">${escapeHtml(name)}</div>` +
-      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
-    $("videoGrid").appendChild(tile); if (!isMe) wireTileControls(tile, id);
-  }
-  const v = tile.querySelector("video"); v.srcObject = stream; if (!isMe) { v.muted = false; applySinkId(v); v.play().catch(() => {}); }
-  updateCallCount(); return tile;
-}
-function removeTile(id) { const t = $("tile-" + id); if (t) t.remove(); }
-function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
-function applyCamView(peerId, st) { if ($("tile-" + peerId)) setTileAvatar(peerId, !st.remoteCam); }
-function applyScreenView(peerId, st) { if (st.remoteScreen && st.screenIn) addScreenTile(peerId, st.name, st.screenIn); else removeTile("screen-" + peerId); }
-function wireTileControls(tile, peerId) {
-  const muteBtn = tile.querySelector(".tctrl-mute"), vol = tile.querySelector(".tctrl-vol");
-  const applyVol = () => { const st = call.pcs.get(peerId); if (!st) return; const vid = tile.querySelector("video"); vid.muted = st.muted; vid.volume = st.muted ? 0 : Math.min(1, st.vol); };
-  vol.oninput = () => { const st = call.pcs.get(peerId); if (!st) return; st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } applyVol(); };
-  muteBtn.onclick = () => { const st = call.pcs.get(peerId); if (!st) return; st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); applyVol(); };
-}
-function updateCallCount() { $("callCount").textContent = (call.active ? 1 : 0) + call.pcs.size; }
-function addScreenTile(id, name, stream) {
-  let tile = $("tile-screen-" + id);
-  if (!tile) { tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen"; tile.innerHTML = `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video><div class="tile-name">🖥 ${escapeHtml(name)}</div>`; $("videoGrid").appendChild(tile); }
-  const v = tile.querySelector("video"); v.srcObject = stream; if (id !== "me") { v.muted = false; applySinkId(v); } v.play().catch(() => {});
-}
-
-// Контролы звонка
-$("toggleMic").onclick = () => { if (!call.localStream) return; call.micOn = !call.micOn; call.localStream.getAudioTracks().forEach((t) => (t.enabled = call.micOn)); $("toggleMic").classList.toggle("off", !call.micOn); $("toggleMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"]; };
-$("toggleCam").onclick = async () => {
-  if (!call.localStream) return; call.camOn = !call.camOn;
-  if (call.camOn) {
-    if (!call.camTrack) { try { const vs = await navigator.mediaDevices.getUserMedia({ video: LOW_VIDEO, audio: false }); call.camTrack = vs.getVideoTracks()[0]; } catch { call.camOn = false; } }
-    if (call.camTrack) { for (const st of call.pcs.values()) { try { await st.camTx.sender.replaceTrack(call.camTrack); setSenderBitrate(st.camTx.sender, 350000); } catch {} } if (!hasTrack(call.meStream, call.camTrack)) call.meStream.addTrack(call.camTrack); const mv = document.querySelector("#tile-me video"); if (mv) mv.srcObject = call.meStream; }
-  } else { for (const st of call.pcs.values()) { try { await st.camTx.sender.replaceTrack(null); } catch {} } if (call.camTrack) { call.meStream.removeTrack(call.camTrack); call.camTrack.stop(); call.camTrack = null; } }
-  $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
-  if (!call.sharing) setTileAvatar("me", !call.camOn);
-  socket.emit("media", { kind: "cam", on: call.camOn });
-};
-$("shareScreen").onclick = async () => {
-  if (!call.active) return; if (call.sharing) { await stopShare(); return; }
-  try { call.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: false }); } catch { return; }
-  call.screenTrack = call.screenStream.getVideoTracks()[0];
-  for (const st of call.pcs.values()) { try { await st.screenTx.sender.replaceTrack(call.screenTrack); setSenderBitrate(st.screenTx.sender, 1800000); } catch {} }
-  addScreenTile("me", myName + " " + t("you_suffix"), call.screenStream);
-  call.sharing = true; $("shareScreen").classList.add("active"); socket.emit("media", { kind: "screen", on: true });
-  call.screenTrack.onended = () => stopShare();
-};
-async function stopShare() {
-  for (const st of call.pcs.values()) { try { await st.screenTx.sender.replaceTrack(null); } catch {} }
-  if (call.screenStream) { call.screenStream.getTracks().forEach((t) => t.stop()); call.screenStream = null; } call.screenTrack = null;
-  removeTile("screen-me"); call.sharing = false; $("shareScreen").classList.remove("active"); socket.emit("media", { kind: "screen", on: false });
-}
+// Контролы
+$("toggleMic").onclick = async () => { if (!call.room) return; call.micOn = !call.micOn; try { await call.room.localParticipant.setMicrophoneEnabled(call.micOn); } catch {} $("toggleMic").classList.toggle("off", !call.micOn); $("toggleMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"]; };
+$("toggleCam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; try { await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); if (call.camOn && call.audioInId) {} } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
+$("shareScreen").onclick = async () => { if (!call.room) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
 
 // Дропдаун микрофона + устройства
 $("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
-$("toggleNoise").onclick = async (e) => { e.stopPropagation(); if (!call.localStream) return; call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); try { for (const tr of call.localStream.getAudioTracks()) await tr.applyConstraints({ echoCancellation: call.ns, noiseSuppression: call.ns, autoGainControl: call.ns }); } catch {} };
+$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); }; // LiveKit применяет шумодав при захвате; тоггл — для следующего включения
 function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
 async function populateDevices() {
   try {
@@ -668,11 +612,8 @@ async function populateDevices() {
     if (!("setSinkId" in HTMLMediaElement.prototype)) { spk.style.display = "none"; if (spk.previousElementSibling) spk.previousElementSibling.style.display = "none"; }
   } catch {}
 }
-$("micSelect").onchange = async () => {
-  call.audioInId = $("micSelect").value; if (!call.localStream) return;
-  try { const s = await navigator.mediaDevices.getUserMedia({ audio: { ...NS_AUDIO, deviceId: { exact: call.audioInId } }, video: false }); const nt = s.getAudioTracks()[0]; nt.enabled = call.micOn; for (const st of call.pcs.values()) { try { await st.audioTx.sender.replaceTrack(nt); } catch {} } const old = call.localStream.getAudioTracks()[0]; if (old) { call.localStream.removeTrack(old); old.stop(); } call.localStream.addTrack(nt); } catch (e) { console.error("mic", e.message); }
-};
-$("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; document.querySelectorAll("#videoGrid video").forEach(applySinkId); };
+$("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } };
+$("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
 // Оконный режим
 $("windowToggle").onclick = () => { const o = $("callOverlay"); if (o.classList.toggle("windowed")) { o.style.right = "24px"; o.style.bottom = "24px"; } else o.style.cssText = ""; };
@@ -681,7 +622,7 @@ $("callTopbar").addEventListener("pointerdown", (e) => { const o = $("callOverla
 $("callTopbar").addEventListener("pointermove", (e) => { if (!dragState) return; const o = $("callOverlay"); o.style.left = Math.max(0, Math.min(innerWidth - o.offsetWidth, e.clientX - dragState.dx)) + "px"; o.style.top = Math.max(0, Math.min(innerHeight - o.offsetHeight, e.clientY - dragState.dy)) + "px"; o.style.right = "auto"; o.style.bottom = "auto"; });
 $("callTopbar").addEventListener("pointerup", () => (dragState = null));
 
-// Keep-alive (не глушить звонок в фоне) — §7.9
+// Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
 function startKeepAlive() {
   const ctx = ensureAudioCtx();

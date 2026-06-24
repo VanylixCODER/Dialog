@@ -8,6 +8,7 @@ import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
 import webpush from "web-push";
+import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction,
@@ -219,6 +220,30 @@ app.get("/api/gif", async (req, res) => {
   } catch (e) { console.error("gif", e.message); res.json({ results: [], error: true }); }
 });
 
+// ---------- REST: LiveKit (SFU) токен ----------
+const LK_URL = process.env.LIVEKIT_URL || "";
+const LK_KEY = process.env.LIVEKIT_API_KEY || "";
+const LK_SECRET = process.env.LIVEKIT_API_SECRET || "";
+const lkOn = !!(LK_URL && LK_KEY && LK_SECRET);
+const lkRoom = (room) => "d_" + Buffer.from(room).toString("base64url"); // валидное имя комнаты для LiveKit
+async function lkToken(login, name, room) {
+  const at = new AccessToken(LK_KEY, LK_SECRET, { identity: login, name, ttl: "2h" });
+  at.addGrant({ roomJoin: true, room: lkRoom(room), canPublish: true, canSubscribe: true });
+  return at.toJwt();
+}
+app.get("/api/livekit/token", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    if (!lkOn) return res.json({ enabled: false });
+    const room = String(req.query.room || "");
+    // доступ к приватным комнатам — как в join
+    if (room.startsWith("@dm:")) { if (!room.slice(4).split("~").includes(me.login)) return res.status(403).json({ error: "no access" }); }
+    else if (room.startsWith("@grp:")) { const g = room.slice(5); if (!/^\d+$/.test(g) || !(await isGroupMember(g, me.login))) return res.status(403).json({ error: "no access" }); }
+    else return res.status(400).json({ error: "bad room" });
+    res.json({ enabled: true, url: LK_URL, token: await lkToken(me.login, me.name, room) });
+  } catch (e) { console.error("lk token", e.message); res.status(500).json({ error: "server error" }); }
+});
+
 // ---------- REST: Web Push ----------
 app.get("/api/push/key", (req, res) => res.json({ key: pushOn ? VAPID_PUBLIC : "" }));
 app.post("/api/push/subscribe", async (req, res) => {
@@ -356,43 +381,24 @@ io.on("connection", (socket) => {
     try { const r = await toggleReaction(id, userLogin, e, currentRoom); if (r) io.to(currentRoom).emit("msg-reaction", { id, reactions: r.reactions }); } catch (err) { console.error("react", err.message); }
   });
 
-  // WebRTC сигналинг (адресно по socketId)
-  socket.on("signal", ({ to, kind, data, restart }) => io.to(to).emit("signal", { from: socket.id, name: userName, kind, data, restart }));
-  // Состояние медиа (камера/экран) — надёжный сигнал вместо track.unmute
-  socket.on("media", ({ to, kind, on }) => {
-    const payload = { from: socket.id, kind, on: !!on };
-    if (to) io.to(to).emit("media", payload); else if (currentRoom) socket.to(currentRoom).emit("media", payload);
-  });
-
-  // ----- Сессия звонка (надёжный mesh без гонок) -----
-  // Вступление в звонок: обе стороны гарантированно активны до обмена offer'ами.
-  function callLeave() {
-    if (!currentRoom) return;
-    const c = callRooms.get(currentRoom);
-    if (c && c.delete(socket.id)) { if (!c.size) callRooms.delete(currentRoom); socket.to(currentRoom).emit("call-peer-left", { id: socket.id }); }
-  }
+  // ----- Звонок: только ringing (медиа — через LiveKit SFU) -----
+  function callLeave() { if (!currentRoom) return; const c = callRooms.get(currentRoom); if (c) { c.delete(socket.id); if (!c.size) callRooms.delete(currentRoom); } }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
     const wasEmpty = c.size === 0;
-    // список уже находящихся в звонке (для меша) — отдаём вступающему
-    const participants = [...c.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, name: v.name }));
     c.set(socket.id, { name: userName, login: userLogin });
-    socket.emit("call-participants", participants);
-    socket.to(currentRoom).emit("call-peer-joined", { id: socket.id, name: userName });
-    // звоним остальным членам комнаты (тост + push), только когда звонок инициируется
-    if (wasEmpty) {
-      const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
-      let recips = [];
-      try {
-        if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
-        else if (currentRoom.startsWith("@dm:")) recips = currentRoom.slice(4).split("~");
-      } catch {}
-      for (const login of recips) {
-        if (login === userLogin) continue;
-        notifyUser(login, "call-ring", payload);
-        sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom });
-      }
+    if (!wasEmpty) return; // звонок уже идёт — звонить не нужно
+    const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
+    let recips = [];
+    try {
+      if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
+      else if (currentRoom.startsWith("@dm:")) recips = currentRoom.slice(4).split("~");
+    } catch {}
+    for (const login of recips) {
+      if (login === userLogin) continue;
+      notifyUser(login, "call-ring", payload);
+      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom });
     }
   });
   socket.on("call-leave", () => callLeave());
