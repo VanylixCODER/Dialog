@@ -63,6 +63,8 @@ const I18N = {
     gif_search: "Search GIPHY", gif_nokey: "GIFs are off (no GIPHY_KEY on server)",
     noise_suppression: "Noise suppression (Krisp-like)",
     call_waiting: "Waiting…", call_connecting: "Connecting…", call_connected: "Connected", call_disconnected: "Disconnected",
+    edit: "Edit", delete_msg: "Delete", react: "React", edited: "edited",
+    confirm_delete: "Delete this message?", edit_hint: "Enter — save · Esc — cancel",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -127,6 +129,8 @@ const I18N = {
     gif_search: "Искать GIF в GIPHY", gif_nokey: "GIF выключены (нет GIPHY_KEY на сервере)",
     noise_suppression: "Шумодав (как Krisp)",
     call_waiting: "Ожидание…", call_connecting: "Подключение…", call_connected: "Подключено", call_disconnected: "Отключение…",
+    edit: "Изменить", delete_msg: "Удалить", react: "Реакция", edited: "изменено",
+    confirm_delete: "Удалить это сообщение?", edit_hint: "Enter — сохранить · Esc — отмена",
   },
 };
 

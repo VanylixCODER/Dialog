@@ -76,6 +76,8 @@ export async function initSchema() {
       KEY idx_messages_room (room, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  try { await pool.query("ALTER TABLE messages ADD COLUMN reactions TEXT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE messages ADD COLUMN edited TINYINT NOT NULL DEFAULT 0"); } catch {}
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       token       VARCHAR(64) PRIMARY KEY,
@@ -255,14 +257,45 @@ export async function recentMessages(room, limit = 100) {
 
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100)); // безопасный целый LIMIT
   const rows = await query(
-    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName
+    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited
      FROM messages WHERE room = ? ORDER BY id DESC LIMIT ${lim}`,
     [room]
   );
   rows.reverse();
+  rows.forEach((r) => { try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; } r.edited = !!r.edited; });
   const json = JSON.stringify(rows);
   if (json.length < HIST_MAX_CACHE) await cacheSet("hist:" + room, json, HIST_TTL);
   return rows;
+}
+
+// Удаление своего сообщения. Возвращает room при успехе.
+export async function deleteMessage(id, login) {
+  const rows = await query("SELECT room FROM messages WHERE id=? AND from_login=?", [id, login]);
+  if (!rows.length) return null;
+  await execute("DELETE FROM messages WHERE id=?", [id]);
+  await cacheDel("hist:" + rows[0].room);
+  return rows[0].room;
+}
+// Редактирование своего текстового сообщения. Возвращает room при успехе.
+export async function editMessage(id, login, text) {
+  const rows = await query("SELECT room FROM messages WHERE id=? AND from_login=? AND type='text'", [id, login]);
+  if (!rows.length) return null;
+  await execute("UPDATE messages SET text=?, edited=1 WHERE id=?", [text, id]);
+  await cacheDel("hist:" + rows[0].room);
+  return rows[0].room;
+}
+// Тоггл реакции. Возвращает {room, reactions} или null.
+export async function toggleReaction(id, login, emoji, room) {
+  const rows = await query("SELECT room, reactions FROM messages WHERE id=?", [id]);
+  if (!rows.length || rows[0].room !== room) return null;
+  let r = {}; try { r = JSON.parse(rows[0].reactions || "{}"); } catch {}
+  const arr = r[emoji] || [];
+  const i = arr.indexOf(login);
+  if (i === -1) arr.push(login); else arr.splice(i, 1);
+  if (arr.length) r[emoji] = arr; else delete r[emoji];
+  await execute("UPDATE messages SET reactions=? WHERE id=?", [JSON.stringify(r), id]);
+  await cacheDel("hist:" + rows[0].room);
+  return { room: rows[0].room, reactions: r };
 }
 
 // Проверка доступности БД с ретраями (контейнер мог ещё подниматься).
