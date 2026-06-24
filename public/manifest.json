@@ -1,7 +1,7 @@
 {
   "name": "Dialog",
   "short_name": "Dialog",
-  "description": "Chat · Group video calls · Screen share",
+  "description": "Chat · Group calls · Screen share",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

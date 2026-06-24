@@ -1,32 +1,24 @@
+# Локальная разработка: MySQL 8 + Redis 7.
+# Запуск: docker compose up -d, затем npm run dev.
 services:
-  db:
+  mysql:
     image: mysql:8
     container_name: dialog-mysql
     environment:
+      MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: dialog
       MYSQL_USER: dialog
       MYSQL_PASSWORD: dialog
-      MYSQL_ROOT_PASSWORD: rootpass
     ports:
       - "3306:3306"
     volumes:
-      - dialog_mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-udialog", "-pdialog"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - dialog-mysql-data:/var/lib/mysql
 
   redis:
     image: redis:7-alpine
     container_name: dialog-redis
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
 volumes:
-  dialog_mysql_data:
+  dialog-mysql-data:

@@ -1,48 +1,31 @@
-// Service worker — Web Push уведомления (звонки и сообщения)
+// Service worker — Web Push (звонки и сообщения), даже при закрытом приложении.
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
-  let data = {};
-  try { data = event.data.json(); } catch {}
+  let data = {}; try { data = event.data.json(); } catch {}
   const isCall = data.kind === "call";
-  const title = data.title || "Dialog";
   const opts = {
-    body: data.body || "",
-    icon: "/icon.svg",
-    badge: "/icon.svg",
-    tag: (isCall ? "call:" : "msg:") + (data.room || ""),
-    renotify: true,
-    requireInteraction: isCall,
-    silent: false,
-    vibrate: isCall ? [400, 200, 400, 200, 400, 200, 400] : [120],
-    actions: isCall
-      ? [{ action: "accept", title: "✅ Принять" }, { action: "decline", title: "✖ Отклонить" }]
-      : [],
+    body: data.body || "", icon: "/icon.svg", badge: "/icon.svg",
+    tag: (isCall ? "call:" : "msg:") + (data.room || ""), renotify: true,
+    requireInteraction: isCall, vibrate: isCall ? [400, 200, 400, 200, 400] : [120],
+    actions: isCall ? [{ action: "accept", title: "✅ Принять" }, { action: "decline", title: "✖ Отклонить" }] : [],
     data: { room: data.room || "", kind: data.kind || "msg" },
   };
   event.waitUntil((async () => {
-    // если приложение открыто и видно — не дублируем (in-app поп-ап сам покажет)
     const cls = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    if (!isCall && cls.some((c) => c.focused || c.visibilityState === "visible")) return;
-    return self.registration.showNotification(title, opts);
+    if (!isCall && cls.some((c) => c.focused || c.visibilityState === "visible")) return; // не дублируем в фокусе
+    return self.registration.showNotification(data.title || "Dialog", opts);
   })());
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const data = event.notification.data || {};
-  if (event.action === "decline") return; // просто закрыть
-  const room = data.room || "";
-  const autojoin = data.kind === "call";
+  if (event.action === "decline") return;
+  const d = event.notification.data || {}, autojoin = d.kind === "call";
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const c of all) {
-      if ("focus" in c) { c.postMessage({ type: "open-room", room, autojoin }); return c.focus(); }
-    }
-    if (self.clients.openWindow) {
-      const url = "/?room=" + encodeURIComponent(room) + (autojoin ? "&autojoin=1" : "");
-      return self.clients.openWindow(url);
-    }
+    for (const c of all) if ("focus" in c) { c.postMessage({ type: "open-room", room: d.room, autojoin }); return c.focus(); }
+    if (self.clients.openWindow) return self.clients.openWindow("/?room=" + encodeURIComponent(d.room || "") + (autojoin ? "&autojoin=1" : ""));
   })());
 });
