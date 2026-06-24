@@ -27,5 +27,7 @@
     volumeMute: s('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/>'),
     stop: s('<rect x="6" y="6" width="12" height="12" rx="2"/>'),
     trash: s('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+    headphones: s('<path d="M3 18v-5a9 9 0 0 1 18 0v5"/><path d="M21 19a2 2 0 0 1-2 2h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3zM3 19a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H3z"/>'),
+    headphonesOff: s('<path d="M3 18v-5a9 9 0 0 1 13.5-7.8"/><path d="M7 14H3v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1z"/><path d="M21 19v-6a9 9 0 0 0-.5-3"/><path d="M21 14h-3v6a1 1 0 0 0 .3.7"/><line x1="2" y1="2" x2="22" y2="22"/>'),
   };
 })();

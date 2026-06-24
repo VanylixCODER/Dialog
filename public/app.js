@@ -476,7 +476,7 @@ async function loadGifs(q) {
 document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn")) gifPanel.classList.add("hidden"); });
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, micOn: true, camOn: false, sharing: false, ns: true, audioInId: null, audioOutId: null };
+const call = { active: false, room: null, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
 const audioEls = new Map(); // identity -> <audio> (звук участника)
 
 function lkTile(identity) { return "p-" + identity.replace(/[^a-zA-Z0-9_]/g, ""); }
@@ -522,7 +522,8 @@ function attachTrack(track, pub, participant) {
     else { const tile = ensureTile(identity, name, false); track.attach(tile.querySelector("video")); setTileAvatar(lkTile(identity), false); }
   } else if (track.kind === "audio") {
     let a = audioEls.get(identity); if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(identity, a); }
-    track.attach(a); applySinkId(a);
+    track.attach(a); applySinkId(a); a.muted = call.deaf;
+    setMicIndicator(lkTile(identity), pub.isMuted);
   }
 }
 function detachTrack(track, pub, participant) {
@@ -550,8 +551,17 @@ function wireRoom(room, LK) {
     if (pub.source === "screen_share") removeTile("screen-me");
     else if (pub.track && pub.track.kind === "video") setTileAvatar("me", true);
   });
+  // Индикатор «микрофон выключен» у участников
+  room.on(E.TrackMuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), true); });
+  room.on(E.TrackUnmuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), false); });
   room.on(E.ConnectionStateChanged, updateCallStatus);
   room.on(E.Disconnected, () => { if (call.active) endCall(); });
+}
+function setMicIndicator(tileId, muted) {
+  const tile = $("tile-" + tileId); if (!tile) return;
+  let ind = tile.querySelector(".tile-mic");
+  if (muted) { if (!ind) { ind = document.createElement("div"); ind.className = "tile-mic"; ind.innerHTML = window.ICON.micOff; tile.appendChild(ind); } }
+  else if (ind) ind.remove();
 }
 
 $("startCallBtn").onclick = () => { if (!myRoom) return; call.active ? endCall() : joinCall(); };
@@ -570,12 +580,14 @@ async function joinCall() {
     await room.connect(data.url, data.token);
     await room.localParticipant.setMicrophoneEnabled(true);
     if (call.audioInId) await room.switchActiveDevice("audioinput", call.audioInId).catch(() => {});
+    applyNoiseFilter(true); // усиленный шумодав по умолчанию
     // показать уже присутствующих участников (для них ParticipantConnected не приходит)
     const parts = room.remoteParticipants || room.participants;
     parts && parts.forEach((p) => {
       ensureTile(p.identity, p.name || p.identity, false);
       const pubs = p.trackPublications || p.tracks;
       pubs && pubs.forEach((pub) => { if (pub.track) attachTrack(pub.track, pub, p); });
+      if (!p.isMicrophoneEnabled) setMicIndicator(lkTile(p.identity), true);
     });
   } catch (e) { console.error("livekit connect", e); alert(t("err_media") + (e.message || "")); endCall(); return; }
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
@@ -591,9 +603,10 @@ function endCall() {
   $("videoGrid").innerHTML = "";
   $("callOverlay").classList.remove("hidden", "windowed"); $("callOverlay").classList.add("hidden"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
-  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true });
-  $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
-  $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("callStatus").textContent = "";
+  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true });
+  krispNode = null;
+  $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
+  $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive();
 }
 $("hangUp").onclick = endCall;
@@ -602,14 +615,46 @@ $("hangUp").onclick = endCall;
 socket.on("call-ring", (p) => { if (call.active) return; const kind = p.room.startsWith("@grp:") ? "group" : "dm"; showToast(p.from, p.name, { room: p.room, title: p.title, kind }); });
 
 // Контролы
-$("toggleMic").onclick = async () => { if (!call.room) return; call.micOn = !call.micOn; try { await call.room.localParticipant.setMicrophoneEnabled(call.micOn); } catch {} $("toggleMic").classList.toggle("off", !call.micOn); $("toggleMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"]; };
+async function setMic(on) {
+  call.micOn = on;
+  try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {}
+  $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
+  setMicIndicator("me", !on);
+}
+$("toggleMic").onclick = () => { if (!call.room) return; setMic(!call.micOn); };
+// Заглушить наушники (deafen) — глушим входящий звук; по-дискордовски выключаем и свой микрофон
+$("toggleDeafen").onclick = () => {
+  if (!call.room) return;
+  call.deaf = !call.deaf;
+  audioEls.forEach((a) => (a.muted = call.deaf));
+  $("toggleDeafen").classList.toggle("off", call.deaf);
+  $("toggleDeafen").innerHTML = window.ICON[call.deaf ? "headphonesOff" : "headphones"];
+  if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false); }
+  else if (call.micWasOn) setMic(true);
+};
 $("toggleCam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; try { await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); if (call.camOn && call.audioInId) {} } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
 $("shareScreen").onclick = async () => { if (!call.room) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
 
 // Дропдаун микрофона + устройства
 $("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
-$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); }; // LiveKit применяет шумодав при захвате; тоггл — для следующего включения
+$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); applyNoiseFilter(call.ns); };
+// Усиленный шумодав Krisp (LiveKit Cloud). Грузим по требованию; при неудаче остаётся браузерный NS.
+let krispMod = null, krispNode = null;
+async function applyNoiseFilter(on) {
+  if (!call.room || !window.LivekitClient) return;
+  const pub = call.room.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Microphone);
+  const track = pub && pub.track; if (!track) return;
+  try {
+    if (on) {
+      if (!krispMod) krispMod = await import("https://esm.sh/@livekit/krisp-noise-filter");
+      if (krispMod.isKrispNoiseFilterSupported && !krispMod.isKrispNoiseFilterSupported()) { console.log("krisp unsupported — браузерный NS"); return; }
+      if (!krispNode) krispNode = krispMod.KrispNoiseFilter();
+      await track.setProcessor(krispNode);
+      console.log("Krisp шумодав включён");
+    } else if (track.stopProcessor) { await track.stopProcessor().catch(() => {}); }
+  } catch (e) { console.log("krisp:", e.message); }
+}
 function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
 async function populateDevices() {
   try {
@@ -623,12 +668,8 @@ async function populateDevices() {
 $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } };
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
-// Оконный режим
-$("windowToggle").onclick = () => { const o = $("callOverlay"); if (o.classList.toggle("windowed")) { o.style.right = "24px"; o.style.bottom = "24px"; } else o.style.cssText = ""; };
-let dragState = null;
-$("callTopbar").addEventListener("pointerdown", (e) => { const o = $("callOverlay"); if (!o.classList.contains("windowed") || e.target.closest("button")) return; const r = o.getBoundingClientRect(); dragState = { dx: e.clientX - r.left, dy: e.clientY - r.top }; $("callTopbar").setPointerCapture(e.pointerId); });
-$("callTopbar").addEventListener("pointermove", (e) => { if (!dragState) return; const o = $("callOverlay"); o.style.left = Math.max(0, Math.min(innerWidth - o.offsetWidth, e.clientX - dragState.dx)) + "px"; o.style.top = Math.max(0, Math.min(innerHeight - o.offsetHeight, e.clientY - dragState.dy)) + "px"; o.style.right = "auto"; o.style.bottom = "auto"; });
-$("callTopbar").addEventListener("pointerup", () => (dragState = null));
+// Свернуть/развернуть звонок (докнутая колонка ↔ полный экран)
+$("windowToggle").onclick = () => { $("callOverlay").classList.toggle("windowed"); $("callOverlay").style.cssText = ""; };
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
@@ -718,7 +759,7 @@ function notify(text) { let el = $("notifyToast"); if (!el) { el = document.crea
 
 // ---------- Иконки ----------
 function setIcons() {
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phoneOff", windowToggle: "window", newChatCancel: "close", profileCancel: "close", toastJoin: "phone", toastClose: "phone", infoClose: "close", contactsCancel: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", windowToggle: "window", newChatCancel: "close", profileCancel: "close", toastJoin: "phone", toastClose: "phone", infoClose: "close", contactsCancel: "close", mpCancel: "close" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
