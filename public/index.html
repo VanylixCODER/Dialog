@@ -230,16 +230,20 @@
     </div>
   </div>
 
-  <!-- Входящий звонок -->
-  <div id="callToast" class="call-toast hidden">
+  <!-- Входящий звонок (полноэкранный поп-ап) -->
+  <div id="callToast" class="call-incoming hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
-    <div class="avatar" id="toastAvatar">?</div>
-    <div class="toast-body">
-      <div class="toast-name" id="toastName">—</div>
-      <div class="toast-sub" data-i18n="toast_started">incoming call</div>
+    <div class="ci-card">
+      <div class="ci-ava-wrap">
+        <div class="avatar ci-ava" id="toastAvatar">?</div>
+      </div>
+      <div class="ci-name" id="toastName">—</div>
+      <div class="ci-sub" id="toastSub" data-i18n="toast_started">incoming call</div>
+      <div class="ci-actions">
+        <button class="ci-btn decline" id="toastClose" data-i18n-title="t_hangup" title="Decline"></button>
+        <button class="ci-btn accept" id="toastJoin" data-i18n-title="toast_join" title="Accept"></button>
+      </div>
     </div>
-    <button class="toast-join" id="toastJoin" data-i18n="toast_join">Accept</button>
-    <button class="toast-close" id="toastClose">✕</button>
   </div>
 
   <!-- Мини-профиль -->

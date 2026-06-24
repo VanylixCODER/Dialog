@@ -473,30 +473,49 @@ input, textarea, button { caret-color: var(--green); }
 }
 .call-btn.end:hover { background: #ff6666; box-shadow: 0 0 12px rgba(255,68,68,0.4); transform: scale(1.08); }
 
-/* ---------- Call toast ---------- */
-.call-toast {
-  position: fixed; top: 24px; right: 24px; z-index: 260;
-  display: flex; align-items: center; gap: 12px;
-  background: var(--bg-3); border: 1px solid var(--border-strong);
-  border-radius: 2px; padding: 13px 15px; box-shadow: var(--glow-soft);
-  animation: slideIn 0.3s ease;
-  overflow: hidden; min-width: 290px; min-height: 72px;
+/* ---------- Входящий звонок: полноэкранный поп-ап ---------- */
+.call-incoming {
+  position: fixed; inset: 0; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 4, 0, 0.92); backdrop-filter: blur(10px) saturate(130%);
+  animation: ciFade 0.25s ease;
 }
-@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-.cava { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.9; }
-.call-toast > .avatar, .call-toast > .toast-body, .call-toast > .toast-join, .call-toast > .toast-close { position: relative; z-index: 1; }
-.toast-body { margin-right: 6px; }
-.toast-name { font-weight: 700; font-size: 14px; color: var(--green); }
-.toast-sub { color: var(--text-dim); font-size: 11px; }
-.toast-join {
-  border: 1px solid var(--green); cursor: pointer; background: transparent; color: var(--green);
-  font-family: inherit; font-weight: 700; padding: 8px 14px; border-radius: 2px; font-size: 13px; text-transform: uppercase;
-  animation: pulse 1.6s ease-in-out infinite;
+@keyframes ciFade { from { opacity: 0; } to { opacity: 1; } }
+.cava { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5; }
+.ci-card {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 40px 32px calc(40px + env(safe-area-inset-bottom));
+  text-align: center; width: 100%; max-width: 420px;
 }
-.toast-join:hover { background: var(--green); color: #001a08; }
-.toast-close { border: none; cursor: pointer; background: transparent; color: var(--text-dim); font-size: 16px; padding: 4px; }
-.toast-close:hover { color: var(--green); }
-@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,90,0.5);} 50% { box-shadow: 0 0 0 12px rgba(0,255,90,0);} }
+.ci-ava-wrap { position: relative; margin-bottom: 12px; }
+.ci-ava-wrap::before, .ci-ava-wrap::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid var(--green); animation: ciRing 1.8s ease-out infinite;
+}
+.ci-ava-wrap::after { animation-delay: 0.9s; }
+@keyframes ciRing { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.8); opacity: 0; } }
+.ci-ava {
+  width: 120px; height: 120px; font-size: 48px; position: relative; z-index: 1;
+  border: 3px solid var(--green); box-shadow: var(--glow);
+}
+.ci-ava img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.ci-name { font-weight: 700; font-size: 24px; color: var(--green); text-shadow: var(--glow); letter-spacing: 1px; }
+.ci-sub { color: var(--text-dim); font-size: 13px; text-transform: uppercase; letter-spacing: 2px; animation: ciBlink 1.4s ease-in-out infinite; }
+@keyframes ciBlink { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+.ci-actions { display: flex; gap: 64px; margin-top: 36px; }
+.ci-btn {
+  width: 68px; height: 68px; border-radius: 50%; border: none; cursor: pointer;
+  display: grid; place-items: center; color: #fff;
+  transition: transform 0.12s, box-shadow 0.2s;
+}
+.ci-btn svg { width: 28px; height: 28px; }
+.ci-btn.accept { background: var(--green); color: #001a08; animation: ciPulse 1.2s ease-in-out infinite; }
+.ci-btn.accept:hover { transform: scale(1.1); }
+.ci-btn.decline { background: var(--danger); }
+.ci-btn.decline:hover { transform: scale(1.1); box-shadow: 0 0 16px rgba(255,68,68,0.5); }
+.ci-btn.decline svg { transform: rotate(135deg); }
+@keyframes ciPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,90,0.5); } 50% { box-shadow: 0 0 0 18px rgba(0,255,90,0); } }
 
 /* ---------- Индикатор соединения ---------- */
 .conn-status {

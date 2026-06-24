@@ -9,6 +9,7 @@ const peers = new Map();   // id -> {name, login}
 const presence = new Map(); // login -> 'online'|'dnd'|'offline'
 let myStatus = "online", myDesc = "";
 const $ = (id) => document.getElementById(id);
+const isDnd = () => myStatus === "dnd"; // «не беспокоить»: глушим звонки, звуки и уведомления
 const FORCE_RELAY = new URLSearchParams(location.search).has("relay");
 let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 let iceReady = fetch("/api/ice").then(r => r.json()).then(c => {
@@ -328,7 +329,7 @@ function notify(text) {
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
   c.ts = Date.now();
-  if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room)) { sfx.msg(); notify(t("dm_ping", { name: fromName })); } }
+  if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { sfx.msg(); notify(t("dm_ping", { name: fromName })); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
 
@@ -608,7 +609,7 @@ socket.on("message", (m) => {
   const c = chats.get(myRoom);
   if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
   const mine = profile && m.fromLogin === profile.login;
-  if (!mine) { if (ping) sfx.call(); else if (!isMuted(myRoom)) sfx.msg(); }
+  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) sfx.msg(); }
 });
 function isPingForMe(m) {
   if (m.type !== "text" || !profile) return false;
@@ -1311,11 +1312,17 @@ function stopCava() { cancelAnimationFrame(ring.raf); ring.raf = 0; const c = $(
 // --- Тост входящего звонка ---
 let toastTimer, pendingCall = null;
 function showToast(from, name, ctx) {
+  if (isDnd()) return; // «не беспокоить» — входящие звонки не показываем и не звоним
   pendingCall = ctx || null;
   $("toastName").textContent = name;
-  $("toastAvatar").textContent = initials(name);
-  const sub = $("callToast").querySelector(".toast-sub");
-  if (sub) sub.textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
+  // аватар звонящего (для ЛС вычисляем логин), иначе инициалы
+  const ava = $("toastAvatar");
+  let callerLogin = "";
+  if (ctx && ctx.room && ctx.room.startsWith("@dm:")) callerLogin = ctx.room.slice(4).split("~").find((l) => l !== profile.login) || "";
+  ava.innerHTML = callerLogin
+    ? `<img src="${avaUrl(callerLogin)}" alt="" onerror="this.remove()"><span>${initials(name)}</span>`
+    : `<span>${initials(name)}</span>`;
+  $("toastSub").textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
   $("callToast").classList.remove("hidden");
   startRingtone();
   clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 60000);
@@ -1389,7 +1396,7 @@ function setIcons() {
     newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users",
     toggleMic: "mic", toggleCam: "camera", shareScreen: "monitor", hangUp: "phoneOff",
     windowToggle: "window", newChatCancel: "close", profileCancel: "close",
-    toastClose: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close",
+    toastJoin: "phone", toastClose: "phone", infoClose: "close", contactsCancel: "close", mpCancel: "close",
   };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
 }
