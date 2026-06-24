@@ -105,6 +105,7 @@ function enterApp() {
   loadMe();
   refreshPresence();
   if (!window._presInt) window._presInt = setInterval(refreshPresence, 25000);
+  initPush();
 }
 function onAuthSuccess({ token: tk, profile: p }) {
   token = tk; profile = p;
@@ -1019,6 +1020,7 @@ async function joinCall() {
   $("toggleCam").classList.toggle("off", !call.camOn);
   $("toggleMic").classList.toggle("off", !call.micOn);
   $("noiseToggle").classList.toggle("on", call.ns);
+  populateDevices();
   updateCallStatus();
   socket.emit("call-invite", { title: curTitle });
 }
@@ -1039,8 +1041,52 @@ function endCall() {
   $("callStatus").textContent = "";
 }
 // Микрофон дропдаун (Discord-стиль)
-$("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); };
+$("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if (!$("micDropdown").classList.contains("hidden")) populateDevices(); };
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
+
+// ---- Выбор устройств ввода (микрофон) и вывода (динамик) ----
+function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
+async function populateDevices() {
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const fill = (sel, kind, cur, label) => {
+      sel.innerHTML = "";
+      devs.filter((d) => d.kind === kind).forEach((d, i) => {
+        const o = document.createElement("option");
+        o.value = d.deviceId; o.textContent = d.label || label + " " + (i + 1);
+        if (d.deviceId === cur) o.selected = true;
+        sel.appendChild(o);
+      });
+    };
+    fill($("micSelect"), "audioinput", call.audioInId, "Mic");
+    const spk = $("spkSelect");
+    fill(spk, "audiooutput", call.audioOutId, "Speaker");
+    // setSinkId не везде поддержан (iOS Safari) — прячем выбор динамика
+    if (!("setSinkId" in HTMLMediaElement.prototype)) {
+      spk.style.display = "none";
+      if (spk.previousElementSibling) spk.previousElementSibling.style.display = "none";
+    }
+  } catch {}
+}
+if (navigator.mediaDevices) navigator.mediaDevices.addEventListener?.("devicechange", () => { if (call.active) populateDevices(); });
+$("micSelect").onchange = async () => {
+  call.audioInId = $("micSelect").value;
+  if (!call.localStream) return;
+  try {
+    const audio = { ...NS_AUDIO, echoCancellation: call.ns, noiseSuppression: call.ns, autoGainControl: call.ns, deviceId: { exact: call.audioInId } };
+    const s = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+    const newTrack = s.getAudioTracks()[0]; newTrack.enabled = call.micOn;
+    for (const st of call.pcs.values()) { try { await st.audioTx.sender.replaceTrack(newTrack); } catch {} }
+    const old = call.localStream.getAudioTracks()[0];
+    if (old) { call.localStream.removeTrack(old); old.stop(); }
+    call.localStream.addTrack(newTrack);
+    if (call.meStream) { call.meStream.getAudioTracks().forEach((tr) => call.meStream.removeTrack(tr)); }
+  } catch (e) { console.error("mic switch", e.message); }
+};
+$("spkSelect").onchange = () => {
+  call.audioOutId = $("spkSelect").value;
+  document.querySelectorAll("#videoGrid video").forEach(applySinkId);
+};
 // Шумодав
 $("toggleNoise").onclick = async (e) => {
   e.stopPropagation();
@@ -1109,7 +1155,7 @@ function addTile(id, name, stream, isMe) {
   }
   const v = tile.querySelector("video");
   v.srcObject = stream;
-  if (!isMe) { v.muted = false; v.play().catch(() => {}); } // звук собеседника играет через сам элемент
+  if (!isMe) { v.muted = false; applySinkId(v); v.play().catch(() => {}); } // звук собеседника играет через сам элемент
   updateCallCount();
   return tile;
 }
@@ -1177,7 +1223,7 @@ function addScreenTile(id, name, stream) {
     $("videoGrid").appendChild(tile);
   }
   const v = tile.querySelector("video");
-  v.srcObject = stream; if (id !== "me") { v.muted = false; } v.play().catch(() => {});
+  v.srcObject = stream; if (id !== "me") { v.muted = false; applySinkId(v); } v.play().catch(() => {});
   updateCallCount();
 }
 $("shareScreen").onclick = async () => {
@@ -1281,6 +1327,53 @@ $("toastJoin").onclick = () => {
   else joinCall();
 };
 $("toastClose").onclick = hideToast;
+
+// ====================== PUSH-УВЕДОМЛЕНИЯ ======================
+let swReg = null;
+async function initPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+  try {
+    swReg = await navigator.serviceWorker.register("/sw.js");
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "open-room" && e.data.room) openRoomByKey(e.data.room);
+    });
+    if (Notification.permission === "granted") subscribePush();
+    else if (Notification.permission === "default") {
+      // браузеры требуют жест пользователя — спросим по первому клику
+      const ask = () => { document.removeEventListener("click", ask); Notification.requestPermission().then((p) => { if (p === "granted") subscribePush(); }); };
+      document.addEventListener("click", ask, { once: true });
+    }
+  } catch (e) { console.log("SW reg failed", e.message); }
+}
+function urlB64ToUint8(base64) {
+  const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function subscribePush() {
+  if (!swReg || !token) return;
+  try {
+    const { key } = await (await fetch("/api/push/key")).json();
+    if (!key) return; // push не настроен на сервере
+    let sub = await swReg.pushManager.getSubscription();
+    if (!sub) sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
+    await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(sub) });
+  } catch (e) { console.log("push sub failed", e.message); }
+}
+function openRoomByKey(room) {
+  if (!room || !profile) return;
+  const kind = room.startsWith("@grp:") ? "group" : "dm";
+  const partner = kind === "dm" ? room.slice(4).split("~").find((l) => l !== profile.login) : undefined;
+  openChat({ key: room, type: kind, login: partner, id: kind === "group" ? room.slice(5) : undefined,
+    name: kind === "dm" ? partner : (chats.get(room)?.name || "Group"), last: "", ts: Date.now(), unread: 0 });
+}
+// Открытие чата из push (новое окно с ?room=)
+window.addEventListener("load", () => {
+  const r = new URLSearchParams(location.search).get("room");
+  if (r) setTimeout(() => { if (profile) openRoomByKey(r); }, 800);
+});
 
 // ====================== УТИЛИТЫ ======================
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }

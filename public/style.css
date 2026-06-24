@@ -436,10 +436,18 @@ input, textarea, button { caret-color: var(--green); }
 .call-dropdown {
   position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
   background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 8px;
-  padding: 8px 0; min-width: 200px; z-index: 10;
+  padding: 8px 0; min-width: 240px; max-width: 86vw; z-index: 10;
   box-shadow: 0 4px 24px rgba(0,0,0,0.5); display: none;
 }
 .call-dropdown.open { display: block; }
+.call-dropdown .dd-label { padding: 4px 14px 2px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.call-dropdown .dd-select {
+  width: calc(100% - 20px); margin: 0 10px 4px; padding: 6px 8px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: inherit; font-size: 12px; cursor: pointer; outline: none;
+}
+.call-dropdown .dd-select:focus { border-color: var(--green); }
+.call-dropdown .dd-sep { height: 1px; background: var(--border); margin: 6px 0; }
 .call-dropdown .dd-item {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 8px 14px; cursor: pointer; font-size: 13px; color: var(--text);
@@ -686,10 +694,17 @@ input, textarea, button { caret-color: var(--green); }
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .emoji-picker { width: calc(100vw - 28px); left: 14px; height: 320px; }
-  .video-grid { gap: 6px; padding: 6px; grid-template-columns: 1fr 1fr; }
-  .video-grid:has(.tile:only-child) { grid-template-columns: 1fr; }
-  .tile-avatar { width: 56px; height: 56px; font-size: 22px; }
-  .tile .tile-name { font-size: 10px; }
+  /* Звонок на мобиле — вертикальный скроллящийся стек, тайлы во всю ширину */
+  .video-grid {
+    display: flex; flex-direction: column; gap: 8px; padding: 8px;
+    align-content: stretch; justify-content: flex-start;
+    grid-template-columns: none; overflow-y: auto;
+  }
+  .video-grid .tile { width: 100%; flex: 0 0 auto; aspect-ratio: 16 / 9; }
+  .video-grid:has(.tile:only-child) { grid-template-columns: none; }
+  .tile.screen { aspect-ratio: 16 / 9; max-height: none; order: -1; }
+  .tile-avatar { width: 64px; height: 64px; font-size: 26px; }
+  .tile .tile-name { font-size: 11px; }
   .call-start { padding: 9px 12px; font-size: 12px; }
   .msg { max-width: 90%; }
   .messages, .chat-head, .composer { padding-left: 14px; padding-right: 14px; }

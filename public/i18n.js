@@ -65,6 +65,8 @@ const I18N = {
     call_waiting: "Waiting…", call_connecting: "Connecting…", call_connected: "Connected", call_disconnected: "Disconnected",
     edit: "Edit", delete_msg: "Delete", react: "React", edited: "edited",
     confirm_delete: "Delete this message?", edit_hint: "Enter — save · Esc — cancel",
+    mic_device: "Microphone", spk_device: "Speaker",
+    notif_enable: "Enable notifications", notif_call: "Incoming call", notif_msg: "New message",
   },
   ru: {
     brand_sub: "Чат · Групповые видеозвонки · Демонстрация экрана",
@@ -131,6 +133,8 @@ const I18N = {
     call_waiting: "Ожидание…", call_connecting: "Подключение…", call_connected: "Подключено", call_disconnected: "Отключение…",
     edit: "Изменить", delete_msg: "Удалить", react: "Реакция", edited: "изменено",
     confirm_delete: "Удалить это сообщение?", edit_hint: "Enter — сохранить · Esc — отмена",
+    mic_device: "Микрофон", spk_device: "Динамик",
+    notif_enable: "Включить уведомления", notif_call: "Входящий звонок", notif_msg: "Новое сообщение",
   },
 };
 
