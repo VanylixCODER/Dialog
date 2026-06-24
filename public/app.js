@@ -516,6 +516,7 @@ function updateCallStatus() {
 
 function attachTrack(track, pub, participant) {
   const identity = participant.identity, name = participant.name || identity;
+  ensureTile(identity, name, false); // тайл участника есть всегда (даже только с аудио)
   if (track.kind === "video") {
     if (pub.source === "screen_share") { addScreenTile(lkTile(identity), name, track); }
     else { const tile = ensureTile(identity, name, false); track.attach(tile.querySelector("video")); setTileAvatar(lkTile(identity), false); }
@@ -569,6 +570,13 @@ async function joinCall() {
     await room.connect(data.url, data.token);
     await room.localParticipant.setMicrophoneEnabled(true);
     if (call.audioInId) await room.switchActiveDevice("audioinput", call.audioInId).catch(() => {});
+    // показать уже присутствующих участников (для них ParticipantConnected не приходит)
+    const parts = room.remoteParticipants || room.participants;
+    parts && parts.forEach((p) => {
+      ensureTile(p.identity, p.name || p.identity, false);
+      const pubs = p.trackPublications || p.tracks;
+      pubs && pubs.forEach((pub) => { if (pub.track) attachTrack(pub.track, pub, p); });
+    });
   } catch (e) { console.error("livekit connect", e); alert(t("err_media") + (e.message || "")); endCall(); return; }
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
