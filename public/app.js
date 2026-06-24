@@ -167,6 +167,7 @@ function openChat(c) {
   if (c.type === "group") { loadGroupMembers(); if (!isMobile()) { $("infoTitle").textContent = t("info"); $("infoPanel").classList.remove("hidden"); } }
   else if (c.type === "dm") $("infoPanel").classList.add("hidden");
   renderChatList($("searchInput").value);
+  if (call.active && c.key === call.roomKey) call.minimized = false; // вернулись в чат звонка
   syncCallUI(); updateCallButton();
 }
 $("backBtnMobile").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
@@ -741,11 +742,12 @@ function syncCallUI() {
   if (!call.active) { stage.classList.add("hidden"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); pane.classList.remove("has-call"); return; }
   const here = myRoom === call.roomKey;
   const fs = stage.classList.contains("fullscreen");
-  stage.classList.toggle("hidden", !here);
+  const showStage = here && !(isMobile() && call.minimized);
+  stage.classList.toggle("hidden", !showStage);
   if (!here) stage.classList.remove("fullscreen");
-  pane.classList.toggle("has-call", here && !fs && !isMobile()); // ПК: звонок — колонка/полоса чата
+  pane.classList.toggle("has-call", showStage && !fs && !isMobile()); // ПК: звонок — колонка/полоса чата
   applyDock();
-  vb.classList.toggle("hidden", here);
+  vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
 }
 function updateVoiceBar() {
@@ -755,14 +757,30 @@ function updateVoiceBar() {
   $("vbDeafen").innerHTML = window.ICON[call.deaf ? "headphonesOff" : "headphones"]; $("vbDeafen").classList.toggle("off", call.deaf);
   $("vbHang").innerHTML = window.ICON.phoneOff;
 }
-$("vbInfo").onclick = () => { const c = chats.get(call.roomKey); if (c) openChat(c); else if (call.roomKey) openRoomByKey(call.roomKey, call.roomTitle); };
+$("vbInfo").onclick = () => { call.minimized = false; const c = chats.get(call.roomKey); if (c) openChat(c); else if (call.roomKey) openRoomByKey(call.roomKey, call.roomTitle); };
 $("vbMic").onclick = () => setMic(!call.micOn);
 $("vbDeafen").onclick = () => $("toggleDeafen").click();
 $("vbHang").onclick = endCall;
 
 // Док звонка: лево / право / верх — перетаскиванием грипа, сохраняется
 let callDock = localStorage.getItem("dialog_dock") || "left";
-function applyDock() { const p = $("chatPane"); p.classList.remove("dock-left", "dock-right", "dock-top"); p.classList.add("dock-" + callDock); }
+function applyDock() {
+  const p = $("chatPane"); p.classList.remove("dock-left", "dock-right", "dock-top"); p.classList.add("dock-" + callDock);
+  const w = localStorage.getItem("dialog_callw"), h = localStorage.getItem("dialog_callh");
+  if (w) p.style.setProperty("--call-w", w + "%"); if (h) p.style.setProperty("--call-h", h + "%");
+}
+// Ресайз панели звонка (тянуть внутренний край)
+(function () {
+  const rz = $("callResizer"), pane = $("chatPane"); let dr = false;
+  rz.addEventListener("pointerdown", (e) => { dr = true; rz.setPointerCapture(e.pointerId); e.preventDefault(); });
+  rz.addEventListener("pointermove", (e) => {
+    if (!dr) return; const r = pane.getBoundingClientRect();
+    if (callDock === "top") { let v = Math.max(15, Math.min(75, (e.clientY - r.top) / r.height * 100)); pane.style.setProperty("--call-h", v + "%"); localStorage.setItem("dialog_callh", v.toFixed(1)); }
+    else { let v = callDock === "right" ? (r.right - e.clientX) / r.width * 100 : (e.clientX - r.left) / r.width * 100; v = Math.max(22, Math.min(70, v)); pane.style.setProperty("--call-w", v + "%"); localStorage.setItem("dialog_callw", v.toFixed(1)); }
+  });
+  rz.addEventListener("pointerup", () => (dr = false));
+})();
+$("minBtn").onclick = () => { call.minimized = true; syncCallUI(); };
 (function () {
   const grip = $("callGrip"), pane = $("chatPane"); let hint = null, dragging = false;
   const zoneAt = (x, y) => { const r = pane.getBoundingClientRect(); if ((y - r.top) / r.height < 0.28) return "top"; return (x - r.left) / r.width < 0.5 ? "left" : "right"; };
@@ -784,7 +802,7 @@ async function joinCall() {
   const LK = window.LivekitClient;
   if (!LK) { alert(t("call_disabled")); return; }
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; wireRoom(room, LK); startCallMatrix();
+  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start();
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   try {
@@ -892,8 +910,15 @@ function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElemen
 let pipWin = null, pipPoll = 0;
 function mountGridIn(win) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
-  win.document.body.style.cssText = "margin:0;background:#000700;overflow:auto";
+  win.document.body.style.cssText = "margin:0;background:#000700;overflow:hidden;display:flex;flex-direction:column;height:100vh";
   win.document.body.appendChild(vGrid);
+  // прокси-кнопки управления в окне (проксируют клики на основные контролы)
+  const bar = win.document.createElement("div"); bar.className = "call-bar";
+  const actions = win.document.createElement("div"); actions.className = "call-actions";
+  [["toggleMic", "mic"], ["toggleCam", "camera"], ["shareScreen", "monitor"], ["toggleDeafen", "headphones"], ["hangUp", "phoneOff", "end"]].forEach(([id, icon, cls]) => {
+    const b = win.document.createElement("button"); b.className = "call-btn" + (cls ? " " + cls : ""); b.innerHTML = window.ICON[icon]; b.title = id; b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
+  });
+  bar.appendChild(actions); win.document.body.appendChild(bar);
 }
 $("popoutBtn").onclick = async () => {
   if (!call.active) return;

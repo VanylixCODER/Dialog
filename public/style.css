@@ -287,10 +287,10 @@ input, textarea, button { caret-color:var(--green); }
   background:var(--bg-2); border-bottom:1px solid var(--border); z-index:2; }
 .call-stage.fullscreen { position:fixed; inset:0; z-index:200; max-height:none; background:var(--bg); }
 /* ПК: звонок — колонка/полоса переписки (лево/право/верх — выбирается перетаскиванием, сохраняется) */
-.chat.has-call { display:grid; }
-.chat.has-call.dock-left { grid-template-columns:minmax(300px,34%) 1fr; grid-template-rows:auto 1fr auto; grid-template-areas:"call head" "call msgs" "call comp"; }
-.chat.has-call.dock-right { grid-template-columns:1fr minmax(300px,34%); grid-template-rows:auto 1fr auto; grid-template-areas:"head call" "msgs call" "comp call"; }
-.chat.has-call.dock-top { grid-template-columns:1fr; grid-template-rows:minmax(150px,42%) auto 1fr auto; grid-template-areas:"call" "head" "msgs" "comp"; }
+.chat.has-call { display:grid; --call-w:34%; --call-h:42%; }
+.chat.has-call.dock-left { grid-template-columns:clamp(280px, var(--call-w), 70%) 1fr; grid-template-rows:auto 1fr auto; grid-template-areas:"call head" "call msgs" "call comp"; }
+.chat.has-call.dock-right { grid-template-columns:1fr clamp(280px, var(--call-w), 70%); grid-template-rows:auto 1fr auto; grid-template-areas:"head call" "msgs call" "comp call"; }
+.chat.has-call.dock-top { grid-template-columns:1fr; grid-template-rows:clamp(120px, var(--call-h), 75%) auto 1fr auto; grid-template-areas:"call" "head" "msgs" "comp"; }
 .chat.has-call > #callStage { grid-area:call; max-height:none; height:100%; border-bottom:none; }
 .chat.has-call.dock-left > #callStage { border-right:1px solid var(--border-strong); }
 .chat.has-call.dock-right > #callStage { border-left:1px solid var(--border-strong); }
@@ -308,6 +308,12 @@ input, textarea, button { caret-color:var(--green); }
 .call-grip span { width:22px; height:3px; border-radius:2px; background:var(--border-strong); }
 .call-grip:hover span { background:var(--green); } .call-grip:active { cursor:grabbing; }
 .call-stage.fullscreen .call-grip { display:none; }
+/* Ресайзер панели звонка (тянуть внутренний край) */
+.call-resizer { position:absolute; z-index:4; display:none; }
+.chat.has-call.dock-left > #callStage > .call-resizer { display:block; top:0; bottom:0; right:-3px; width:7px; cursor:col-resize; }
+.chat.has-call.dock-right > #callStage > .call-resizer { display:block; top:0; bottom:0; left:-3px; width:7px; cursor:col-resize; }
+.chat.has-call.dock-top > #callStage > .call-resizer { display:block; left:0; right:0; bottom:-3px; height:7px; cursor:row-resize; }
+.call-resizer:hover { background:rgba(0,255,90,.4); }
 /* Тайлы: 1 в ряд + вертикальный скролл (в колонке); фуллскрин — сеткой; верхний док — горизонтальный скролл */
 .video-grid { position:relative; z-index:1; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:8px; padding:10px; overflow-y:auto; }
 .video-grid .tile { width:100%; }
@@ -470,12 +476,13 @@ input, textarea, button { caret-color:var(--green); }
   .hicon-btn { width:40px; height:40px; flex-shrink:0; }
   .hicon-btn svg { width:20px; height:20px; }
   .chat-title { font-size:14px; }
-  /* Звонок на телефоне — стейдж побольше, тайлы во всю ширину */
-  .call-stage { max-height:55vh; }
+  /* Звонок на телефоне — всегда на полный экран */
+  .call-stage:not(.hidden) { position:fixed; inset:0; z-index:200; max-height:none; }
   .video-grid .tile { width:100%; }
   .tile-avatar { width:64px; height:64px; font-size:26px; }
   .call-btn { width:46px; height:46px; } .call-btn.end { width:54px; }
-  .call-grip { display:none; }
+  .call-btn.mobile-only { display:grid; }
+  .call-grip, .call-resizer { display:none !important; }
   .info-panel { position:fixed; }
   .lang-select { top:10px; right:10px; }
 }
