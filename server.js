@@ -427,9 +427,12 @@ io.on("connection", (socket) => {
   socket.on("signal", ({ to, kind, data }) => {
     io.to(to).emit("signal", { from: socket.id, name: userName, kind, data });
   });
-  // Демонстрация экрана: оповещаем комнату вкл/выкл (тайл-скрин у всех)
-  socket.on("screen", ({ on }) => {
-    if (currentRoom) socket.to(currentRoom).emit("screen", { from: socket.id, on: !!on });
+  // Состояние медиа (камера/экран) — надёжный сигнал вкл/выкл вместо track.unmute.
+  // to задан → адресно (синк состояния новому пиру), иначе — всей комнате.
+  socket.on("media", ({ to, kind, on }) => {
+    const payload = { from: socket.id, kind, on: !!on };
+    if (to) io.to(to).emit("media", payload);
+    else if (currentRoom) socket.to(currentRoom).emit("media", payload);
   });
   socket.on("call-invite", async ({ title } = {}) => {
     if (!currentRoom) return;

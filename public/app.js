@@ -871,10 +871,7 @@ function ensurePeer(peerId, peerName) {
     if (tx === st.screenTx) {
       st.screenIn = st.screenIn || new MediaStream();
       if (!hasTrack(st.screenIn, track)) st.screenIn.addTrack(track);
-      const show = () => addScreenTile(peerId, st.name, st.screenIn);
-      const hide = () => removeTile("screen-" + peerId);
-      track.onunmute = show; track.onmute = hide;
-      track.muted ? hide() : show();
+      applyScreenView(peerId, st);   // покажем если уже пришёл сигнал "screen on"
       return;
     }
     // аудио + камера → один основной тайл собеседника
@@ -884,12 +881,16 @@ function ensurePeer(peerId, peerName) {
     const v = tile.querySelector("video");
     v.srcObject = st.mainStream; v.muted = false;
     v.play().catch(() => { document.addEventListener("click", () => v.play().catch(() => {}), { once: true }); });
-    if (tx === st.camTx) setupVideoDetect(peerId, track);  // нет видео → показать аватар
+    if (tx === st.camTx) applyCamView(peerId, st);  // покажем видео если уже пришёл сигнал "cam on"
   };
   pc.onconnectionstatechange = () => {
     console.log("peer", peerId.slice(0,6), "conn:", pc.connectionState);
     updateCallStatus();
-    if (pc.connectionState === "closed") removePeerConn(peerId);
+    if (pc.connectionState === "connected") {
+      // синхронизируем своё текущее состояние камеры/экрана новому пиру
+      if (call.camOn) socket.emit("media", { to: peerId, kind: "cam", on: true });
+      if (call.sharing) socket.emit("media", { to: peerId, kind: "screen", on: true });
+    } else if (pc.connectionState === "closed") removePeerConn(peerId);
   };
   pc.oniceconnectionstatechange = () => {
     console.log("peer", peerId.slice(0,6), "ice:", pc.iceConnectionState);
@@ -971,6 +972,13 @@ socket.on("call-ring", (p) => {
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
+// Состояние медиа собеседника (камера/экран вкл-выкл)
+socket.on("media", ({ from, kind, on }) => {
+  if (!call.active) return;
+  const st = call.pcs.get(from); if (!st) return;
+  if (kind === "cam") { st.remoteCam = on; applyCamView(from, st); }
+  else if (kind === "screen") { st.remoteScreen = on; applyScreenView(from, st); }
+});
 socket.on("signal", async ({ from, name, kind, data, restart }) => {
   if (!call.active) return;
   const st = ensurePeer(from, name); const pc = st.pc;
@@ -1020,6 +1028,12 @@ function addTile(id, name, stream, isMe) {
 function removeTile(id) { const tile = $("tile-" + id); if (tile) tile.remove(); }
 function setTileAvatar(id, show) { const tile = $("tile-" + id); if (tile) tile.classList.toggle("show-avatar", show); }
 function setupVideoDetect(peerId, track) { const apply = () => setTileAvatar(peerId, track.muted); track.onmute = apply; track.onunmute = apply; apply(); }
+// Показ камеры/экрана собеседника — по явному сигналу "media" (надёжнее track.unmute)
+function applyCamView(peerId, st) { if ($("tile-" + peerId)) setTileAvatar(peerId, !st.remoteCam); }
+function applyScreenView(peerId, st) {
+  if (st.remoteScreen && st.screenIn) addScreenTile(peerId, st.name, st.screenIn);
+  else removeTile("screen-" + peerId);
+}
 function setupAudioGain(peerId, stream) {
   const st = call.pcs.get(peerId); if (!st || st.gain) return;
   const ctx = ensureAudioCtx(); if (!ctx) return;
@@ -1062,6 +1076,7 @@ $("toggleCam").onclick = async () => {
   }
   $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
   if (!call.sharing) setTileAvatar("me", !call.camOn);
+  socket.emit("media", { kind: "cam", on: call.camOn });
 };
 
 // Отдельный тайл для демонстрации экрана (свой и чужой)
@@ -1085,6 +1100,7 @@ $("shareScreen").onclick = async () => {
   for (const st of call.pcs.values()) { try { await st.screenTx.sender.replaceTrack(call.screenTrack); setSenderBitrate(st.screenTx.sender, 1800000); } catch {} }
   addScreenTile("me", myName + " " + t("you_suffix"), call.screenStream);
   call.sharing = true; $("shareScreen").classList.add("active");
+  socket.emit("media", { kind: "screen", on: true });
   call.screenTrack.onended = () => stopShare();
 };
 async function stopShare() {
@@ -1093,6 +1109,7 @@ async function stopShare() {
   call.screenTrack = null;
   removeTile("screen-me");
   call.sharing = false; $("shareScreen").classList.remove("active");
+  socket.emit("media", { kind: "screen", on: false });
 }
 
 // --- Окно звонка (ПК) ---
