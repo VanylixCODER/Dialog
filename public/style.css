@@ -356,17 +356,18 @@ input, textarea, button { caret-color:var(--green); }
 .tile-mic svg { width:14px; height:14px; }
 
 /* Свёрнутый звонок — докнутая колонка (после списка чатов), чат виден справа, тайлы скроллятся */
-.call-overlay.windowed { inset:auto; left:330px; top:0; bottom:0; right:auto; width:400px; height:auto;
-  min-width:280px; max-width:72vw; border-right:1px solid var(--border-strong); box-shadow:var(--glow-soft);
-  resize:horizontal; overflow:hidden; display:flex; flex-direction:column; }
-.call-overlay.windowed .video-grid { flex:1; display:flex; flex-direction:column; gap:8px; padding:8px;
-  grid-template-columns:none; align-content:flex-start; justify-content:flex-start; overflow-y:auto; }
+/* Докнутая колонка: высота по контенту — кнопки сразу под участниками, без пустоты внизу */
+.call-overlay.windowed { inset:auto; left:330px; top:0; bottom:auto; right:auto; width:400px; height:auto;
+  min-width:280px; max-width:72vw; max-height:100dvh; border:1px solid var(--border-strong); border-radius:0 0 10px 0;
+  box-shadow:var(--glow-soft); resize:horizontal; overflow:hidden; display:flex; flex-direction:column; }
+.call-overlay.windowed .video-grid { flex:0 1 auto; display:flex; flex-direction:column; gap:8px; padding:8px;
+  grid-template-columns:none; align-content:flex-start; justify-content:flex-start; overflow-y:auto; max-height:calc(100dvh - 120px); }
 .call-overlay.windowed .video-grid .tile { width:100%; flex:0 0 auto; aspect-ratio:16/9; }
 .call-overlay.windowed .tile.screen { aspect-ratio:16/9; max-height:none; order:-1; }
 .call-overlay.windowed .call-topbar { cursor:default; padding:8px 12px; }
-.call-overlay.windowed .call-controls { padding:8px; gap:6px; }
-.call-overlay.windowed .call-btn { width:40px; height:40px; }
-.call-overlay.windowed .call-btn.end { width:50px; }
+.call-overlay.windowed .call-controls { padding:10px 8px; gap:6px; }
+.call-overlay.windowed .call-btn { width:42px; height:42px; }
+.call-overlay.windowed .call-btn.end { width:52px; }
 
 /* ---------- Входящий звонок (полноэкранный) ---------- */
 .call-incoming { position:fixed; inset:0; z-index:400; display:flex; align-items:center; justify-content:center;
@@ -439,7 +440,7 @@ input, textarea, button { caret-color:var(--green); }
   .chat-head { padding-left:8px; padding-right:8px; gap:6px; }
   .chat-head .avatar.ch-ava { width:34px; height:34px; }
   .msg { max-width:90%; }
-  .desktop-only { display:none !important; } .back-btn.mobile-only { display:grid; }
+  .desktop-only { display:none !important; } .back-btn.mobile-only { display:grid; } .win-btn.mobile-only { display:inline-flex; }
   .icon-btn { width:46px; height:46px; }
   /* крупнее тач-таргеты в хедере, чтобы кнопка звонка точно нажималась */
   .hicon-btn { width:40px; height:40px; flex-shrink:0; }

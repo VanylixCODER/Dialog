@@ -730,8 +730,8 @@ function updateCallButton() {
 function syncCallUI() {
   const ov = $("callOverlay");
   if (!call.active) { ov.classList.add("hidden"); ov.classList.remove("windowed"); hideReturnPill(); return; }
-  if (!isMobile()) { // ПК: всегда докнутая колонка, фуллскрин только по кнопке
-    ov.classList.remove("hidden"); ov.classList.toggle("windowed", !call.fullscreen); hideReturnPill(); return;
+  if (!isMobile()) { // ПК: всегда докнутая колонка (фуллскрина нет)
+    ov.classList.remove("hidden"); ov.classList.add("windowed"); hideReturnPill(); return;
   }
   // мобайл: фуллскрин когда смотришь чат звонка и не свёрнут; иначе скрыть + пилюля
   const away = call.minimized || myRoom !== call.roomKey;
@@ -859,7 +859,7 @@ $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; i
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
 // Свернуть/развернуть звонок (ПК — докнутая колонка, мобайл — скрыть + пилюля «вернуться»)
-$("windowToggle").onclick = () => { if (isMobile()) call.minimized = !call.minimized; else call.fullscreen = !call.fullscreen; $("callOverlay").style.cssText = ""; syncCallUI(); };
+$("windowToggle").onclick = () => { call.minimized = !call.minimized; $("callOverlay").style.cssText = ""; syncCallUI(); }; // только телефон (на ПК кнопка скрыта)
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
