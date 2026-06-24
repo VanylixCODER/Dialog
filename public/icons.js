@@ -29,5 +29,7 @@
     trash: s('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
     headphones: s('<path d="M3 18v-5a9 9 0 0 1 18 0v5"/><path d="M21 19a2 2 0 0 1-2 2h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3zM3 19a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H3z"/>'),
     headphonesOff: s('<path d="M3 18v-5a9 9 0 0 1 13.5-7.8"/><path d="M7 14H3v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1z"/><path d="M21 19v-6a9 9 0 0 0-.5-3"/><path d="M21 14h-3v6a1 1 0 0 0 .3.7"/><line x1="2" y1="2" x2="22" y2="22"/>'),
+    block: s('<circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/>'),
+    userPlus: s('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>'),
   };
 })();

@@ -75,8 +75,9 @@ export async function initSchema() {
 
   await pool.query(`CREATE TABLE IF NOT EXISTS chat_groups (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL,
-    owner VARCHAR(24) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    owner VARCHAR(24) NOT NULL, avatar LONGTEXT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN avatar LONGTEXT NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS group_members (
     group_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL,
@@ -205,6 +206,26 @@ export async function getGroupMembers(groupId) {
 }
 export async function getGroup(id) { const r = await query("SELECT id, name, owner FROM chat_groups WHERE id=?", [id]); return r[0] || null; }
 export async function leaveGroup(id, login) { await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]); }
+export async function isGroupOwner(id, login) { const r = await query("SELECT 1 FROM chat_groups WHERE id=? AND owner=?", [id, login]); return r.length > 0; }
+export async function getGroupAvatar(id) { const r = await query("SELECT avatar FROM chat_groups WHERE id=?", [id]); return r[0] ? r[0].avatar : null; }
+// Участники с именами/статусами (для боковой панели и настроек)
+export async function getGroupMembersDetailed(id) {
+  return await query(
+    `SELECT u.login, u.name, u.status FROM group_members m JOIN users u ON u.login=m.login WHERE m.group_id=? ORDER BY u.name`, [id]
+  );
+}
+export async function addGroupMembers(id, logins) {
+  for (const login of logins) { if (await getUser(login)) await execute("INSERT IGNORE INTO group_members (group_id, login) VALUES (?,?)", [id, login]); }
+}
+export async function removeGroupMember(id, login) { await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]); }
+export async function renameGroup(id, name) { await execute("UPDATE chat_groups SET name=? WHERE id=?", [name, id]); }
+export async function setGroupAvatar(id, avatar) { await execute("UPDATE chat_groups SET avatar=? WHERE id=?", [avatar, id]); }
+export async function deleteGroup(id) {
+  await execute("DELETE FROM group_members WHERE group_id=?", [id]);
+  await execute("DELETE FROM chat_groups WHERE id=?", [id]);
+  try { await execute("DELETE FROM messages WHERE room=?", ["@grp:" + id]); } catch {}
+  await cacheDel("hist:@grp:" + id);
+}
 
 // ---------- Друзья / блокировки (relations: friend|block|request) ----------
 export async function setRelation(login, target, type) { await execute("INSERT IGNORE INTO relations (login, target, type) VALUES (?,?,?)", [login, target, type]); }

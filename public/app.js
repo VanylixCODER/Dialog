@@ -128,8 +128,11 @@ function renderChatList(filter = "") {
     shown++;
     const li = document.createElement("li");
     li.className = "chat-item" + (c.key === activeKey ? " active" : "");
-    const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${(presence.get(c.login) || "offline") === "online" ? "online" : (presence.get(c.login) === "dnd" ? "dnd" : "offline")}"></span>` : "";
-    li.innerHTML = `<div class="avatar ${c.type === "group" ? "grp" : ""}">${c.type === "group" ? "#" : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`}${dot}</div>
+    const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
+    const avaInner = c.type === "group"
+      ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#`
+      : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+    li.innerHTML = `<div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
       <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
     li.onclick = (e) => { if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; } openChat(c); };
@@ -155,11 +158,13 @@ function openChat(c) {
   $("chatTitle").textContent = c.name;
   $("chatSub").textContent = c.type === "group" ? t("room_sub_group") : t("room_sub_dm");
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
-  $("chatAva").innerHTML = c.type === "group" ? "#" : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+  $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
+  $("chatAva").innerHTML = c.type === "group" ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#` : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
   $("app").classList.add("in-chat");
   // боковая панель участников для групп (на десктопе)
-  if (c.type === "group" && !isMobile()) { renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.remove("hidden"); }
+  groupMembers = [];
+  if (c.type === "group") { loadGroupMembers(); if (!isMobile()) { $("infoTitle").textContent = t("info"); $("infoPanel").classList.remove("hidden"); } }
   else if (c.type === "dm") $("infoPanel").classList.add("hidden");
   renderChatList($("searchInput").value);
   if (call.active && c.key === call.roomKey) call.minimized = false; // открыли чат звонка — разворачиваем
@@ -170,19 +175,97 @@ $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteB
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
 
+// ---------- Меню чата (⋮) ----------
+$("chatMenuBtn").onclick = (e) => {
+  e.stopPropagation(); const menu = $("chatMenu");
+  if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+  menu.innerHTML = "";
+  const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
+  if (curKind === "group") {
+    item(t("group_settings"), "settings", openGroupSettings);
+    item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
+  } else if (curKind === "dm") {
+    const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
+    const isB = blocked.has(partner);
+    item(isB ? t("unblock_user") : t("block_user"), "block", () => block(partner, isB ? "unblock" : "block"), !isB);
+    item(t("delete_chat"), "trash", () => { const c = chats.get(myRoom); if (c) deleteChat(c); }, true);
+  }
+  menu.classList.remove("hidden");
+};
+document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap")) $("chatMenu").classList.add("hidden"); });
+function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
+
+// ---------- Настройки группы ----------
+let gsId = null, gsOwner = false, gsAvatar = null, gsAdd = new Set();
+async function openGroupSettings() {
+  if (curKind !== "group") return;
+  gsId = myRoom.slice(5); gsAvatar = null; gsAdd.clear();
+  const { ok, data } = await api("/api/groups/" + gsId, null, "GET");
+  if (!ok) return;
+  gsOwner = data.owner === profile.login;
+  const modal = $("groupSettingsModal"); modal.classList.toggle("is-owner", gsOwner); modal.classList.remove("hidden");
+  $("gsError").textContent = "";
+  $("gsName").value = data.name; $("gsName").disabled = !gsOwner;
+  $("gsAvaImg").src = "/api/group-avatar/" + gsId + "?v=" + Date.now();
+  $("gsAvaImg").onerror = () => { $("gsAvaImg").style.display = "none"; $("gsAvaInit").style.display = "block"; };
+  $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none";
+  // участники
+  const box = $("gsMembers"); box.innerHTML = "";
+  data.members.forEach((m) => {
+    const row = document.createElement("div"); row.className = "contact-row";
+    const ownerTag = m.login === data.owner ? `<span class="owner-tag">(${t("owner")})</span>` : "";
+    row.innerHTML = `<div class="avatar" data-login="${m.login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(m.login)}" onerror="this.remove()">${initials(m.name)}</div><span class="c-name">${escapeHtml(m.name)}</span>${ownerTag}`;
+    if (gsOwner && m.login !== data.owner) { const b = document.createElement("button"); b.className = "danger"; b.textContent = t("remove"); b.onclick = () => removeGroupMember(m.login); row.appendChild(b); }
+    box.appendChild(row);
+  });
+  // добавить друзей (только владелец, кто не в группе)
+  const memberSet = new Set(data.members.map((m) => m.login));
+  const addBox = $("gsAddPick"); addBox.innerHTML = "";
+  relations.friends.filter((l) => !memberSet.has(l)).forEach((l) => {
+    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
+    b.onclick = () => { if (gsAdd.has(l)) { gsAdd.delete(l); b.classList.remove("on"); } else { gsAdd.add(l); b.classList.add("on"); } };
+    addBox.appendChild(b);
+  });
+}
+$("gsCancel").onclick = () => $("groupSettingsModal").classList.add("hidden");
+$("gsAvaBtn").onclick = () => $("gsAvaFile").click();
+$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 2 * 1024 * 1024) { $("gsError").textContent = "≤ 2 MB"; return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
+$("gsSave").onclick = async () => {
+  if (!gsOwner) return;
+  const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
+  await api("/api/groups/" + gsId, body);
+  if (gsAdd.size) await api("/api/groups/" + gsId + "/members", { add: [...gsAdd] });
+  avaVer = Date.now(); $("groupSettingsModal").classList.add("hidden"); loadGroups();
+};
+async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/members", { remove: login }); openGroupSettings(); }
+$("gsLeave").onclick = () => { $("groupSettingsModal").classList.add("hidden"); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
+$("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); $("groupSettingsModal").classList.add("hidden"); };
+socket.on("group-updated", () => { loadGroups(); if (curKind === "group" && !$("groupSettingsModal").classList.contains("hidden")) openGroupSettings(); if (curKind === "group" && !$("infoPanel").classList.contains("hidden")) renderMembers(); });
+socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); $("groupSettingsModal").classList.add("hidden"); } renderChatList($("searchInput").value); });
+
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
 function initials(n) { return (n || "?").trim().charAt(0).toUpperCase(); }
-function setMyAvatar() { const a = $("myAvatar"); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}`; }
+function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
 
 // ---------- Новый чат ----------
-$("newChatBtn").onclick = () => { $("newChatModal").classList.remove("hidden"); $("dmError").textContent = ""; renderFriendChips(); };
+$("newChatBtn").onclick = () => { $("newChatModal").classList.remove("hidden"); $("dmError").textContent = ""; $("groupError").textContent = ""; renderFriendChips(); renderGroupPick(); };
 $("newChatCancel").onclick = () => $("newChatModal").classList.add("hidden");
 $("emptyNewChat").onclick = () => $("newChatBtn").click();
 $("emptyAddFriend").onclick = () => $("contactsBtn").click();
 function renderFriendChips() {
   const box = $("friendsQuick"); box.innerHTML = "";
   relations.friends.forEach((l) => { const b = document.createElement("button"); b.className = "room-chip"; b.textContent = l; b.onclick = () => openDM(l); box.appendChild(b); });
+}
+// Мультивыбор друзей для новой группы
+const groupPicked = new Set();
+function renderGroupPick() {
+  groupPicked.clear(); const box = $("groupFriendPick"); box.innerHTML = "";
+  relations.friends.forEach((l) => {
+    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
+    b.onclick = () => { if (groupPicked.has(l)) { groupPicked.delete(l); b.classList.remove("on"); } else { groupPicked.add(l); b.classList.add("on"); } };
+    box.appendChild(b);
+  });
 }
 async function openDM(login) {
   login = (login || $("dmInput").value).trim().toLowerCase();
@@ -197,9 +280,9 @@ $("dmOpenBtn").onclick = () => openDM();
 $("createGroupBtn").onclick = async () => {
   const name = $("groupName").value.trim();
   if (!name) { $("groupError").textContent = t("err_group_name"); return; }
-  const { ok, data } = await api("/api/groups", { name, members: $("groupMembers").value });
+  const { ok, data } = await api("/api/groups", { name, members: [...groupPicked].join(",") });
   if (!ok) { $("groupError").textContent = data.error || "error"; return; }
-  $("newChatModal").classList.add("hidden"); $("groupName").value = ""; $("groupMembers").value = "";
+  $("newChatModal").classList.add("hidden"); $("groupName").value = ""; groupPicked.clear();
   const key = "@grp:" + data.id; chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
   openChat(chats.get(key));
 };
@@ -274,6 +357,7 @@ async function openMiniProfile(login) {
   const { ok, data } = await api("/api/profile/" + login, null, "GET");
   if (!ok) return;
   $("mpModal").classList.remove("hidden");
+  $("mpAva").setAttribute("data-login", login);
   $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
   $("mpName").textContent = data.name; $("mpLogin").textContent = data.login;
   $("mpStatus").textContent = t("status_" + (data.status === "offline" ? "offline" : data.status));
@@ -291,23 +375,32 @@ async function refreshPresence() {
   const { ok, data } = await api("/api/presence", { logins });
   if (ok) { for (const [l, st] of Object.entries(data)) presence.set(l, st); updateDots(); }
 }
-function updateDots() { renderChatList($("searchInput").value); }
+function statusClass(s) { return s === "online" ? "online" : s === "dnd" ? "dnd" : "offline"; }
+function updateDots() { renderChatList($("searchInput").value); setMyAvatar(); }
 socket.on("presence", ({ login, status }) => { presence.set(login, status); updateDots(); });
 socket.on("relations-changed", () => loadRelations());
 
 // ---------- Участники (инфо-панель) ----------
+let groupMembers = []; // [{login,name}] текущей группы (для боковой панели)
+async function loadGroupMembers() {
+  if (curKind !== "group") { groupMembers = []; return; }
+  const id = myRoom.slice(5);
+  const { ok, data } = await api("/api/groups/" + id, null, "GET");
+  if (ok && myRoom === "@grp:" + id) { groupMembers = data.members || []; renderMembers(); }
+}
 function renderMembers() {
   const ul = $("members"); if (!ul) return; ul.innerHTML = "";
   const inCall = new Set((activeCalls.get(myRoom) || {}).logins || []);
-  // объединяем присутствующих в чате и тех, кто в звонке
   const byLogin = new Map();
-  for (const [, info] of peers) if (info.login) byLogin.set(info.login, info.name);
+  if (curKind === "group") for (const m of groupMembers) byLogin.set(m.login, m.name); // все участники группы
+  for (const [, info] of peers) if (info.login) byLogin.set(info.login, info.name);    // + присутствующие
   inCall.forEach((l) => { if (!byLogin.has(l)) byLogin.set(l, l); });
   if (byLogin.size === 0) { ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`; return; }
   for (const [login, name] of byLogin) {
     const li = document.createElement("li"); li.className = "member";
-    const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : "";
-    li.innerHTML = `<div class="avatar" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${escapeHtml(name)}</span>${callIcon}`;
+    const online = login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(login) || "offline");
+    const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
+    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${escapeHtml(name)}</span>${callIcon}`;
     li.onclick = () => openMiniProfile(login);
     ul.appendChild(li);
   }
@@ -342,6 +435,31 @@ socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
 socket.on("dm-blocked", () => notify(t("dm_need_friend")));
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
 function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const me = profile && (name.toLowerCase() === profile.login.toLowerCase() || name.toLowerCase() === (profile.name || "").toLowerCase()); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
+// Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
+function formatMessage(text) {
+  let html = escapeHtml(text);
+  const links = [];
+  html = html.replace(/(https?:\/\/[^\s]+)/g, (u) => { const i = links.push(u) - 1; return "L" + i + ""; });
+  html = highlightMentions(html);
+  html = html.replace(/L(\d+)/g, (_, i) => `<a href="${links[i]}" target="_blank" rel="noopener noreferrer" style="color:#7dffaf">${links[i]}</a>`);
+  return html;
+}
+function firstUrl(text) { const m = (text || "").match(/https?:\/\/[^\s]+/); return m ? m[0] : null; }
+function ytId(url) { const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/); return m ? m[1] : null; }
+// Превью ссылки/видео под сообщением
+function addLinkExtras(wrap, text) {
+  const url = firstUrl(text); if (!url) return;
+  const yid = ytId(url);
+  if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>`; wrap.appendChild(d); scrollDown(); return; }
+  fetch("/api/link-preview?url=" + encodeURIComponent(url), { headers: { Authorization: "Bearer " + token } })
+    .then((r) => r.json()).then((d) => {
+      if (!d || (!d.title && !d.image)) return;
+      const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "link-preview";
+      a.innerHTML = (d.image ? `<img class="lp-img" src="${escapeHtml(d.image)}" onerror="this.remove()">` : "") +
+        `<div class="lp-body"><div class="lp-site">${escapeHtml(d.site || "")}</div><div class="lp-title">${escapeHtml(d.title || "")}</div><div class="lp-desc">${escapeHtml(d.description || "")}</div></div>`;
+      wrap.appendChild(a); scrollDown();
+    }).catch(() => {});
+}
 
 function renderMessage(m, scroll = true, ping = false) {
   const mine = profile && m.fromLogin === profile.login;
@@ -352,7 +470,7 @@ function renderMessage(m, scroll = true, ping = false) {
   if (isB) wrap.dataset.blocklabel = t("blocked_msg");
   let inner = "";
   if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
-  if (m.type === "text") inner += `<div class="bubble">${highlightMentions(linkify(escapeHtml(m.text)))}</div>`;
+  if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt=""></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
@@ -366,6 +484,7 @@ function renderMessage(m, scroll = true, ping = false) {
   wrap.innerHTML = inner;
   renderReactions(wrap, m.reactions || {});
   messagesEl.appendChild(wrap);
+  if (m.type === "text" && !isB) addLinkExtras(wrap, m.text); // превью ссылки / YouTube
   if (scroll) scrollDown();
 }
 function renderReactions(wrap, reactions) {
@@ -414,7 +533,7 @@ messagesEl.addEventListener("click", (e) => {
   const img = e.target.closest(".bubble.media img"); if (img) openLightbox(img.src);
 });
 socket.on("msg-deleted", ({ id }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove(); });
-socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = highlightMentions(linkify(escapeHtml(text))); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
+socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = formatMessage(text); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
 socket.on("msg-reaction", ({ id, reactions }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) renderReactions(el, reactions); });
 
 function sendText() {
@@ -496,7 +615,7 @@ async function loadGifs(q) {
 document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn")) gifPanel.classList.add("hidden"); });
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, fullscreen: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
 const audioEls = new Map(); // identity -> <audio> (звук участника)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
 const isMobile = () => matchMedia("(max-width:720px)").matches;
@@ -509,7 +628,7 @@ function ensureTile(identity, name, isMe) {
     tile = document.createElement("div"); tile.id = "tile-" + id; tile.className = "tile show-avatar" + (isMe ? " me" : "");
     tile.dataset.identity = identity;
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
-      `<div class="tile-avatar"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
+      `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>`;
     $("videoGrid").appendChild(tile);
   }
@@ -611,10 +730,13 @@ function updateCallButton() {
 function syncCallUI() {
   const ov = $("callOverlay");
   if (!call.active) { ov.classList.add("hidden"); ov.classList.remove("windowed"); hideReturnPill(); return; }
+  if (!isMobile()) { // ПК: всегда докнутая колонка, фуллскрин только по кнопке
+    ov.classList.remove("hidden"); ov.classList.toggle("windowed", !call.fullscreen); hideReturnPill(); return;
+  }
+  // мобайл: фуллскрин когда смотришь чат звонка и не свёрнут; иначе скрыть + пилюля
   const away = call.minimized || myRoom !== call.roomKey;
-  if (!away) { ov.classList.remove("hidden", "windowed"); hideReturnPill(); }
-  else if (isMobile()) { ov.classList.add("hidden"); ov.classList.remove("windowed"); showReturnPill(); } // мобайл: прячем, пилюля «вернуться»
-  else { ov.classList.remove("hidden"); ov.classList.add("windowed"); hideReturnPill(); }               // десктоп: докнутая колонка
+  if (away) { ov.classList.add("hidden"); ov.classList.remove("windowed"); showReturnPill(); }
+  else { ov.classList.remove("hidden", "windowed"); hideReturnPill(); }
 }
 let returnPill;
 function showReturnPill() {
@@ -637,7 +759,7 @@ async function joinCall() {
   const LK = window.LivekitClient;
   if (!LK) { alert(t("call_disabled")); return; }
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK);
+  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; call.fullscreen = false; wireRoom(room, LK); startCallMatrix();
   $("callOverlay").classList.remove("hidden", "windowed"); $("startCallBtn").classList.add("in-call"); hideToast();
   $("callRoomLabel").textContent = curTitle; updateCallStatus(); sfx.start();
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
@@ -670,8 +792,8 @@ function endCall() {
   $("videoGrid").innerHTML = "";
   $("callOverlay").classList.remove("hidden", "windowed"); $("callOverlay").classList.add("hidden"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
-  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
-  krispNode = null; hideReturnPill();
+  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false, fullscreen: false });
+  krispNode = null; hideReturnPill(); stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive(); updateCallButton();
@@ -737,7 +859,7 @@ $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; i
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
 // Свернуть/развернуть звонок (ПК — докнутая колонка, мобайл — скрыть + пилюля «вернуться»)
-$("windowToggle").onclick = () => { call.minimized = !call.minimized; $("callOverlay").style.cssText = ""; syncCallUI(); };
+$("windowToggle").onclick = () => { if (isMobile()) call.minimized = !call.minimized; else call.fullscreen = !call.fullscreen; $("callOverlay").style.cssText = ""; syncCallUI(); };
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
@@ -748,6 +870,20 @@ function startKeepAlive() {
   requestWakeLock();
 }
 function stopKeepAlive() { if (keepAlive) { try { keepAlive.osc.stop(); keepAlive.osc.disconnect(); keepAlive.g.disconnect(); } catch {} keepAlive = null; } if ("mediaSession" in navigator) { try { navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; } catch {} } if (wakeLock) { try { wakeLock.release(); } catch {} wakeLock = null; } }
+// Матрица-фон звонка (затемнённая)
+let callMatrixRaf = 0;
+function startCallMatrix() {
+  const c = $("callMatrix"); if (!c) return; const ctx = c.getContext("2d");
+  const chars = "アイウエオカキ0123456789ABCDEF<>/{}".split(""); let cols = 0, drops = [];
+  const frame = () => {
+    callMatrixRaf = requestAnimationFrame(frame);
+    if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; cols = Math.floor(c.width / 16); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
+    ctx.fillStyle = "rgba(0,7,0,0.09)"; ctx.fillRect(0, 0, c.width, c.height); ctx.font = "14px monospace";
+    for (let i = 0; i < cols; i++) { ctx.fillStyle = Math.random() > 0.98 ? "#b6ffd2" : "#00ff5a"; ctx.fillText(chars[(Math.random() * chars.length) | 0], i * 16, drops[i] * 16); if (drops[i] * 16 > c.height && Math.random() > 0.975) drops[i] = 0; drops[i]++; }
+  };
+  cancelAnimationFrame(callMatrixRaf); frame();
+}
+function stopCallMatrix() { cancelAnimationFrame(callMatrixRaf); callMatrixRaf = 0; const c = $("callMatrix"); if (c) { const x = c.getContext("2d"); x && x.clearRect(0, 0, c.width, c.height); } }
 async function requestWakeLock() { if (!("wakeLock" in navigator)) return; try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && call.active) { requestWakeLock(); document.querySelectorAll("#videoGrid video").forEach((v) => v.play().catch(() => {})); } });
 

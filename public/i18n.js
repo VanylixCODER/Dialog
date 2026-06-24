@@ -48,6 +48,9 @@ const I18N = {
     call_disabled: "Calls are not configured (no LiveKit on server)",
     t_deafen: "Deafen (mute headphones)",
     join_call: "Join call", return_call: "Return to call", in_call: "in call", call_ongoing: "Call in progress",
+    pick_members: "Pick members:", group_settings: "Group settings", add_members: "Add friends",
+    leave_group_btn: "Leave group", delete_group: "Delete group", confirm_del_group: "Delete this group for everyone?",
+    settings: "Settings", remove: "Remove", owner: "owner",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -97,6 +100,9 @@ const I18N = {
     call_disabled: "Звонки не настроены (нет LiveKit на сервере)",
     t_deafen: "Заглушить наушники",
     join_call: "Войти в звонок", return_call: "Вернуться в звонок", in_call: "в звонке", call_ongoing: "Идёт звонок",
+    pick_members: "Выберите участников:", group_settings: "Настройки группы", add_members: "Добавить друзей",
+    leave_group_btn: "Выйти из группы", delete_group: "Удалить группу", confirm_del_group: "Удалить группу у всех?",
+    settings: "Настройки", remove: "Убрать", owner: "владелец",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";

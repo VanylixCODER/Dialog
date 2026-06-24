@@ -75,6 +75,10 @@
         <button class="hicon-btn" id="muteBtn" data-i18n-title="mute_room" title="Mute">🔔</button>
         <button class="hicon-btn call-go" id="startCallBtn" data-i18n-title="t_call" title="Call">📞</button>
         <button class="hicon-btn" id="infoBtn" data-i18n-title="info" title="Info">ⓘ</button>
+        <div class="chat-menu-wrap">
+          <button class="hicon-btn" id="chatMenuBtn" title="More">⋮</button>
+          <div id="chatMenu" class="chat-menu hidden"></div>
+        </div>
       </header>
       <div id="messages" class="messages hidden"></div>
       <div class="composer hidden" id="composer">
@@ -110,9 +114,30 @@
     <div id="friendsQuick" class="room-chips"></div>
     <div class="modal-sep" data-i18n="or">— or create a group —</div>
     <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
-    <input id="groupMembers" class="field" type="text" data-i18n-ph="ph_group_members" />
+    <div class="pick-label" data-i18n="pick_members">Pick members:</div>
+    <div id="groupFriendPick" class="friend-pick"></div>
     <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
     <div class="form-error" id="groupError"></div>
+  </div></div>
+
+  <!-- Настройки группы -->
+  <div id="groupSettingsModal" class="modal hidden"><div class="modal-card">
+    <button id="gsCancel" class="hub-close">✕</button>
+    <div class="modal-title" data-i18n="group_settings">Group settings</div>
+    <div class="profile-ava avatar ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit">#</span></div>
+    <button id="gsAvaBtn" class="btn-ghost" data-i18n="upload_avatar">Upload logo</button>
+    <input id="gsAvaFile" type="file" accept="image/*" hidden />
+    <input id="gsName" class="field" data-i18n-ph="ph_group_name" maxlength="64" />
+    <div class="pick-label" data-i18n="members_title">Members</div>
+    <div id="gsMembers" class="contacts-list"></div>
+    <div class="pick-label gs-owner" data-i18n="add_members">Add friends</div>
+    <div id="gsAddPick" class="friend-pick gs-owner"></div>
+    <div class="form-error" id="gsError"></div>
+    <div class="modal-actions">
+      <button id="gsSave" class="btn-primary gs-owner" data-i18n="save">Save</button>
+      <button id="gsLeave" class="btn-ghost" data-i18n="leave_group_btn">Leave</button>
+    </div>
+    <button id="gsDelete" class="btn-ghost gs-owner gs-danger" data-i18n="delete_group">Delete group</button>
   </div></div>
 
   <!-- Контакты / заявки -->
@@ -154,6 +179,7 @@
 
   <!-- Звонок (Discord-стиль) -->
   <div id="callOverlay" class="call-overlay hidden">
+    <canvas id="callMatrix" class="call-matrix"></canvas>
     <div class="call-topbar" id="callTopbar">
       <span id="callRoomLabel">Call</span>
       <span id="callStatus" class="call-status"></span>
