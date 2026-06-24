@@ -619,6 +619,7 @@ const call = { active: false, room: null, roomKey: null, roomTitle: "", minimize
 const audioEls = new Map(); // identity -> <audio> (звук участника)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
 const isMobile = () => matchMedia("(max-width:720px)").matches;
+const vGrid = $("videoGrid"); // кешируем — выживает при переносе в окно поп-аута
 
 function lkTile(identity) { return "p-" + identity.replace(/[^a-zA-Z0-9_]/g, ""); }
 function ensureTile(identity, name, isMe) {
@@ -630,7 +631,7 @@ function ensureTile(identity, name, isMe) {
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>`;
-    $("videoGrid").appendChild(tile);
+    vGrid.appendChild(tile);
   }
   updateCallCount(); return tile;
 }
@@ -643,10 +644,18 @@ function removeTile(id) { const t = $("tile-" + id); if (t) t.remove(); }
 function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
 function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
-  if (!tile) { tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen"; tile.innerHTML = `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video><div class="tile-name">🖥 ${escapeHtml(name)}</div>`; $("videoGrid").appendChild(tile); }
+  if (!tile) {
+    tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen";
+    tile.innerHTML = `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video><div class="tile-name">🖥 ${escapeHtml(name)}</div><button class="tile-expand" title="${t("fullscreen")}">⛶</button>`;
+    vGrid.appendChild(tile);
+    // увеличение демонстрации — клик или кнопка → полноэкранное видео
+    const enlarge = () => { const vv = tile.querySelector("video"); (vv.requestFullscreen || vv.webkitRequestFullscreen || (() => {})).call(vv); };
+    tile.querySelector(".tile-expand").onclick = (e) => { e.stopPropagation(); enlarge(); };
+    tile.querySelector("video").onclick = enlarge;
+  }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
-function updateCallCount() { $("callCount").textContent = $("videoGrid").querySelectorAll(".tile:not(.screen)").length; }
+function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; }
 function updateCallStatus() {
   const el = $("callStatus"); if (!el) return;
   const s = call.room ? call.room.state : ""; // 'connecting'|'connected'|'reconnecting'|'disconnected'
@@ -680,7 +689,7 @@ function wireRoom(room, LK) {
   room.on(E.ParticipantDisconnected, (p) => { removeParticipant(p.identity); sfx.leave(); });
   room.on(E.ActiveSpeakersChanged, (speakers) => {
     const ids = new Set(speakers.map((s) => s.isLocal ? "me" : lkTile(s.identity)));
-    $("videoGrid").querySelectorAll(".tile:not(.screen)").forEach((tl) => tl.classList.toggle("speaking", ids.has(tl.id.replace("tile-", ""))));
+    vGrid.querySelectorAll(".tile:not(.screen)").forEach((tl) => tl.classList.toggle("speaking", ids.has(tl.id.replace("tile-", ""))));
   });
   room.on(E.LocalTrackPublished, (pub) => {
     if (pub.track.kind === "video") {
@@ -730,8 +739,8 @@ function updateCallButton() {
 function syncCallUI() {
   const ov = $("callOverlay");
   if (!call.active) { ov.classList.add("hidden"); ov.classList.remove("windowed"); hideReturnPill(); return; }
-  if (!isMobile()) { // ПК: всегда докнутая колонка (фуллскрина нет)
-    ov.classList.remove("hidden"); ov.classList.add("windowed"); hideReturnPill(); return;
+  if (!isMobile()) { // ПК: докнутая колонка; фуллскрин только по кнопке ⛶
+    ov.classList.remove("hidden"); ov.classList.toggle("windowed", !call.fullscreen); hideReturnPill(); return;
   }
   // мобайл: фуллскрин когда смотришь чат звонка и не свёрнут; иначе скрыть + пилюля
   const away = call.minimized || myRoom !== call.roomKey;
@@ -787,9 +796,11 @@ async function joinCall() {
 function endCall() {
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
+  if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; const ov = $("callOverlay"); if (vGrid.parentElement !== ov) ov.insertBefore(vGrid, ov.querySelector(".call-controls")); }
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
-  $("videoGrid").innerHTML = "";
+  vGrid.innerHTML = "";
+  $("expandBtn").classList.remove("active");
   $("callOverlay").classList.remove("hidden", "windowed"); $("callOverlay").classList.add("hidden"); $("callOverlay").style.cssText = "";
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false, fullscreen: false });
@@ -860,6 +871,21 @@ $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioE
 
 // Свернуть/развернуть звонок (ПК — докнутая колонка, мобайл — скрыть + пилюля «вернуться»)
 $("windowToggle").onclick = () => { call.minimized = !call.minimized; $("callOverlay").style.cssText = ""; syncCallUI(); }; // только телефон (на ПК кнопка скрыта)
+$("expandBtn").onclick = () => { call.fullscreen = !call.fullscreen; syncCallUI(); $("expandBtn").classList.toggle("active", call.fullscreen); };
+// Поп-аут звонка в отдельное окно (Document PiP) — только ПК/Chrome
+let pipWin = null;
+$("popoutBtn").onclick = async () => {
+  if (!call.active) return;
+  if (!("documentPictureInPicture" in window)) { alert(t("pip_unsupported")); return; }
+  if (pipWin) { pipWin.close(); return; }
+  try {
+    pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 520 });
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => pipWin.document.head.appendChild(s.cloneNode(true)));
+    pipWin.document.body.style.cssText = "margin:0;background:var(--bg);overflow:auto";
+    pipWin.document.body.appendChild(vGrid); // переносим сетку тайлов (ссылка vGrid кеширована)
+    pipWin.addEventListener("pagehide", () => { const ov = $("callOverlay"); ov.insertBefore(vGrid, ov.querySelector(".call-controls")); pipWin = null; });
+  } catch (e) { console.log("pip", e.message); pipWin = null; }
+};
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
@@ -885,7 +911,7 @@ function startCallMatrix() {
 }
 function stopCallMatrix() { cancelAnimationFrame(callMatrixRaf); callMatrixRaf = 0; const c = $("callMatrix"); if (c) { const x = c.getContext("2d"); x && x.clearRect(0, 0, c.width, c.height); } }
 async function requestWakeLock() { if (!("wakeLock" in navigator)) return; try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && call.active) { requestWakeLock(); document.querySelectorAll("#videoGrid video").forEach((v) => v.play().catch(() => {})); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && call.active) { requestWakeLock(); vGrid.querySelectorAll("video").forEach((v) => v.play().catch(() => {})); } });
 
 // ---------- Входящий звонок (поп-ап + рингтон + cava) ----------
 const ring = { audio: null, src: null, analyser: null, raf: 0, data: null, bars: [] };

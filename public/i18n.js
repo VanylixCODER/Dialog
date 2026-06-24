@@ -51,6 +51,7 @@ const I18N = {
     pick_members: "Pick members:", group_settings: "Group settings", add_members: "Add friends",
     leave_group_btn: "Leave group", delete_group: "Delete group", confirm_del_group: "Delete this group for everyone?",
     settings: "Settings", remove: "Remove", owner: "owner",
+    fullscreen: "Fullscreen", popout: "Pop out window", pip_unsupported: "Pop-out window is not supported in this browser",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -103,6 +104,7 @@ const I18N = {
     pick_members: "Выберите участников:", group_settings: "Настройки группы", add_members: "Добавить друзей",
     leave_group_btn: "Выйти из группы", delete_group: "Удалить группу", confirm_del_group: "Удалить группу у всех?",
     settings: "Настройки", remove: "Убрать", owner: "владелец",
+    fullscreen: "Во весь экран", popout: "Открепить в окно", pip_unsupported: "Открепление окна не поддерживается в этом браузере",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";
