@@ -449,6 +449,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("typing", (isTyping) => { if (currentRoom) socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping }); });
+  // «Просмотрено» — оповещаем остальных в комнате, что мы видим переписку
+  socket.on("seen", () => { if (currentRoom && userLogin) socket.to(currentRoom).emit("seen", { room: currentRoom, login: userLogin }); });
 
   socket.on("msg-delete", async ({ id }) => {
     if (!currentRoom || !userLogin) return;

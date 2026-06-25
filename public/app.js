@@ -152,6 +152,7 @@ function openChat(c) {
   c = upsertChat(c);
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
+  setTimeout(() => socket.emit("seen"), 300); // отметить переписку просмотренной
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
   $("messages").innerHTML = "";
@@ -191,8 +192,12 @@ $("chatMenuBtn").onclick = (e) => {
     item(t("delete_chat"), "trash", () => { const c = chats.get(myRoom); if (c) deleteChat(c); }, true);
   }
   menu.classList.remove("hidden");
+  // позиционируем фикс-меню под кнопкой, прижимая к правому краю (не вылезает за экран)
+  const r = $("chatMenuBtn").getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + "px";
+  menu.style.left = Math.max(8, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8)) + "px";
 };
-document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap")) $("chatMenu").classList.add("hidden"); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap") && !e.target.closest(".chat-menu")) $("chatMenu").classList.add("hidden"); });
 function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
 
 // ---------- Настройки группы ----------
@@ -425,7 +430,10 @@ socket.on("message", (m) => {
   const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
   const mine = profile && m.fromLogin === profile.login;
   if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) sfx.msg(); }
+  if (!mine && document.visibilityState === "visible") socket.emit("seen"); // мы видим — отметить просмотренным
 });
+// Партнёр увидел переписку → ставим ✓✓ на свои сообщения (ЛС)
+socket.on("seen", ({ room }) => { if (room === myRoom && curKind === "dm") messagesEl.querySelectorAll(".msg.me .seen-tag").forEach((s) => (s.textContent = "✓✓")); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
   c.ts = Date.now();
@@ -474,7 +482,7 @@ function renderMessage(m, scroll = true, ping = false) {
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt=""></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
-  inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span></div>`;
+  inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${mine ? '<span class="seen-tag"></span>' : ""}</div>`;
   inner += `<div class="reactions"></div>`;
   if (m.id != null && !isB) {
     inner += `<div class="msg-actions"><button class="ma-btn ma-react" title="${t("react")}">${window.ICON.smile}</button>` +
@@ -630,10 +638,23 @@ function ensureTile(identity, name, isMe) {
     tile.dataset.identity = identity;
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
-      `<div class="tile-name">${escapeHtml(name)}</div>`;
+      `<div class="tile-name">${escapeHtml(name)}</div>` +
+      (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
     vGrid.appendChild(tile);
+    if (!isMe) wireTileControls(tile, identity);
   }
   updateCallCount(); return tile;
+}
+// Громкость/мут конкретного участника (локально, через LiveKit setVolume)
+const tileVol = new Map(); // identity -> {vol, muted}
+function wireTileControls(tile, identity) {
+  const muteBtn = tile.querySelector(".tctrl-mute"), vol = tile.querySelector(".tctrl-vol");
+  const st = tileVol.get(identity) || { vol: 1, muted: false }; tileVol.set(identity, st);
+  const apply = () => { const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity)); if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {} };
+  vol.value = st.vol;
+  vol.oninput = () => { st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } apply(); };
+  muteBtn.onclick = () => { st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); apply(); };
+  apply();
 }
 function removeParticipant(identity) {
   const id = lkTile(identity); removeTile(id); removeTile("screen-" + id);
@@ -835,6 +856,7 @@ function endCall() {
   vGrid.innerHTML = "";
   $("expandBtn").classList.remove("active");
   $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
+  $("chatPane").classList.remove("has-call"); // убрать grid-колонку звонка — без неё была чёрная зона
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false, fullscreen: false });
   krispNode = null; stopCallMatrix();
