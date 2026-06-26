@@ -1,0 +1,65 @@
+name: Perf Budgets
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lighthouse-and-leak:
+    name: Lighthouse + Memory Leak Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: dialog
+          MYSQL_USER: dialog
+          MYSQL_PASSWORD: dialog
+        ports: ["3306:3306"]
+        options: --health-cmd "mysqladmin ping" --health-interval 5s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Boot server (HTTP, без certs в CI)
+        env:
+          DATABASE_URL: mysql://dialog:dialog@localhost:3306/dialog
+          REDIS_URL: redis://localhost:6379
+        run: |
+          node server.js &
+          npx wait-on http://localhost:3000 -t 60000
+
+      # GitHub Actions НЕ делает shell-expansion значений в env:,
+      # поэтому $() внутри env — это литеральная строка. Chrome-путь
+      # вычисляем отдельным шагом и пробрасываем через $GITHUB_OUTPUT.
+      - name: Resolve Playwright Chromium path
+        id: chrome
+        run: |
+          echo "chrome_path=$(node -p \"require('playwright').chromium.executablePath()\")" >> "$GITHUB_OUTPUT"
+
+      - name: Lighthouse CI (perf budgets)
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome_path }}
+        run: npx @lhci/cli@0.14.x autorun --config=./lighthouserc.json
+
+      - name: Memory-leak gate (SPA nav-journey + single-page stability)
+        env:
+          BASE_URL: http://localhost:3000
+          # 8MB — стартовый порог: матрица + DOM + модули должны стабилизироваться;
+          # ужесточайте по мере того, как профиль становится предсказуемым.
+          LEAK_THRESHOLD_MB: 8
+          LEAK_STATIC_SECONDS: 15  # Stage A: heap должен быть стабилен за N сек на статичной /login
+          LEAK_APP_ROUNDS: 5       # Stage B: циклов навигации в /app
+        run: npm run perf:leak

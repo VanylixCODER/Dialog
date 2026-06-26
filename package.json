@@ -9,7 +9,12 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "perf": "npm run perf:lh && npm run perf:leak",
+    "perf:lh": "lhci autorun --config=./lighthouserc.json",
+    "perf:leak": "node scripts/perf-leak.mjs",
+    "seed:chat": "node scripts/seed-chat.mjs",
+    "seed:register": "node scripts/seed-register.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -19,5 +24,11 @@
     "mysql2": "^3.22.5",
     "socket.io": "^4.7.5",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@lhci/cli": "0.14.0",
+    "playwright": "^1.48.0",
+    "socket.io-client": "^4.7.5",
+    "wait-on": "^8.0.0"
   }
 }

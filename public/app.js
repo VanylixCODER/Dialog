@@ -84,7 +84,7 @@ function enterApp() {
   $("myName").textContent = myName; setMyAvatar();
   socket.emit("identify", { token });
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
-  refreshPresence(); if (!window._presInt) window._presInt = setInterval(refreshPresence, 25000);
+  refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush();
 }
 socket.on("connect", () => {
@@ -455,6 +455,11 @@ function updateDots() {
   // Точечное обновление: меняем только статус-точку на видимых строках списка чатов,
   // не пересобирая весь список и не перезагружая аватарки (раньше на каждый presence-событие
   // делался полный innerHTML="" + appendChild N <li> с новыми <img src> — это и был главный источник лагов).
+  //
+  // ВАЖНО: setMyAvatar() тут НЕ вызываем — оно ребилдит #myAvatar (avatar моего аккаунта) на
+  // КАЖДЫЙ presence-ивен, что при пустом HTTP-кеше перезапрашивает /api/avatar. Своя ава
+  // уже переустанавливается в enterApp() и в profileSave(); статус-точка моя зависит только
+  // от локальной переменной myStatus, не от чужого присутствия.
   const ul = $("chatList");
   if (ul) {
     for (const li of ul.children) {
@@ -469,7 +474,6 @@ function updateDots() {
       dot.className = cls;
     }
   }
-  setMyAvatar();
 }
 socket.on("presence", ({ login, status }) => { presence.set(login, status); updateDots(); });
 socket.on("relations-changed", () => loadRelations());
@@ -608,6 +612,17 @@ function renderMessage(m, scroll = true, ping = false) {
       (mine && m.type === "text" ? `<button class="ma-btn ma-edit" title="${t("edit")}">${window.ICON.edit}</button>` : "") +
       (mine ? `<button class="ma-btn ma-del" title="${t("delete_msg")}">${window.ICON.trash}</button>` : "") + `</div>`;
   }
+  // Разделитель дат — перед сообщением сменились сутки относительно последнего видимого.
+  const curDay = new Date(m.ts).toDateString();
+  const last = messagesEl.lastElementChild;
+  if (last && last.dataset && last.dataset.day && last.dataset.day !== curDay) {
+    const sep = document.createElement("div");
+    sep.className = "day-sep";
+    sep.textContent = dayLabel(curDay);
+    messagesEl.appendChild(sep);
+    sep.dataset.day = curDay;
+  }
+  wrap.dataset.day = curDay;
   wrap.innerHTML = inner;
   renderReactions(wrap, m.reactions || {});
   messagesEl.appendChild(wrap);
@@ -1213,7 +1228,7 @@ window.addEventListener("load", () => { const p = new URLSearchParams(location.s
 // ---------- Соединение ----------
 let connEl;
 socket.on("disconnect", () => { if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
-socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); });
+socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); if (token) refreshPresence(); }); // после reconnect снимок присутствия мог устареть — догоняем одним вызовом вместо poll.
 
 // ---------- Утилиты ----------
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
@@ -1224,8 +1239,14 @@ function notify(text) { let el = $("notifyToast"); if (!el) { el = document.crea
 
 // ---------- Иконки ----------
 function setIcons() {
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", newChatCancel: "close", profileCancel: "close", toastJoin: "phone", toastClose: "phone", infoClose: "close", contactsCancel: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", newChatCancel: "close", profileCancel: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", newChatBtn: "new_chat", profileBtn: "profile", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
+  for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
+  // Кнопки входящего звонка получают подпись снизу (+ tooltip сверху)
+  const toastJoin = $("toastJoin"), toastClose = $("toastClose");
+  if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; toastJoin.setAttribute("data-tip", t("toast_join")); }
+  if (toastClose) { toastClose.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("t_hangup") + '</span>'; toastClose.setAttribute("data-tip", t("t_hangup")); }
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 
