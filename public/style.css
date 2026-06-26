@@ -2068,7 +2068,12 @@ a:focus-visible {
 .theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
 
 /* ============ Themes — переопределения через body[data-theme="…"] ============ */
-/* Matrix — дефолт совпадает с :root, объявлен для явности */
+/* Matrix — дефолт совпадает с :root, объявлен для явности.
+   Дефолтный matrix-стиль был перенасыщен эффектами (скан-линии на body, глоу-текст-shadow
+   на КАЖДОМ символе, пульс-анимации на статусах, неоновые бордеры, фоновая сетка в чате).
+   Здесь — сдержанная версия: те же зелёные токены и иконография, но без постоянного «движущегося»
+   шума. Другие темы (amber / red / contrast / lofi) сохраняют прежний вид — переопределение
+   лежит ТОЛЬКО внутри body[data-theme="matrix"]. */
 body[data-theme="matrix"] {
   --green-100: #e9ffec; --green-200: #b6ffd2; --green-300: #3df58a;
   --green-400: #00ff5a; --green-500: #138a4a; --green-600: #0a6e3d;
@@ -2076,6 +2081,65 @@ body[data-theme="matrix"] {
   --bg-0: #000300; --bg-1: #000700; --bg-2: #020a04; --bg-3: #04120a; --bg-4: #0a1f12;
   --cyan-300: #5ac8ff;
 }
+/* matrix-specific tonalities (минималистичный matrix-стиль):
+   без скан-линий, без глоу-текст-shadow, без неоновых бегущих полос.
+   Подавляем ТОЛЬКО конкретные декоративные анимации — функциональные модальные открытия
+   (modalIn/cardIn/menuPop) сохраняются. Другие темы (amber/red/contrast/lofi) не задеты —
+   всё локально в body[data-theme="matrix"]. */
+/* убираем скан-линии на body, но не на логине (там их нет — там matrixrain на canvas) */
+body[data-theme="matrix"]::before { display: none; }
+/* убираем заливочные радиал-градиенты фона — оставляем плоский bg-1 */
+body[data-theme="matrix"] { background-image: none; }
+/* убираем фоновую сетку в чате (.chat::before) */
+body[data-theme="matrix"] .chat::before { display: none; }
+/* глоу-текст-shadow на body был «0 0 1px ...» на каждом символе — снимаем */
+body[data-theme="matrix"] { text-shadow: none; }
+/* глоу на чате (.chat-head, .bubble) — приглушаем до читабельной теньки, без неоновой ауры */
+body[data-theme="matrix"] .chat-title { text-shadow: none; }
+body[data-theme="matrix"] .bubble { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+body[data-theme="matrix"] .msg.me .bubble { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+/* убираем неоновую бегущую полосу над списком чатов */
+body[data-theme="matrix"] .chatlist::before { display: none; }
+/* анимация «логотип-пульс» в бренде карточки логина — спокойный статический вид */
+body[data-theme="matrix"] .brand-logo::after { display: none; }
+/* убираем анимацию «скан-beam» под хедером чата */
+body[data-theme="matrix"] .chat-head::after { display: none; }
+/* убираем анимацию «сёрф-бегущей полоски» на компоузере */
+body[data-theme="matrix"] .composer::before { display: none; }
+/* убираем всем сообщениям начальную анимацию — появляются мгновенно */
+body[data-theme="matrix"] .msg { animation: none; }
+body[data-theme="matrix"] .bubble { animation: none; }
+/* убираем «пинг-вспышку» (срабатывает при упоминании) — оставляем только рамку */
+body[data-theme="matrix"] .msg.ping .bubble { animation: none; }
+/* убираем bounding pulse на @keyframes inCallBlink / joinPulse — рамка остаётся */
+body[data-theme="matrix"] .call-go.in-call { animation: none; }
+body[data-theme="matrix"] .call-go.join-call { animation: none; }
+/* гасим бесконечный «slide» в voice-bar и статус-индикаторе dm-ping */
+body[data-theme="matrix"] .voice-bar::before { display: none; }
+body[data-theme="matrix"] .typing::before { animation: none; }
+/* убираем прыгающие точки в «typing»-индикаторе и щелчок-recording */
+body[data-theme="matrix"] .typing-dots span { animation: none; }
+body[data-theme="matrix"] .icon-btn.recording { animation: none; }
+/* бейдж «нового сообщения» — без pop-анимации и без глоу */
+body[data-theme="matrix"] .ci-bot .badge { box-shadow: none; animation: none; }
+/* убираем вездесущий drop-shadow на статус-чек-чеке доставки */
+body[data-theme="matrix"] .msg-status[data-status="delivered"],
+body[data-theme="matrix"] .msg-status[data-status="read"] { filter: none; animation: none; }
+/* матричный фон в стейдже звонка (callMatrix) — оставляем canvas, но глушим opacity */
+body[data-theme="matrix"] .call-matrix { opacity: 0.05; }
+/* кольца входящего звонка — без расходящейся волны (один статический круг) */
+body[data-theme="matrix"] .ci-ava-wrap::before,
+body[data-theme="matrix"] .ci-ava-wrap::after { display: none; }
+body[data-theme="matrix"] .ci-btn.accept { animation: none; }
+/* меньше неона в реакциях */
+body[data-theme="matrix"] .reaction { animation: none; }
+body[data-theme="matrix"] .reaction.mine { box-shadow: none; }
+/* аватар тайла без торцевых колец */
+body[data-theme="matrix"] .tile-avatar::before { display: none; }
+/* статичные tooltip'ы без translateY */
+body[data-theme="matrix"] [data-tip]::after { transition: opacity var(--t-fast) var(--ease); transform: translate(-50%, 0) scale(1); }
+/* стили для empty-state чуть тише */
+body[data-theme="matrix"] .es-logo { animation: none; text-shadow: none; }
 /* Amber CRT — янтарный фосфор */
 body[data-theme="amber"] {
   --green-100: #ffeac9; --green-200: #ffce72; --green-300: #ffae40;
