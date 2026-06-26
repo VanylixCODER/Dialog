@@ -47,10 +47,13 @@
     <aside class="chatlist">
       <div class="cl-head">
         <div class="avatar" id="myAvatar">?</div>
-        <div class="me-name" id="myName">—</div>
+        <div class="me-name-wrap">
+          <div class="me-name" id="myName">—</div>
+          <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
+          <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
+        </div>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
-        <button id="newChatBtn" class="hicon-btn" data-i18n-title="new_chat" title="New chat">✎</button>
-        <button id="profileBtn" class="hicon-btn" data-i18n-title="profile" title="Profile">⚙</button>
+        <button id="newChatBtn" class="hicon-btn" data-i18n-title="settings" title="Settings">⚙</button>
         <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
@@ -143,80 +146,107 @@
     </aside>
   </div>
 
-  <!-- Новый чат -->
-  <div id="newChatModal" class="modal hidden"><div class="modal-card">
-    <button id="newChatCancel" class="hub-close">✕</button>
-    <div class="modal-title" data-i18n="new_chat">New chat</div>
-    <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
-    <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
-    <div class="form-error" id="dmError"></div>
-    <div id="friendsQuick" class="room-chips"></div>
-    <div class="modal-sep" data-i18n="or">— or create a group —</div>
-    <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
-    <div class="pick-label" data-i18n="pick_members">Pick members:</div>
-    <div id="groupFriendPick" class="friend-pick"></div>
-    <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
-    <div class="form-error" id="groupError"></div>
-  </div></div>
+  <!-- Все формы (новый чат / настройки группы / контакты / профиль) теперь живут внутри #settingsOverlay.
+       Старые #newChatModal / #groupSettingsModal / #contactsModal / #profileModal удалены как fallback,
+       их элементы были перенесены в пейны настроек (те же `id`, но теперь резолвятся исключительно в #settingsOverlay). -->
 
-  <!-- Настройки группы -->
-  <div id="groupSettingsModal" class="modal hidden"><div class="modal-card">
-    <button id="gsCancel" class="hub-close">✕</button>
-    <div class="modal-title" data-i18n="group_settings">Group settings</div>
-    <div class="profile-ava avatar ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit">#</span></div>
-    <button id="gsAvaBtn" class="btn-ghost" data-i18n="upload_avatar">Upload logo</button>
-    <input id="gsAvaFile" type="file" accept="image/*" hidden />
-    <input id="gsName" class="field" data-i18n-ph="ph_group_name" maxlength="64" />
-    <div class="pick-label" data-i18n="members_title">Members</div>
-    <div id="gsMembers" class="contacts-list"></div>
-    <div class="pick-label gs-owner" data-i18n="add_members">Add friends</div>
-    <div id="gsAddPick" class="friend-pick gs-owner"></div>
-    <div class="form-error" id="gsError"></div>
-    <div class="modal-actions">
-      <button id="gsSave" class="btn-primary gs-owner" data-i18n="save">Save</button>
-      <button id="gsLeave" class="btn-ghost" data-i18n="leave_group_btn">Leave</button>
+  <!-- Меню статуса (хедер чата) — body-level, чтобы поверх всех элементов -->
+  <div id="meStatusMenu" class="me-status-menu hidden" role="menu"></div>
+
+  <!-- Settings overlay — единый оверлей настроек (Discord-style, 80% экрана). 4 вкладки: Profile / Contacts / Themes / Group. -->
+  <div id="settingsOverlay" class="settings-overlay hidden" role="dialog" aria-modal="true">
+    <div class="settings-card" role="document">
+      <div class="settings-head">
+        <h2 id="settingsTitle" data-i18n="settings">Settings</h2>
+        <button id="settingsClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      </div>
+      <nav class="settings-tabs" role="tablist" id="settingsTabs">
+        <button class="settings-tab active" data-tab="profile"    data-i18n="tab_profile"    role="tab">Profile</button>
+        <button class="settings-tab"        data-tab="contacts"   data-i18n="tab_contacts"   role="tab">Contacts</button>
+        <button class="settings-tab"        data-tab="themes"     data-i18n="tab_themes"     role="tab">Themes</button>
+        <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
+        <button class="settings-tab"        data-tab="newchat"    data-i18n="new_chat"      role="tab">New chat</button>
+      </nav>
+      <div class="settings-panes" id="settingsPanes">
+        <!-- Profile -->
+        <section class="settings-pane active" data-pane="profile" role="tabpanel">
+          <h3 data-i18n="tab_profile">Profile</h3>
+          <div class="profile-ava avatar ava" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
+          <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
+          <input id="avaFile" type="file" accept="image/*" hidden />
+          <div class="profile-login" id="profileLogin">login</div>
+          <div class="field-wrap">
+            <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+          </div>
+          <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
+          <div class="form-error" id="profileError"></div>
+          <div class="modal-actions">
+            <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
+            <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
+          </div>
+          <div class="uppercase-tag" data-i18n="set_status">Set status</div>
+          <div style="color:var(--text-dim);font-size:12px;line-height:1.4" data-i18n="esc_to_close">Esc / click outside to close</div>
+        </section>
+        <!-- Contacts -->
+        <section class="settings-pane" data-pane="contacts" role="tabpanel">
+          <h3 data-i18n="contacts">Contacts</h3>
+          <div class="req-add">
+            <input id="reqInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
+            <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
+          </div>
+          <div class="form-error" id="reqError"></div>
+          <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
+          <div id="reqList" class="contacts-list"></div>
+          <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
+          <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
+          <div id="friendsListEl" class="contacts-list"></div>
+          <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
+          <div id="sentList" class="contacts-list"></div>
+        </section>
+        <!-- Themes -->
+        <section class="settings-pane" data-pane="themes" role="tabpanel">
+          <h3 data-i18n="theme_choose">Choose theme</h3>
+          <div class="theme-grid" id="themeGrid"></div>
+        </section>
+        <!-- Group (заполняется в openGroupSettings()) -->
+        <section class="settings-pane" data-pane="groups" role="tabpanel">
+          <h3 data-i18n="group_section">Manage groups</h3>
+          <div id="groupPanelPlaceholder" class="contacts-empty" data-i18n="pick_chat">Select a group chat to manage its settings</div>
+          <div id="groupSettingsBody" class="hidden" style="display:flex;flex-direction:column;gap:12px">
+            <div class="profile-ava avatar ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit">#</span></div>
+            <button id="gsAvaBtn" class="btn-ghost gs-owner" data-i18n="upload_avatar">Upload logo</button>
+            <input id="gsAvaFile" type="file" accept="image/*" hidden />
+            <input id="gsName" class="field" data-i18n-ph="ph_group_name" maxlength="64" />
+            <div class="pick-label" data-i18n="members_title">Members</div>
+            <div id="gsMembers" class="contacts-list"></div>
+            <div class="pick-label gs-owner" data-i18n="add_members">Add friends</div>
+            <div id="gsAddPick" class="friend-pick gs-owner"></div>
+            <div class="form-error" id="gsError"></div>
+            <div class="modal-actions">
+              <button id="gsSave" class="btn-primary gs-owner" data-i18n="save">Save</button>
+              <button id="gsLeave" class="btn-ghost" data-i18n="leave_group_btn">Leave</button>
+            </div>
+            <button id="gsDelete" class="btn-ghost gs-owner gs-danger" data-i18n="delete_group">Delete group</button>
+          </div>
+        </section>
+        <!-- New chat (отдельная вкладка — удобно для пустого списка чатов) -->
+        <section class="settings-pane" data-pane="newchat" role="tabpanel">
+          <h3 data-i18n="new_chat">New chat</h3>
+          <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
+          <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
+          <div class="form-error" id="dmError"></div>
+          <div id="friendsQuick" class="room-chips"></div>
+          <div class="modal-sep" data-i18n="or">— or create a group —</div>
+          <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
+          <div class="pick-label" data-i18n="pick_members">Pick members:</div>
+          <div id="groupFriendPick" class="friend-pick"></div>
+          <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
+          <div class="form-error" id="groupError"></div>
+        </section>
+      </div>
     </div>
-    <button id="gsDelete" class="btn-ghost gs-owner gs-danger" data-i18n="delete_group">Delete group</button>
-  </div></div>
+  </div>
 
-  <!-- Контакты / заявки -->
-  <div id="contactsModal" class="modal hidden"><div class="modal-card wide">
-    <button id="contactsCancel" class="hub-close">✕</button>
-    <div class="modal-title" data-i18n="contacts">Contacts</div>
-    <div class="req-add">
-      <input id="reqInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
-      <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
-    </div>
-    <div class="form-error" id="reqError"></div>
-    <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
-    <div id="reqList" class="contacts-list"></div>
-    <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
-    <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
-    <div id="friendsListEl" class="contacts-list"></div>
-    <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
-    <div id="sentList" class="contacts-list"></div>
-  </div></div>
-
-  <!-- Профиль -->
-  <div id="profileModal" class="modal hidden"><div class="modal-card">
-    <button id="profileCancel" class="hub-close">✕</button>
-    <div class="modal-title" data-i18n="profile">Profile</div>
-    <div class="profile-ava avatar ava" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
-    <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
-    <input id="avaFile" type="file" accept="image/*" hidden />
-    <div class="profile-login" id="profileLogin">login</div>
-    <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
-    <textarea id="profileDesc" class="field" rows="2" data-i18n-ph="ph_description" maxlength="280"></textarea>
-    <div class="status-pick">
-      <button class="status-opt" data-st="online"><span class="st-dot st-online"></span><span data-i18n="status_online">Online</span></button>
-      <button class="status-opt" data-st="dnd"><span class="st-dot st-dnd"></span><span data-i18n="status_dnd">Do not disturb</span></button>
-      <button class="status-opt" data-st="invisible"><span class="st-dot st-offline"></span><span data-i18n="status_invisible">Invisible</span></button>
-    </div>
-    <div class="form-error" id="profileError"></div>
-    <div class="modal-actions"><button id="profileSave" class="btn-primary" data-i18n="save">Save</button><button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button></div>
-  </div></div>
-
-  <!-- Входящий звонок (полноэкранный) -->
   <div id="callToast" class="call-incoming hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
     <div class="ci-card">

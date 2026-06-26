@@ -37,6 +37,26 @@ const sfx = {
 };
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
+// ---------- Темы ----------
+// Конфиг каждой темы: ключ применяется к <body data-theme="...">; name/desc — i18n-ключи;
+// swatch — 4 hex-цвета для превью в #themeGrid (фон, акцент 1, акцент 2, тёмный фон).
+const THEMES = [
+  { key: "matrix",   name: "theme_matrix",   desc: "theme_desc_matrix",   swatch: ["#00ff5a", "#00cc48", "#138a4a", "#020a04"] },
+  { key: "amber",    name: "theme_amber",    desc: "theme_desc_amber",    swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
+  { key: "red",      name: "theme_red",      desc: "theme_desc_red",      swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
+  { key: "contrast", name: "theme_contrast", desc: "theme_desc_contrast", swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
+  { key: "lofi",     name: "theme_lofi",     desc: "theme_desc_lofi",     swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
+];
+function applyTheme(key) {
+  if (!THEMES.find((x) => x.key === key)) key = "matrix";
+  document.body.dataset.theme = key;
+  try { localStorage.setItem("dialog_theme", key); } catch {}
+  const grid = $("themeGrid");
+  if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+}
+applyTheme(localStorage.getItem("dialog_theme") || "matrix"); // применяем сразу, до рендера чатов
+
+
 // ---------- Язык ----------
 function initLang() {
   const v = window.getLang();
@@ -81,7 +101,7 @@ function enterApp() {
   myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || "";
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  $("myName").textContent = myName; setMyAvatar();
+  $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   socket.emit("identify", { token });
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
@@ -271,7 +291,7 @@ $("chatMenuBtn").onclick = (e) => {
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
   if (curKind === "group") {
-    item(t("group_settings"), "settings", openGroupSettings);
+    item(t("group_settings"), "settings", () => openSettings("groups"));
     item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
   } else if (curKind === "dm") {
     const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
@@ -288,21 +308,32 @@ $("chatMenuBtn").onclick = (e) => {
 document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap") && !e.target.closest(".chat-menu")) $("chatMenu").classList.add("hidden"); });
 function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
 
-// ---------- Настройки группы ----------
+// ---------- Настройки группы (живёт в settingsOverlay → пейн groups) ----------
 let gsId = null, gsOwner = false, gsAvatar = null, gsAdd = new Set();
-async function openGroupSettings() {
-  if (curKind !== "group") return;
+// Заполняет пейн groups в #settingsOverlay. Если группа не открыта — показывает placeholder.
+async function populateGroupSettingsPane() {
+  const placeholder = $("groupPanelPlaceholder"); const body = $("groupSettingsBody");
+  if (curKind !== "group") {
+    if (placeholder) placeholder.classList.remove("hidden");
+    if (body) body.classList.add("hidden");
+    return { ok: true, noGroup: true }; // placeholder — это успешный рендер (без API-вызова), кешируем
+  }
   gsId = myRoom.slice(5); gsAvatar = null; gsAdd.clear();
+  if (placeholder) placeholder.classList.add("hidden");
+  if (body) body.classList.remove("hidden");
   const { ok, data } = await api("/api/groups/" + gsId, null, "GET");
-  if (!ok) return;
+  if (!ok) {
+    const err = $("gsError"); if (err) err.textContent = "Failed to load group"; // без i18n — отдельный ключ «t(\"err_*\")» в словаре не подходит
+    return { ok: false };
+  }
   gsOwner = data.owner === profile.login;
-  const modal = $("groupSettingsModal"); modal.classList.toggle("is-owner", gsOwner); modal.classList.remove("hidden");
+  // 'is-owner' модификатор вешаем на сам #settingsOverlay вместо удалённого модала
+  $("settingsOverlay").classList.toggle("is-owner", gsOwner);
   $("gsError").textContent = "";
   $("gsName").value = data.name; $("gsName").disabled = !gsOwner;
   $("gsAvaImg").src = "/api/group-avatar/" + gsId + "?v=" + Date.now();
   $("gsAvaImg").onerror = () => { $("gsAvaImg").style.display = "none"; $("gsAvaInit").style.display = "block"; };
   $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none";
-  // участники
   const box = $("gsMembers"); box.innerHTML = "";
   data.members.forEach((m) => {
     const row = document.createElement("div"); row.className = "contact-row";
@@ -311,7 +342,6 @@ async function openGroupSettings() {
     if (gsOwner && m.login !== data.owner) { const b = document.createElement("button"); b.className = "danger"; b.textContent = t("remove"); b.onclick = () => removeGroupMember(m.login); row.appendChild(b); }
     box.appendChild(row);
   });
-  // добавить друзей (только владелец, кто не в группе)
   const memberSet = new Set(data.members.map((m) => m.login));
   const addBox = $("gsAddPick"); addBox.innerHTML = "";
   relations.friends.filter((l) => !memberSet.has(l)).forEach((l) => {
@@ -319,8 +349,8 @@ async function openGroupSettings() {
     b.onclick = () => { if (gsAdd.has(l)) { gsAdd.delete(l); b.classList.remove("on"); } else { gsAdd.add(l); b.classList.add("on"); } };
     addBox.appendChild(b);
   });
+  return { ok: true };
 }
-$("gsCancel").onclick = () => $("groupSettingsModal").classList.add("hidden");
 $("gsAvaBtn").onclick = () => $("gsAvaFile").click();
 $("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 2 * 1024 * 1024) { $("gsError").textContent = "≤ 2 MB"; return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
 $("gsSave").onclick = async () => {
@@ -328,13 +358,19 @@ $("gsSave").onclick = async () => {
   const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
   await api("/api/groups/" + gsId, body);
   if (gsAdd.size) await api("/api/groups/" + gsId + "/members", { add: [...gsAdd] });
-  avaVer = Date.now(); $("groupSettingsModal").classList.add("hidden"); loadGroups();
+  avaVer = Date.now(); closeSettings(); loadGroups();
 };
-async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/members", { remove: login }); openGroupSettings(); }
-$("gsLeave").onclick = () => { $("groupSettingsModal").classList.add("hidden"); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
-$("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); $("groupSettingsModal").classList.add("hidden"); };
-socket.on("group-updated", () => { loadGroups(); if (curKind === "group" && !$("groupSettingsModal").classList.contains("hidden")) openGroupSettings(); if (curKind === "group" && !$("infoPanel").classList.contains("hidden")) renderMembers(); });
-socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); $("groupSettingsModal").classList.add("hidden"); } renderChatList($("searchInput").value); });
+async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/members", { remove: login }); populateGroupSettingsPane(); }
+$("gsLeave").onclick = () => { closeSettings(); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
+$("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); closeSettings(); };
+// group-updated: если пейн groups активен — перечитать; иначе просто обновить список чатов/панели.
+socket.on("group-updated", () => {
+  loadGroups();
+  // Обновляем пейн groups если он сейчас открыт над активной группой.
+  if (curKind === "group" && settingsOpen && $("settingsTabs")?.querySelector('.settings-tab.active')?.dataset.tab === "groups") populateGroupSettingsPane();
+  if (curKind === "group" && !$("infoPanel").classList.contains("hidden")) renderMembers();
+});
+socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); } if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
 
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
@@ -343,7 +379,8 @@ function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", p
 
 // ---------- Новый чат ----------
 $("newChatBtn").onclick = () => { $("newChatModal").classList.remove("hidden"); $("dmError").textContent = ""; $("groupError").textContent = ""; renderFriendChips(); renderGroupPick(); };
-$("newChatCancel").onclick = () => $("newChatModal").classList.add("hidden");
+// (#newChatCancel устарел вместе с #newChatModal — форма «Новый чат» теперь в #settingsOverlay → пейн «newchat».)
+$("newChatCancel") && ($("newChatCancel").onclick = () => closeSettings());
 $("emptyNewChat").onclick = () => $("newChatBtn").click();
 $("emptyAddFriend").onclick = () => $("contactsBtn").click();
 function renderFriendChips() {
@@ -361,64 +398,64 @@ function renderGroupPick() {
   });
 }
 async function openDM(login) {
-  login = (login || $("dmInput").value).trim().toLowerCase();
-  if (!login || login === profile.login) { $("dmError").textContent = t("err_user_not_found"); return; }
+  login = (login || $("dmInput")?.value || "").trim().toLowerCase();
+  if (!login || login === profile.login) { const e = $("dmError"); if (e) e.textContent = t("err_user_not_found"); return; }
   const { ok, data } = await api("/api/user/" + login, null, "GET");
-  if (!ok) { $("dmError").textContent = t("err_user_not_found"); return; }
-  $("newChatModal").classList.add("hidden"); $("dmInput").value = "";
+  if (!ok) { const e = $("dmError"); if (e) e.textContent = t("err_user_not_found"); return; }
+  closeSettings(); const di = $("dmInput"); if (di) di.value = "";
   openChat({ key: dmKey(login), type: "dm", login, name: data.name || login, last: "", ts: Date.now(), unread: 0 });
   persistDMs();
 }
 $("dmOpenBtn").onclick = () => openDM();
 $("createGroupBtn").onclick = async () => {
-  const name = $("groupName").value.trim();
-  if (!name) { $("groupError").textContent = t("err_group_name"); return; }
+  const name = ($("groupName")?.value || "").trim();
+  if (!name) { const e = $("groupError"); if (e) e.textContent = t("err_group_name"); return; }
   const { ok, data } = await api("/api/groups", { name, members: [...groupPicked].join(",") });
-  if (!ok) { $("groupError").textContent = data.error || "error"; return; }
-  $("newChatModal").classList.add("hidden"); $("groupName").value = ""; groupPicked.clear();
+  if (!ok) { const e = $("groupError"); if (e) e.textContent = data.error || "error"; return; }
+  closeSettings(); const gn = $("groupName"); if (gn) gn.value = ""; groupPicked.clear();
   const key = "@grp:" + data.id; chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
   openChat(chats.get(key));
 };
 
-// ---------- Профиль ----------
-$("profileBtn").onclick = () => {
-  $("profileModal").classList.remove("hidden"); $("profileError").textContent = "";
-  $("profileLogin").textContent = profile.login; $("profileName").value = myName; $("profileDesc").value = myDesc;
-  $("profileAvaImg").src = avaUrl(profile.login); $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
-  $("profileAvaInit").textContent = initials(myName);
-  document.querySelectorAll(".status-opt").forEach((x) => x.classList.toggle("active", x.dataset.st === myStatus));
-};
-$("profileCancel").onclick = () => $("profileModal").classList.add("hidden");
-let pendingStatus = "online", pendingAvatar;
-document.querySelectorAll(".status-opt").forEach((x) => x.onclick = () => { pendingStatus = x.dataset.st; document.querySelectorAll(".status-opt").forEach((y) => y.classList.toggle("active", y === x)); });
-$("avaUploadBtn").onclick = () => $("avaFile").click();
-$("avaFile").onchange = (e) => {
+// ---------- Профиль (пейн «Profile» в #settingsOverlay) ----------
+// Старые #profileModal / #contactsModal / #newChatModal / #groupSettingsModal удалены —
+// их кнопки перенаправлены на openSettings(tab) выше; формы живут как пейны в #settingsOverlay.
+let pendingAvatar = null;
+$("avaUploadBtn") && ($("avaUploadBtn").onclick = () => $("avaFile").click());
+$("avaFile") && ($("avaFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
   if (f.size > 2 * 1024 * 1024) { $("profileError").textContent = "≤ 2 MB"; return; }
-  const r = new FileReader(); r.onload = () => { pendingAvatar = r.result; $("profileAvaImg").src = r.result; $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none"; }; r.readAsDataURL(f);
-};
-$("profileSave").onclick = async () => {
-  pendingStatus = document.querySelector(".status-opt.active")?.dataset.st || myStatus;
-  const body = { name: $("profileName").value.trim(), description: $("profileDesc").value, status: pendingStatus };
+  const r = new FileReader();
+  r.onload = () => { pendingAvatar = r.result; const img = $("profileAvaImg"); img.src = r.result; img.style.display = "block"; $("profileAvaInit").style.display = "none"; };
+  r.readAsDataURL(f);
+  e.target.value = "";
+});
+$("profileSave") && ($("profileSave").onclick = async () => {
+  $("profileError").textContent = "";
+  const body = { name: ($("profileName").value || "").trim(), description: $("profileDesc").value || "" };
   if (pendingAvatar) body.avatar = pendingAvatar;
   const { ok, data } = await api("/api/profile", body);
-  if (!ok) { $("profileError").textContent = data.error || "error"; return; }
-  profile = data.profile; myName = profile.name; myDesc = body.description; myStatus = pendingStatus; avaVer = Date.now(); pendingAvatar = null;
-  presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
-  socket.emit("set-status", myStatus);
-  $("myName").textContent = myName; setMyAvatar(); $("profileModal").classList.add("hidden"); renderChatList($("searchInput").value);
-};
-$("logoutBtn").onclick = async () => { await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); };
+  if (!ok) { $("profileError").textContent = data.error || "Failed to save profile"; return; }
+  profile = data.profile; myName = profile.name; myDesc = body.description;
+  // Тоже синхронизируем статус — раньше жил в #profileModal.status-opt и сохранялся здесь же.
+  // Если статус-пилл в хедере уже поменял myStatus, отдаём его в payload, чтобы /api/profile
+  // не «откатил» статус обратно к старому значению.
+  if (profile.status && profile.status !== myStatus) { myStatus = profile.status; renderMeStatus(); }
+  avaVer = Date.now(); pendingAvatar = null;
+  $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
+  closeSettings(); renderChatList($("searchInput").value);
+});
+$("logoutBtn") && ($("logoutBtn").onclick = async () => { await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Контакты / друзья ----------
-$("contactsBtn").onclick = () => { $("contactsModal").classList.remove("hidden"); $("reqError").textContent = ""; loadRelations(); };
-$("contactsCancel").onclick = () => $("contactsModal").classList.add("hidden");
+$("contactsBtn").onclick = () => openSettings("contacts");
+// Кнопка отправки заявки работает по тому же #reqInput, который теперь живёт в settingsOverlay → contacts пейн.
 $("reqSendBtn").onclick = async () => {
-  const target = $("reqInput").value.trim().toLowerCase();
+  const inp = $("reqInput"); const target = (inp?.value || "").trim().toLowerCase();
   if (!target) return;
   const { ok, data } = await api("/api/friend", { target, action: "request" });
-  if (!ok) { $("reqError").textContent = data.error || t("err_user_not_found"); return; }
-  $("reqInput").value = ""; loadRelations();
+  if (!ok) { const e = $("reqError"); if (e) e.textContent = data.error || t("err_user_not_found"); return; }
+  if (inp) inp.value = ""; loadRelations();
 };
 async function loadRelations() {
   const { ok, data } = await api("/api/relations", null, "GET");
@@ -434,12 +471,12 @@ function contactRow(login, buttons) {
   return row;
 }
 function renderContacts() {
-  if (!$("reqList")) return;
-  $("reqList").innerHTML = ""; $("friendsListEl").innerHTML = ""; $("sentList").innerHTML = "";
-  $("reqEmpty").classList.toggle("hidden", relations.incoming.length > 0);
-  relations.incoming.forEach((l) => $("reqList").appendChild(contactRow(l, [["✓", () => friend(l, "accept")], ["✕", () => friend(l, "decline"), true]])));
-  relations.friends.forEach((l) => $("friendsListEl").appendChild(contactRow(l, [[t("dm_open"), () => { $("contactsModal").classList.add("hidden"); openDM(l); }], [t("remove_friend"), () => friend(l, "remove"), true]])));
-  relations.sent.forEach((l) => $("sentList").appendChild(contactRow(l, [[t("pending"), () => {}]])));
+  const reqList = $("reqList"); if (!reqList) return;
+  reqList.innerHTML = ""; const fL = $("friendsListEl"); if (fL) fL.innerHTML = ""; const sL = $("sentList"); if (sL) sL.innerHTML = "";
+  const reqEmpty = $("reqEmpty"); if (reqEmpty) reqEmpty.classList.toggle("hidden", relations.incoming.length > 0);
+  relations.incoming.forEach((l) => reqList.appendChild(contactRow(l, [["✓", () => friend(l, "accept")], ["✕", () => friend(l, "decline"), true]])));
+  relations.friends.forEach((l) => fL.appendChild(contactRow(l, [[t("dm_open"), () => { openDM(l); }], [t("remove_friend"), () => friend(l, "remove"), true]])));
+  relations.sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
 }
 async function friend(target, action) { await api("/api/friend", { target, action }); loadRelations(); }
 async function block(target, action) { await api("/api/relations", { target, action }); loadRelations(); }
@@ -1136,7 +1173,7 @@ $("popoutBtn").onclick = async () => {
     if ("documentPictureInPicture" in window) {
       pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });
       mountGridIn(pipWin);
-      pipWin.addEventListener("pagehide", () => { returnGridHome(); pipWin = null; });
+      pipWin.addEventListener("pagehide", () => { const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); });
     } else {
       // Firefox / без Document PiP — обычное окно
       pipWin = window.open("", "dialogCall", "width=380,height=520,menubar=no,toolbar=no");
@@ -1144,7 +1181,7 @@ $("popoutBtn").onclick = async () => {
       pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
       mountGridIn(pipWin);
       clearInterval(pipPoll);
-      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); returnGridHome(); pipWin = null; } }, 700);
+      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); } }, 700);
     }
   } catch (e) { console.log("pip", e.message); pipWin = null; }
 };
@@ -1185,15 +1222,46 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ---------- Входящий звонок (поп-ап + рингтон + cava) ----------
-const ring = { audio: null, src: null, analyser: null, raf: 0, data: null, bars: [] };
+const ring = { audio: null, raf: 0, data: null, bars: [], analyser: null, toneLoop: null };
+// Ригнтон целиком на WebAudio (синтез). Файл /src/Ringtone.mp3 НЕ требуется:
+// два коротких аккорда minor-септимы, повтор каждые 4.5 с — после минуты звонка не душно.
+// Cava-визуализация рисует симулированный паттерн (см. startCava — ветка при ring.analyser == null).
+const RING_NOTES = [
+  [440, 0.42, 0.06], [659, 0.42, 0.05], [554, 0.42, 0.04],   // аккорд 1: A + E + C# (Am7-flavor)
+  [0,   0.18, 0],                                              // малая пауза
+  [494, 0.42, 0.05], [659, 0.42, 0.05], [587, 0.42, 0.04],   // аккорд 2: чуть выше (B + E + D)
+  [0,   0.20, 0],                                              // длинная пауза
+];
+function playRingChord() {
+  const ctx = ensureAudioCtx(); if (!ctx) return;
+  let t0 = ctx.currentTime + 0.04;
+  RING_NOTES.forEach(([f, d, v]) => {
+    if (!f) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(v, t0 + 0.04);
+    g.gain.setValueAtTime(v, t0 + d - 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + d + 0.02);
+    t0 += d + 0.06;
+  });
+}
 function startRingtone() {
-  const ctx = ensureAudioCtx();
-  if (!ring.audio) ring.audio = new Audio("/src/Ringtone.mp3");
-  ring.audio.loop = true; ring.audio.currentTime = 0; ring.audio.play().catch(() => {});
-  if (ctx && !ring.analyser) { try { ring.src = ctx.createMediaElementSource(ring.audio); ring.analyser = ctx.createAnalyser(); ring.analyser.fftSize = 128; ring.src.connect(ring.analyser); ring.analyser.connect(ctx.destination); ring.data = new Uint8Array(ring.analyser.frequencyBinCount); } catch {} }
+  if (ring.audio) return; // двойной вызов не заводит второй луп
+  ensureAudioCtx();
+  ring.audio = { synth: true };
+  playRingChord();
+  ring.toneLoop = setInterval(playRingChord, 4500);
   startCava();
 }
-function stopRingtone() { if (ring.audio) ring.audio.pause(); cancelAnimationFrame(ring.raf); ring.raf = 0; const c = $("cavaCanvas"); if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height); }
+function stopRingtone() {
+  clearInterval(ring.toneLoop); ring.toneLoop = null;
+  ring.audio = null;
+  cancelAnimationFrame(ring.raf); ring.raf = 0;
+  const c = $("cavaCanvas"); if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+}
 function startCava() {
   const canvas = $("cavaCanvas"), toast = $("callToast"); if (!canvas) return; const cx = canvas.getContext("2d"); const N = 40;
   if (ring.bars.length !== N) ring.bars = new Array(N).fill(0); cancelAnimationFrame(ring.raf);
@@ -1258,17 +1326,192 @@ function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&a
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
 function notify(text) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
 
+// ---------- Settings overlay (Discord-style, ~80vw × 80vh), status pill, ESC/click-outside ----------
+// Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
+// 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
+let settingsOpen = false;
+const SETTINGS_TABS = ["profile", "contacts", "themes", "groups", "newchat"];
+function openSettings(tab) {
+  if (!SETTINGS_TABS.includes(tab)) tab = "profile";
+  const ov = $("settingsOverlay"); if (!ov) return;
+  // Если открываем groups без активной группы — показываем placeholder в пейне (ТОЛЬКО переключаем таб, не перенаправляем).
+  // (Сохранение состояния открытого таба важнее, чем автоматический возврат на profile.)
+  ov.classList.remove("hidden");
+  settingsOpen = true;
+  switchTab(tab);
+  applyI18n(ov); // обновить лейблы и плейсхолдеры (темы/табы называния)
+  if (!ov._themesRendered) renderThemes();
+  if (tab === "contacts") loadRelations();
+  if (tab === "profile") refreshProfilePane();
+  if (tab === "groups") populateGroupSettingsPane();
+  if (tab === "newchat") { renderFriendChips(); renderGroupPick(); }
+  renderChatList($("searchInput").value);
+}
+function closeSettings() {
+  if (!settingsOpen) return;
+  const ov = $("settingsOverlay"); if (ov) ov.classList.add("hidden");
+  settingsOpen = false;
+}
+function switchTab(tab) {
+  if (!SETTINGS_TABS.includes(tab)) tab = "profile";
+  const tabs = $("settingsTabs"); if (tabs) tabs.querySelectorAll(".settings-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  const panes = $("settingsPanes"); if (panes) panes.querySelectorAll(".settings-pane").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab));
+  // Регидрация данных пейна при переключении вручную (иначе кликом по табу после открытия оверлея
+  // демонстрируется placeholder / устаревший контент до явного повторного openSettings).
+  hydratePane(tab);
+}
+// Объявлен ДО hydratePane, чтобы не упасть в TDZ при первом вызове из openSettings().
+// { id: gsId, ts: Date.now() } — если уже фетчили эту группу в текущей открытой сессии оверлея, повторно не лупим /api/groups/:id.
+let lastGsFetch = null; // success cache: {id (gsId или null для placeholder), ts}
+let gsFetching = false;  // in-flight guard: предотвращает спам-clicks /api/groups/:id пока не вернулся первый запрос
+function hydratePane(tab) {
+  if (!settingsOpen) return;
+  if (tab === "profile") refreshProfilePane();
+  else if (tab === "contacts") loadRelations();
+  else if (tab === "groups") {
+    // Сентинел `id: null` кеширует и режим «без активной группы» (placeholder), чтобы повторные клики
+    // по табу не гоняли populateGroupSettingsPane вхолостую — функция всё равно идемпотентна,
+    // но дёргает каждый раз DOM-узлы #gsName / #gsMembers / #gsAvaImg.
+    const wantId = curKind === "group" ? myRoom.slice(5) : null;
+    if (lastGsFetch && lastGsFetch.id === wantId) return;
+    if (gsFetching) return; // спам-click: ждём завершения текущего запроса
+    gsFetching = true;
+    populateGroupSettingsPane()
+      .then((res) => { if (res && res.ok) lastGsFetch = { id: wantId, ts: Date.now() }; })
+      .finally(() => { gsFetching = false; });
+    return;
+  }
+  else if (tab === "newchat") { renderFriendChips(); renderGroupPick(); }
+  // themes: один раз через renderThemes() + _themesRendered guard
+}
+function refreshProfilePane() {
+  if (!profile) return;
+  $("profileError").textContent = "";
+  $("profileLogin").textContent = profile.login;
+  $("profileName").value = myName || "";
+  $("profileDesc").value = myDesc || "";
+  $("profileAvaImg").src = avaUrl(profile.login);
+  $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
+  $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
+  $("profileAvaInit").textContent = initials(myName);
+}
+function renderThemes() {
+  const grid = $("themeGrid"); if (!grid) return;
+  grid.innerHTML = "";
+  const cur = document.body.dataset.theme || "matrix";
+  THEMES.forEach((th) => {
+    const opt = document.createElement("button");
+    opt.type = "button";
+    opt.className = "theme-opt" + (th.key === cur ? " active" : "");
+    opt.dataset.theme = th.key;
+    opt.innerHTML =
+      `<div class="theme-swatch">${th.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div>` +
+      `<div class="theme-name">${escapeHtml(t(th.name))}</div>` +
+      `<div class="theme-desc">${escapeHtml(t(th.desc))}</div>`;
+    opt.onclick = () => applyTheme(th.key);
+    grid.appendChild(opt);
+  });
+  const ov = $("settingsOverlay"); if (ov) ov._themesRendered = true;
+}
+
+// Перенаправляем хедер-кнопки на settings overlay.
+$("contactsBtn").onclick = () => openSettings("contacts");
+$("profileBtn").onclick = () => openSettings("profile");
+$("newChatBtn").onclick = () => openSettings("newchat");
+// Табы / закрытие оверлея
+$("settingsTabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".settings-tab");
+  if (tab) switchTab(tab.dataset.tab);
+});
+$("settingsClose").onclick = closeSettings;
+
+// Click-outside на бэкдроп (сам .settings-overlay div — фоновый слой) закрывает оверлей.
+// ВАЖНО: проверяем ровно сам элемент overlay, а не вложенные карточки (event.target === overlay).
+$("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeSettings(); });
+
+// ---------- Status pill в хедере чатлиста (рядом с никнеймом, дефолт = online) ----------
+function renderMeStatus() {
+  const pill = $("meStatus"); if (!pill) return;
+  const cls = statusClass(myStatus === "invisible" ? "offline" : myStatus);
+  const labelKey = "status_" + (myStatus === "invisible" ? "offline" : myStatus);
+  pill.innerHTML = `<span class="st-dot ms-dot st-${cls}"></span><span>${escapeHtml(t(labelKey))}</span>`;
+  pill.classList.toggle("me-status-dnd", myStatus === "dnd");
+  pill.classList.toggle("me-status-invisible", myStatus === "invisible");
+}
+function openStatusMenu() {
+  const menu = $("meStatusMenu"); if (!menu) return;
+  menu.innerHTML = "";
+  // Порядок: online → dnd → invisible. Для invisible в UI подпись "Invisible", реальная точка — серый (offline).
+  [[ "online", "online", "status_online" ], [ "dnd", "dnd", "status_dnd" ], [ "invisible", "offline", "status_invisible" ]]
+    .forEach(([key, dot, labelKey]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = (myStatus === key) ? "on" : "";
+      b.innerHTML = `<span class="st-dot ms-dot st-${statusClass(dot)}"></span><span>${escapeHtml(t(labelKey))}</span>`;
+      b.onclick = (e) => { e.stopPropagation(); setMyStatus(key); };
+      menu.appendChild(b);
+    });
+  menu.classList.remove("hidden");
+  // Позиционируем под пиллой, прижимаем к левому краю чтобы не вылезало за экран.
+  const r = $("meStatus").getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + "px";
+  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - 240 - 8)) + "px";
+}
+function closeStatusMenu() { const m = $("meStatusMenu"); if (m) m.classList.add("hidden"); }
+async function setMyStatus(key) {
+  if (!profile) return;
+  if (key === myStatus) { closeStatusMenu(); return; }
+  closeStatusMenu();
+  const prev = myStatus;
+  myStatus = key;
+  renderMeStatus();
+  presence.set(profile.login, key === "invisible" ? "offline" : key);
+  socket.emit("set-status", key);
+  setMyAvatar();
+  // Сохраняем на сервере минимальным пейлоадом — иначе /api/profile трется с `name/description`,
+  // а пользователь мог что-то поменять но ещё не нажал Save.
+  try {
+    const { ok, data } = await api("/api/profile", { status: key });
+    if (!ok) { myStatus = prev; renderMeStatus(); presence.set(profile.login, prev === "invisible" ? "offline" : prev); setMyAvatar(); notify(t("err_save_status") || "Status change failed"); return; }
+    if (data.profile) profile.status = data.profile.status || key;
+  } catch { myStatus = prev; renderMeStatus(); }
+  renderChatList($("searchInput").value);
+}
+$("meStatus").onclick = (e) => { e.stopPropagation(); if ($("meStatusMenu").classList.contains("hidden")) openStatusMenu(); else closeStatusMenu(); };
+
+// ---------- ESC + click-outside для всех видимых оверлеев ----------
+// Один глобальный keydown обрабатывает Esc в порядке «сверху вниз» по важности.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  // Inline-edit в сообщении уже обрабатывает Esc сам (startEdit), не трогаем.
+  if (!$("lightbox").classList.contains("hidden")) { closeLightbox(); return; }
+  if (settingsOpen) { closeSettings(); return; }
+  if (!$("meStatusMenu").classList.contains("hidden")) { closeStatusMenu(); return; }
+  if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
+  if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
+  if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
+  if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
+});
+
+// Click-outside для status-меню: глобальный click-проверка по DOM.
+// (chat menu уже имел свой обработчик в исходниках — оставляем; добавляем сюда только для новых штук.)
+document.addEventListener("click", (e) => {
+  if (!$("meStatusMenu").classList.contains("hidden") && !e.target.closest("#meStatusMenu") && e.target !== $("meStatus")) closeStatusMenu();
+});
+
 // ---------- Иконки ----------
 function setIcons() {
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newChatBtn: "edit", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", newChatCancel: "close", profileCancel: "close", infoClose: "close", contactsCancel: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", newChatBtn: "new_chat", profileBtn: "profile", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
+  // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", profileBtn: "settings", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
   // чтобы [data-tip]::after не дублировал ту же подпись при наведении).
   const toastJoin = $("toastJoin"), toastClose = $("toastClose");
   if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; }
-  if (toastClose) { toastClose.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
+  if (toastClose) { toastClose.innerHTML = window.ICON.phoneOff + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 
