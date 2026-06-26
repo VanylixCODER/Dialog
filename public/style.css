@@ -430,6 +430,33 @@ a:focus-visible {
   color: var(--green-100);
   letter-spacing: 0.3px;
 }
+/* Аватар и имя в хедере чатлиста — кликабельные: открывают свой профиль (см. openMyProfile в app.js).
+   .me-trigger общий селектор для любых "triggers" в cl-head; фокус-кольцо — единый стиль. */
+.cl-head .me-trigger {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease), text-shadow var(--t-fast) var(--ease);
+}
+.cl-head .avatar.me-trigger:hover {
+  border-color: var(--green-400);
+  box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.12);
+  transform: scale(1.08);
+}
+.cl-head .avatar.me-trigger:active { transform: scale(0.96); }
+.cl-head .me-name.me-trigger:hover {
+  color: var(--green-300);
+  text-shadow: 0 0 8px rgba(0, 255, 90, 0.5);
+}
+.cl-head .me-name.me-trigger:active { color: var(--green-100); }
+/* Кольцо клавиатурного фокуса для обеих триггеров. > 0 один outline (браузерный :focus-visible
+   глобально убит выше в :focus-visible { outline: none } — нужен явный аналог для chatlist header). */
+.cl-head .me-trigger:focus-visible {
+  outline: 2px solid var(--green-400);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.22);
+}
 .hicon-btn {
   width: 36px; height: 36px;
   display: grid; place-items: center;
@@ -1274,6 +1301,21 @@ a:focus-visible {
 }
 
 .mp-card { align-items: center; text-align: center; }
+
+/* Add-member mini-modal: компактнее обычного модала, ровно одна колонка выбора друзей + Add. */
+.am-card {
+  width: min(380px, 94vw);
+  padding: 24px 22px 18px;
+  gap: 12px;
+}
+.am-card .friend-pick {
+  max-height: 240px;
+  min-height: 60px;
+}
+/* + над списком участников (info panel); группы-владелец видит, иначе скрыт. Спиннер-стейт
+   совпадает с другими hicon-btn — тот же hover/focus. */
+.info-add-btn { font-size: 18px; line-height: 1; font-weight: 700; }
+.info-add-btn.hidden { display: none; }
 .mp-name {
   font-weight: 800; font-size: 20px; color: var(--green-100);
   text-shadow: 0 0 8px rgba(0, 255, 90, 0.2);
