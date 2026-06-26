@@ -14,6 +14,8 @@
     drops = new Array(cols).fill(0).map(() => Math.random() * -50);
   }
   function frame() {
+    // Вкладка скрыта — полная пауза canvas: 0 FPS, чтобы не насиловать CPU в фоне.
+    if (document.hidden) { raf = 0; return; }
     raf = requestAnimationFrame(frame);
     ctx.fillStyle = "rgba(0,7,0,0.08)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.font = "14px monospace";
@@ -31,6 +33,10 @@
   // остановить дождь, когда вход скрыт (после логина)
   new MutationObserver(() => {
     if (login.classList.contains("hidden")) cancelAnimationFrame(raf);
-    else if (!raf) frame();
+    else if (!document.hidden && !raf) frame();
   }).observe(login, { attributes: true, attributeFilter: ["class"] });
+  // вернуть дождь при возврате на вкладку
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !login.classList.contains("hidden") && !raf) frame();
+  });
 })();
