@@ -59,7 +59,7 @@ const THEMES = [
   { key: "amber",     name: "theme_amber",     desc: "theme_desc_amber",     swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
   { key: "red",       name: "theme_red",       desc: "theme_desc_red",       swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
   { key: "lofi",      name: "theme_lofi",      desc: "theme_desc_lofi",      swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
-  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#148255", "#1686b5", "#16223a", "#f7f9fc"] },
+  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#2563eb", "#0891b2", "#111827", "#ffffff"] },
 ];
 function applyTheme(key) {
   if (!THEMES.find((x) => x.key === key)) key = "contrast";
@@ -517,7 +517,7 @@ function renderPendingList(items) {
     const byName = p.invited_by === profile.login ? t("you_suffix") : p.invited_by;
     const label = p.name || p.login;
     row.innerHTML = `<div class="avatar" data-login="${escapeHtml(p.login)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(p.login)}" onerror="this.remove()">${initials(label)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">${escapeHtml(t("pending_by", { name: byName }))}</span></span>`;
-    const a = document.createElement("button"); a.textContent = "✓"; a.style.color = "var(--green-300)";
+    const a = document.createElement("button"); a.textContent = "✓"; a.style.color = "var(--accent-300)";
     a.title = t("pending_approve");
     a.onclick = () => resolvePending(p.id, "approve");
     row.appendChild(a);
