@@ -44,6 +44,98 @@ const sfx = {
   // 620 Hz then 540 Hz with quick exponential decay, ~90 ms между ударами. Только для темы aero.
   knock: () => { beep(620, 0.04, 0.1); setTimeout(() => beep(540, 0.06, 0.12), 90); },
 };
+
+// ---- Custom ringtone (localStorage, ≤13s, ≤4MB) ----
+const RINGTONE_KEY = "dialog_ringtone";
+const RINGTONE_MAX_DURATION = 13;     // seconds
+const RINGTONE_MAX_BYTES = 4 * 1024 * 1024;
+let _customRingtone = null;            // {name, dataUrl, duration, mime}
+
+function loadRingtone() {
+  try {
+    const raw = localStorage.getItem(RINGTONE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.dataUrl || !obj.duration) return null;
+    _customRingtone = obj;
+    return obj;
+  } catch { return null; }
+}
+function refreshRingtoneUI() {
+  const nameEl = $("ringtoneName");
+  if (!nameEl) return;
+  if (_customRingtone) {
+    nameEl.dataset.i18n = "";
+    nameEl.textContent = _customRingtone.name + " (" + Math.round(_customRingtone.duration * 10) / 10 + "s)";
+  } else {
+    nameEl.dataset.i18n = "ringtone_none";
+    nameEl.textContent = t("ringtone_none");
+  }
+}
+function saveRingtone(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error("no file"));
+    if (file.size > RINGTONE_MAX_BYTES) return reject(new Error("ringtone_too_big"));
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    audio.preload = "metadata";
+    audio.src = url;
+    const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+    audio.addEventListener("loadedmetadata", () => {
+      const dur = audio.duration;
+      if (!Number.isFinite(dur) || dur > RINGTONE_MAX_DURATION) { cleanup(); return reject(new Error("ringtone_too_long")); }
+      const reader = new FileReader();
+      reader.onload = () => {
+        cleanup();
+        _customRingtone = { name: file.name, dataUrl: reader.result, duration: dur, mime: file.type };
+        try { localStorage.setItem(RINGTONE_KEY, JSON.stringify(_customRingtone)); } catch {}
+        refreshRingtoneUI();
+        resolve(_customRingtone);
+      };
+      reader.onerror = () => { cleanup(); reject(new Error("read error")); };
+      reader.readAsDataURL(file);
+    });
+    audio.addEventListener("error", () => { cleanup(); reject(new Error("decode")); });
+  });
+}
+function removeRingtone() {
+  _customRingtone = null;
+  try { localStorage.removeItem(RINGTONE_KEY); } catch {}
+  refreshRingtoneUI();
+}
+function previewRingtone() {
+  if (!_customRingtone) { beep(440, 0.2); return; }
+  const a = new Audio(_customRingtone.dataUrl);
+  a.volume = 1;
+  a.play().catch(() => {});
+}
+function playCustomRingtone() {
+  if (!_customRingtone) return;
+  try { const a = new Audio(_customRingtone.dataUrl); a.volume = 1; a.play().catch(() => {}); } catch {}
+}
+// Wire ringtone UI (delegated, runs once)
+document.addEventListener("click", (e) => {
+  const chooseBtn = e.target.closest("#ringtoneChoose");
+  const previewBtn = e.target.closest("#ringtonePreview");
+  const removeBtn = e.target.closest("#ringtoneRemove");
+  if (chooseBtn) { $("ringtoneFile").click(); return; }
+  if (previewBtn) { previewRingtone(); return; }
+  if (removeBtn) { removeRingtone(); return; }
+});
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "ringtoneFile" && e.target.files && e.target.files[0]) {
+    const err = $("ringtoneError");
+    if (err) err.textContent = "";
+    saveRingtone(e.target.files[0]).catch((reason) => {
+      if (err) err.textContent = reason === "ringtone_too_long" ? t("ringtone_too_long")
+                          : reason === "ringtone_too_big" ? t("ringtone_too_big")
+                          : "Error: " + reason;
+    });
+    e.target.value = "";
+  }
+});
+loadRingtone();
+
 // MSN aero theme uses the classic door-knock sound; остальные темы — обычный beep.
 function msgSfxForTheme() { return document.body.dataset.theme === "aero" ? sfx.knock : sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
@@ -63,13 +155,156 @@ const THEMES = [
   { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
 ];
 function applyTheme(key) {
-  if (!THEMES.find((x) => x.key === key)) key = "contrast";
+  if (!THEMES.find((x) => x.key === key) && !key.startsWith("custom_")) key = "contrast";
   document.body.dataset.theme = key;
   try { localStorage.setItem("dialog_theme", key); } catch {}
+  injectCustomThemeStyle(key);
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
 }
+
+// ---- Custom theme CSS injection (set/clear <style> tag with body[data-theme="custom_X"] rules) ----
+let _customThemeStyleEl = null;
+function injectCustomThemeStyle(key) {
+  if (!_customThemeStyleEl) {
+    _customThemeStyleEl = document.createElement("style");
+    _customThemeStyleEl.id = "custom-theme-style";
+    document.head.appendChild(_customThemeStyleEl);
+  }
+  if (!key.startsWith("custom_")) { _customThemeStyleEl.textContent = ""; return; }
+  const ct = loadCustomThemes().find((t) => t.id === key);
+  if (!ct) { _customThemeStyleEl.textContent = ""; return; }
+  // Inject under body[data-theme="custom_X"] so user CSS can't escape.
+  // We need to prefix each top-level rule with that selector. Naive approach (works for simple CSS): wrap whole CSS in a top-level selector.
+  _customThemeStyleEl.textContent = wrapCssForCustomScope(ct.css, key);
+}
+// Wrap every top-level CSS rule in `body[data-theme="custom_X"] { ... }`. Simple implementation:
+// split by '}' while tracking brace depth; prefix the resulting selector list with our scope.
+function wrapCssForCustomScope(css, key) {
+  const scope = `body[data-theme="${key}"]`;
+  let out = "", depth = 0, buf = "", i = 0;
+  while (i < css.length) {
+    const c = css[i];
+    buf += c;
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        // buffer holds `selector { ... }` — prefix selector with our scope unless it's an @ rule
+        if (buf.trimStart().startsWith("@")) out += buf;
+        else {
+          const braceIdx = buf.indexOf("{");
+          const sel = buf.slice(0, braceIdx).trim();
+          const body = buf.slice(braceIdx);
+          out += scope + " " + sel + body;
+        }
+        buf = "";
+      }
+    }
+    i++;
+  }
+  // Drop trailing junk that wasn't a complete rule, but keep with comment if it's just whitespace.
+  out += buf;
+  return out;
+}
 applyTheme(localStorage.getItem("dialog_theme") || "contrast"); // применяем сразу, до рендера чатов (high contrast = новый дефолт)
+// ---- Custom themes (localStorage) ----
+const CUSTOM_THEMES_KEY = "dialog_custom_themes";
+const CUSTOM_CSS_CAP = 8000;
+const CUSTOM_THEMES_CAP = 5;
+
+function loadCustomThemes() {
+  try { const raw = localStorage.getItem(CUSTOM_THEMES_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function saveCustomThemes(list) { try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(list.slice(0, CUSTOM_THEMES_CAP))); } catch {} }
+function genCustomThemeId() {
+  const list = loadCustomThemes();
+  let n = 1;
+  while (list.some((t) => t.id === "custom_" + n)) n++;
+  return "custom_" + n;
+}
+function nextCustomThemeId() { return genCustomThemeId(); }
+function openCustomThemeModal(editId) {
+  const list = loadCustomThemes();
+  const isEdit = !!(editId && list.find((t) => t.id === editId));
+  if (!isEdit && list.length >= CUSTOM_THEMES_CAP) {
+    notify(t("custom_theme_limit")); return;
+  }
+  const m = $("customThemeModal");
+  const ex = isEdit ? list.find((t) => t.id === editId) : null;
+  $("ctName").value = ex ? ex.name : "";
+  $("ctCss").value = ex ? ex.css : "/* sample rules */\n--primary-rgb: 0, 255, 90;\n--bg-1: #001200;\n--text: #b6ffd2;";
+  $("ctError").textContent = "";
+  $("ctSave").dataset.editId = editId || "";
+  m.classList.remove("hidden");
+  setTimeout(() => $("ctName").focus(), 30);
+}
+function closeCustomThemeModal() { $("customThemeModal").classList.add("hidden"); }
+function submitCustomTheme() {
+  const id = $("ctSave").dataset.editId || nextCustomThemeId();
+  const name = ($("ctName").value || "").trim();
+  let css = $("ctCss").value || "";
+  const err = $("ctError");
+  err.textContent = "";
+  if (!name) { err.textContent = t("custom_theme_name_ph") + "?"; return; }
+  if (!css.trim()) { err.textContent = t("custom_theme_empty"); return; }
+  if (css.length > CUSTOM_CSS_CAP) { err.textContent = t("custom_theme_too_long"); return; }
+  const list = loadCustomThemes();
+  const existing = list.find((t) => t.id === id);
+  if (existing) { existing.name = name; existing.css = css; }
+  else { list.push({ id, name, css, createdAt: Date.now() }); }
+  saveCustomThemes(list);
+  closeCustomThemeModal();
+  renderThemes();
+  applyTheme(id);
+  notify(t("custom_theme_active"));
+}
+function deleteCustomTheme(id) {
+  let list = loadCustomThemes().filter((t) => t.id !== id);
+  saveCustomThemes(list);
+  if (document.body.dataset.theme === id) {
+    applyTheme("contrast");
+    notify(t("custom_theme_removed"));
+  }
+  renderThemes();
+}
+
+function renderThemes() {
+  const grid = $("themeGrid");
+  if (!grid) return;
+  // Wipe ALL .theme-opt (keep the .theme-opt-add button we have in HTML)
+  grid.querySelectorAll(".theme-opt").forEach((el) => el.remove());
+  // Static built-in themes
+  for (const t of THEMES) {
+    const b = document.createElement("button");
+    b.className = "theme-opt";
+    b.dataset.theme = t.key;
+    b.type = "button";
+        // Use real key for i18n lookup
+    b.innerHTML = `<div class="theme-swatch">${t.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(t("theme_" + t.key))}</span><span class="theme-desc">${escapeHtml(t("theme_desc_" + t.key))}</span>`;
+    b.onclick = () => applyTheme(t.key);
+    grid.appendChild(b);
+  }
+  // Custom themes (after built-ins)
+  const customs = loadCustomThemes();
+  for (const ct of customs) {
+    const b = document.createElement("div");
+    b.className = "theme-opt custom";
+    b.dataset.theme = ct.id;
+    b.innerHTML = `<div class="theme-swatch">${(ct.swatch || ["#888","#aaa","#ccc","#444"]).map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(ct.name)}<span class="theme-badge">CUSTOM</span></span><span class="theme-actions"><button class="theme-edit" type="button">${escapeHtml(t("custom_theme_save"))}</button><button class="theme-del danger" type="button">${escapeHtml(t("custom_theme_delete"))}</button></div>`;
+    b.onclick = (e) => {
+      if (e.target.closest(".theme-edit")) { openCustomThemeModal(ct.id); return; }
+      if (e.target.closest(".theme-del")) { deleteCustomTheme(ct.id); return; }
+      applyTheme(ct.id);
+    };
+    grid.appendChild(b);
+  }
+  // Highlight active
+  const active = document.body.dataset.theme;
+  grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === active));
+}
+
+
 
 
 // ---------- Язык ----------
@@ -918,7 +1153,7 @@ socket.on("message", (m) => {
     }
   }
   const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
-  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
+  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80); }
   // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
   // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
@@ -932,7 +1167,7 @@ socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
-  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); notify(t("dm_ping", { name: fromName })); } }
+  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80); notify(t("dm_ping", { name: fromName })); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", () => notify(t("dm_need_friend")));
@@ -1773,24 +2008,6 @@ function refreshProfilePane() {
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
   $("profileAvaInit").textContent = initials(myName);
 }
-function renderThemes() {
-  const grid = $("themeGrid"); if (!grid) return;
-  grid.innerHTML = "";
-  const cur = document.body.dataset.theme || "matrix";
-  THEMES.forEach((th) => {
-    const opt = document.createElement("button");
-    opt.type = "button";
-    opt.className = "theme-opt" + (th.key === cur ? " active" : "");
-    opt.dataset.theme = th.key;
-    opt.innerHTML =
-      `<div class="theme-swatch">${th.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div>` +
-      `<div class="theme-name">${escapeHtml(t(th.name))}</div>` +
-      `<div class="theme-desc">${escapeHtml(t(th.desc))}</div>`;
-    opt.onclick = () => applyTheme(th.key);
-    grid.appendChild(opt);
-  });
-  const ov = $("settingsOverlay"); if (ov) ov._themesRendered = true;
-}
 
 // Перенаправляем хедер-кнопки на settings overlay (`&&` гард — кнопка могла быть удалена из разметки,
 // и тогда `$("id")` вернёт null и «Uncaught TypeError: can't access property "onclick", $(...) is null»
@@ -1911,3 +2128,23 @@ $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value)
 
 // ---------- Старт ----------
 initLang(); setIcons(); checkSession();
+
+// Wire up custom-theme modal + + Custom button
+(function () {
+  // + new custom theme (delegation, button is inside #themeGrid and survives multiple renders)
+  document.addEventListener("click", (e) => {
+    const addBtn = e.target.closest(".theme-opt-add");
+    if (addBtn) { e.preventDefault(); openCustomThemeModal(null); return; }
+    const modal = $("customThemeModal");
+    if (!modal) return;
+    if (e.target === modal) { modal.classList.add("hidden"); return; }
+    const close = e.target.closest("#ctClose");
+    if (close) { modal.classList.add("hidden"); return; }
+    const cancel = e.target.closest("#ctCancel");
+    if (cancel) { modal.classList.add("hidden"); return; }
+    const save = e.target.closest("#ctSave");
+    if (save) { submitCustomTheme(); return; }
+  });
+  // Initial render of themes into the grid (called after i18n is wired)
+  if (typeof renderThemes === "function") renderThemes();
+})();
