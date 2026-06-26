@@ -174,8 +174,15 @@ input, textarea, button { caret-color:var(--green); }
 .bubble.media img { cursor:zoom-in; }
 .bubble.audio { display:flex; align-items:center; gap:8px; padding:8px 10px; }
 .bubble.audio audio { height:34px; max-width:220px; }
-.msg .time { font-size:10px; color:var(--text-dim); padding:0 4px; }
-.seen-tag { color:var(--green); margin-left:5px; font-size:10px; font-weight:700; }
+.msg .time { font-size:10px; color:var(--text-dim); padding:0 4px; display:inline-flex; align-items:center; gap:4px; }
+/* Статус исходящего сообщения: pending ⏱ → sent ✓ → delivered ✓✓ (приглушённо) → read ✓✓ (ярко) */
+.msg-status { display:inline-flex; align-items:center; margin-left:4px; line-height:0; }
+.msg-status svg { width:13px; height:13px; }
+.msg-status[data-status="pending"]    { color:var(--text-dim); animation:statusBlink 1.6s ease-in-out infinite; }
+.msg-status[data-status="sent"]       { color:var(--text-dim); }
+.msg-status[data-status="delivered"]  { color:var(--green); }
+.msg-status[data-status="read"]       { color:#5ac8ff; filter:drop-shadow(0 0 4px rgba(90,200,255,.55)); }
+@keyframes statusBlink { 0%,100%{opacity:.45} 50%{opacity:.95} }
 .mention { color:var(--green); background:rgba(0,255,90,.12); padding:0 3px; border-radius:2px; font-weight:700; }
 .msg.ping .bubble { border-color:var(--green); box-shadow:var(--glow); background:rgba(0,255,90,.1); }
 .msg.blocked > .bubble, .msg.blocked > .time, .msg.blocked > .reactions { display:none; }

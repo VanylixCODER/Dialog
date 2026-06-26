@@ -119,6 +119,68 @@ function preview(m) {
   if (m.type === "audio") return "🎤 " + t("pv_voice");
   return "media";
 }
+
+// ---------- Статусы доставки / просмотра ----------
+function refreshOutgoingStatuses() {
+  if (!messagesEl) return;
+  messagesEl.querySelectorAll(".msg.me").forEach(statusOf);
+}
+function statusOf(el) {
+  if (!el.classList.contains("me")) return;
+  const id = Number(el.dataset.id) || 0;
+  const acked = el.dataset.acked === "1";
+  const icon = el.querySelector(".msg-status");
+  if (!icon) return;
+  if (!acked || !id) { setStatus(icon, "pending"); return; }
+  const others = othersInRoom();
+  if (!others.length) { setStatus(icon, "sent"); return; }
+  let minDelivered = Infinity, minSeen = Infinity;
+  for (const l of others) {
+    const w = watermarks.get(l);
+    if (!w) { minDelivered = 0; minSeen = 0; break; }
+    if (w.delivered < minDelivered) minDelivered = w.delivered;
+    if (w.seen < minSeen) minSeen = w.seen;
+  }
+  if (minSeen >= id) setStatus(icon, "read");
+  else if (minDelivered >= id) setStatus(icon, "delivered");
+  else setStatus(icon, "sent");
+}
+function setStatus(iconEl, status) {
+  if (!iconEl || iconEl.dataset.status === status) return;
+  iconEl.dataset.status = status;
+  if (status === "pending") iconEl.innerHTML = window.ICON.clock;
+  else if (status === "sent") iconEl.innerHTML = window.ICON.check;
+  else iconEl.innerHTML = window.ICON.checkCheck; // delivered + read — одинаковая иконка, цвет через CSS
+  iconEl.title = t("status_" + status);
+}
+function othersInRoom() {
+  if (!myRoom) return [];
+  if (curKind === "dm") {
+    const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
+    return partner ? [partner] : [];
+  }
+  // group: все из groupMembers + присоединившиеся peers
+  const set = new Set();
+  if (Array.isArray(groupMembers)) for (const m of groupMembers) if (m.login !== profile.login) set.add(m.login);
+  peers.forEach((v) => { if (v.login && v.login !== profile.login) set.add(v.login); });
+  return [...set];
+}
+function lastVisiblePartnerId() {
+  // id последнего НЕ-нашего сообщения в ленте — до этой точки помечаем «доставлено/просмотрено».
+  const els = messagesEl.querySelectorAll(".msg");
+  for (let i = els.length - 1; i >= 0; i--) {
+    const el = els[i]; if (el.classList.contains("me")) continue;
+    const id = Number(el.dataset.id) || 0; if (id) return id;
+  }
+  return 0;
+}
+function markDeliveredSeenUpToLast() {
+  const id = lastVisiblePartnerId();
+  if (id && !isDnd() && myRoom) {
+    socket.emit("delivery", { maxId: id });
+    if (document.visibilityState === "visible") socket.emit("seen", { maxId: id });
+  }
+}
 function renderChatList(filter = "") {
   const ul = $("chatList"); ul.innerHTML = ""; filter = filter.toLowerCase();
   const list = [...chats.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -152,7 +214,7 @@ function openChat(c) {
   c = upsertChat(c);
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
-  setTimeout(() => socket.emit("seen"), 300); // отметить переписку просмотренной
+  setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
   $("messages").innerHTML = "";
@@ -423,17 +485,42 @@ socket.on("history", (list) => {
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   scrollDown();
+  // Курсоры доставки/просмотра: на открытии чата пометим всё видимое партнёру как «доставлено» + «просмотрено».
+  setTimeout(markDeliveredSeenUpToLast, 50);
 });
 socket.on("message", (m) => {
   const ping = isPingForMe(m);
-  if (myRoom === m.room || !m.room) renderMessage(m, true, ping);
-  const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
   const mine = profile && m.fromLogin === profile.login;
+  if (myRoom === m.room || !m.room) {
+    // Своё сообщение пришло round-trip'ом — найдём локальный оптимистичный пузырь,
+    // иначе отрендерим как обычно (на случай если локальный был утерян).
+    if (mine && m.localId) {
+      const localEl = messagesEl.querySelector(`.msg.me[data-localid="${m.localId}"]`);
+      if (localEl) {
+        // обновим data-id, статус acked и иконки; контент уже отрисован
+        localEl.dataset.id = m.id != null ? m.id : "";
+        localEl.dataset.acked = "1";
+        statusOf(localEl); // пересчитать статус (pending → sent)
+      } else {
+        renderMessage(m, true, ping);
+      }
+    } else {
+      renderMessage(m, true, ping);
+    }
+  }
+  const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
   if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) sfx.msg(); }
-  if (!mine && document.visibilityState === "visible") socket.emit("seen"); // мы видим — отметить просмотренным
+  // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
+  // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
-// Партнёр увидел переписку → ставим ✓✓ на свои сообщения (ЛС)
-socket.on("seen", ({ room }) => { if (room === myRoom && curKind === "dm") messagesEl.querySelectorAll(".msg.me .seen-tag").forEach((s) => (s.textContent = "✓✓")); });
+// Сервер подтвердил сохранение нашего сообщения — снимаем «pending».
+socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
+  if (!ackRoom || ackRoom !== myRoom) return;
+  const el = messagesEl.querySelector(`.msg.me[data-localid="${localId}"]`);
+  if (el) { el.dataset.id = id != null ? id : (el.dataset.id || ""); el.dataset.acked = "1"; statusOf(el); }
+});
+// Снимок курсоров для всей комнаты (приходит на join и при каждом обновлении).
+socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
   c.ts = Date.now();
@@ -475,6 +562,9 @@ function renderMessage(m, scroll = true, ping = false) {
   const wrap = document.createElement("div");
   wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isB ? " blocked" : "");
   wrap.dataset.id = m.id != null ? m.id : "";
+  if (m.localId != null) wrap.dataset.localid = String(m.localId);
+  if (m._optimistic) wrap.dataset.acked = ""; // ещё не подтверждено сервером
+  else if (m.id != null) wrap.dataset.acked = "1";
   if (isB) wrap.dataset.blocklabel = t("blocked_msg");
   let inner = "";
   if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
@@ -482,7 +572,9 @@ function renderMessage(m, scroll = true, ping = false) {
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt=""></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
-  inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${mine ? '<span class="seen-tag"></span>' : ""}</div>`;
+  // Для исходящих — статус-иконка (pending / sent / delivered / read)
+  const statusSpan = mine ? `<span class="msg-status" data-status="pending" title="${t("status_pending")}">${window.ICON.clock}</span>` : "";
+  inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${statusSpan}</div>`;
   inner += `<div class="reactions"></div>`;
   if (m.id != null && !isB) {
     inner += `<div class="msg-actions"><button class="ma-btn ma-react" title="${t("react")}">${window.ICON.smile}</button>` +
@@ -493,6 +585,8 @@ function renderMessage(m, scroll = true, ping = false) {
   renderReactions(wrap, m.reactions || {});
   messagesEl.appendChild(wrap);
   if (m.type === "text" && !isB) addLinkExtras(wrap, m.text); // превью ссылки / YouTube
+  // Для входящих сразу же отправляем ACK доставки (на любое сообщение, в т.ч. live broadcast).
+  if (!mine && m.id) setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0);
   if (scroll) scrollDown();
 }
 function renderReactions(wrap, reactions) {
@@ -544,10 +638,33 @@ socket.on("msg-deleted", ({ id }) => { const el = messagesEl.querySelector(`.msg
 socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = formatMessage(text); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
 socket.on("msg-reaction", ({ id, reactions }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) renderReactions(el, reactions); });
 
+let localIdCounter = 0;
+// Снимок курсоров доставки/просмотра по логинам (заполняется сервером и обновляется live).
+const watermarks = new Map(); // login -> { delivered, seen }
+function applyWatermarkUpdates(updates) {
+  if (!updates) return;
+  for (const u of updates) {
+    const cur = watermarks.get(u.login) || { delivered: 0, seen: 0 };
+    cur.delivered = Math.max(Number(cur.delivered) || 0, Number(u.delivered) || 0);
+    cur.seen = Math.max(Number(cur.seen) || 0, Number(u.seen) || 0);
+    watermarks.set(u.login, cur);
+  }
+  // Пересчитать статусы наших исходящих сообщений в видимой ленте.
+  refreshOutgoingStatuses();
+}
 function sendText() {
   const input = $("msgInput"); const text = input.value.trim();
   if (!text || !myRoom) return;
-  socket.emit("message", { type: "text", text }); input.value = ""; input.style.height = "auto"; socket.emit("typing", false);
+  const localId = ++localIdCounter;
+  // Оптимистичный локальный рендер — мгновенная обратная связь, не ждём round-trip.
+  const m = {
+    localId, id: null, fromLogin: profile.login, name: myName, ts: Date.now(),
+    type: "text", text, media: null, mediaName: "",
+    room: myRoom, _optimistic: true,
+  };
+  renderMessage(m, true, false);
+  socket.emit("message", { type: "text", text, localId });
+  input.value = ""; input.style.height = "auto"; socket.emit("typing", false);
 }
 $("sendBtn").onclick = sendText;
 $("msgInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
@@ -986,7 +1103,12 @@ function startCallMatrix() {
 }
 function stopCallMatrix() { cancelAnimationFrame(callMatrixRaf); callMatrixRaf = 0; const c = $("callMatrix"); if (c) { const x = c.getContext("2d"); x && x.clearRect(0, 0, c.width, c.height); } }
 async function requestWakeLock() { if (!("wakeLock" in navigator)) return; try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && call.active) { requestWakeLock(); vGrid.querySelectorAll("video").forEach((v) => v.play().catch(() => {})); } });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (call.active) { requestWakeLock(); vGrid.querySelectorAll("video").forEach((v) => v.play().catch(() => {})); }
+    if (profile && myRoom) setTimeout(markDeliveredSeenUpToLast, 50); // пометить просмотренным при возврате на вкладку
+  }
+});
 
 // ---------- Входящий звонок (поп-ап + рингтон + cava) ----------
 const ring = { audio: null, src: null, analyser: null, raf: 0, data: null, bars: [] };

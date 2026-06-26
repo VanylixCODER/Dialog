@@ -18,6 +18,7 @@ import {
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend,
   savePushSub, getPushSubs, deletePushSub,
+  getRoomWatermarks, bumpWatermarks,
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -363,6 +364,28 @@ async function broadcastPresence(login) {
   for (const f of friends) notifyUser(f, "presence", { login, status });
 }
 
+// ---------- Курсоры доставки/просмотра ----------
+// В памяти держим свежий снимок по комнате — чтобы emit'ить дельту без запроса в БД.
+const watermarks = new Map(); // room -> { login: {delivered, seen} }
+async function getRoomWatermarkSnapshot(room) {
+  let snap = watermarks.get(room);
+  if (!snap) {
+    try { snap = await getRoomWatermarks(room); } catch { snap = {}; }
+    watermarks.set(room, snap);
+  }
+  return snap;
+}
+// Применить bump и сразу emit'ить только изменённые записи в комнату.
+async function applyWatermarkBump(room, logins, { delivered, seen } = {}) {
+  if (!logins || !logins.length) return;
+  try { await bumpWatermarks(room, logins, { delivered, seen }); } catch (e) { console.error("watermark bump", e.message); }
+  const snap = await getRoomWatermarkSnapshot(room);
+  io.to(room).emit("watermark", { room, updates: logins.map((l) => {
+    const w = snap[l] || { delivered: 0, seen: 0 };
+    return { login: l, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 };
+  }) });
+}
+
 io.on("connection", (socket) => {
   let currentRoom = null, userLogin = null, userName = null;
 
@@ -409,6 +432,12 @@ io.on("connection", (socket) => {
     catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", [...peers.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, ...v })));
     socket.emit("call-state", callStatePayload(currentRoom)); // идёт ли тут звонок прямо сейчас
+    // Снимок курсоров доставки/просмотра комнаты — чтобы клиент сразу показал,
+    // какие из его сообщений уже доставлены / прочитаны собеседниками.
+    try {
+      const snap = await getRoomWatermarkSnapshot(currentRoom);
+      socket.emit("watermark", { room: currentRoom, updates: Object.entries(snap).map(([login, w]) => ({ login, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 })) });
+    } catch {}
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
     broadcastPresence(userLogin);
   });
@@ -430,9 +459,12 @@ io.on("connection", (socket) => {
     const payload = {
       from: socket.id, fromLogin: userLogin, name: userName, ts: Date.now(),
       type: msg.type, text: (msg.text || "").slice(0, 4000), media: msg.media || null, mediaName: (msg.mediaName || "").slice(0, 255),
+      localId: msg.localId || null,
     };
     try { payload.id = await saveMessage({ room: currentRoom, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
     io.to(currentRoom).emit("message", payload);
+    // Возвращаем автору ACK с id, чтобы клиент снял статус «отправляется».
+    if (payload.id) socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
 
     // ЛС-пинг + push (тем, кто не в этой комнате)
     let recips = [];
@@ -449,8 +481,23 @@ io.on("connection", (socket) => {
   });
 
   socket.on("typing", (isTyping) => { if (currentRoom) socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping }); });
-  // «Просмотрено» — оповещаем остальных в комнате, что мы видим переписку
-  socket.on("seen", () => { if (currentRoom && userLogin) socket.to(currentRoom).emit("seen", { room: currentRoom, login: userLogin }); });
+  // Курсоры доставки / просмотра
+  // — delivery: получатель подтверждает, что сообщения долетели до его устройства.
+  // — seen:     получатель подтверждает, что реально просмотрел переписку (чат открыт/сфокусирован).
+  // Оба идёмпотентны (GREATEST) и обновляют «водяной знак» в БД, рассылая дельту в комнату.
+  socket.on("delivery", ({ maxId } = {}) => {
+    if (!currentRoom || !userLogin) return;
+    const id = Number(maxId) | 0;
+    if (id <= 0) return;
+    applyWatermarkBump(currentRoom, [userLogin], { delivered: id }).catch((e) => console.error("delivery bump", e.message));
+  });
+  socket.on("seen", ({ maxId } = {}) => {
+    if (!currentRoom || !userLogin) return;
+    const id = Number(maxId) | 0;
+    if (id <= 0) return;
+    // «Просмотр» подразумевает доставку: доставка не может быть меньше просмотра.
+    applyWatermarkBump(currentRoom, [userLogin], { seen: id, delivered: id }).catch((e) => console.error("seen bump", e.message));
+  });
 
   socket.on("msg-delete", async ({ id }) => {
     if (!currentRoom || !userLogin) return;
