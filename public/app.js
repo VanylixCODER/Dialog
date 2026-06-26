@@ -59,7 +59,9 @@ const THEMES = [
   { key: "amber",     name: "theme_amber",     desc: "theme_desc_amber",     swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
   { key: "red",       name: "theme_red",       desc: "theme_desc_red",       swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
   { key: "lofi",      name: "theme_lofi",      desc: "theme_desc_lofi",      swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
-  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#2563eb", "#0891b2", "#111827", "#ffffff"] },
+  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
+  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#00bfff", "#7cb342", "#082030", "#f0f9ff"] },
 ];
 function applyTheme(key) {
   if (!THEMES.find((x) => x.key === key)) key = "contrast";

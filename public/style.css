@@ -2309,16 +2309,16 @@ body[data-theme="lofi"] {
   --cyan-300: #88a4a8;
 }
 
-/* Flashbang — НОРМАЛЬНАЯ светлая тема (чистый белый фон, тёмный текст, синий акцент).
-   Палитра нормальная/стандартная: --bg-* светло-серые тона (white/#ffffff, #f9fafb…#d1d5db),
-   --accent-100/200/300 — тёмно-серые/чёрные (#111827/#1f2937) для читаемого текста на белом,
-   «primary» --accent-400 — современный синий #2563eb для кнопок/ссылок/фокуса.
-   --cyan-300 — насыщенный циан, --danger — нормативный красный. Гloу, неоновые beam'ы,
+/* Flashbang — НОРМАЛЬНАЯ светлая тема (чистый белый фон, тёмный текст, зелёный акцент).
+  Палитра нормальная/стандартная: --bg-* светло-серые тона (white/#ffffff, #f9fafb…#d1d5db),
+  --accent-100/200/300 — тёмно-серые/чёрные (#111827/#1f2937) для читаемого текста на белом,
+  «primary» --accent-400 — свежий зелёный #16a34a для кнопок/ссылок/фокуса.
+  --cyan-300 — насыщенный циан, --danger — нормативный красный. Гloу, неоновые beam'ы,
    scan-лайны и фоновые текст-shadow'ы глушим — на светлом фоне они выглядят чужеродно/грязно. */
 body[data-theme="flashbang"] {
-  --primary-rgb: 37, 99, 235;                     /* modern blue — primary #2563eb */
+  --primary-rgb: 22, 163, 74;                     /* fresh green — primary #16a34a (Tailwind green-600) */
   --accent-100: #111827; --accent-200: #1f2937; --accent-300: #1f2937;
-  --accent-400: #2563eb; --accent-500: #1d4ed8; --accent-600: #1e40af;
+  --accent-400: #16a34a; --accent-500: #15803d; --accent-600: #166534;
   --accent-glow: rgba(var(--primary-rgb), 0.3); --accent-soft: rgba(var(--primary-rgb), 0.14);
   --accent-faint: rgba(var(--primary-rgb), 0.07);
   --bg-0: #ffffff; --bg-1: #f9fafb; --bg-2: #f3f4f6; --bg-3: #e5e7eb; --bg-4: #d1d5db;
@@ -2354,7 +2354,7 @@ body[data-theme="flashbang"] .ci-ava-wrap::after { display: none; }
 body[data-theme="flashbang"] .tile-avatar::before { display: none; }
 body[data-theme="flashbang"] .call-matrix { display: none; }
 /* Plain-light overrides — логин-карточка, фирменные модалы, баблы, кнопки и состояния в "нормальной" светлой теме — flat white/светло-серые фоны,
-   тонкие серые границы, синие акценты и обычные тени. Без неоновых glow, gradient оверлеев и фоновых текстовых shadow. */
+   тонкие серые границы, зелёные акценты и обычные тени. Без неоновых glow, gradient оверлеев и фоновых текстовых shadow. */
 body[data-theme="flashbang"] .login-card {
   background: linear-gradient(180deg, #ffffff, #f8f9fb);
   border: 1px solid var(--border-1);
@@ -2372,10 +2372,10 @@ body[data-theme="flashbang"] ::selection { background: rgba(var(--primary-rgb), 
 /* Incoming bubble — обычный текст на белом (тёмный текст на светлом = нормально). */
 body[data-theme="flashbang"] .bubble { background: #ffffff; border-color: var(--border-1); color: var(--text); box-shadow: var(--shadow-sm); }
 /* «Our» bubble — solid blue, белый текст (typical light-theme messenger look). */
-body[data-theme="flashbang"] .msg.me .bubble { background: var(--accent-400); border-color: var(--accent-500); color: #ffffff; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.16); }
+body[data-theme="flashbang"] .msg.me .bubble { background: var(--accent-400); border-color: var(--accent-500); color: #ffffff; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.16); }
 /* Send-button: solid blue, без неонового glow. */
-body[data-theme="flashbang"] .icon-btn.send { background: var(--accent-400); color: #ffffff; box-shadow: 0 0 0 1px rgba(var(--primary-rgb),.2) inset, 0 2px 8px rgba(37, 99, 235, 0.18); }
-body[data-theme="flashbang"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(0,0,0,.22), 0 4px 14px rgba(37, 99, 235, 0.22); }
+body[data-theme="flashbang"] .icon-btn.send { background: var(--accent-400); color: #ffffff; box-shadow: 0 0 0 1px rgba(var(--primary-rgb),.2) inset, 0 2px 8px rgba(22, 163, 74, 0.18); }
+body[data-theme="flashbang"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(0,0,0,.22), 0 4px 14px rgba(var(--primary-rgb),0.22); }
 /* Active chat-item, badges — без неоновых shadow на светлом. */
 body[data-theme="flashbang"] .chat-item.active { box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb),.22); }
 body[data-theme="flashbang"] .ci-bot .badge { box-shadow: 0 1px 4px rgba(var(--primary-rgb),.22); }
@@ -2399,6 +2399,125 @@ body[data-theme="flashbang"] .me-status-menu { background: #ffffff; border-color
 body[data-theme="flashbang"] .notify-toast { background: #ffffff; border-color: var(--accent-400); color: var(--text-strong); box-shadow: var(--shadow-lg); }
 /* .mention on outgoing bubble: dark text on blue = low contrast — flip to white on flashbang. */
 body[data-theme="flashbang"] .msg.me .mention { color: #ffffff; }
+
+/* Monochrome — чисто чёрно-белая светлая тема («newspaper» style): только серые тона + чистый чёрный текст.
+   Удобно для печати/чтения — ни одного цветного акцента, только градации серого. primary-rgb — чисто чёрный (R=G=B=24), так что все rgba(—primary-rgb,··) оверлеи тоже становятся чисто серыми. */
+body[data-theme="mono"] {
+  --primary-rgb: 24, 24, 27;                     /* neutral charcoal — primary #18181b */
+  --accent-100: #fafafa; --accent-200: #e4e4e7; --accent-300: #a1a1aa;
+  --accent-400: #18181b; --accent-500: #27272a; --accent-600: #09090b;
+  --accent-glow: rgba(var(--primary-rgb), 0.4); --accent-soft: rgba(var(--primary-rgb), 0.16);
+  --accent-faint: rgba(var(--primary-rgb), 0.06);
+  --bg-0: #ffffff; --bg-1: #ffffff; --bg-2: #fafafa; --bg-3: #f4f4f5; --bg-4: #e4e4e7;
+  --surface-1: rgba(0, 0, 0, 0.025); --surface-2: rgba(0, 0, 0, 0.06); --surface-3: rgba(0, 0, 0, 0.10);
+  --border-1: rgba(0, 0, 0, 0.10); --border-2: rgba(0, 0, 0, 0.18); --border-3: rgba(0, 0, 0, 0.32);
+  --text: #27272a; --text-strong: #09090b; --text-dim: #71717a;
+  --glow-sm: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  --glow-md: 0 0 0 1px rgba(0, 0, 0, 0.18);
+  --glow-lg: 0 0 0 2px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.10);
+  --cyan-300: #71717a;                            /* нейтральный серый, чтобы "read" тик не выделялся */
+  --danger: #18181b;                             /* черный — чёрно-белая тема */
+  background: var(--bg-1);
+  background-image: none;
+  color: var(--text);
+  text-shadow: none;
+}
+/* Mono специфика: выключаем цветные glow/scan слои и flat белые панели */
+body[data-theme="mono"]::before { display: none; }
+body[data-theme="mono"] .chat::before { display: none; }
+body[data-theme="mono"] .chatlist::before { display: none; }
+body[data-theme="mono"] .brand-logo::after { display: none; }
+body[data-theme="mono"] .chat-head::after { display: none; }
+body[data-theme="mono"] .composer::before { display: none; }
+body[data-theme="mono"] .voice-bar::before { display: none; }
+body[data-theme="mono"] .ci-ava-wrap::before,
+body[data-theme="mono"] .ci-ava-wrap::after { display: none; }
+body[data-theme="mono"] .tile-avatar::before { display: none; }
+body[data-theme="mono"] .call-matrix { display: none; }
+body[data-theme="mono"] .modal-card,
+body[data-theme="mono"] .settings-card,
+body[data-theme="mono"] .chat-menu,
+body[data-theme="mono"] .react-picker,
+body[data-theme="mono"] .me-status-menu,
+body[data-theme="mono"] .emoji-picker,
+body[data-theme="mono"] .gif-panel { background: #ffffff; border-color: var(--border-2); box-shadow: var(--shadow-md); }
+body[data-theme="mono"] .chat-head { background: #ffffff; border-bottom-color: var(--border-1); }
+body[data-theme="mono"] .composer { background: #ffffff; border-top-color: var(--border-1); }
+body[data-theme="mono"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); }
+body[data-theme="mono"] .bubble { background: #ffffff; color: var(--text); }
+body[data-theme="mono"] .msg.me .bubble { background: var(--accent-400); color: #ffffff; border-color: var(--accent-500); }
+body[data-theme="mono"] .login-card { background: #ffffff; box-shadow: var(--shadow-lg); }
+body[data-theme="mono"] .bubble, body[data-theme="mono"] .msg, body[data-theme="mono"] .chat-title,
+body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-theme="mono"] .setting-tab { animation: none; text-shadow: none; }
+
+/* Aero — Frutiger Aero (Vista-era): небо + трава + сатинат, фростный глас (backdrop-filter blur),
+   мягкие градиенты и словно «летающий» «приливный» панельный слой. primary-rgb — яркий небосный (#00bfff). */
+body[data-theme="aero"] {
+  --primary-rgb: 0, 191, 255;                    /* sky aero blue — primary #00bfff */
+  --accent-100: #f0f9ff; --accent-200: #bae6fd; --accent-300: #7dd3fc;
+  --accent-400: #00bfff; --accent-500: #0099cc; --accent-600: #006699;
+  --accent-glow: rgba(var(--primary-rgb), 0.5); --accent-soft: rgba(var(--primary-rgb), 0.18);
+  --accent-faint: rgba(var(--primary-rgb), 0.08);
+  --bg-0: #ffffff; --bg-1: #f3f9fd; --bg-2: #e3eff8; --bg-3: #c8dff0; --bg-4: #a5cce6;
+  --surface-1: rgba(255, 255, 255, 0.4); --surface-2: rgba(255, 255, 255, 0.6); --surface-3: rgba(255, 255, 255, 0.85);
+  --border-1: rgba(0, 80, 130, 0.08); --border-2: rgba(0, 80, 130, 0.18); --border-3: rgba(0, 80, 130, 0.32);
+  --text: #0c2a3d; --text-strong: #082030; --text-dim: #2e5a78;
+  /* «Aero» софт-глоу и лёгкая глубина теней — словно «стекло на столе» */
+  --glow-sm: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 8px rgba(var(--primary-rgb), 0.2);
+  --glow-md: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 14px rgba(var(--primary-rgb), 0.3);
+  --glow-lg: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 22px rgba(var(--primary-rgb), 0.35);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 6px rgba(0, 80, 130, 0.10);
+  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 22px rgba(0, 80, 130, 0.14);
+  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 46px rgba(0, 80, 130, 0.20);
+  --cyan-300: #7cb342;                          /* Frutiger grass-green — «трава» акцент */
+  --danger: #c13838;
+  background: var(--bg-1);
+  background-image:
+    radial-gradient(ellipse at 30% 20%, rgba(124, 179, 66, 0.10), transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(0, 191, 255, 0.10), transparent 60%);
+  color: var(--text);
+  text-shadow: none;
+}
+/* Aero специфика: фростный глас на модальных окнах, мягкие градиенты на активных элементах, без neon-scan-лайн */
+body[data-theme="aero"]::before { display: none; }
+body[data-theme="aero"] .chat::before { display: none; }
+body[data-theme="aero"] .chatlist::before { display: none; }
+body[data-theme="aero"] .brand-logo::after { display: none; }
+body[data-theme="aero"] .chat-head::after { display: none; }
+body[data-theme="aero"] .composer::before { display: none; }
+body[data-theme="aero"] .voice-bar::before { display: none; }
+body[data-theme="aero"] .ci-ava-wrap::before,
+body[data-theme="aero"] .ci-ava-wrap::after { display: none; }
+body[data-theme="aero"] .tile-avatar::before { display: none; }
+body[data-theme="aero"] .call-matrix { display: none; }
+body[data-theme="aero"] .modal-card,
+body[data-theme="aero"] .settings-card,
+body[data-theme="aero"] .chat-menu,
+body[data-theme="aero"] .react-picker,
+body[data-theme="aero"] .me-status-menu,
+body[data-theme="aero"] .emoji-picker,
+body[data-theme="aero"] .gif-panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.65));
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+}
+body[data-theme="aero"] .chat-head,
+body[data-theme="aero"] .composer { background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.4)); border-color: rgba(255, 255, 255, 0.6); }
+body[data-theme="aero"] .info-panel { background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.3)); border-left-color: rgba(255, 255, 255, 0.6); }
+body[data-theme="aero"] .bubble { background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78)); border-color: rgba(255, 255, 255, 0.7); color: var(--text); backdrop-filter: blur(6px); }
+body[data-theme="aero"] .msg.me .bubble { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); border-color: var(--accent-500); color: #ffffff; text-shadow: 0 1px 0 rgba(0,0,0,0.18); }
+body[data-theme="aero"] .login-card { background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border: 1px solid rgba(255,255,255,0.6); box-shadow: var(--shadow-lg); backdrop-filter: blur(14px) saturate(140%); }
+body[data-theme="aero"] .icon-btn.send { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); color: #ffffff; }
+body[data-theme="aero"] .btn-primary { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); color: #ffffff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 0 1px rgba(255,255,255,0.5), 0 8px 22px rgba(var(--primary-rgb), 0.3); }
+body[data-theme="aero"] .brand-logo { border-radius: 14px; background: linear-gradient(160deg, var(--bg-4), var(--bg-3)); color: var(--accent-400); }
+body[data-theme="aero"] .es-logo { text-shadow: none; filter: none; }
+body[data-theme="aero"] .msg, body[data-theme="aero"] .bubble { animation: msgIn 0.34s var(--ease-out) forwards; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
