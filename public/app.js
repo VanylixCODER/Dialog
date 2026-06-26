@@ -46,21 +46,29 @@ document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 // ---------- Темы ----------
 // Конфиг каждой темы: ключ применяется к <body data-theme="...">; name/desc — i18n-ключи;
 // swatch — 4 hex-цвета для превью в #themeGrid (фон, акцент 1, акцент 2, тёмный фон).
+// Матрица была выпилена как отдельная тема — High Contrast стал дефолтом. Вместо неё
+// добавлены: midnight (глубокий синий), vice (80s neon), dracula (палитра Dracula),
+// nord (палитра Nord) и светлый flashbang. Порядок — от дефолтной и популярных неоновых
+// к более «нишевым», flashbang идёт последним как «наоборот-тема».
 const THEMES = [
-  { key: "matrix",   name: "theme_matrix",   desc: "theme_desc_matrix",   swatch: ["#00ff5a", "#00cc48", "#138a4a", "#020a04"] },
-  { key: "amber",    name: "theme_amber",    desc: "theme_desc_amber",    swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
-  { key: "red",      name: "theme_red",      desc: "theme_desc_red",      swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
-  { key: "contrast", name: "theme_contrast", desc: "theme_desc_contrast", swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
-  { key: "lofi",     name: "theme_lofi",     desc: "theme_desc_lofi",     swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
+  { key: "contrast",  name: "theme_contrast",  desc: "theme_desc_contrast",  swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
+  { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
+  { key: "vice",      name: "theme_vice",      desc: "theme_desc_vice",      swatch: ["#ff3aa3", "#00e1ff", "#d11880", "#130820"] },
+  { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
+  { key: "nord",      name: "theme_nord",      desc: "theme_desc_nord",      swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
+  { key: "amber",     name: "theme_amber",     desc: "theme_desc_amber",     swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
+  { key: "red",       name: "theme_red",       desc: "theme_desc_red",       swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
+  { key: "lofi",      name: "theme_lofi",      desc: "theme_desc_lofi",      swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
+  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#148255", "#1686b5", "#16223a", "#f7f9fc"] },
 ];
 function applyTheme(key) {
-  if (!THEMES.find((x) => x.key === key)) key = "matrix";
+  if (!THEMES.find((x) => x.key === key)) key = "contrast";
   document.body.dataset.theme = key;
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
 }
-applyTheme(localStorage.getItem("dialog_theme") || "matrix"); // применяем сразу, до рендера чатов
+applyTheme(localStorage.getItem("dialog_theme") || "contrast"); // применяем сразу, до рендера чатов (high contrast = новый дефолт)
 
 
 // ---------- Язык ----------
