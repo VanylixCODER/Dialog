@@ -204,6 +204,24 @@ function renderChatList(filter = "") {
     li.innerHTML = `<div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
       <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
+    // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
+    // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
+    // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
+    li.tabIndex = 0; li.setAttribute("role", "button");
+    li.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (e.target.closest(".ci-del")) { deleteChat(c); return; }
+        openChat(c);
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        // Дребезг автоповтора клавиши: key-repeat (~30 Гц) иначе завалит очередь confirm()/deleteChat().
+        // Пер-ли кешем — соседние строки под Дел не теряются.
+        if (e.timeStamp - (li._lastDelete || 0) < 150) return;
+        li._lastDelete = e.timeStamp;
+        deleteChat(c);
+      }
+    };
     li.onclick = (e) => { if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; } openChat(c); };
     ul.appendChild(li);
   }
@@ -499,6 +517,9 @@ function renderMembers() {
     const online = login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(login) || "offline");
     const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
     li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${escapeHtml(name)}</span>${callIcon}`;
+    // Клавиатурная навигация по сайдпанели участников: Tab → focus (кольцо из .member:focus-visible), Enter/Space → то же, что и клик.
+    li.tabIndex = 0; li.setAttribute("role", "button");
+    li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMiniProfile(login); } };
     li.onclick = () => openMiniProfile(login);
     ul.appendChild(li);
   }
@@ -1243,10 +1264,11 @@ function setIcons() {
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", newChatBtn: "new_chat", profileBtn: "profile", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
-  // Кнопки входящего звонка получают подпись снизу (+ tooltip сверху)
+  // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
+  // чтобы [data-tip]::after не дублировал ту же подпись при наведении).
   const toastJoin = $("toastJoin"), toastClose = $("toastClose");
-  if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; toastJoin.setAttribute("data-tip", t("toast_join")); }
-  if (toastClose) { toastClose.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("t_hangup") + '</span>'; toastClose.setAttribute("data-tip", t("t_hangup")); }
+  if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; }
+  if (toastClose) { toastClose.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 

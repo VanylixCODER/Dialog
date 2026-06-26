@@ -102,6 +102,97 @@ img { display: block; max-width: 100%; }
 ::selection { background: rgba(0, 255, 90, 0.32); color: var(--green-100); }
 :focus-visible { outline: none; }
 
+/* === Keyboard focus rings — global outline:none is intentional === */
+/* We style focus per-control so the design language stays cohesive. Every
+   tabbable control gets a green focus ring + subtle glow — keyboard users
+   always see where they are, even when the browser default would have
+   fired (because we killed it above). */
+.icon-btn:focus-visible,
+.hicon-btn:focus-visible,
+.ma-btn:focus-visible,
+.call-btn:focus-visible,
+.call-drop:focus-visible,
+.ci-btn:focus-visible,
+.chat-menu button:focus-visible,
+.fp-chip:focus-visible,
+.room-chip:focus-visible,
+.status-opt:focus-visible,
+.auth-tab:focus-visible,
+.contact-row button:focus-visible,
+.contact-row .c-name:focus-visible,
+.hub-close:focus-visible,
+.emoji-tabs button:focus-visible,
+.emoji-grid button:focus-visible,
+.react-picker button:focus-visible,
+.tile .tile-expand:focus-visible,
+.member:focus-visible,
+.gif-item:focus-visible,
+.field-wrap .toggle-eye:focus-visible,
+.chat-item:focus-visible,
+.lang-select:focus-visible,
+.dd-item:focus-visible,
+.dd-toggle:focus-visible,
+.tile-ctrl .tctrl-mute:focus-visible,
+.back-btn:focus-visible {
+  outline: 2px solid var(--green-400);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.22);
+}
+/* Suppress hover transforms when focusing — predictability for keyboard users */
+.icon-btn:focus-visible, .hicon-btn:focus-visible, .ma-btn:focus-visible,
+.call-btn:focus-visible, .call-drop:focus-visible, .hub-close:focus-visible,
+.emoji-grid button:focus-visible, .emoji-tabs button:focus-visible,
+.react-picker button:focus-visible, .gif-item:focus-visible,
+.chat-menu button:focus-visible, .contact-row button:focus-visible {
+  transform: none;
+}
+/* Call-bar focus: brighter glow, more obvious */
+.call-btn:focus-visible { box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.32), 0 0 18px rgba(0, 255, 90, 0.35); }
+.chat-menu button:focus-visible { padding-left: 16px; }
+/* Inputs / selects: clean outline, no extra shadow (they already glow on focus) */
+#msgInput:focus-visible, #searchInput:focus-visible, #gifSearch:focus-visible,
+#reqInput:focus-visible, #gsName:focus-visible,
+.dd-select:focus-visible, .edit-box textarea:focus-visible,
+.lang-select:focus-visible, input[type="file"]:focus-visible {
+  outline: 2px solid var(--green-400);
+  outline-offset: 2px;
+}
+/* File inputs are visually hidden — keep their focus ring on the trigger button instead */
+#gsAvaFile:focus-visible, #avaFile:focus-visible, #fileInput:focus-visible {
+  outline: none; /* the parent upload button already gets the focus ring */
+  box-shadow: none;
+}
+/* .tile-expand sits inside .tile which has overflow:hidden — outline-offset:2px
+   would be clipped by the parent. Use an inset ring (box-shadow only, no outline)
+   so keyboard focus on the screen-share enlarge button is always visible. */
+.tile .tile-expand:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--green-400), 0 0 0 4px rgba(0, 255, 90, 0.32);
+  opacity: 1; /* keep visible — normally reveals on hover only */
+}
+/* Links — chat mentions, link previews, footer */
+a:focus-visible {
+  outline: 2px solid var(--green-400);
+  outline-offset: 2px;
+  border-radius: 2px;
+  text-shadow: 0 0 6px rgba(0, 255, 90, 0.55);
+}
+
+/* Form action buttons (login submit, register, group save, send-request).
+   These have hover lift + shimmer overlays, so focus overlap must be predictable:
+   keep outline + ring, kill the hover translate and shimmer pseudo-motion. */
+.btn-primary:focus-visible, .btn-ghost:focus-visible {
+  outline: 2px solid var(--green-400);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.28),
+              inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+  transform: none;
+  /* keep :disabled filter (grayscale+brightness) intact so a focused-but-disabled
+     button still reads as inactive. Outline + ring + cursor:not-allowed is enough. */
+}
+/* Pin the .btn-primary shimmer pseudo off-focus so the focus ring isn't blinded by motion */
+.btn-primary:focus-visible::after { transform: translateX(-120%); transition: none; }
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
