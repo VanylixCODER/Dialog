@@ -64,6 +64,7 @@ const I18N = {
     tab_profile: "Profile", tab_contacts: "Contacts", tab_themes: "Themes", tab_groups: "Group",
     close: "Close", esc_to_close: "Esc / click outside to close",
     group_section: "Manage groups",
+    today: "Today", yesterday: "Yesterday",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -129,6 +130,7 @@ const I18N = {
     tab_profile: "Профиль", tab_contacts: "Контакты", tab_themes: "Темы", tab_groups: "Группа",
     close: "Закрыть", esc_to_close: "Esc / клик снаружи — закрыть",
     group_section: "Управление группами",
+    today: "Сегодня", yesterday: "Вчера",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";

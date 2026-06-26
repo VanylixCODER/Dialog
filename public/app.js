@@ -1326,6 +1326,18 @@ socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); i
 // ---------- Утилиты ----------
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString(window.getLang() === "ru" ? "ru-RU" : "en-GB", { hour: "2-digit", minute: "2-digit" }); }
+// Метка дня над лентой: «Today / Yesterday» для свежих суток, иначе локализованная дата.
+// Раньше функция была потеряна при рефакторинге (браузер падал в ReferenceError на любом сообщении
+// в новичок-комнате, где ещё не выставлен dataset.day) — добавляем обратно.
+function dayLabel(dayStr) {
+  const d = new Date(dayStr);
+  const now = new Date();
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return t("today");
+  const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (sameDay(d, yest)) return t("yesterday");
+  return d.toLocaleDateString(window.getLang() === "ru" ? "ru-RU" : "en-GB", { day: "numeric", month: "long", year: now.getFullYear() === d.getFullYear() ? undefined : "numeric" });
+}
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
 function notify(text) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
@@ -1418,9 +1430,11 @@ function renderThemes() {
   const ov = $("settingsOverlay"); if (ov) ov._themesRendered = true;
 }
 
-// Перенаправляем хедер-кнопки на settings overlay.
+// Перенаправляем хедер-кнопки на settings overlay (`&&` гард — кнопка могла быть удалена из разметки,
+// и тогда `$("id")` вернёт null и «Uncaught TypeError: can't access property "onclick", $(...) is null»
+// в консоли. Такой же приём уже стоит на других опциональных кнопках.)
 $("contactsBtn").onclick = () => openSettings("contacts");
-$("profileBtn").onclick = () => openSettings("profile");
+$("profileBtn") && ($("profileBtn").onclick = () => openSettings("profile"));
 $("newChatBtn").onclick = () => openSettings("newchat");
 // Табы / закрытие оверлея
 $("settingsTabs").addEventListener("click", (e) => {
