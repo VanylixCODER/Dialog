@@ -110,58 +110,34 @@ app.get("/api/profile/:login", async (req, res) => {
 // у клиентов с большим списком чатов (каждый видимый собеседник без аватара иначе логирует ERR).
 const TRANSPARENT_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 const sendTransparent = (res) => { res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=60"); res.send(TRANSPARENT_PNG); };
+// Default PFP fallback chain: pfp.svg (when user drops the file) > LIL_DIALOG.svg (mini-logo) > 1×1 transparent.
+// Served as image/svg+xml so <img> in the browser renders it directly without a data-URL round-trip.
+const PFP_DEFAULT_PATH  = join(__dirname, "public", "src", "pfp.svg");
+const PFP_FALLBACK_PATH = join(__dirname, "public", "src", "LIL_DIALOG.svg");
+const sendPfpDefault = (res) => {
+  res.set("Cache-Control", "public, max-age=60");
+  if (existsSync(PFP_DEFAULT_PATH))  return res.type("image/svg+xml").sendFile(PFP_DEFAULT_PATH);
+  if (existsSync(PFP_FALLBACK_PATH)) return res.type("image/svg+xml").sendFile(PFP_FALLBACK_PATH);
+  sendTransparent(res);
+};
 app.get("/api/avatar/:login", async (req, res) => {
   try {
     const dataUrl = await getAvatar(req.params.login.toLowerCase());
-    if (!dataUrl) return sendTransparent(res);
+    if (!dataUrl) return sendPfpDefault(res);
     const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl);
-    if (!m) return sendTransparent(res);
+    if (!m) return sendPfpDefault(res);
     res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
     res.send(Buffer.from(m[2], "base64"));
-  } catch { sendTransparent(res); }
+  } catch { sendPfpDefault(res); }
 });
-app.get("/api/user/:login", async (req, res) => {
-  const u = await getUser(req.params.login.toLowerCase());
-  if (!u) return res.status(404).json({ error: "not found" });
-  res.json({ login: u.login, name: u.name });
-});
-
-// ---------- REST: группы ----------
-app.get("/api/groups", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  res.json({ groups: await getUserGroups(me.login) });
-});
-app.post("/api/groups", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const name = String(req.body.name || "").trim().slice(0, 64);
-  if (!name) return res.status(400).json({ error: "no name" });
-  const members = [];
-  for (const raw of String(req.body.members || "").split(",")) {
-    const l = raw.trim().toLowerCase(); if (l && (await getUser(l))) members.push(l);
-  }
-  const id = await createGroup(name, me.login, members);
-  res.json({ id, name });
-});
-app.post("/api/groups/:id/leave", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  await leaveGroup(req.params.id, me.login); res.json({ ok: true });
-});
-// Инфо о группе + участники (только для членов)
-app.get("/api/groups/:id", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const id = req.params.id;
-  if (!(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
-  const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
-  res.json({ id: g.id, name: g.name, owner: g.owner, members: await getGroupMembersDetailed(id) });
-});// Аватар группы (бинарно) — тот же silent-PNG fallback, что и для личных аватарок, чтобы не 404'ил в консоли на каждой группе без логотипа.
 app.get("/api/group-avatar/:id", async (req, res) => {
   try {
     const dataUrl = await getGroupAvatar(req.params.id);
-    if (!dataUrl) return sendTransparent(res);
-    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl); if (!m) return sendTransparent(res);
+    if (!dataUrl) return sendPfpDefault(res);
+    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl); if (!m) return sendPfpDefault(res);
     res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
     res.send(Buffer.from(m[2], "base64"));
-  } catch { sendTransparent(res); }
+  } catch { sendPfpDefault(res); }
 });
 // Управление (только владелец): rename / avatar / add / remove / delete
 async function notifyGroup(id, event, data) { try { for (const l of await getGroupMembers(id)) notifyUser(l, event, data); } catch {} }

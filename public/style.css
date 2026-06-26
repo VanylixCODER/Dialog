@@ -356,7 +356,8 @@ a:focus-visible {
   font-size: 22px;
   text-shadow: 0 0 12px var(--accent-glow);
 }
-.brand-logo svg { width: 22px; height: 22px; }
+.brand-logo svg,
+.brand-logo img { width: 32px; height: 32px; object-fit: contain; display: block; position: relative; z-index: 1; }
 .brand-logo::after {
   content: ""; position: absolute; inset: -4px;
   border: 1px solid rgba(var(--primary-rgb), 0.35); border-radius: 16px;
@@ -622,6 +623,7 @@ a:focus-visible {
   animation: stPulse 2.5s var(--ease) infinite;
   letter-spacing: 6px;
 }
+.es-logo img { height: 64px; width: auto; max-width: 80vw; object-fit: contain; filter: drop-shadow(var(--glow-md)); display: block; }
 .es-cta {
   font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
   color: var(--text-dim); font-weight: 700;

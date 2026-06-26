@@ -6,8 +6,8 @@
   <title>Dialog</title>
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#00ff5a" />
-  <link rel="icon" href="/icon.svg" />
-  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="icon" href="/src/LIL_DIALOG.svg" />
+  <link rel="apple-touch-icon" href="/src/LIL_DIALOG.svg" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,8 +19,7 @@
   <!-- ВХОД -->
   <div id="login" class="login">
     <div class="login-card">
-      <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
-      <div class="brand"><div class="brand-logo">◆</div><h1>Dialog</h1></div>
+      <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>        <div class="brand"><div class="brand-logo"><img src="/src/LIL_DIALOG.svg" alt="" /></div><h1>Dialog</h1></div>
       <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
       <div class="auth-tabs">
         <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
@@ -72,8 +71,7 @@
       </div>
     </aside>
 
-    <main class="chat" id="chatPane">
-      <div id="emptyState" class="empty-state"><div class="es-logo">◆</div><div data-i18n="pick_chat">Select a chat</div></div>
+    <main class="chat" id="chatPane">        <div id="emptyState" class="empty-state"><div class="es-logo"><img src="/src/dialoglogo.svg" alt="Dialog" /></div><div data-i18n="pick_chat">Select a chat</div></div>
       <header class="chat-head hidden" id="chatHead">
         <button id="backBtnMobile" class="back-btn mobile-only" title="Back">‹</button>
         <div class="avatar ch-ava" id="chatAva" tabindex="0" role="button" aria-label="Open chat info">?</div>
