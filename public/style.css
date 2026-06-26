@@ -2474,33 +2474,42 @@ body[data-theme="mono"] .msg.me .mention { color: rgba(0, 0, 0, 0.85); }
 body[data-theme="mono"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
 body[data-theme="mono"] .bubble, body[data-theme="mono"] .msg, body[data-theme="mono"] .chat-title,
 body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-theme="mono"] .setting-tab { animation: none; text-shadow: none; }
+/* Frutiger Aero (Windows 7 / Vista era) — sky-bokeh background, frosted Aero Glass
+   panels, glossy buttons, inner white highlights, soft cyan drop-shadows. Calm — no msgIn animation. */
 body[data-theme="aero"] {
-  --primary-rgb: 0, 191, 255;                    /* sky aero blue — primary #00bfff */
-  --accent-100: #f0f9ff; --accent-200: #bae6fd; --accent-300: #7dd3fc;
-  --accent-400: #00bfff; --accent-500: #0099cc; --accent-600: #006699;
-  --accent-glow: rgba(var(--primary-rgb), 0.5); --accent-soft: rgba(var(--primary-rgb), 0.18);
-  --accent-faint: rgba(var(--primary-rgb), 0.08);
-  --bg-0: #ffffff; --bg-1: #f3f9fd; --bg-2: #e3eff8; --bg-3: #c8dff0; --bg-4: #a5cce6;
-  --surface-1: rgba(255, 255, 255, 0.4); --surface-2: rgba(255, 255, 255, 0.6); --surface-3: rgba(255, 255, 255, 0.85);
-  --border-1: rgba(0, 80, 130, 0.08); --border-2: rgba(0, 80, 130, 0.18); --border-3: rgba(0, 80, 130, 0.32);
-  --text: #0c2a3d; --text-strong: #082030; --text-dim: #2e5a78;
-  /* «Aero» софт-глоу и лёгкая глубина теней — словно «стекло на столе» */
-  --glow-sm: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 8px rgba(var(--primary-rgb), 0.2);
-  --glow-md: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 14px rgba(var(--primary-rgb), 0.3);
-  --glow-lg: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 22px rgba(var(--primary-rgb), 0.35);
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 6px rgba(0, 80, 130, 0.10);
-  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 22px rgba(0, 80, 130, 0.14);
-  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 46px rgba(0, 80, 130, 0.20);
-  --cyan-300: #7cb342;                          /* Frutiger grass-green — «трава» акцент */
-  --danger: #c13838;
-  background: var(--bg-1);
-  background-image:
-    radial-gradient(ellipse at 30% 20%, rgba(124, 179, 66, 0.10), transparent 60%),
-    radial-gradient(ellipse at 70% 80%, rgba(0, 191, 255, 0.10), transparent 60%);
-  color: var(--text);
+  --primary-rgb: 93, 173, 226;                   /* primary sky-blue — #5dade2 */
+  --accent-400: #5dade2;
+  --accent-500: #3498db;
+  --accent-600: #2874a6;
+  --accent-glow: rgba(93, 173, 226, 0.5);
+  --accent-soft: rgba(93, 173, 226, 0.18);
+  --accent-faint: rgba(93, 173, 226, 0.08);
+  --cyan-300: #5dade2;
+  --danger: #e74c3c;
+  background: linear-gradient(160deg, #b3e3f0 0%, #d6eef5 50%, #f0f8fc 100%);
+  color: #1d3c5a;
   text-shadow: none;
 }
-/* Aero специфика: фростный глас на модальных окнах, мягкие градиенты на активных элементах, без neon-scan-лайн */
+/* Sky-bokeh background — 5 large radial blobs (sky-cyan, frosted white, grass-green halo,
+   mid-blue, center glow) drifting slowly. Uses ::after (not ::before) because ::before is the
+   global scan-lattice and this block's ::before { display:none } turns it off. */
+body[data-theme="aero"]::after {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 22%, rgba(173, 216, 230, 0.7), transparent 26%),
+    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.92), transparent 20%),
+    radial-gradient(circle at 72% 78%, rgba(169, 223, 191, 0.55), transparent 30%),
+    radial-gradient(circle at 22% 72%, rgba(180, 220, 240, 0.6), transparent 28%),
+    radial-gradient(circle at 50% 50%, rgba(220, 240, 255, 0.5), transparent 38%);
+  animation: aeroBokeh 60s ease-in-out infinite alternate;
+}
+@keyframes aeroBokeh {
+  0%   { transform: translate(0, 0)     scale(1); }
+  50%  { transform: translate(-1.5%, 1%) scale(1.04); }
+  100% { transform: translate(1.5%, -1%) scale(1.02); }
+}
+/* Глушим глобальные декорации (matrix-стиль) — для Aero Glass они чужеродны. */
 body[data-theme="aero"]::before { display: none; }
 body[data-theme="aero"] .chat::before { display: none; }
 body[data-theme="aero"] .chatlist::before { display: none; }
@@ -2512,6 +2521,8 @@ body[data-theme="aero"] .ci-ava-wrap::before,
 body[data-theme="aero"] .ci-ava-wrap::after { display: none; }
 body[data-theme="aero"] .tile-avatar::before { display: none; }
 body[data-theme="aero"] .call-matrix { display: none; }
+
+/* ============ Aero Glass panels — deep blur, top inner highlight ============ */
 body[data-theme="aero"] .modal-card,
 body[data-theme="aero"] .settings-card,
 body[data-theme="aero"] .chat-menu,
@@ -2519,25 +2530,207 @@ body[data-theme="aero"] .react-picker,
 body[data-theme="aero"] .me-status-menu,
 body[data-theme="aero"] .emoji-picker,
 body[data-theme="aero"] .gif-panel {
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.65));
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: var(--shadow-md);
-  color: var(--text);
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78));
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(125, 200, 255, 0.18),
+    0 12px 40px rgba(46, 134, 193, 0.18),
+    0 4px 14px rgba(0, 30, 80, 0.08);
+  backdrop-filter: blur(28px) saturate(220%) brightness(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(220%) brightness(1.04);
+  color: #1d3c5a;
+  border-radius: 14px;
 }
-body[data-theme="aero"] .chat-head,
-body[data-theme="aero"] .composer { background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.4)); border-color: rgba(255, 255, 255, 0.6); }
-body[data-theme="aero"] .info-panel { background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.3)); border-left-color: rgba(255, 255, 255, 0.6); }
-body[data-theme="aero"] .bubble { background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78)); border-color: rgba(255, 255, 255, 0.7); color: var(--text); backdrop-filter: blur(6px); }
-body[data-theme="aero"] .msg.me .bubble { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); border-color: var(--accent-500); color: #ffffff; text-shadow: 0 1px 0 rgba(0,0,0,0.18); }
-body[data-theme="aero"] .login-card { background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border: 1px solid rgba(255,255,255,0.6); box-shadow: var(--shadow-lg); backdrop-filter: blur(14px) saturate(140%); }
-body[data-theme="aero"] .icon-btn.send { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); color: #ffffff; }
-body[data-theme="aero"] .btn-primary { background: linear-gradient(180deg, var(--accent-400), var(--accent-500)); color: #ffffff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 0 1px rgba(255,255,255,0.5), 0 8px 22px rgba(var(--primary-rgb), 0.3); }
-body[data-theme="aero"] .brand-logo { border-radius: 14px; background: linear-gradient(160deg, var(--bg-4), var(--bg-3)); color: var(--accent-400); }
-body[data-theme="aero"] .es-logo { text-shadow: none; filter: none; }
-body[data-theme="aero"] .msg, body[data-theme="aero"] .bubble { animation: msgIn 0.34s var(--ease-out) forwards; }
+/* Chat head — Vista-style glass with white inner highlight on top + Win7 aero-blue ribbon */
+body[data-theme="aero"] .chat-head {
+  background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(220,235,250,0.65) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(125, 200, 255, 0.25),
+    0 1px 0 rgba(125, 200, 255, 0.15),
+    0 -2px 8px rgba(0, 30, 80, 0.06);
+  backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
+  -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
+  color: #1a3a5c;
+}
+body[data-theme="aero"] .chat-head .chat-title { color: #0f2e4d; text-shadow: 0 1px 0 rgba(255,255,255,0.6); }
+body[data-theme="aero"] .chat-head .chat-sub { color: #5b7a93; }
+/* Composer — same aero glass treatment */
+body[data-theme="aero"] .composer {
+  background: linear-gradient(180deg, rgba(220,235,250,0.65) 0%, rgba(255,255,255,0.85) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(125, 200, 255, 0.25),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9),
+    0 -2px 8px rgba(0, 30, 80, 0.05);
+  backdrop-filter: blur(26px) saturate(200%) brightness(1.04);
+  -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(1.04);
+  color: #1d3c5a;
+}
+/* Info panel right column */
+body[data-theme="aero"] .info-panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(220,235,250,0.6));
+  border-left: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.9),
+    0 0 8px rgba(0, 30, 80, 0.04);
+  backdrop-filter: blur(24px) saturate(200%) brightness(1.04);
+  -webkit-backdrop-filter: blur(24px) saturate(200%) brightness(1.04);
+  color: #1d3c5a;
+}
+body[data-theme="aero"] .chatlist {
+  background: linear-gradient(180deg, rgba(220,235,250,0.55), rgba(179,227,240,0.4));
+  border-right: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%) brightness(1.03);
+  -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.03);
+}
 
+/* ============ Bubbles — incoming: frosted glass, outgoing: sky-blue glossy ============ */
+body[data-theme="aero"] .bubble {
+  background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: #1d3c5a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 8px rgba(46, 134, 193, 0.1);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  animation: none;
+}
+body[data-theme="aero"] .msg.me .bubble {
+  background: linear-gradient(180deg, #74c0e6 0%, #3498db 100%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 50, 100, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.18),
+    0 4px 14px rgba(46, 134, 193, 0.32);
+}
+/* Tail — frosted, not clipped */
+body[data-theme="aero"] .msg.me .bubble { border-radius: 16px 16px 4px 16px; }
+body[data-theme="aero"] .msg:not(.me) .bubble { border-radius: 16px 16px 16px 4px; }
+body[data-theme="aero"] .msg.me .mention { color: rgba(255, 255, 255, 0.95); font-weight: 800; background: rgba(255,255,255,0.18); }
+
+/* ============ Login card — biggest glass with white inner border ============ */
+body[data-theme="aero"] .login-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(220,235,250,0.82) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 8px rgba(125, 200, 255, 0.25),
+    0 22px 60px rgba(46, 134, 193, 0.28),
+    0 6px 18px rgba(0, 30, 80, 0.08);
+  backdrop-filter: blur(32px) saturate(240%) brightness(1.05);
+  -webkit-backdrop-filter: blur(32px) saturate(240%) brightness(1.05);
+  color: #1d3c5a;
+}
+body[data-theme="aero"] .login::before {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.3), transparent 70%),
+    radial-gradient(ellipse at 50% 100%, rgba(125,200,255,0.2), transparent 60%);
+}
+
+/* ============ Buttons — glossy sky-blue gradient + inner white highlight ============ */
+body[data-theme="aero"] .btn-primary {
+  background: linear-gradient(180deg, #74c0e6 0%, #3498db 50%, #2874a6 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 50, 100, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.25),
+    0 6px 20px rgba(46, 134, 193, 0.4);
+}
+body[data-theme="aero"] .btn-primary::after {
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+}
+body[data-theme="aero"] .icon-btn.send,
+body[data-theme="aero"] .btn-ghost {
+  background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(220,235,250,0.55));
+  border-color: rgba(125, 200, 255, 0.45);
+  color: #1c4f7a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 6px rgba(46, 134, 193, 0.1);
+}
+body[data-theme="aero"] .icon-btn.send {
+  background: linear-gradient(180deg, #74c0e6 0%, #3498db 100%);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 50, 100, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.25),
+    0 4px 14px rgba(46, 134, 193, 0.32);
+}
+body[data-theme="aero"] .auth-tab.active,
+body[data-theme="aero"] .settings-tab.active {
+  background: linear-gradient(180deg, #74c0e6 0%, #3498db 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 50, 100, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.25),
+    0 4px 14px rgba(46, 134, 193, 0.3);
+}
+
+/* ============ Brand chip ============ */
+body[data-theme="aero"] .brand-logo {
+  background: linear-gradient(160deg, #74c0e6, #3498db);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.2),
+    0 4px 12px rgba(46, 134, 193, 0.32);
+  text-shadow: 0 1px 1px rgba(0, 50, 100, 0.4);
+}
+
+/* ============ Inputs — frosted glass ============ */
+body[data-theme="aero"] .field,
+body[data-theme="aero"] #msgInput,
+body[data-theme="aero"] .lang-select {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(125, 200, 255, 0.45);
+  color: #1d3c5a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+body[data-theme="aero"] .field:focus,
+body[data-theme="aero"] #msgInput:focus {
+  border-color: #3498db;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 3px rgba(93, 173, 226, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 100%);
+}
+body[data-theme="aero"] ::selection { background: rgba(93, 173, 226, 0.5); color: #0f2e4d; }
+
+/* ============ Avatar — glossy gradient circle ============ */
+body[data-theme="aero"] .avatar {
+  background: linear-gradient(160deg, rgba(255,255,255,0.7), rgba(220,235,250,0.55));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  color: #1c4f7a;
+}
+body[data-theme="aero"] .chat-item .ci-name { color: #1d3c5a; }
+body[data-theme="aero"] .chat-item.active {
+  background: linear-gradient(90deg, rgba(93,173,226,0.22), rgba(93,173,226,0.08) 70%);
+  border-left-color: #3498db;
+}
+body[data-theme="aero"] .chat-item.has-unread .ci-last { color: #1c4f7a; font-weight: 700; }
+
+/* ============ Disable msgIn animation specifically for aero (calm) ============ */
+body[data-theme="aero"] .msg,
+body[data-theme="aero"] .bubble { animation: none; }
+body[data-theme="aero"] .call-go.join-call { animation: none; }
+body[data-theme="aero"] .ci-btn.accept { animation: none; }
+body[data-theme="aero"] .typing::before,
+body[data-theme="aero"] .typing-dots span { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
