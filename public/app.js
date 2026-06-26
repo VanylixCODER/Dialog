@@ -1570,20 +1570,64 @@ function playRingChord() {
     t0 += d + 0.06;
   });
 }
+// /ringtone.mp3 — основной путь для рингтона (HTMLAudioElement loop=true).
+//   Cava-анимация (#cavaCanvas) запускается всегда.
+//   Если файл 404 / NotSupportedError → постоянная отключка mp3 (ringMp3Disabled), на каждом
+//   следующем звонке идём сразу в синтезатор (чтобы не спамить 404 в консоли).
+//   Если autoplay заблокирован браузером (NotAllowedError — типично до первого user-gesture)
+//   → только этот звонок уходит в синтезатор; mp3 пробуем снова на следующем звонке.
+let ringAudioEl = null;
+let ringMp3Disabled = false;
 function startRingtone() {
   if (ring.audio) return; // двойной вызов не заводит второй луп
   ensureAudioCtx();
+  startCava();
+  if (!ringMp3Disabled) {
+    if (!ringAudioEl) {
+      ringAudioEl = new Audio("/ringtone.mp3");
+      ringAudioEl.loop = true;
+      // preload="none" — не тащим 24KB на каждой загрузке страницы, если звонка так и не будет.
+      // Первый ring-ring всё равно быстро закэшируется (server/CDN) — лаг незаметный.
+      ringAudioEl.preload = "none";
+      ringAudioEl.addEventListener("error", () => {
+        // 404 / decode-failure — отключаем mp3 навсегда и, если ринг активен на этом пути,
+        // немедленно подхватываем синтезатор. Один console.warn чтобы не было «бесследного» фоллбэка:
+        // если юзер кинет свой файл с битым именем/форматом, причина ищется в DevTools одной строкой.
+        console.warn("ringtone.mp3 failed to load, falling back to synth chord");
+        ringMp3Disabled = true;
+        ringAudioEl = null;
+        if (ring.audio && ring.audio.mp3) startRingtoneSynth();
+      }, { once: true });
+    }
+    ring.audio = { mp3: true };
+    ringAudioEl.currentTime = 0;
+    const p = ringAudioEl.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        // NotAllowedError и подобные — на этот звонок синтезатор; ringMp3Disabled НЕ выставляем.
+        if (ring.audio && ring.audio.mp3) startRingtoneSynth();
+      });
+    }
+    return;
+  }
+  startRingtoneSynth();
+}
+function startRingtoneSynth() {
+  // Старая логика рингтона (WebAudio chord каждые 4.5с) — fallback, если /ringtone.mp3 отсутствует
+  // или autoplay заблокирован в этом звонке. startRingtone-ом вызывается, не напрямую.
+  if (ring.toneLoop) return;
   ring.audio = { synth: true };
   playRingChord();
   ring.toneLoop = setInterval(playRingChord, 4500);
-  startCava();
 }
 function stopRingtone() {
   clearInterval(ring.toneLoop); ring.toneLoop = null;
+  if (ringAudioEl) { try { ringAudioEl.pause(); ringAudioEl.currentTime = 0; } catch {} }
   ring.audio = null;
   cancelAnimationFrame(ring.raf); ring.raf = 0;
   const c = $("cavaCanvas"); if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
 }
+
 function startCava() {
   const canvas = $("cavaCanvas"), toast = $("callToast"); if (!canvas) return; const cx = canvas.getContext("2d"); const N = 40;
   if (ring.bars.length !== N) ring.bars = new Array(N).fill(0); cancelAnimationFrame(ring.raf);
