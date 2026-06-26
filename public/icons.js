@@ -31,5 +31,9 @@
     headphonesOff: s('<path d="M3 18v-5a9 9 0 0 1 13.5-7.8"/><path d="M7 14H3v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1z"/><path d="M21 19v-6a9 9 0 0 0-.5-3"/><path d="M21 14h-3v6a1 1 0 0 0 .3.7"/><line x1="2" y1="2" x2="22" y2="22"/>'),
     block: s('<circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/>'),
     userPlus: s('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>'),
+    // Статусы сообщения: часы → ✓ → ✓✓
+    clock: s('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>'),
+    check: s('<polyline points="5 12 10 17 19 7"/>'),
+    checkCheck: s('<polyline points="2 12 7 17 10 13"/><polyline points="9 12 14 17 21 7"/>'),
   };
 })();

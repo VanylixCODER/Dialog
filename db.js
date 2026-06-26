@@ -93,6 +93,16 @@ export async function initSchema() {
     endpoint VARCHAR(512) PRIMARY KEY, login VARCHAR(24) NOT NULL, sub TEXT NOT NULL,
     KEY idx_push_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Курсоры доставки/просмотра для каждого участника каждой комнаты.
+  // Запись идемпотентна: «доставлено до id X» / «просмотрено до id Y».
+  // Это масштабируется лучше JSON-массивов per-message и не вызывает write amplification.
+  await pool.query(`CREATE TABLE IF NOT EXISTS watermarks (
+    room VARCHAR(64) NOT NULL, login VARCHAR(24) NOT NULL,
+    delivered_max BIGINT NOT NULL DEFAULT 0, seen_max BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (room, login), KEY idx_wm_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -288,3 +298,31 @@ export async function getPushSubs(login) {
   return r.map((x) => { try { return JSON.parse(x.sub); } catch { return null; } }).filter(Boolean);
 }
 export async function deletePushSub(endpoint) { await execute("DELETE FROM push_subs WHERE endpoint=?", [endpoint.slice(0, 512)]); }
+
+// ---------- Курсоры доставки / просмотра (per-user, per-room) ----------
+// Возвращает {login: {delivered, seen}} для всех членов комнаты (или [] если пусто).
+export async function getRoomWatermarks(room) {
+  const r = await query("SELECT login, delivered_max AS delivered, seen_max AS seen FROM watermarks WHERE room=?", [room]);
+  const out = {};
+  for (const row of r) out[row.login] = { delivered: Number(row.delivered), seen: Number(row.seen) };
+  return out;
+}
+// Идемпотентное обновление (GREATEST). «delivered» или «seen» могут быть null, тогда не трогаем.
+export async function bumpWatermarks(room, logins, { delivered, seen } = {}) {
+  if (!logins.length) return;
+  const placeholders = logins.map(() => "(?,?,?,?)").join(",");
+  const params = [];
+  for (const l of logins) {
+    const d = delivered != null ? Number(delivered) : 0;
+    const s = seen != null ? Number(seen) : 0;
+    params.push(room, l, d, s);
+  }
+  // GREATEST(x, VALUES(x)) — берём максимум из существующего и нового, идемпотентно.
+  await execute(
+    `INSERT INTO watermarks (room, login, delivered_max, seen_max) VALUES ${placeholders}
+     ON DUPLICATE KEY UPDATE
+       delivered_max = GREATEST(delivered_max, VALUES(delivered_max)),
+       seen_max      = GREATEST(seen_max,      VALUES(seen_max))`,
+    params
+  );
+}
