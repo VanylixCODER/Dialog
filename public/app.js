@@ -378,7 +378,8 @@ function initials(n) { return (n || "?").trim().charAt(0).toUpperCase(); }
 function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
 
 // ---------- Новый чат ----------
-$("newChatBtn").onclick = () => { $("newChatModal").classList.remove("hidden"); $("dmError").textContent = ""; $("groupError").textContent = ""; renderFriendChips(); renderGroupPick(); };
+// (#newChatBtn теперь открывает settingsOverlay → пейн «newchat»; #newChatModal удалён.)
+// Финальная привязка — ниже в блоке «Перенаправляем хедер-кнопки на settings overlay».
 // (#newChatCancel устарел вместе с #newChatModal — форма «Новый чат» теперь в #settingsOverlay → пейн «newchat».)
 $("newChatCancel") && ($("newChatCancel").onclick = () => closeSettings());
 $("emptyNewChat").onclick = () => $("newChatBtn").click();

@@ -104,15 +104,19 @@ app.get("/api/profile/:login", async (req, res) => {
   if (!card) return res.status(404).json({ error: "not found" });
   res.json({ ...card, status: effectiveStatus(card.login) });
 });
+// 1×1 прозрачный PNG — отдаём при отсутствии аватара вместо 404, чтобы не сыпались ошибки в консоли
+// у клиентов с большим списком чатов (каждый видимый собеседник без аватара иначе логирует ERR).
+const TRANSPARENT_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+const sendTransparent = (res) => { res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=60"); res.send(TRANSPARENT_PNG); };
 app.get("/api/avatar/:login", async (req, res) => {
   try {
     const dataUrl = await getAvatar(req.params.login.toLowerCase());
-    if (!dataUrl) return res.status(404).end();
+    if (!dataUrl) return sendTransparent(res);
     const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl);
-    if (!m) return res.status(404).end();
+    if (!m) return sendTransparent(res);
     res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
     res.send(Buffer.from(m[2], "base64"));
-  } catch { res.status(500).end(); }
+  } catch { sendTransparent(res); }
 });
 app.get("/api/user/:login", async (req, res) => {
   const u = await getUser(req.params.login.toLowerCase());
@@ -147,15 +151,15 @@ app.get("/api/groups/:id", async (req, res) => {
   if (!(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
   const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
   res.json({ id: g.id, name: g.name, owner: g.owner, members: await getGroupMembersDetailed(id) });
-});
-// Аватар группы (бинарно)
+});// Аватар группы (бинарно) — тот же silent-PNG fallback, что и для личных аватарок, чтобы не 404'ил в консоли на каждой группе без логотипа.
 app.get("/api/group-avatar/:id", async (req, res) => {
   try {
     const dataUrl = await getGroupAvatar(req.params.id);
-    if (!dataUrl) return res.status(404).end();
-    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl); if (!m) return res.status(404).end();
-    res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60"); res.send(Buffer.from(m[2], "base64"));
-  } catch { res.status(500).end(); }
+    if (!dataUrl) return sendTransparent(res);
+    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl); if (!m) return sendTransparent(res);
+    res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
+    res.send(Buffer.from(m[2], "base64"));
+  } catch { sendTransparent(res); }
 });
 // Управление (только владелец): rename / avatar / add / remove / delete
 async function notifyGroup(id, event, data) { try { for (const l of await getGroupMembers(id)) notifyUser(l, event, data); } catch {} }
