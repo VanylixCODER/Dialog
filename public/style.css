@@ -1,12 +1,14 @@
 /* ============ Dialog · Matrix design system ============ */
 /* Токены ----------------------------------------------------------- */
 :root {
-  /* Фоны — глубокая тьма с лёгкой зеленцой */
-  --bg-0: #000300;
-  --bg-1: #000700;
-  --bg-2: #020a04;
-  --bg-3: #04120a;
-  --bg-4: #0a1f12;
+  /* Фоны — чистый чёрный (high-contrast default; лёгкая зеленца проступает только
+     как тонкие surface/border rgba-наложения, чтобы панели читались). Раньше были
+     #000300/#000700 и пр. — matrix-дымка, устаревший дефолт. */
+  --bg-0: #000000;
+  --bg-1: #000000;
+  --bg-2: #000604;
+  --bg-3: #000c08;
+  --bg-4: #00130c;
 
   /* Зелёная палитра (matrix) */
   --green-100: #e9ffec;
@@ -2166,79 +2168,54 @@ a:focus-visible {
 .theme-opt .theme-name { font-weight: 700; font-size: 13px; color: var(--green-100); letter-spacing: 0.4px; }
 .theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
 
-/* ============ Themes — переопределения через body[data-theme="…"] ============ */
-/* Matrix — дефолт совпадает с :root, объявлен для явности.
-   Дефолтный matrix-стиль был перенасыщен эффектами (скан-линии на body, глоу-текст-shadow
-   на КАЖДОМ символе, пульс-анимации на статусах, неоновые бордеры, фоновая сетка в чате).
-   Здесь — сдержанная версия: те же зелёные токены и иконография, но без постоянного «движущегося»
-   шума. Другие темы (amber / red / contrast / lofi) сохраняют прежний вид — переопределение
-   лежит ТОЛЬКО внутри body[data-theme="matrix"]. */
-body[data-theme="matrix"] {
-  --green-100: #e9ffec; --green-200: #b6ffd2; --green-300: #3df58a;
-  --green-400: #00ff5a; --green-500: #138a4a; --green-600: #0a6e3d;
-  --green-glow: rgba(0, 255, 90, 0.55); --green-soft: rgba(0, 255, 90, 0.16);
-  --bg-0: #000300; --bg-1: #000700; --bg-2: #020a04; --bg-3: #04120a; --bg-4: #0a1f12;
-  --cyan-300: #5ac8ff;
+/* ============ Themes ============ */
+/* :root уже задаёт base-токены чисто-чёрного default-вида (= «High Contrast»). Матрица
+   снята как тема: ключ «matrix» больше не появляется в пикере тем ни в i18n. Тоны :root
+   теперь — это явный чёрный + неон, без зеленцой дымки в --bg-*; поверх него остальные
+   темы — это переназначения токенов + (опц.) локальных декоративных слоёв. */
+
+/* High Contrast — дефолт. :root == эта тема (явно повторяем тон-калибровку для читаемости). */
+body[data-theme="contrast"] {
+  --green-100: #ffffff; --green-200: #d6ffe0; --green-300: #88ffaa;
+  --green-400: #00ff5a; --green-500: #00cc48; --green-600: #009938;
+  --green-glow: rgba(0, 255, 90, 0.7); --green-soft: rgba(0, 255, 90, 0.22);
+  --bg-0: #000000; --bg-1: #000000; --bg-2: #000604; --bg-3: #000c08; --bg-4: #00130c;
+  --cyan-300: #66ddff;
 }
-/* matrix-specific tonalities (минималистичный matrix-стиль):
-   без скан-линий, без глоу-текст-shadow, без неоновых бегущих полос.
-   Подавляем ТОЛЬКО конкретные декоративные анимации — функциональные модальные открытия
-   (modalIn/cardIn/menuPop) сохраняются. Другие темы (amber/red/contrast/lofi) не задеты —
-   всё локально в body[data-theme="matrix"]. */
-/* убираем скан-линии на body, но не на логине (там их нет — там matrixrain на canvas) */
-body[data-theme="matrix"]::before { display: none; }
-/* убираем заливочные радиал-градиенты фона — оставляем плоский bg-1 */
-body[data-theme="matrix"] { background-image: none; }
-/* убираем фоновую сетку в чате (.chat::before) */
-body[data-theme="matrix"] .chat::before { display: none; }
-/* глоу-текст-shadow на body был «0 0 1px ...» на каждом символе — снимаем */
-body[data-theme="matrix"] { text-shadow: none; }
-/* глоу на чате (.chat-head, .bubble) — приглушаем до читабельной теньки, без неоновой ауры */
-body[data-theme="matrix"] .chat-title { text-shadow: none; }
-body[data-theme="matrix"] .bubble { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
-body[data-theme="matrix"] .msg.me .bubble { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
-/* убираем неоновую бегущую полосу над списком чатов */
-body[data-theme="matrix"] .chatlist::before { display: none; }
-/* анимация «логотип-пульс» в бренде карточки логина — спокойный статический вид */
-body[data-theme="matrix"] .brand-logo::after { display: none; }
-/* убираем анимацию «скан-beam» под хедером чата */
-body[data-theme="matrix"] .chat-head::after { display: none; }
-/* убираем анимацию «сёрф-бегущей полоски» на компоузере */
-body[data-theme="matrix"] .composer::before { display: none; }
-/* убираем всем сообщениям начальную анимацию — появляются мгновенно */
-body[data-theme="matrix"] .msg { animation: none; }
-body[data-theme="matrix"] .bubble { animation: none; }
-/* убираем «пинг-вспышку» (срабатывает при упоминании) — оставляем только рамку */
-body[data-theme="matrix"] .msg.ping .bubble { animation: none; }
-/* убираем bounding pulse на @keyframes inCallBlink / joinPulse — рамка остаётся */
-body[data-theme="matrix"] .call-go.in-call { animation: none; }
-body[data-theme="matrix"] .call-go.join-call { animation: none; }
-/* гасим бесконечный «slide» в voice-bar и статус-индикаторе dm-ping */
-body[data-theme="matrix"] .voice-bar::before { display: none; }
-body[data-theme="matrix"] .typing::before { animation: none; }
-/* убираем прыгающие точки в «typing»-индикаторе и щелчок-recording */
-body[data-theme="matrix"] .typing-dots span { animation: none; }
-body[data-theme="matrix"] .icon-btn.recording { animation: none; }
-/* бейдж «нового сообщения» — без pop-анимации и без глоу */
-body[data-theme="matrix"] .ci-bot .badge { box-shadow: none; animation: none; }
-/* убираем вездесущий drop-shadow на статус-чек-чеке доставки */
-body[data-theme="matrix"] .msg-status[data-status="delivered"],
-body[data-theme="matrix"] .msg-status[data-status="read"] { filter: none; animation: none; }
-/* матричный фон в стейдже звонка (callMatrix) — оставляем canvas, но глушим opacity */
-body[data-theme="matrix"] .call-matrix { opacity: 0.05; }
-/* кольца входящего звонка — без расходящейся волны (один статический круг) */
-body[data-theme="matrix"] .ci-ava-wrap::before,
-body[data-theme="matrix"] .ci-ava-wrap::after { display: none; }
-body[data-theme="matrix"] .ci-btn.accept { animation: none; }
-/* меньше неона в реакциях */
-body[data-theme="matrix"] .reaction { animation: none; }
-body[data-theme="matrix"] .reaction.mine { box-shadow: none; }
-/* аватар тайла без торцевых колец */
-body[data-theme="matrix"] .tile-avatar::before { display: none; }
-/* статичные tooltip'ы без translateY */
-body[data-theme="matrix"] [data-tip]::after { transition: opacity var(--t-fast) var(--ease); transform: translate(-50%, 0) scale(1); }
-/* стили для empty-state чуть тише */
-body[data-theme="matrix"] .es-logo { animation: none; text-shadow: none; }
+/* High Contrast: держим статичный неоновый лоск без движущегося шума (раньше это сидело
+   внутри body[data-theme=matrix]). Функциональные анимации (modalIn/cardIn/menuPop)
+   сохраняются — это видимые «открылись/появились» сигналы UI, их глушить не надо. */
+body[data-theme="contrast"]::before { display: none; }                 /* без скан-линий на чате */
+body[data-theme="contrast"] { background-image: none; text-shadow: none; }
+body[data-theme="contrast"] .chat::before { display: none; }            /* без фоновой сетки */
+body[data-theme="contrast"] .chatlist::before { display: none; }        /* без neon-strip сверху */
+body[data-theme="contrast"] .brand-logo::after { display: none; }      /* без пульса логотипа */
+body[data-theme="contrast"] .chat-head::after { display: none; }        /* без scan-beam */
+body[data-theme="contrast"] .composer::before { display: none; }       /* без shimmer-полосы */
+body[data-theme="contrast"] .voice-bar::before { display: none; }       /* без shimmer */
+body[data-theme="contrast"] .ci-ava-wrap::before,
+body[data-theme="contrast"] .ci-ava-wrap::after { display: none; }      /* без волн входящего звонка */
+body[data-theme="contrast"] .tile-avatar::before { display: none; }     /* без торцевых колец */
+body[data-theme="contrast"] .msg { animation: none; }
+body[data-theme="contrast"] .bubble { animation: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+body[data-theme="contrast"] .msg.me .bubble { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+body[data-theme="contrast"] .chat-title { text-shadow: none; }
+body[data-theme="contrast"] .msg.ping .bubble { animation: none; }
+body[data-theme="contrast"] .call-go.in-call { animation: none; }
+body[data-theme="contrast"] .call-go.join-call { animation: none; }
+body[data-theme="contrast"] .typing::before { animation: none; }
+body[data-theme="contrast"] .typing-dots span { animation: none; }
+body[data-theme="contrast"] .icon-btn.recording { animation: none; }
+body[data-theme="contrast"] .ci-bot .badge { box-shadow: none; animation: none; }
+body[data-theme="contrast"] .msg-status[data-status="delivered"],
+body[data-theme="contrast"] .msg-status[data-status="read"] { filter: none; animation: none; }
+body[data-theme="contrast"] .call-matrix { opacity: 0.05; }
+body[data-theme="contrast"] .ci-btn.accept { animation: none; }
+body[data-theme="contrast"] .reaction { animation: none; }
+body[data-theme="contrast"] .reaction.mine { box-shadow: none; }
+body[data-theme="contrast"] [data-tip]::after { transition: opacity var(--t-fast) var(--ease); transform: translate(-50%, 0) scale(1); }
+body[data-theme="contrast"] .es-logo { animation: none; text-shadow: none; }
+
 /* Amber CRT — янтарный фосфор */
 body[data-theme="amber"] {
   --green-100: #ffeac9; --green-200: #ffce72; --green-300: #ffae40;
@@ -2255,14 +2232,57 @@ body[data-theme="red"] {
   --bg-0: #100000; --bg-1: #170202; --bg-2: #200404; --bg-3: #2a0606; --bg-4: #380909;
   --cyan-300: #ffae7a;
 }
-/* High Contrast — чистый чёрный + ярко-зелёный */
-body[data-theme="contrast"] {
-  --green-100: #ffffff; --green-200: #d6ffe0; --green-300: #88ffaa;
-  --green-400: #00ff5a; --green-500: #00cc48; --green-600: #009938;
-  --green-glow: rgba(0, 255, 90, 0.7); --green-soft: rgba(0, 255, 90, 0.22);
-  --bg-0: #000000; --bg-1: #000000; --bg-2: #000604; --bg-3: #000c08; --bg-4: #00130c;
-  --cyan-300: #66ddff;
+/* Midnight — глубокий ночной синий с ледяным циан-акцентом. Зелёная палитра
+   переназначается в голубую через «--green-*», чтобы компоненты `.field`, `.bubble`,
+   `.chat-title` и пр. работали без дополнительных правок (они все читают --green-*). */
+body[data-theme="midnight"] {
+  --green-100: #e5f0ff; --green-200: #b6d2ff; --green-300: #88aedb;
+  --green-400: #5a8aff; --green-500: #3868d8; --green-600: #2a4ea8;
+  --green-glow: rgba(90, 138, 255, 0.55); --green-soft: rgba(90, 138, 255, 0.16);
+  --bg-0: #06080f; --bg-1: #0a0e1c; --bg-2: #0f1428; --bg-3: #141c34; --bg-4: #1d2748;
+  --cyan-300: #6ed8ff;
 }
+/* Vice City — неоновый Майами 80-х: розовый как primary + бирюза как cyan. На пурпурной
+   ночи, без оранжево-зелёного tone. .msg.me .bubble получает ярко-малиновую подложку. */
+body[data-theme="vice"] {
+  --green-100: #ffd8ee; --green-200: #ffa8d8; --green-300: #ff7ec0;
+  --green-400: #ff3aa3; --green-500: #d11880; --green-600: #94085c;
+  --green-glow: rgba(255, 58, 163, 0.55); --green-soft: rgba(255, 58, 163, 0.18);
+  --bg-0: #0d0612; --bg-1: #130820; --bg-2: #190c28; --bg-3: #241238; --bg-4: #341a50;
+  --cyan-300: #00e1ff;
+}
+/* «Наши» сообщения — бирюза на пурпурно-розовом: чтобы не сливались с дефолтной «зелёной заливкой».
+   (.msg.me .bubble читает rgba(--green-400) — у нас это розовый, OK). */
+body[data-theme="vice"] .msg.me .bubble { color: #ffe6f3; }
+
+/* Dracula — официальная палитра Dracula (https://draculatheme.com).
+   primary = Dracula Purple #bd93f9, текст = #f8f8f2. Подложки берём из #21222c/#282a36. */
+body[data-theme="dracula"] {
+  --green-100: #f8f8f2; --green-200: #ffb86c; --green-300: #bd93f9;
+  --green-400: #bd93f9; --green-500: #8be9fd; --green-600: #6272a4;
+  --green-glow: rgba(189, 147, 249, 0.5); --green-soft: rgba(189, 147, 249, 0.16);
+  --bg-0: #191a21; --bg-1: #21222c; --bg-2: #282a36; --bg-3: #343746; --bg-4: #44475a;
+  --cyan-300: #8be9fd;
+  --danger: #ff5555;
+}
+/* Dracula собственные бампы: зелёная галочка доставки заменилась на cyan-Dracula,
+   потому что primary-зелёного #50fa7b у нас нет в палитре green-* (там фиолет). */
+body[data-theme="dracula"] .msg.me .bubble { color: #f8f8f2; background: linear-gradient(180deg, rgba(189,147,249,.22), rgba(189,147,249,.12)); border-color: #bd93f9; }
+body[data-theme="dracula"] .msg-status[data-status="delivered"] { color: #8be9fd; }
+body[data-theme="dracula"] .msg-status[data-status="read"] { color: #50fa7b; }
+
+/* Nord — официальная палитра Nord (https://www.nordtheme.com). Polar Night для фона,
+   Frost для акцентов. primary = Frost-3 #88c0d0 (тёплый ледяной циан). */
+body[data-theme="nord"] {
+  --green-100: #eceff4; --green-200: #d8dee9; --green-300: #b8c4d6;
+  --green-400: #88c0d0; --green-500: #5e81ac; --green-600: #4c566a;
+  --green-glow: rgba(136, 192, 208, 0.5); --green-soft: rgba(136, 192, 208, 0.16);
+  --bg-0: #2e3440; --bg-1: #3b4252; --bg-2: #434c5e; --bg-3: #4c566a; --bg-4: #303841;
+  --cyan-300: #8fbcbb;
+}
+/* «Наши» сообщения — снежно-голубой вместо обычной tint-подложки. */
+body[data-theme="nord"] .msg.me .bubble { background: linear-gradient(180deg, rgba(136,192,208,.22), rgba(136,192,208,.10)); border-color: #88c0d0; color: #eceff4; }
+
 /* Lo-Fi — приглушённый, легче для глаз */
 body[data-theme="lofi"] {
   --green-100: #dfeae3; --green-200: #a9c2b5; --green-300: #84a892;
@@ -2271,6 +2291,76 @@ body[data-theme="lofi"] {
   --bg-0: #0a0e0c; --bg-1: #0e1311; --bg-2: #131917; --bg-3: #1a221e; --bg-4: #232d28;
   --cyan-300: #88a4a8;
 }
+
+/* Flashbang — СВЕТЛАЯ тема. Зелёная палитра переворачивается: --green-100..300 становятся
+   тёмными (нужны для читаемого текста/панелей на белом), а «primary» --green-400 — это
+   плотный насыщенный лесной зелёный для кнопок-акцентов. --bg-* светлеют до белого/кремового.
+   --cyan-300 — глубокий циан, заметный на светлом. Текст-shadow на body глушим, чтобы блёстки
+   не «съедали» текст; неоновые чатlist/chat-head::after beam’ы маски — отключаем (на светлом
+   фоне они выглядят чужеродно). */
+body[data-theme="flashbang"] {
+  --green-100: #16223a; --green-200: #2e3d5c; --green-300: #1f2c4a;
+  --green-400: #148255; --green-500: #0f6c46; --green-600: #0a5234;
+  --green-glow: rgba(20, 130, 85, 0.35); --green-soft: rgba(20, 130, 85, 0.14);
+  --green-faint: rgba(20, 130, 85, 0.07);
+  --bg-0: #ffffff; --bg-1: #f7f9fc; --bg-2: #edf0f5; --bg-3: #e1e6ed; --bg-4: #d0d6e0;
+  --surface-1: rgba(20, 130, 85, 0.045); --surface-2: rgba(20, 130, 85, 0.09);
+  --surface-3: rgba(20, 130, 85, 0.16);
+  --border-1: rgba(20, 130, 85, 0.22); --border-2: rgba(20, 130, 85, 0.4);
+  --border-3: rgba(20, 130, 85, 0.65);
+  --text: var(--green-300); --text-strong: var(--green-100);
+  --text-dim: #6a7382;
+  --glow-sm: 0 0 6px rgba(20, 130, 85, 0.3);
+  --glow-md: 0 0 12px rgba(20, 130, 85, 0.22);
+  --glow-lg: 0 0 20px rgba(20, 130, 85, 0.28);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 8px rgba(20, 30, 50, 0.06);
+  --shadow-md: 0 0 0 1px rgba(20, 130, 85, 0.08) inset, 0 8px 22px rgba(20, 30, 50, 0.09);
+  --shadow-lg: 0 0 0 1px rgba(20, 130, 85, 0.1) inset, 0 18px 46px rgba(20, 30, 50, 0.12);
+  --cyan-300: #1686b5;
+  --danger: #c13838;
+  background: var(--bg-1);
+  background-image: none;
+  color: var(--green-300);
+  text-shadow: none;
+}
+/* Flashbang-специфичные перебивки: матричный дождь, неоновые полосы и глоу-текст-shadow
+   на светлом фоне смотрятся грязно/чужеродно — глушим. Логин-карточка получает светлый градиент
+   и более тонкую рамку (зелёная rgba на белом — рабочая). */
+body[data-theme="flashbang"]::before { display: none; }
+body[data-theme="flashbang"] .chat::before { display: none; }
+body[data-theme="flashbang"] .chatlist::before { display: none; }
+body[data-theme="flashbang"] .brand-logo::after { display: none; }
+body[data-theme="flashbang"] .chat-head::after { display: none; }
+body[data-theme="flashbang"] .composer::before { display: none; }
+body[data-theme="flashbang"] .voice-bar::before { display: none; }
+body[data-theme="flashbang"] .ci-ava-wrap::before,
+body[data-theme="flashbang"] .ci-ava-wrap::after { display: none; }
+body[data-theme="flashbang"] .tile-avatar::before { display: none; }
+body[data-theme="flashbang"] .call-matrix { display: none; }
+/* Логин-карточка на светлом — белый card с тонкой зелёной рамкой instead of dark glass. */
+body[data-theme="flashbang"] .login-card {
+  background: linear-gradient(180deg, #ffffff, #f3f5f9);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(20, 130, 85, 0.16);
+}
+body[data-theme="flashbang"] .login::before {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(20, 130, 85, 0.08), transparent 70%),
+    radial-gradient(ellipse at 50% 100%, rgba(20, 130, 85, 0.04), transparent 60%);
+}
+body[data-theme="flashbang"] .brand h1 { color: var(--green-100); }
+body[data-theme="flashbang"] .brand-logo { color: var(--green-400); text-shadow: none; }
+/* Field/input selection на светлом — голубой ради higher contrast. */
+body[data-theme="flashbang"] ::selection { background: rgba(20, 130, 85, 0.2); color: var(--green-100); }
+/* «Our» bubble — solid forest-green tint, читается на белом chat-bg. */
+body[data-theme="flashbang"] .msg.me .bubble { background: linear-gradient(180deg, rgba(20,130,85,.18), rgba(20,130,85,.08)); border-color: var(--green-400); color: var(--green-100); }
+body[data-theme="flashbang"] .bubble { background: linear-gradient(180deg, rgba(20,130,85,.05), rgba(20,130,85,.02)); }
+/* Send-button: на светлом лучше solid fg без neon-glow. */
+body[data-theme="flashbang"] .icon-btn.send { background: var(--green-400); color: #ffffff; box-shadow: 0 0 0 1px rgba(20,130,85,.2) inset, 0 4px 12px rgba(20,130,85,.18); }
+body[data-theme="flashbang"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(0,0,0,.22), 0 8px 22px rgba(20,130,85,.22); }
+/* Active chat-item, bubbles, panels — без зелёного glow на светлом. */
+body[data-theme="flashbang"] .chat-item.active { box-shadow: inset 0 0 0 1px rgba(20,130,85,.18); }
+body[data-theme="flashbang"] .msg.me .bubble { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.08); }
+body[data-theme="flashbang"] .ci-bot .badge { box-shadow: 0 0 8px rgba(20,130,85,.22); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
