@@ -147,21 +147,30 @@ document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 // добавлены: midnight (глубокий синий), vice (80s neon), dracula (палитра Dracula),
 // nord (палитра Nord) и светлый flashbang. Порядок — от дефолтной и популярных неоновых
 // к более «нишевым», flashbang идёт последним как «наоборот-тема».
+// Встроенные темы — видны сразу в Settings → Themes. Порядок от наиболее «дефолтных» к «нишевым»:
+// Matrix (default), Dracula, Nord, mono-дуэт (dark), mono-light (его «зеркальная версия»), flashbang (чисто белый),
+// затем цветные/retros (не видены по умолчанию, но остаются в списке).
+// swatch = [accent1, accent2, accent3, bg] — 4 цвета для превью-полоски в #themeGrid.
 const THEMES = [
-  { key: "contrast",  name: "theme_contrast",  desc: "theme_desc_contrast",  swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
-  { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
-  { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
-  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
-  { key: "vice",      name: "theme_vice",      desc: "theme_desc_vice",      swatch: ["#ff3aa3", "#00e1ff", "#d11880", "#130820"] },
-  { key: "nord",      name: "theme_nord",      desc: "theme_desc_nord",      swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
-  { key: "amber",     name: "theme_amber",     desc: "theme_desc_amber",     swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
-  { key: "red",       name: "theme_red",       desc: "theme_desc_red",       swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
-  { key: "lofi",      name: "theme_lofi",      desc: "theme_desc_lofi",      swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
-  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#00bfff", "#7cb342", "#082030", "#f0f9ff"] },
+  { key: "matrix",     name: "theme_matrix",     desc: "theme_desc_matrix",     swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
+  { key: "dracula",    name: "theme_dracula",    desc: "theme_desc_dracula",    swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
+  { key: "nord",       name: "theme_nord",       desc: "theme_desc_nord",       swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
+  { key: "mono",       name: "theme_mono",       desc: "theme_desc_mono",       swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
+  { key: "mono-light", name: "theme_mono_light", desc: "theme_desc_mono_light", swatch: ["#000000", "#404040", "#6a6a6a", "#ffffff"] },
+  { key: "flashbang",  name: "theme_flashbang",  desc: "theme_desc_flashbang",  swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+  { key: "vice",       name: "theme_vice",       desc: "theme_desc_vice",       swatch: ["#ff3aa3", "#00e1ff", "#d11880", "#130820"] },
+  { key: "midnight",   name: "theme_midnight",   desc: "theme_desc_midnight",   swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
+  { key: "amber",      name: "theme_amber",      desc: "theme_desc_amber",      swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
+  { key: "red",        name: "theme_red",        desc: "theme_desc_red",        swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
+  { key: "lofi",       name: "theme_lofi",       desc: "theme_desc_lofi",       swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
+  { key: "aero",       name: "theme_aero",       desc: "theme_desc_aero",       swatch: ["#00bfff", "#7cb342", "#082030", "#f0f9ff"] },
 ];
 function applyTheme(key) {
-  if (!THEMES.find((x) => x.key === key) && !key.startsWith("custom_")) key = "contrast";
+  // Legacy "contrast"/"high_contrast" → matrix; unknown keys → matrix; ghost custom keys
+  // (e.g. localStorage kept dialog_theme="custom_5" while the user deleted that
+  // custom theme) also → matrix so the body attr never sticks on a non-existent theme.
+  if (key === "contrast" || key === "high_contrast") key = "matrix";
+  else if (!THEMES.find((x) => x.key === key) && !(key.startsWith("custom_") && loadCustomThemes().some((c) => c.id === key))) key = "matrix";
   document.body.dataset.theme = key;
   try { localStorage.setItem("dialog_theme", key); } catch {}
   injectCustomThemeStyle(key);
@@ -184,36 +193,112 @@ function injectCustomThemeStyle(key) {
   // We need to prefix each top-level rule with that selector. Naive approach (works for simple CSS): wrap whole CSS in a top-level selector.
   _customThemeStyleEl.textContent = wrapCssForCustomScope(ct.css, key);
 }
-// Wrap every top-level CSS rule in `body[data-theme="custom_X"] { ... }`. Simple implementation:
-// split by '}' while tracking brace depth; prefix the resulting selector list with our scope.
+// Wrap user CSS so it can't leak outside `body[data-theme="custom_X"]`. State-machine parser
+// tracks string (' "), comment (/* */) and brace depth so braces inside {url('a{b}')} or
+// `/* { */` don't break depth counting. For each top-level rule:
+//   • @keyframes / @font-face — pass through (defines keyframe names / `@font-face src: url()`);
+//     scoping the inner rules with body[data-theme=...] would break them.
+//   • @media / @supports / @container / @document / @-rule-with-inner-block — recurse: only the
+//     inner block gets wrapped rule-by-rule, header stays untouched.
+//   • Bare declarations (`--primary-rgb: 0,255,90;`) — fit them under body[data-theme="..."] so
+//     CSS custom-properties cascade to UI descendants. This is the bug the old parser had:
+//     bare decls have no `{}`, so they fell into the trailing-junk fallback and were appended
+//     verbatim — browser rejected them as invalid top-level.
+//   • Any other selector — prefix selector with body[data-theme="custom_X"].
+// Wrap user CSS so it can't leak outside `body[data-theme="custom_X"]`. State-machine
+// tokenizer tracks string (' "), comment (/* */) and brace depth so braces inside
+// `url("a{b}")` or comments don't break depth counting. For each top-level rule:
+//   - @keyframes (@-webkit-keyframes / @-moz-keyframes), @font-face, @page, @charset,
+//     @import - pass through untouched. @keyframes names are global; @font-face src:
+//     url() must be unscoped or the URL breaks.
+//   - @media / @supports / @container / @-rule-with-inner-block - recurse: header
+//     stays intact, only the inner block is re-wrapped rule-by-rule.
+//   - Bare declarations (`--primary-rgb: 0,255,90;`) - wrap under
+//     `body[data-theme="custom_X"] { ... }` so CSS custom-properties actually apply
+//     when this theme is active. The old naive parser dumped these verbatim and
+//     the browser rejected them as invalid top-level.
+//   - Selector rules - prefix selector with `body[data-theme="custom_X"]`.
+//
+// Mixed-entry case: when a chunk has leading bare decls AND a trailing selector
+// block (`--x: y;\n.foo { ... }`), split on the LAST `;` before `{` so decls go
+// under their own scoped block and the selector stays a clean selector.
 function wrapCssForCustomScope(css, key) {
-  const scope = `body[data-theme="${key}"]`;
-  let out = "", depth = 0, buf = "", i = 0;
+  const scope = 'body[data-theme="' + key + '"]';
+  let out = '', buf = '', depth = 0, i = 0, inString = null, inComment = false;
+  const emitTopLevel = (chunk) => {
+    const trimmed = chunk.trim();
+    if (!trimmed) return;
+    if (trimmed.startsWith('@')) {
+      const m = trimmed.match(/^@[a-zA-Z-]+/);
+      const atName = m ? m[0] : '@';
+      const passthrough = atName === '@keyframes' || atName === '@-webkit-keyframes' ||
+                           atName === '@-moz-keyframes' || atName === '@font-face' ||
+                           atName === '@page' || atName === '@charset' || atName === '@import';
+      if (passthrough) { out += chunk; return; }
+      const openIdx = chunk.indexOf('{');
+      const lastClose = chunk.lastIndexOf('}');
+      if (openIdx !== -1 && lastClose !== -1 && lastClose > openIdx) {
+        const header = chunk.slice(0, openIdx + 1);
+        const inner = chunk.slice(openIdx + 1, lastClose);
+        const footer = chunk.slice(lastClose);
+        out += header + wrapCssForCustomScope(inner, key) + footer;
+      } else { out += chunk; }
+      return;
+    }
+    const braceIdx = chunk.indexOf('{');
+    if (braceIdx === -1) {
+      const decls = chunk.trim();
+      if (decls) out += scope + ' {\n' + decls + '\n}\n';
+      return;
+    }
+    const head = chunk.slice(0, braceIdx);
+    const body = chunk.slice(braceIdx);
+    const lastSemi = head.lastIndexOf(';');
+    const endsDecl = head.trimEnd().endsWith(';');
+    if (endsDecl && lastSemi >= 0) {
+      const decls = head.slice(0, lastSemi + 1).trim();
+      const sel = head.slice(lastSemi + 1).trim();
+      if (decls) out += scope + ' {\n' + decls + '\n}\n';
+      out += scope + ' ' + sel + body;
+    } else {
+      const sel = head.trim();
+      out += scope + ' ' + sel + body;
+    }
+  };
   while (i < css.length) {
     const c = css[i];
-    buf += c;
-    if (c === "{") depth++;
-    else if (c === "}") {
-      depth--;
-      if (depth === 0) {
-        // buffer holds `selector { ... }` — prefix selector with our scope unless it's an @ rule
-        if (buf.trimStart().startsWith("@")) out += buf;
-        else {
-          const braceIdx = buf.indexOf("{");
-          const sel = buf.slice(0, braceIdx).trim();
-          const body = buf.slice(braceIdx);
-          out += scope + " " + sel + body;
-        }
-        buf = "";
-      }
+    if (inComment) {
+      buf += c;
+      if (c === '*' && css[i + 1] === '/') { buf += '/'; i += 2; inComment = false; continue; }
+      i++; continue;
     }
-    i++;
+    if (inString) {
+      buf += c;
+      if (c === '\\' && i + 1 < css.length) { buf += css[i + 1]; i += 2; continue; }
+      if (c === inString) inString = null;
+      i++; continue;
+    }
+    if (c === '/' && css[i + 1] === '*') { inComment = true; buf += '/*'; i += 2; continue; }
+    if (c === '"' || c === "'") { inString = c; buf += c; i++; continue; }
+    if (c === '{') { depth++; buf += c; i++; continue; }
+    if (c === '}') {
+      buf += c; depth--; i++;
+      if (depth === 0) {
+        const trimmed = buf.trim();
+        if (trimmed) emitTopLevel(buf);
+        buf = '';
+      }
+      continue;
+    }
+    buf += c; i++;
   }
-  // Drop trailing junk that wasn't a complete rule, but keep with comment if it's just whitespace.
-  out += buf;
+  if (buf.trim()) {
+    const trimmed = buf.trimStart();
+    if (!trimmed.startsWith('@') && trimmed.includes(':')) emitTopLevel(buf);
+    else if (trimmed.startsWith('@')) out += buf;
+  }
   return out;
 }
-applyTheme(localStorage.getItem("dialog_theme") || "contrast"); // применяем сразу, до рендера чатов (high contrast = новый дефолт)
 // ---- Custom themes (localStorage) ----
 const CUSTOM_THEMES_KEY = "dialog_custom_themes";
 const CUSTOM_CSS_CAP = 8000;
@@ -269,7 +354,7 @@ function deleteCustomTheme(id) {
   let list = loadCustomThemes().filter((t) => t.id !== id);
   saveCustomThemes(list);
   if (document.body.dataset.theme === id) {
-    applyTheme("contrast");
+    applyTheme("matrix");
     notify(t("custom_theme_removed"));
   }
   renderThemes();

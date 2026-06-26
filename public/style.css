@@ -2312,8 +2312,11 @@ body[data-theme="aero"] {
    теперь — это явный чёрный + неон, без зеленцой дымки в --bg-*; поверх него остальные
    темы — это переназначения токенов + (опц.) локальных декоративных слоёв. */
 
-/* High Contrast — дефолт. :root == эта тема (явно повторяем тон-калибровку для читаемости). */
-body[data-theme="contrast"] {
+/* Matrix — дефолт (= High Contrast, переименовано обратно). Чёрный фон + неоновые акценты #00ff5a,
+   без движущейся скан-плёнки на чате (функциональные modalIn/cardIn/menuPop глушить нельзя —
+   это «появилось/открылось» сигналы UI; их оставляем как есть). Матричный rAF-дождь из
+   matrix.js сидит на логине поверх, а здесь его CSS-след выключен явно. */
+body[data-theme="matrix"] {
   --primary-rgb: 0, 255, 90;                       /* matrix neon — primary #00ff5a */
   --accent-100: #ffffff; --accent-200: #d6ffe0; --accent-300: #88ffaa;
   --accent-400: #00ff5a; --accent-500: #00cc48; --accent-600: #009938;
@@ -2321,39 +2324,36 @@ body[data-theme="contrast"] {
   --bg-0: #000000; --bg-1: #000000; --bg-2: #000604; --bg-3: #000c08; --bg-4: #00130c;
   --cyan-300: #66ddff;
 }
-/* High Contrast: держим статичный неоновый лоск без движущегося шума (раньше это сидело
-   внутри body[data-theme=matrix]). Функциональные анимации (modalIn/cardIn/menuPop)
-   сохраняются — это видимые «открылись/появились» сигналы UI, их глушить не надо. */
-body[data-theme="contrast"]::before { display: none; }                 /* без скан-линий на чате */
-body[data-theme="contrast"] { background-image: none; text-shadow: none; }
-body[data-theme="contrast"] .chat::before { display: none; }            /* без фоновой сетки */
-body[data-theme="contrast"] .chatlist::before { display: none; }        /* без neon-strip сверху */
-body[data-theme="contrast"] .brand-logo::after { display: none; }      /* без пульса логотипа */
-body[data-theme="contrast"] .chat-head::after { display: none; }        /* без scan-beam */
-body[data-theme="contrast"] .composer::before { display: none; }       /* без shimmer-полосы */
-body[data-theme="contrast"] .voice-bar::before { display: none; }       /* без shimmer */
-body[data-theme="contrast"] .ci-ava-wrap::before,
-body[data-theme="contrast"] .ci-ava-wrap::after { display: none; }      /* без волн входящего звонка */
-body[data-theme="contrast"] .tile-avatar::before { display: none; }     /* без торцевых колец */
-body[data-theme="contrast"] .msg { animation: none; }
-body[data-theme="contrast"] .bubble { animation: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
-body[data-theme="contrast"] .msg.me .bubble { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
-body[data-theme="contrast"] .chat-title { text-shadow: none; }
-body[data-theme="contrast"] .msg.ping .bubble { animation: none; }
-body[data-theme="contrast"] .call-go.in-call { animation: none; }
-body[data-theme="contrast"] .call-go.join-call { animation: none; }
-body[data-theme="contrast"] .typing::before { animation: none; }
-body[data-theme="contrast"] .typing-dots span { animation: none; }
-body[data-theme="contrast"] .icon-btn.recording { animation: none; }
-body[data-theme="contrast"] .ci-bot .badge { box-shadow: none; animation: none; }
-body[data-theme="contrast"] .msg-status[data-status="delivered"],
-body[data-theme="contrast"] .msg-status[data-status="read"] { filter: none; animation: none; }
-body[data-theme="contrast"] .call-matrix { opacity: 0.05; }
-body[data-theme="contrast"] .ci-btn.accept { animation: none; }
-body[data-theme="contrast"] .reaction { animation: none; }
-body[data-theme="contrast"] .reaction.mine { box-shadow: none; }
-body[data-theme="contrast"] [data-tip]::after { transition: opacity var(--t-fast) var(--ease); transform: translate(-50%, 0) scale(1); }
-body[data-theme="contrast"] .es-logo { animation: none; text-shadow: none; }
+body[data-theme="matrix"]::before { display: none; }                 /* без скан-линий на чате */
+body[data-theme="matrix"] { background-image: none; text-shadow: none; }
+body[data-theme="matrix"] .chat::before { display: none; }            /* без фоновой сетки */
+body[data-theme="matrix"] .chatlist::before { display: none; }        /* без neon-strip сверху */
+body[data-theme="matrix"] .brand-logo::after { display: none; }      /* без пульса логотипа */
+body[data-theme="matrix"] .chat-head::after { display: none; }        /* без scan-beam */
+body[data-theme="matrix"] .composer::before { display: none; }       /* без shimmer-полосы */
+body[data-theme="matrix"] .voice-bar::before { display: none; }       /* без shimmer */
+body[data-theme="matrix"] .ci-ava-wrap::before,
+body[data-theme="matrix"] .ci-ava-wrap::after { display: none; }      /* без волн входящего звонка */
+body[data-theme="matrix"] .tile-avatar::before { display: none; }     /* без торцевых колец */
+body[data-theme="matrix"] .msg { animation: none; }
+body[data-theme="matrix"] .bubble { animation: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+body[data-theme="matrix"] .msg.me .bubble { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+body[data-theme="matrix"] .chat-title { text-shadow: none; }
+body[data-theme="matrix"] .msg.ping .bubble { animation: none; }
+body[data-theme="matrix"] .call-go.in-call { animation: none; }
+body[data-theme="matrix"] .call-go.join-call { animation: none; }
+body[data-theme="matrix"] .typing::before { animation: none; }
+body[data-theme="matrix"] .typing-dots span { animation: none; }
+body[data-theme="matrix"] .icon-btn.recording { animation: none; }
+body[data-theme="matrix"] .ci-bot .badge { box-shadow: none; animation: none; }
+body[data-theme="matrix"] .msg-status[data-status="delivered"],
+body[data-theme="matrix"] .msg-status[data-status="read"] { filter: none; animation: none; }
+body[data-theme="matrix"] .call-matrix { opacity: 0.05; }
+body[data-theme="matrix"] .ci-btn.accept { animation: none; }
+body[data-theme="matrix"] .reaction { animation: none; }
+body[data-theme="matrix"] .reaction.mine { box-shadow: none; }
+body[data-theme="matrix"] [data-tip]::after { transition: opacity var(--t-fast) var(--ease); transform: translate(-50%, 0) scale(1); }
+body[data-theme="matrix"] .es-logo { animation: none; text-shadow: none; }
 
 /* Amber CRT — янтарный фосфор */
 body[data-theme="midnight"] {
@@ -2389,7 +2389,7 @@ body[data-theme="flashbang"] {
   --accent-400: #16a34a; --accent-500: #15803d; --accent-600: #166534;
   --accent-glow: rgba(var(--primary-rgb), 0.3); --accent-soft: rgba(var(--primary-rgb), 0.14);
   --accent-faint: rgba(var(--primary-rgb), 0.07);
-  --bg-0: #ffffff; --bg-1: #f9fafb; --bg-2: #f3f4f6; --bg-3: #e5e7eb; --bg-4: #d1d5db;
+  --bg-0: #ffffff; --bg-1: #ffffff; --bg-2: #ffffff; --bg-3: #ffffff; --bg-4: #f5f5f5;
   --surface-1: rgba(var(--primary-rgb), 0.04); --surface-2: rgba(var(--primary-rgb), 0.08);
   --surface-3: rgba(var(--primary-rgb), 0.14);
   --border-1: rgba(17, 24, 39, 0.10); --border-2: rgba(17, 24, 39, 0.18); --border-3: rgba(17, 24, 39, 0.32);
@@ -2546,6 +2546,63 @@ body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-th
    Flat pale-blue background, white panels, classic #0a78d3 blue accents.
    Triangle bubble tails (WLM wedge) rendered via ::before + ::after.
    No glassmorphism, no bokeh, no animations — calm and readable. */
+/* Mono Light — зеркальный близнец mono. Чёрный фон / белый текст → белый фон / чёрный текст,
+   все декоративные overlays отключены. Используется как «пара» к mono (dark + light версии
+   одной чёрно-белой палитры). primary = 0,0,0 → rgba(--primary-rgb) для свечений работает как
+   полупрозрачный чёрный, не зелёный/синий. */
+body[data-theme="mono-light"] {
+  --primary-rgb: 0, 0, 0;                          /* mono counterpart of --primary-rgb */
+  --accent-100: #ffffff; --accent-200: #f4f4f4; --accent-300: #e5e5e5;
+  --accent-400: #111111; --accent-500: #404040; --accent-600: #555555;
+  --accent-glow: rgba(0, 0, 0, 0.18); --accent-soft: rgba(0, 0, 0, 0.10);
+  --accent-faint: rgba(0, 0, 0, 0.04);
+  --bg-0: #ffffff; --bg-1: #ffffff; --bg-2: #f7f7f7; --bg-3: #ececec; --bg-4: #e0e0e0;
+  --surface-1: rgba(0, 0, 0, 0.02); --surface-2: rgba(0, 0, 0, 0.05);
+  --surface-3: rgba(0, 0, 0, 0.10);
+  --border-1: rgba(0, 0, 0, 0.10); --border-2: rgba(0, 0, 0, 0.18); --border-3: rgba(0, 0, 0, 0.36);
+  --text: #1a1a1a; --text-strong: #000000; --text-dim: #6a6a6a;
+  --glow-sm: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --glow-md: 0 0 0 1px rgba(0, 0, 0, 0.10);
+  --glow-lg: 0 0 0 1px rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.10), 0 6px 16px rgba(0, 0, 0, 0.05);
+  --cyan-300: #404040;
+  --danger: #b00020;
+  background: var(--bg-1);
+  background-image: none;
+  color: var(--text);
+  text-shadow: none;
+}
+body[data-theme="mono-light"]::before { display: none; }
+body[data-theme="mono-light"] .chat::before { display: none; }
+body[data-theme="mono-light"] .chatlist::before { display: none; }
+body[data-theme="mono-light"] .brand-logo::after { display: none; }
+body[data-theme="mono-light"] .chat-head::after { display: none; }
+body[data-theme="mono-light"] .composer::before { display: none; }
+body[data-theme="mono-light"] .voice-bar::before { display: none; }
+body[data-theme="mono-light"] .ci-ava-wrap::before,
+body[data-theme="mono-light"] .ci-ava-wrap::after { display: none; }
+body[data-theme="mono-light"] .tile-avatar::before { display: none; }
+body[data-theme="mono-light"] .call-matrix { display: none; }
+body[data-theme="mono-light"] .modal-card,
+body[data-theme="mono-light"] .settings-card,
+body[data-theme="mono-light"] .chat-menu,
+body[data-theme="mono-light"] .react-picker,
+body[data-theme="mono-light"] .me-status-menu,
+body[data-theme="mono-light"] .emoji-picker,
+body[data-theme="mono-light"] .gif-panel { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-md); color: var(--text); }
+body[data-theme="mono-light"] .chat-head { background: var(--bg-1); border-bottom-color: var(--border-1); color: var(--text-strong); }
+body[data-theme="mono-light"] .composer { background: var(--bg-1); border-top-color: var(--border-1); color: var(--text); }
+body[data-theme="mono-light"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); color: var(--text); }
+body[data-theme="mono-light"] .bubble { background: var(--bg-3); color: var(--text); border-color: var(--border-1); box-shadow: var(--shadow-sm); }
+body[data-theme="mono-light"] .msg.me .bubble { background: #000000; color: #ffffff; border-color: #000000; box-shadow: var(--shadow-md); }
+body[data-theme="mono-light"] .msg.me .mention { color: #ffffff; }
+body[data-theme="mono-light"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
+body[data-theme="mono-light"] .bubble, body[data-theme="mono-light"] .msg, body[data-theme="mono-light"] .chat-title,
+body[data-theme="mono-light"] .es-logo, body[data-theme="mono-light"] .mention, body[data-theme="mono-light"] .setting-tab { animation: none; text-shadow: none; }
+body[data-theme="mono-light"] .icon-btn.send { background: #000000; color: #ffffff; border-color: #000000; box-shadow: 0 0 0 1px rgba(0,0,0,.2) inset, 0 2px 8px rgba(0,0,0,0.18); }
+body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(255,255,255,.15), 0 4px 14px rgba(0,0,0,0.22); }
 /* ============ Custom theme + ringtone UI ============ */
 .theme-opt-add {
   display: flex; align-items: center; justify-content: center;
