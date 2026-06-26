@@ -87,12 +87,14 @@ body {
     radial-gradient(ellipse at 50% 100%, rgba(0, 255, 90, 0.04), transparent 60%);
 }
 body::before {
-  content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background: repeating-linear-gradient(rgba(0, 255, 90, 0.035) 0 1px, transparent 1px 3px);
-  mix-blend-mode: lighten;
-  opacity: 0.6;
+  opacity: 0.4;
   animation: scanShift 36s linear infinite;
 }
+/* Скан-лайн НЕ перекрывает попап-оверлеи: ставим на z-index 0 (фоновый слой)
+   и на чате (не на логине) гасим совсем — на чате он съедает FPS поверх тяжёлых шиммеров. */
+body[data-page="chat"]::before { display: none; }
 @keyframes scanShift { to { transform: translateY(3px); } }
 
 button, input, textarea, select { font: inherit; color: inherit; caret-color: var(--green-400); }
@@ -133,7 +135,10 @@ img { display: block; max-width: 100%; }
 .dd-item:focus-visible,
 .dd-toggle:focus-visible,
 .tile-ctrl .tctrl-mute:focus-visible,
-.back-btn:focus-visible {
+.back-btn:focus-visible,
+.me-status:focus-visible,
+.settings-tab:focus-visible,
+.theme-opt:focus-visible {
   outline: 2px solid var(--green-400);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.22);
@@ -180,8 +185,7 @@ a:focus-visible {
 
 /* Form action buttons (login submit, register, group save, send-request).
    These have hover lift + shimmer overlays, so focus overlap must be predictable:
-   keep outline + ring, kill the hover translate and shimmer pseudo-motion. */
-.btn-primary:focus-visible, .btn-ghost:focus-visible {
+   keep outline + ring, kill the hover translate and shimmer pseudo-motion. */.btn-primary:focus-visible, .btn-ghost:focus-visible {
   outline: 2px solid var(--green-400);
   outline-offset: 3px;
   box-shadow: 0 0 0 4px rgba(0, 255, 90, 0.28),
@@ -688,9 +692,9 @@ a:focus-visible {
 .m-incall svg { width: 16px; height: 16px; }
 .member .st-dot { margin-left: auto; }
 
-.chat-menu-wrap { position: relative; flex-shrink: 0; display: flex; align-items: center; }
+.chat-menu-wrap { position: relative; flex-shrink: 0; display: flex; align-items: center; isolation: isolate; }
 .chat-menu {
-  position: fixed; z-index: 260; min-width: 220px;
+  position: fixed; z-index: 1900; min-width: 220px;
   background: rgba(2, 10, 4, 0.92);
   border: 1px solid rgba(0, 255, 90, 0.4); border-radius: var(--r-3);
   padding: 6px 0; box-shadow: var(--shadow-md);
@@ -729,7 +733,7 @@ a:focus-visible {
 }
 .fp-chip:active { transform: scale(0.95); }
 
-#groupSettingsModal:not(.is-owner) .gs-owner { display: none; }
+#settingsOverlay:not(.is-owner) .gs-owner { display: none; }
 .gs-danger { color: var(--danger); border-color: rgba(255, 82, 82, 0.4); }
 .gs-danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(255, 82, 82, 0.12); }
 #gsMembers .contact-row .owner-tag { font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px; }
@@ -1727,7 +1731,7 @@ a:focus-visible {
 
 /* === Входящий звонок (полноэкранный) === */
 .call-incoming {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; inset: 0; z-index: 1200;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0, 4, 0, 0.92);
   backdrop-filter: blur(18px) saturate(140%);
@@ -1947,6 +1951,177 @@ a:focus-visible {
   .login-card { padding: 24px 18px; }
   .brand h1 { font-size: 22px; }
   .ci-actions { margin-top: 28px; gap: 36px; }
+}
+
+/* ============ Status pill — хедер чатлиста, рядом с никнеймом ============ */
+.me-name-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.me-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px 2px 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  color: var(--text-dim);
+  font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;
+  cursor: pointer;
+  border-radius: var(--r-pill);
+  align-self: flex-start;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  margin-top: 1px;
+}
+.me-status:hover { color: var(--green-300); background: var(--green-faint); border-color: var(--green-400); }
+.me-status::after { content: "▾"; opacity: 0.5; margin-left: 2px; font-size: 9px; }
+.me-status .ms-dot { width: 7px; height: 7px; }
+
+.me-status-menu {
+  position: fixed; z-index: 1400;
+  min-width: 220px;
+  background: rgba(2, 10, 4, 0.94);
+  border: 1px solid var(--border-2); border-radius: var(--r-3);
+  padding: 6px 0;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(10px);
+  animation: menuPop 0.18s var(--ease-out);
+}
+.me-status-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 14px;
+  background: none; border: none; color: var(--text);
+  font-size: 13px; cursor: pointer; text-align: left;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), padding-left var(--t-fast) var(--ease);
+}
+.me-status-menu button:hover { background: var(--green-faint); color: var(--green-300); padding-left: 18px; }
+.me-status-menu button.on { font-weight: 700; color: var(--green-100); }
+
+/* ============ Settings overlay (Discord-style, 80% экрана) ============ */
+.settings-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  display: grid; place-items: center;
+  background: rgba(0, 4, 0, 0.7);
+  backdrop-filter: blur(14px) saturate(140%);
+  animation: modalIn 0.18s var(--ease-out);
+}
+.settings-card {
+  position: relative;
+  width: min(80vw, 980px);
+  height: min(80vh, 720px);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: cardIn 0.34s var(--ease-out);
+}
+.settings-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border-1);
+  background: linear-gradient(180deg, rgba(0, 255, 90, 0.06), transparent);
+}
+.settings-head h2 {
+  font-weight: 800; font-size: 16px; color: var(--green-200);
+  letter-spacing: 2px; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(0, 255, 90, 0.25);
+  margin: 0;
+}
+.settings-tabs {
+  display: flex; gap: 4px; padding: 8px 22px;
+  border-bottom: 1px solid var(--border-1);
+  background: rgba(0, 7, 0, 0.4);
+}
+.settings-tab {
+  padding: 9px 14px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--text-dim);
+  font-weight: 700; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+  cursor: pointer; border-radius: var(--r-2);
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.settings-tab:hover { color: var(--green-300); background: var(--green-faint); }
+.settings-tab.active {
+  background: linear-gradient(180deg, var(--green-400), var(--green-600));
+  color: #001a08;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2), 0 4px 18px rgba(0, 255, 90, 0.18);
+}
+.settings-panes { overflow-y: auto; padding: 22px; min-height: 0; }
+.settings-pane { display: none; flex-direction: column; gap: 12px; }
+.settings-pane.active { display: flex; }
+.settings-pane h3 {
+  font-weight: 800; font-size: 13px; color: var(--green-300);
+  letter-spacing: 1.6px; text-transform: uppercase;
+  margin: 0 0 6px 0;
+  text-shadow: 0 0 6px rgba(0, 255, 90, 0.18);
+}
+
+/* Themes grid — живые свотчи превью */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.theme-opt {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  color: var(--text); font: inherit;
+}
+.theme-opt:hover { background: var(--surface-2); border-color: var(--green-400); transform: translateY(-2px); }
+.theme-opt.active {
+  border-color: var(--green-400);
+  background: rgba(0, 255, 90, 0.12);
+  box-shadow: 0 0 18px rgba(0, 255, 90, 0.18);
+}
+.theme-opt:active { transform: translateY(0); }
+.theme-opt .theme-swatch {
+  display: flex; gap: 3px; height: 36px; border-radius: var(--r-2);
+  overflow: hidden; border: 1px solid var(--border-1);
+}
+.theme-opt .theme-swatch span { flex: 1; height: 100%; }
+.theme-opt .theme-name { font-weight: 700; font-size: 13px; color: var(--green-100); letter-spacing: 0.4px; }
+.theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
+
+/* ============ Themes — переопределения через body[data-theme="…"] ============ */
+/* Matrix — дефолт совпадает с :root, объявлен для явности */
+body[data-theme="matrix"] {
+  --green-100: #e9ffec; --green-200: #b6ffd2; --green-300: #3df58a;
+  --green-400: #00ff5a; --green-500: #138a4a; --green-600: #0a6e3d;
+  --green-glow: rgba(0, 255, 90, 0.55); --green-soft: rgba(0, 255, 90, 0.16);
+  --bg-0: #000300; --bg-1: #000700; --bg-2: #020a04; --bg-3: #04120a; --bg-4: #0a1f12;
+  --cyan-300: #5ac8ff;
+}
+/* Amber CRT — янтарный фосфор */
+body[data-theme="amber"] {
+  --green-100: #ffeac9; --green-200: #ffce72; --green-300: #ffae40;
+  --green-400: #ff8c00; --green-500: #b36800; --green-600: #7a4a00;
+  --green-glow: rgba(255, 174, 64, 0.55); --green-soft: rgba(255, 174, 64, 0.16);
+  --bg-0: #0a0500; --bg-1: #100700; --bg-2: #180d00; --bg-3: #221300; --bg-4: #2e1a00;
+  --cyan-300: #ffd87a;
+}
+/* Red Alert — тревожный красный */
+body[data-theme="red"] {
+  --green-100: #ffd1d1; --green-200: #ff8a8a; --green-300: #ff5252;
+  --green-400: #dd2828; --green-500: #aa1414; --green-600: #800a0a;
+  --green-glow: rgba(255, 82, 82, 0.55); --green-soft: rgba(255, 82, 82, 0.16);
+  --bg-0: #100000; --bg-1: #170202; --bg-2: #200404; --bg-3: #2a0606; --bg-4: #380909;
+  --cyan-300: #ffae7a;
+}
+/* High Contrast — чистый чёрный + ярко-зелёный */
+body[data-theme="contrast"] {
+  --green-100: #ffffff; --green-200: #d6ffe0; --green-300: #88ffaa;
+  --green-400: #00ff5a; --green-500: #00cc48; --green-600: #009938;
+  --green-glow: rgba(0, 255, 90, 0.7); --green-soft: rgba(0, 255, 90, 0.22);
+  --bg-0: #000000; --bg-1: #000000; --bg-2: #000604; --bg-3: #000c08; --bg-4: #00130c;
+  --cyan-300: #66ddff;
+}
+/* Lo-Fi — приглушённый, легче для глаз */
+body[data-theme="lofi"] {
+  --green-100: #dfeae3; --green-200: #a9c2b5; --green-300: #84a892;
+  --green-400: #6a8e7a; --green-500: #557766; --green-600: #425d50;
+  --green-glow: rgba(106, 142, 122, 0.4); --green-soft: rgba(106, 142, 122, 0.14);
+  --bg-0: #0a0e0c; --bg-1: #0e1311; --bg-2: #131917; --bg-3: #1a221e; --bg-4: #232d28;
+  --cyan-300: #88a4a8;
 }
 
 @media (prefers-reduced-motion: reduce) {
