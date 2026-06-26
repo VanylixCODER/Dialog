@@ -47,9 +47,9 @@
   <div id="app" class="app hidden">
     <aside class="chatlist">
       <div class="cl-head">
-        <div class="avatar" id="myAvatar">?</div>
+        <div class="avatar me-trigger" id="myAvatar" tabindex="0" role="button" data-i18n-title="open_profile" title="Open profile" aria-label="Open profile">?</div>
         <div class="me-name-wrap">
-          <div class="me-name" id="myName">—</div>
+          <div class="me-name me-trigger" id="myName" tabindex="0" role="button" data-i18n-title="open_profile" title="Open profile" aria-label="Open profile">—</div>
           <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
@@ -142,7 +142,7 @@
     </main>
 
     <aside id="infoPanel" class="info-panel hidden">
-      <div class="info-head"><span id="infoTitle" data-i18n="info">Info</span><button id="infoClose" class="hicon-btn">✕</button></div>
+      <div class="info-head"><span id="infoTitle" data-i18n="info">Info</span><button id="infoAddBtn" class="hicon-btn info-add-btn hidden" data-i18n-title="add_member_btn" title="Add member">+</button><button id="infoClose" class="hicon-btn">✕</button></div>
       <ul id="members" class="members"></ul>
     </aside>
   </div>
@@ -272,6 +272,20 @@
     <div class="mp-joined" id="mpJoined"></div>
     <div class="modal-actions"><button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button></div>
   </div></div>
+
+  <!-- Add members (mini-modal, group-owner only). Отдельный от settings overlay — пользователь после
+       создания группы часто не понимает, КУДА идти, чтобы добавить ещё людей. Эта маленькая панель
+       открывается из очевидных точек входа (⋮ меню группы и + над списком участников). -->
+  <div id="addMemberModal" class="modal hidden">
+    <div class="modal-card am-card">
+      <button id="amCancel" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="add_members_title">Add members</div>
+      <div id="amPicker" class="friend-pick"></div>
+      <div id="amEmpty" class="contacts-empty hidden" data-i18n="add_member_no_friends">No friends to add</div>
+      <div class="form-error" id="amError"></div>
+      <div class="modal-actions"><button id="amConfirm" class="btn-primary" data-i18n="add_member_btn">Add</button></div>
+    </div>
+  </div>
 
   <!-- Лайтбокс -->
   <div id="lightbox" class="lightbox hidden">

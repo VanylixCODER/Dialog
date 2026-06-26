@@ -291,6 +291,10 @@ $("chatMenuBtn").onclick = (e) => {
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
   if (curKind === "group") {
+    // Овнер может добавлять участников прямо из меню чата — отдельный пункт над «Group settings»,
+    // потому что открывать пейн настроек ради одного действия было неочевидно (жалоба «не могу
+    // добавить пользователя после создания группы»).
+    if (groupOwner) item(t("add_member_btn"), "userPlus", () => openAddMembers());
     item(t("group_settings"), "settings", () => openSettings("groups"));
     item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
   } else if (curKind === "dm") {
@@ -307,6 +311,65 @@ $("chatMenuBtn").onclick = (e) => {
 };
 document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap") && !e.target.closest(".chat-menu")) $("chatMenu").classList.add("hidden"); });
 function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
+
+// ---------- Добавление участников (group owner only) ----------
+// Отдельная точка фхода от ⋮-меню и + над участниками → #addMemberModal. В отличие от settings
+// overlay (где add-friends планируется в общем пейне настроек) — здесь только одно действие и
+// один пейлоад: {add: [...]}. gmAdd локально хранит выбранных, чистится при каждом открытии.
+let gmAdd = new Set();
+function syncAddMemberUI() {
+  // Только овнер текущей открытой группы видит кнопки; в DM/non-chat скрываем.
+  const show = curKind === "group" && groupOwner;
+  const infoBtn = $("infoAddBtn"); if (infoBtn) infoBtn.classList.toggle("hidden", !show);
+}
+async function openAddMembers() {
+  if (curKind !== "group") return;
+  const id = myRoom.slice(5);
+  const { ok, data } = await api("/api/groups/" + id, null, "GET");
+  if (!ok) return;
+  // Сервер тоже проверит, но не показываем модал не-овнеру — лишний POST ловить у пользователя не нужно.
+  if (data.owner !== profile.login) { $("amError").textContent = ""; renderAmPicker([], []); $("addMemberModal").classList.remove("hidden"); return; }
+  // Подтянем свежие relations, если friends загружались до логина и пусты — без друзей пикер пустой.
+  if (!relations.friends.length) await loadRelations();
+  const memberSet = new Set((data.members || []).map((m) => m.login));
+  gmAdd.clear();
+  renderAmPicker([...relations.friends].filter((l) => !memberSet.has(l)));
+  $("amError").textContent = "";
+  $("addMemberModal").classList.remove("hidden");
+}
+function renderAmPicker(candidates) {
+  const box = $("amPicker"); box.innerHTML = "";
+  $("amEmpty").classList.toggle("hidden", candidates.length > 0);
+  candidates.forEach((l) => {
+    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
+    b.onclick = () => {
+      if (gmAdd.has(l)) { gmAdd.delete(l); b.classList.remove("on"); }
+      else { gmAdd.add(l); b.classList.add("on"); }
+      // Изначально disabled, пока никто не выбран — защита от пустого POST.
+      const any = gmAdd.size > 0;
+      const c = $("amConfirm"); if (c) c.disabled = !any;
+    };
+    box.appendChild(b);
+  });
+  const c = $("amConfirm"); if (c) c.disabled = true;
+}
+$("amCancel").onclick = () => $("addMemberModal").classList.add("hidden");
+$("addMemberModal").addEventListener("click", (e) => { if (e.target === $("addMemberModal")) $("addMemberModal").classList.add("hidden"); });
+$("infoAddBtn").onclick = () => openAddMembers();
+$("amConfirm").onclick = async () => {
+  $("amError").textContent = "";
+  if (curKind !== "group" || !gmAdd.size) return;
+  const id = myRoom.slice(5);
+  const payload = { add: [...gmAdd] };
+  const { ok, data } = await api("/api/groups/" + id + "/members", payload);
+  if (!ok) { const e = $("amError"); if (e) e.textContent = data.error || "Couldn't add members"; return; }
+  gmAdd.clear();
+  $("addMemberModal").classList.add("hidden");
+  // Сервер рассылает group-updated всем — мы подхватим и перечитаем состав.
+  loadGroupMembers();
+  loadGroups();
+  notify(t("add_member_btn") + ": " + payload.add.join(", "));
+};
 
 // ---------- Настройки группы (живёт в settingsOverlay → пейн groups) ----------
 let gsId = null, gsOwner = false, gsAvatar = null, gsAdd = new Set();
@@ -364,11 +427,13 @@ async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/me
 $("gsLeave").onclick = () => { closeSettings(); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
 $("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); closeSettings(); };
 // group-updated: если пейн groups активен — перечитать; иначе просто обновить список чатов/панели.
+// Если активна группа — перечитать её участников сразу (add/remove с любого клиента). Внутри
+// loadGroupMembers уже есть защита от stale ответов (сверка myRoom === "@grp:" + id) и она же
+// обновит groupOwner + renderMembers + syncAddMemberUI.
 socket.on("group-updated", () => {
   loadGroups();
-  // Обновляем пейн groups если он сейчас открыт над активной группой.
+  if (curKind === "group") loadGroupMembers();
   if (curKind === "group" && settingsOpen && $("settingsTabs")?.querySelector('.settings-tab.active')?.dataset.tab === "groups") populateGroupSettingsPane();
-  if (curKind === "group" && !$("infoPanel").classList.contains("hidden")) renderMembers();
 });
 socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); } if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
 
@@ -536,11 +601,20 @@ socket.on("relations-changed", () => loadRelations());
 
 // ---------- Участники (инфо-панель) ----------
 let groupMembers = []; // [{login,name}] текущей группы (для боковой панели)
+// Овнерство текущей группы — кешируем сразу при загрузке списка, чтобы чат-меню и кнопка + под
+// участниками могли решать, показывать «Add member» (только овнеру). Сбрасывается в openChat, когда
+// переключаемся на другой чат или в DM. disconnect/identify — отдельный путь, см. loadGroupMembers.
+let groupOwner = false;
 async function loadGroupMembers() {
-  if (curKind !== "group") { groupMembers = []; return; }
+  if (curKind !== "group") { groupMembers = []; groupOwner = false; syncAddMemberUI(); return; }
   const id = myRoom.slice(5);
   const { ok, data } = await api("/api/groups/" + id, null, "GET");
-  if (ok && myRoom === "@grp:" + id) { groupMembers = data.members || []; renderMembers(); }
+  if (ok && myRoom === "@grp:" + id) {
+    groupMembers = data.members || [];
+    groupOwner = data.owner === profile.login;
+    renderMembers();
+    syncAddMemberUI();
+  }
 }
 function renderMembers() {
   const ul = $("members"); if (!ul) return; ul.innerHTML = "";
@@ -1436,6 +1510,20 @@ function renderThemes() {
 $("contactsBtn").onclick = () => openSettings("contacts");
 $("profileBtn") && ($("profileBtn").onclick = () => openSettings("profile"));
 $("newChatBtn").onclick = () => openSettings("newchat");
+
+// Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
+// #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
+// навешиваем Enter/Space-активацию для клавиатурной навигации. Сам onclick переживает ре-рендер
+// содержимого в setMyAvatar() (там меняется только innerHTML, сам узел и его листенеры остаются).
+function openMyProfile() { openSettings("profile"); }
+$("myAvatar").onclick = openMyProfile;
+$("myName").onclick = openMyProfile;
+["myAvatar", "myName"].forEach((id) => {
+  const el = $(id); if (!el) return;
+  el.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMyProfile(); }
+  };
+});
 // Табы / закрытие оверлея
 $("settingsTabs").addEventListener("click", (e) => {
   const tab = e.target.closest(".settings-tab");
