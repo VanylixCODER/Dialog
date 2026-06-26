@@ -328,22 +328,7 @@ a:focus-visible {
   animation: cardIn 0.55s var(--ease-out);
 }
 @keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
-/* Живая сканирующая рамка */
-.login-card::before {
-  content: "";
-  position: absolute; inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--green-400) 60deg, transparent 120deg, transparent 240deg, var(--green-400) 300deg, transparent 360deg);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  opacity: 0.6;
-  animation: ringRotate 6s linear infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-@keyframes ringRotate { to { transform: rotate(360deg); } }
+/* (вращающаяся conic-рамка убрана — отвлекала и портила вид логина; тонкая подсветка через .login-card box-shadow остаётся) */
 .login-card > * { position: relative; z-index: 1; }
 
 .brand {

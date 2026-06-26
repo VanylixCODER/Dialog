@@ -42,14 +42,16 @@ async function issueToken(loginName) {
 
 export async function userByToken(token) {
   if (!token) return null;
-  const cached = await cacheGet("sess:" + token);
-  if (cached) { try { return JSON.parse(cached); } catch {} }
-  const login = await db.sessionLogin(token);
+  // DB-first, cache — best-effort. Если Redis недоступен, /api/me всё равно ответит 200/401 через БД.
+  // Иначе любой 500 от недоступного кеша стерал бы токен на клиенте и разлогинивал юзера на каждом F5.
+  try { const cached = await cacheGet("sess:" + token); if (cached) { try { return JSON.parse(cached); } catch {} } } catch {}
+  let login = null, u = null;
+  try { login = await db.sessionLogin(token); } catch { return null; }
   if (!login) return null;
-  const u = await db.getUser(login);
+  try { u = await db.getUser(login); } catch { return null; }
   if (!u) return null;
   const profile = profileOf(u);
-  await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
+  cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL).catch(() => {}); // best-effort, не блокируем ответ
   return profile;
 }
 
