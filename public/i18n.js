@@ -64,6 +64,7 @@ const I18N = {
     fullscreen: "Fullscreen", popout: "Pop out window", pip_unsupported: "Pop-out window is not supported in this browser",
     status_pending: "Pending…", status_sent: "Sent", status_delivered: "Delivered", status_read: "Read",
     status_label: "Status", set_status: "Set status",
+<<<<<<< HEAD
     theme_choose: "Choose theme", theme_matrix: "Matrix",     theme_dracula: "Dracula", theme_flashbang: "Flashbang", theme_mono: "Monochrome", theme_mono_light: "Mono Light",             theme_desc_matrix: "Neon green on pure black — Matrix (default)",
         theme_desc_dracula: "Official Dracula palette — purple and pink",
         theme_desc_flashbang: "Light theme — clean white with green accents",
@@ -73,6 +74,13 @@ const I18N = {
     theme_desc_nord: "Arctic Nord — Polar Night + Frost ice-blue",
     theme_nord_light: "Nord Light",
     theme_desc_nord_light: "Nord palette inverted — Snow Storm background, Frost ice-blue accents on Polar Night text",
+=======
+    theme_choose: "Choose theme", theme_contrast: "High contrast",     theme_midnight: "Midnight",     theme_dracula: "Dracula", theme_flashbang: "Flashbang", theme_mono: "Monochrome",             theme_desc_contrast: "Pure black + neon — max legibility (default)",
+        theme_desc_midnight: "Deep navy + icy cyan — calm and focused",
+        theme_desc_dracula: "Official Dracula palette — purple and pink",
+        theme_desc_flashbang: "Light theme — clean white with green accents",
+    theme_desc_mono: "Mostly black with white accents — high-contrast dark monochrome",
+>>>>>>> f507f15 (removed msn and other shit)
         tab_profile: "Profile", tab_contacts: "Contacts", tab_themes: "Themes", tab_groups: "Group",
     open_profile: "Open profile",
     close: "Close", esc_to_close: "Esc / click outside to close",
@@ -162,6 +170,7 @@ const I18N = {
     fullscreen: "Во весь экран", popout: "Открепить в окно", pip_unsupported: "Открепление окна не поддерживается в этом браузере",
     status_pending: "Отправляется…", status_sent: "Отправлено", status_delivered: "Доставлено", status_read: "Прочитано",
     status_label: "Статус", set_status: "Сменить статус",
+<<<<<<< HEAD
     theme_choose: "Выбрать тему", theme_matrix: "Matrix",     theme_dracula: "Дракула", theme_flashbang: "Фонарик", theme_mono: "Монохром", theme_mono_light: "Монохром светлый",     theme_desc_matrix: "Неоновый зелёный на чистом чёрном — Matrix (по умолчанию)",
     theme_desc_dracula: "Палитра Dracula — пурпур и розовый на тёмно-сером",
     theme_desc_flashbang: "Светлая тема — чистый белый с зелёным акцентом",
@@ -171,6 +180,13 @@ const I18N = {
     theme_desc_nord: "Арктический Nord — полярная ночь + ледяной Frost",
     theme_nord_light: "Nord светлый",
     theme_desc_nord_light: "Nord наоборот — фон Snow Storm, ледяные акценты Frost и текст Polar Night",
+=======
+    theme_choose: "Выбрать тему", theme_contrast: "Высокий контраст",     theme_midnight: "Полночь",     theme_dracula: "Дракула", theme_flashbang: "Фонарик", theme_mono: "Монохром",     theme_desc_contrast: "Чистый чёрный + неон — максимум читаемости (по умолчанию)",
+    theme_desc_midnight: "Глубокий синий + ледяной циан — спокойно и сосредоточенно",
+    theme_desc_dracula: "Палитра Dracula — пурпур и розовый на тёмно-сером",
+    theme_desc_flashbang: "Светлая тема — чистый белый с зелёным акцентом",
+    theme_desc_mono: "Преимущественно чёрная с белыми акцентами — контрастная тёмная монохрома",
+>>>>>>> f507f15 (removed msn and other shit)
     tab_profile: "Профиль", tab_contacts: "Контакты", tab_themes: "Темы", tab_groups: "Группа",
     open_profile: "Открыть профиль",
     close: "Закрыть", esc_to_close: "Esc / клик снаружи — закрыть",

@@ -169,6 +169,7 @@ document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 // затем цветные/retros (не видены по умолчанию, но остаются в списке).
 // swatch = [accent1, accent2, accent3, bg] — 4 цвета для превью-полоски в #themeGrid.
 const THEMES = [
+<<<<<<< HEAD
   { key: "matrix",     name: "theme_matrix",     desc: "theme_desc_matrix",     swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
   { key: "dracula",    name: "theme_dracula",    desc: "theme_desc_dracula",    swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "nord",       name: "theme_nord",       desc: "theme_desc_nord",       swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
@@ -176,6 +177,13 @@ const THEMES = [
   { key: "mono",       name: "theme_mono",       desc: "theme_desc_mono",       swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
   { key: "mono-light", name: "theme_mono_light", desc: "theme_desc_mono_light", swatch: ["#000000", "#404040", "#6a6a6a", "#ffffff"] },
   { key: "flashbang",  name: "theme_flashbang",  desc: "theme_desc_flashbang",  swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+=======
+  { key: "contrast",  name: "theme_contrast",  desc: "theme_desc_contrast",  swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
+  { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
+  { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
+  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
+>>>>>>> f507f15 (removed msn and other shit)
 ];
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix; unknown keys → matrix; ghost custom keys
