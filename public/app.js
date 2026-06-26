@@ -145,8 +145,13 @@ function statusOf(el) {
   else if (minDelivered >= id) setStatus(icon, "delivered");
   else setStatus(icon, "sent");
 }
+// Статусы доставки монотонны: галочки «не откатываются» назад при обновлении курсоров.
+// pending (0) → sent (1) → delivered (2) → read (3). Достигнутый максимум сохраняется.
+const STATUS_RANK = { pending: 0, sent: 1, delivered: 2, read: 3 };
 function setStatus(iconEl, status) {
-  if (!iconEl || iconEl.dataset.status === status) return;
+  if (!iconEl) return;
+  const cur = iconEl.dataset.status || "pending";
+  if (STATUS_RANK[status] <= STATUS_RANK[cur]) return; // постоянное состояние — не понижаем
   iconEl.dataset.status = status;
   if (status === "pending") iconEl.innerHTML = window.ICON.clock;     // ⏱ печатаем/ждём
   else if (status === "read") iconEl.innerHTML = window.ICON.checkCheck; // ✓✓ только когда ПРОЧИТАНО
