@@ -2417,6 +2417,83 @@ body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-th
    Flat pale-blue background, white panels, classic #0a78d3 blue accents.
    Triangle bubble tails (WLM wedge) rendered via ::before + ::after.
    No glassmorphism, no bokeh, no animations — calm and readable. */
+/* ============ Custom theme + ringtone UI ============ */
+.theme-opt-add {
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px dashed var(--border-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.theme-opt-add:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-300);
+  background: var(--accent-faint);
+}
+.theme-opt-add .add-plus { font-size: 18px; margin-right: 8px; font-weight: 800; }
+
+/* Badged "custom" label inside a theme card */
+.theme-opt.custom .theme-badge {
+  display: inline-block;
+  font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent-300);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.theme-opt .theme-actions {
+  display: flex; gap: 4px; margin-top: 4px;
+}
+.theme-opt .theme-actions button {
+  flex: 1; font-size: 11px; padding: 4px 6px;
+  border: 1px solid var(--border-1);
+  background: transparent; color: var(--text-dim);
+  border-radius: 4px; cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.theme-opt .theme-actions button:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
+.theme-opt .theme-actions button.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.1); }
+
+/* Ringtone row in profile pane */
+.ringtone-row {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  margin-top: 6px;
+}
+.ringtone-row .ringtone-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: var(--text-dim);
+}
+.ringtone-row .ringtone-meta strong { color: var(--text-strong); }
+.ringtone-row .ringtone-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ringtone-row .ringtone-btn {
+  flex: 1; min-width: 90px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid var(--border-1);
+  color: var(--text);
+  border-radius: var(--r-2);
+  cursor: pointer; font-size: 12px;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.ringtone-row .ringtone-btn:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
+.ringtone-row .ringtone-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.12); }
+.ringtone-row audio { width: 100%; margin-top: 6px; }
+
+/* CSS editor modal — textarea already styled by .field but slightly taller */
+#ctCss {
+  font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px; line-height: 1.45;
+  min-height: 180px; max-height: 320px; resize: vertical;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }

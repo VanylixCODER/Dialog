@@ -180,7 +180,20 @@
           <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
           <div class="form-error" id="profileError"></div>
           <div class="modal-actions">
-            <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
+            <div class="ringtone-row">
+        <div class="ringtone-meta">
+          <span data-i18n="ringtone_label">Ringtone</span>
+          <strong id="ringtoneName" data-i18n="ringtone_none">Default sound only</strong>
+        </div>
+        <input id="ringtoneFile" type="file" accept="audio/*" hidden>
+        <div class="ringtone-actions">
+          <button type="button" id="ringtoneChoose" class="ringtone-btn" data-i18n="ringtone_choose">Choose audio</button>
+          <button type="button" id="ringtonePreview" class="ringtone-btn" data-i18n="ringtone_preview">Preview</button>
+          <button type="button" id="ringtoneRemove" class="ringtone-btn danger" data-i18n="ringtone_remove">Remove</button>
+        </div>
+        <div id="ringtoneError" class="form-error"></div>
+      </div>
+      <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
             <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
           </div>
           <div class="uppercase-tag" data-i18n="set_status">Set status</div>
@@ -206,6 +219,7 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
+<button class="theme-opt theme-opt-add" data-action="new-custom-theme" type="button"><span class="add-plus">+</span><span data-i18n="custom_theme_btn">Custom theme</span></button>
         </section>
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
@@ -293,6 +307,25 @@
       <div id="amEmpty" class="contacts-empty hidden" data-i18n="add_member_no_friends">No friends to add</div>
       <div class="form-error" id="amError"></div>
       <div class="modal-actions"><button id="amConfirm" class="btn-primary" data-i18n="add_member_btn">Add</button></div>
+    </div>
+  </div>
+
+  <!-- Custom theme editor modal — opens from "+ Custom theme" button in #themeGrid or
+       the per-card Edit action. Body-level (not inside #settingsOverlay) so it can layer
+       above the overlay without z-index gymnastics. -->
+  <div id="customThemeModal" class="modal hidden">
+    <div class="modal-card ct-card">
+      <button id="ctClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="custom_theme_title">Custom theme</div>
+      <label class="ct-label" data-i18n="custom_theme_name_ph">Theme name</label>
+      <input id="ctName" class="field" maxlength="32" autocomplete="off" />
+      <label class="ct-label" data-i18n="custom_theme_css_hint">CSS</label>
+      <textarea id="ctCss" class="field ct-css" rows="11" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      <div id="ctError" class="form-error"></div>
+      <div class="modal-actions">
+        <button id="ctCancel" class="btn-ghost" data-i18n="custom_theme_cancel">Cancel</button>
+        <button id="ctSave" class="btn-primary" data-i18n="custom_theme_save">Save</button>
+      </div>
     </div>
   </div>
 
