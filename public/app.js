@@ -40,7 +40,12 @@ const sfx = {
   leave: () => beepSeq([[784, 0.09], [415, 0.13]]),              // участник вышел
   mute: () => beep(300, 0.07),
   unmute: () => beep(560, 0.07),
+  // MSN / Windows Live Messenger «door knock» — два коротких перкуссионных удара (tok-tok).
+  // 620 Hz then 540 Hz with quick exponential decay, ~90 ms между ударами. Только для темы aero.
+  knock: () => { beep(620, 0.04, 0.1); setTimeout(() => beep(540, 0.06, 0.12), 90); },
 };
+// MSN aero theme uses the classic door-knock sound; остальные темы — обычный beep.
+function msgSfxForTheme() { return document.body.dataset.theme === "aero" ? sfx.knock : sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
 // ---------- Темы ----------
@@ -919,7 +924,7 @@ socket.on("message", (m) => {
     }
   }
   const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
-  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) sfx.msg(); }
+  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
   // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
   // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
@@ -933,8 +938,7 @@ socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
-  c.ts = Date.now();
-  if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { sfx.msg(); notify(t("dm_ping", { name: fromName })); } }
+  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); notify(t("dm_ping", { name: fromName })); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", () => notify(t("dm_need_friend")));
