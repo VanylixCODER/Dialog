@@ -148,9 +148,9 @@ function statusOf(el) {
 function setStatus(iconEl, status) {
   if (!iconEl || iconEl.dataset.status === status) return;
   iconEl.dataset.status = status;
-  if (status === "pending") iconEl.innerHTML = window.ICON.clock;
-  else if (status === "sent") iconEl.innerHTML = window.ICON.check;
-  else iconEl.innerHTML = window.ICON.checkCheck; // delivered + read — одинаковая иконка, цвет через CSS
+  if (status === "pending") iconEl.innerHTML = window.ICON.clock;     // ⏱ печатаем/ждём
+  else if (status === "read") iconEl.innerHTML = window.ICON.checkCheck; // ✓✓ только когда ПРОЧИТАНО
+  else iconEl.innerHTML = window.ICON.check;                          // ✓ sent/delivered — одинарная
   iconEl.title = t("status_" + status);
 }
 function othersInRoom() {
