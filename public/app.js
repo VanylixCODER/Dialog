@@ -1152,6 +1152,9 @@ $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioE
 $("expandBtn").onclick = () => { const fs = $("callStage").classList.toggle("fullscreen"); $("expandBtn").classList.toggle("active", fs); $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile()); };
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
+// Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
+// и если звонок был активен — выйти из него. Идемпотентно: повторный вызов видит call.active=false.
+function _onPipClosed() { const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); }
 // ⧉ Поп-аут звонка: Document PiP (Chrome, поверх всех) или обычное окно window.open (Firefox и пр.)
 let pipWin = null, pipPoll = 0;
 function mountGridIn(win) {
@@ -1173,7 +1176,7 @@ $("popoutBtn").onclick = async () => {
     if ("documentPictureInPicture" in window) {
       pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });
       mountGridIn(pipWin);
-      pipWin.addEventListener("pagehide", () => { const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); });
+      pipWin.addEventListener("pagehide", _onPipClosed);
     } else {
       // Firefox / без Document PiP — обычное окно
       pipWin = window.open("", "dialogCall", "width=380,height=520,menubar=no,toolbar=no");
@@ -1181,7 +1184,7 @@ $("popoutBtn").onclick = async () => {
       pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
       mountGridIn(pipWin);
       clearInterval(pipPoll);
-      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); } }, 700);
+      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
     }
   } catch (e) { console.log("pip", e.message); pipWin = null; }
 };
