@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
 import { networkInterfaces } from "os";
+import crypto from "crypto";
 import webpush from "web-push";
 import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
@@ -14,6 +15,7 @@ import {
   initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction,
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, deleteGroup,
+  createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend,
@@ -191,6 +193,144 @@ app.delete("/api/groups/:id", async (req, res) => {
   await deleteGroup(id);
   for (const l of members) notifyUser(l, "group-deleted", { id });
   res.json({ ok: true });
+});
+
+// ---------- REST: приглашения в группу (invite-codes + suggestion queue) ----------
+// Шарабельные коды. Все участники могут создать (любой код — входная точка в группу, можно расшарить).
+// Приватный ключ: SHA-256 хеш кода хранится в БД; plaintext 22-символьный код отдаётся клиенту
+// ОДИН РАЗ при создании (как пароль). Поиск при redeem — по UNIQUE(code_hash), O(log n).
+function genInviteCode() {
+  // 16 случайных байт в base64url (~22 символа без pad). Трим хвостовых '=' для URL-чистоты.
+  return crypto.randomBytes(16).toString("base64url").replace(/=+$/, "").slice(0, 22);
+}
+function hashInviteCode(code) {
+  // Lowercase trim — чтобы случайные leading/trailing spaces в pasted-коде не ломали lookup.
+  return crypto.createHash("sha256").update(String(code || "").trim().toLowerCase()).digest("hex");
+}
+app.post("/api/groups/:id/invites", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id) || !(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
+    const code = genInviteCode();
+    await createGroupInvite(id, me.login, hashInviteCode(code));
+    // Овнеру И создателю — обоим полезно видеть новую точку входа в списке инвайтов. Создатель не
+    // получит повторного socket-event потому что генерирует код в своём клиенте и сразу ре-фетчит,
+    // но emit «на всякий случай» — для апдейта UI без ручного refetch.
+    const g = await getGroup(id);
+    if (g) notifyUser(g.owner, "invite-created", { id });
+    notifyUser(me.login, "invite-created", { id });
+    res.json({ ok: true, code, url: "/?invite=" + encodeURIComponent(code) });
+  } catch (e) { console.error("invite create", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.get("/api/groups/:id/invites", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id) || !(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
+    res.json({ invites: await getGroupInvites(id) });
+  } catch (e) { console.error("invite list", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.delete("/api/groups/:id/invites/:invId", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
+    const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
+    // Владелец ЛЮБОЙ код может отозвать; обычный участник — только свои (созданные им самим).
+    const invId = parseInt(req.params.invId, 10);
+    const all = await getGroupInvites(id);
+    const target = all.find((x) => x.id === invId);
+    if (!target) return res.status(404).json({ error: "not found" });
+    if (g.owner !== me.login && target.creator_login !== me.login) return res.status(403).json({ error: "not allowed" });
+    await revokeGroupInvite(invId);
+    notifyGroup(id, "invites-changed", { id });
+    res.json({ ok: true });
+  } catch (e) { console.error("invite revoke", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// Redeem кода: неавторизованный получает {loginRequired:true} (клиент будит login + сохраняет код в
+// sessionStorage). Авторизованный создаёт pending-invite (НЕ авто-join) — овнер должен approve.
+app.post("/api/groups/redeem", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.json({ loginRequired: true });
+    const code = String(req.body.code || "").trim();
+    if (!code) return res.status(400).json({ error: "no code" });
+    const inv = await getInviteByHash(hashInviteCode(code));
+    if (!inv) return res.json({ ok: false, status: "invalid" });
+    if (await isGroupMember(inv.group_id, me.login)) return res.json({ ok: true, status: "already", group: inv.group_id });
+    const d = await createPendingInvite(inv.group_id, me.login, me.login);
+    if (d.duplicate) return res.json({ ok: true, status: "duplicate", group: inv.group_id });
+    const g = await getGroup(inv.group_id);
+    if (g) notifyUser(g.owner, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
+    notifyUser(me.login, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
+    res.json({ ok: true, status: "pending", group: inv.group_id });
+  } catch (e) { console.error("redeem", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// In-app suggestion (любой участник может предложить друга). Цель НЕ добавляется в группу сразу —
+// заявка попадает в pending и ждёт одобрения овнера. target — comma-list: пикер в одном сабмите
+// может отправить несколько логинов; невалидные/уже-участники/уже-pending молча пропускаются.
+app.post("/api/groups/:id/suggest", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id) || !(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
+    const targets = [...new Set(String(req.body.target || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean))]
+      .filter((l) => l !== me.login);
+    if (!targets.length) return res.status(400).json({ error: "bad target" });
+    let created = 0;
+    for (const target of targets) {
+      if (!(await getUser(target))) continue;
+      if (await isGroupMember(id, target)) continue;
+      const d = await createPendingInvite(id, target, me.login);
+      if (!d.duplicate) {
+        created++;
+        const g = await getGroup(id);
+        if (g) notifyUser(g.owner, "pending-new", { id, login: target, by: me.login });
+        notifyUser(target, "pending-new", { id, login: target, by: me.login });
+      }
+    }
+    res.json({ ok: true, status: "pending", created });
+  } catch (e) { console.error("suggest", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// Owner-only: список ожидающих заявок (для UI в settings → groups + для refresh после socket-event).
+app.get("/api/groups/:id/pending", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id) || !(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+    res.json({ pending: await getGroupPending(id) });
+  } catch (e) { console.error("pending list", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// Owner-only: approve/decline. Сначала ВЕРИФИЦИРУЕМ что pid принадлежит именно группе :id
+// (подбором из getGroupPending(id) — pid это глобальный PK, но матчим по id для подстраховки).
+app.post("/api/groups/:id/pending/:pid", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id) || !(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+    const pid = parseInt(req.params.pid, 10);
+    const all = await getGroupPending(id);
+    const pending = all.find((p) => p.id === pid);
+    if (!pending) return res.status(404).json({ error: "not found" });
+    const action = String(req.body.action || "");
+    if (action !== "approve" && action !== "decline") return res.status(400).json({ error: "bad action" });
+    await deletePendingInvite(pid);
+    const gid = parseInt(id, 10);
+    if (action === "approve") {
+      await addGroupMembers(id, [pending.login]);
+      // group-updated рассылается notifyGroup/include через addGroupMembers; pending-resolved уходит
+      // целевому юзеру только. Ид — просто id (не дублируем как group, клиент использует p.id).
+      notifyUser(pending.login, "pending-resolved", { id: gid, action: "approve" });
+    } else {
+      notifyUser(pending.login, "pending-resolved", { id: gid, action: "decline" });
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error("pending resolve", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: друзья / блокировки ----------
