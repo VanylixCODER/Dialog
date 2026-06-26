@@ -2012,6 +2012,135 @@ a:focus-visible {
 [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
 /* ============ Mobile ============ */
+body[data-theme="amber"] {
+  --primary-rgb: 255, 140, 0;                     /* CRT amber — primary #ff8c00 */
+  --accent-100: #ffeac9; --accent-200: #ffce72; --accent-300: #ffae40;
+  --accent-400: #ff8c00; --accent-500: #b36800; --accent-600: #7a4a00;
+  --accent-glow: rgba(255, 174, 64, 0.55); --accent-soft: rgba(255, 174, 64, 0.16);
+  --bg-0: #0a0500; --bg-1: #100700; --bg-2: #180d00; --bg-3: #221300; --bg-4: #2e1a00;
+  --cyan-300: #ffd87a;
+}
+
+body[data-theme="red"] {
+  --primary-rgb: 221, 40, 40;                     /* alert red — primary #dd2828 */
+  --accent-100: #ffd1d1; --accent-200: #ff8a8a; --accent-300: #ff5252;
+  --accent-400: #dd2828; --accent-500: #aa1414; --accent-600: #800a0a;
+  --accent-glow: rgba(255, 82, 82, 0.55); --accent-soft: rgba(255, 82, 82, 0.16);
+  --bg-0: #100000; --bg-1: #170202; --bg-2: #200404; --bg-3: #2a0606; --bg-4: #380909;
+  --cyan-300: #ffae7a;
+}
+
+body[data-theme="vice"] {
+  --primary-rgb: 255, 58, 163;                    /* Miami pink — primary #ff3aa3 */
+  --accent-100: #ffd8ee; --accent-200: #ffa8d8; --accent-300: #ff7ec0;
+  --accent-400: #ff3aa3; --accent-500: #d11880; --accent-600: #94085c;
+  --accent-glow: rgba(255, 58, 163, 0.55); --accent-soft: rgba(255, 58, 163, 0.18);
+  --bg-0: #0d0612; --bg-1: #130820; --bg-2: #190c28; --bg-3: #241238; --bg-4: #341a50;
+  --cyan-300: #00e1ff;
+}
+
+body[data-theme="nord"] {
+  --primary-rgb: 136, 192, 208;                   /* Frost-3 — primary #88c0d0 */
+  --accent-100: #eceff4; --accent-200: #d8dee9; --accent-300: #b8c4d6;
+  --accent-400: #88c0d0; --accent-500: #5e81ac; --accent-600: #4c566a;
+  --accent-glow: rgba(136, 192, 208, 0.5); --accent-soft: rgba(136, 192, 208, 0.16);
+  --bg-0: #2e3440; --bg-1: #3b4252; --bg-2: #434c5e; --bg-3: #4c566a; --bg-4: #303841;
+  --cyan-300: #8fbcbb;
+}
+
+body[data-theme="lofi"] {
+  --primary-rgb: 106, 142, 122;                   /* muted green — primary #6a8e7a */
+  --accent-100: #dfeae3; --accent-200: #a9c2b5; --accent-300: #84a892;
+  --accent-400: #6a8e7a; --accent-500: #557766; --accent-600: #425d50;
+  --accent-glow: rgba(106, 142, 122, 0.4); --accent-soft: rgba(106, 142, 122, 0.14);
+  --bg-0: #0a0e0c; --bg-1: #0e1311; --bg-2: #131917; --bg-3: #1a221e; --bg-4: #232d28;
+  --cyan-300: #88a4a8;
+}
+
+body[data-theme="aero"] {
+  --primary-rgb: 0, 191, 255;                    /* sky aero blue — primary #00bfff */
+  --accent-100: #f0f9ff; --accent-200: #bae6fd; --accent-300: #7dd3fc;
+  --accent-400: #00bfff; --accent-500: #0099cc; --accent-600: #006699;
+  --accent-glow: rgba(var(--primary-rgb), 0.5); --accent-soft: rgba(var(--primary-rgb), 0.18);
+  --accent-faint: rgba(var(--primary-rgb), 0.08);
+  --bg-0: #ffffff; --bg-1: #f3f9fd; --bg-2: #e3eff8; --bg-3: #c8dff0; --bg-4: #a5cce6;
+  --surface-1: rgba(255, 255, 255, 0.4); --surface-2: rgba(255, 255, 255, 0.6); --surface-3: rgba(255, 255, 255, 0.85);
+  --border-1: rgba(0, 80, 130, 0.08); --border-2: rgba(0, 80, 130, 0.18); --border-3: rgba(0, 80, 130, 0.32);
+  --text: #0c2a3d; --text-strong: #082030; --text-dim: #2e5a78;
+  /* «Aero» софт-глоу и лёгкая глубина теней — словно «стекло на столе» */
+  --glow-sm: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 8px rgba(var(--primary-rgb), 0.2);
+  --glow-md: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 14px rgba(var(--primary-rgb), 0.3);
+  --glow-lg: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 22px rgba(var(--primary-rgb), 0.35);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 6px rgba(0, 80, 130, 0.10);
+  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 22px rgba(0, 80, 130, 0.14);
+  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 46px rgba(0, 80, 130, 0.20);
+  --cyan-300: #7cb342;                          /* Frutiger grass-green — «трава» акцент */
+  --danger: #c13838;
+  background: var(--bg-1);
+  background-image:
+    radial-gradient(ellipse at 30% 20%, rgba(124, 179, 66, 0.10), transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(0, 191, 255, 0.10), transparent 60%);
+  color: var(--text);
+  text-shadow: none;
+}
+
+/* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
+@media (max-width: 720px) {
+  .settings-overlay { padding: 0; align-items: end; }
+  .settings-card {
+    width: calc(100vw - 16px);
+    height: min(96dvh, 880px);
+    border-radius: 16px 16px 4px 4px;
+    border-bottom: none;
+    animation: sheetIn 0.32s var(--ease-out);
+  }
+  @keyframes sheetIn { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+  .settings-head { padding: 12px 18px; }
+  .settings-head h2 { font-size: 14px; letter-spacing: 1.6px; }
+  .settings-tabs {
+    padding: 6px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    gap: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .settings-tabs::-webkit-scrollbar { display: none; }
+  .settings-tab {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 11px 14px;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .settings-panes { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); }
+  .settings-pane { gap: 11px; }
+  /* Profile pane: bigger touch targets, ringtone row stacks */
+  .profile-ava { width: 88px; height: 88px; font-size: 32px; }
+  .field-wrap .toggle-eye, #profileName, #profileDesc { padding: 14px; font-size: 16px; } /* iOS no-zoom */
+  #ringtoneMeta { flex-direction: column; align-items: flex-start; }
+  .ringtone-actions { flex-wrap: wrap; }
+  .ringtone-btn { min-height: 44px; padding: 10px 14px; flex: 1 0 auto; }
+  /* Theme grid: 2 columns instead of variable-fill so touch targets stay visible */
+  .theme-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .theme-opt { padding: 10px; gap: 6px; }
+  .theme-opt .theme-swatch { height: 28px; }
+  .theme-opt .theme-name { font-size: 12px; }
+  .theme-opt .theme-desc { font-size: 10px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Contacts + Groups row contents: friend-pick wraps but bigger chips */
+  .fp-chip { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+  .contact-row { padding: 10px 12px; gap: 12px; }
+  .contact-row button { min-height: 40px; padding: 8px 14px; font-size: 12px; }
+  .btn-primary, .btn-ghost { min-height: 48px; font-size: 14px; }
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .btn-primary, .modal-actions .btn-ghost { flex: 1 1 140px; }
+  /* Custom theme modal is layered above settings — keep its own mobile sizing */
+  #customThemeModal .modal-card.ct-card { width: 100vw; max-height: 100dvh; border-radius: 0; }
+  .ct-label { font-size: 11px; }
+  #ctCss { font-size: 13px; min-height: 220px; }
+  #ctName, #ctSave, #ctCancel { min-height: 48px; font-size: 15px; }
+}
+
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
   .chatlist { display: flex; }

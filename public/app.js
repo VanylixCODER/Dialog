@@ -153,6 +153,12 @@ const THEMES = [
   { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
   { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
+  { key: "vice",      name: "theme_vice",      desc: "theme_desc_vice",      swatch: ["#ff3aa3", "#00e1ff", "#d11880", "#130820"] },
+  { key: "nord",      name: "theme_nord",      desc: "theme_desc_nord",      swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
+  { key: "amber",     name: "theme_amber",     desc: "theme_desc_amber",     swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
+  { key: "red",       name: "theme_red",       desc: "theme_desc_red",       swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
+  { key: "lofi",      name: "theme_lofi",      desc: "theme_desc_lofi",      swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
+  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#00bfff", "#7cb342", "#082030", "#f0f9ff"] },
 ];
 function applyTheme(key) {
   if (!THEMES.find((x) => x.key === key) && !key.startsWith("custom_")) key = "contrast";
@@ -1646,7 +1652,17 @@ function endCall() {
 $("hangUp").onclick = endCall;
 
 // Ringing (через Socket.IO + push) — медиа поднимает LiveKit
-socket.on("call-ring", (p) => { if (call.active) return; const kind = p.room.startsWith("@grp:") ? "group" : "dm"; showToast(p.from, p.name, { room: p.room, title: p.title, kind }); });
+socket.on("call-ring", (p) => {
+  if (call.active) return;
+  ensureAudioCtx();
+  if (!isMuted(p.room) && !isDnd()) {
+    sfx.call();
+    notify(t("call_in", { title: p.title }));
+    if (_customRingtone) setTimeout(playCustomRingtone, 110);
+  }
+  const kind = p.room.startsWith("@grp:") ? "group" : "dm";
+  showToast(p.from, p.name, { room: p.room, title: p.title, kind });
+});
 
 // Контролы
 async function setMic(on) {
