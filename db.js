@@ -103,6 +103,32 @@ export async function initSchema() {
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (room, login), KEY idx_wm_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Шарабельные коды приглашений в группу. Сервер хранит только SHA-256 хеш кода — plaintext
+  // показывается клиенту ОДИН РАЗ при создании, как пароль. Хеш уникален, поэтому поиск при
+  // /api/groups/redeem — точечный по индексу UNIQUE, без скана таблицы.
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_invites (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT NOT NULL,
+    creator_login VARCHAR(24) NOT NULL,
+    code_hash CHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_invites_group (group_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Очередь ожидающих заявок на вступление (от in-app suggestions и от redemption кодов).
+  // UNIQUE KEY на паре (group_id, login) — запрещает дубли: повторный suggest/redeem одного и того
+  // юзера не плодит очереди. revoked/approved/declined строки удаляются (а не помечаются) — таблица
+  // и так мала, и проще логика, чем чистить старые флаги.
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_pending (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT NOT NULL,
+    login VARCHAR(24) NOT NULL,
+    invited_by VARCHAR(24) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_pending_group_login (group_id, login),
+    KEY idx_pending_group (group_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -235,6 +261,51 @@ export async function deleteGroup(id) {
   await execute("DELETE FROM chat_groups WHERE id=?", [id]);
   try { await execute("DELETE FROM messages WHERE room=?", ["@grp:" + id]); } catch {}
   await cacheDel("hist:@grp:" + id);
+  // Каскадно чистим заявки и активные коды удалённой группы.
+  try { await execute("DELETE FROM group_pending WHERE group_id=?", [id]); } catch {}
+  try { await execute("DELETE FROM group_invites WHERE group_id=?", [id]); } catch {}
+}
+
+// ---------- Приглашения в группу (invite-codes + suggestion queue) ----------
+// server.js хранит SHA-256 хеш кода; здесь просто INSERT/SELECT/DELETE хеша.
+// UNIQUE KEY на code_hash в group_invites даёт O(log n) lookup при redeem.
+export async function createGroupInvite(groupId, creatorLogin, hash) {
+  const res = await execute("INSERT INTO group_invites (group_id, creator_login, code_hash) VALUES (?,?,?)", [groupId, creatorLogin, hash]);
+  return res.insertId;
+}
+export async function getGroupInvites(groupId) {
+  return await query("SELECT id, creator_login, created_at FROM group_invites WHERE group_id=? ORDER BY id DESC", [groupId]);
+}
+export async function revokeGroupInvite(invId) {
+  const r = await query("SELECT group_id FROM group_invites WHERE id=?", [invId]);
+  if (!r.length) return null;
+  await execute("DELETE FROM group_invites WHERE id=?", [invId]);
+  return r[0].group_id;
+}
+// Поиск по хешу — использует UNIQUE(code_hash), ровно одна строка. Без хеша функция бесполезна.
+export async function getInviteByHash(hash) {
+  const r = await query("SELECT id, group_id, creator_login FROM group_invites WHERE code_hash=?", [hash]);
+  return r[0] || null;
+}
+// Создать заявку на вступление. INSERT IGNORE: повторный вызов (suggest/redeem для того же логина)
+// не плодит дубликатов. Возвращает {duplicate: bool}, чтобы вызывающий мог выбрать ответ.
+export async function createPendingInvite(groupId, targetLogin, invitedBy) {
+  const r = await execute("INSERT IGNORE INTO group_pending (group_id, login, invited_by) VALUES (?,?,?)", [groupId, targetLogin, invitedBy]);
+  return { duplicate: r.affectedRows === 0 };
+}
+// Возвращает pending-заявки с именами/аватарами для UI овнера — ровно то, что нужно в #gsPendingList.
+export async function getGroupPending(groupId) {
+  return await query(
+    `SELECT p.id, p.login, p.invited_by, p.created_at, u.name, u.avatar IS NOT NULL AS has_avatar
+     FROM group_pending p JOIN users u ON u.login=p.login WHERE p.group_id=? ORDER BY p.id ASC`,
+    [groupId]
+  );
+}
+export async function deletePendingInvite(pid) {
+  const r = await query("SELECT group_id, login FROM group_pending WHERE id=?", [pid]);
+  if (!r.length) return null;
+  await execute("DELETE FROM group_pending WHERE id=?", [pid]);
+  return r[0]; // {group_id, login}
 }
 
 // ---------- Друзья / блокировки (relations: friend|block|request) ----------

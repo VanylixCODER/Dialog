@@ -1,6 +1,12 @@
 const socket = io();
 const $ = (id) => document.getElementById(id);
 
+// Capture ?invite=<code> from URL на самом раннем этапе (до login-flow). Function declaration hoisting
+// позволяет вызвать readInviteFromUrl() здесь, пока она объявлена ниже в файле. Если уже залогинены,
+// redeem подхватит enterApp(). Если нет — код сохранится в sessionStorage и будет подхвачен после
+// логина/регистрации. Без этого IIFE весь URL-invite-флоу немой.
+(function () { try { readInviteFromUrl(); } catch {} })();
+
 // ---------- Состояние ----------
 let token = localStorage.getItem("dialog_token") || null;
 let profile = null, myName = "";
@@ -106,6 +112,9 @@ function enterApp() {
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush();
+  // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
+  // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
+  redeemStoredInvite();
 }
 socket.on("connect", () => {
   if (!token) return;
@@ -269,6 +278,10 @@ function openChat(c) {
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
   $("chatAva").innerHTML = c.type === "group" ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#` : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+  // Title для чат-аватара: DM → open_profile (мини-профиль собеседника), группа → settings overlay
+  // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
+  // по факту смены чата, а не через data-i18n-title.
+  $("chatAva").title = t(c.type === "group" ? "group_settings" : "open_profile");
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
   $("app").classList.add("in-chat");
   // боковая панель участников для групп (на десктопе)
@@ -293,8 +306,9 @@ $("chatMenuBtn").onclick = (e) => {
   if (curKind === "group") {
     // Овнер может добавлять участников прямо из меню чата — отдельный пункт над «Group settings»,
     // потому что открывать пейн настроек ради одного действия было неочевидно (жалоба «не могу
-    // добавить пользователя после создания группы»).
-    if (groupOwner) item(t("add_member_btn"), "userPlus", () => openAddMembers());
+    // добавить пользователя после создания группы»). Не-овнер тоже получает кнопку — но в режиме
+    // «suggest», заявка летит овнеру. Тот же #addMemberModal, разный режим (amMode).
+    item(t(groupOwner ? "add_member_btn" : "suggest_member_btn"), "userPlus", () => openAddMembers());
     item(t("group_settings"), "settings", () => openSettings("groups"));
     item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
   } else if (curKind === "dm") {
@@ -312,13 +326,15 @@ $("chatMenuBtn").onclick = (e) => {
 document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap") && !e.target.closest(".chat-menu")) $("chatMenu").classList.add("hidden"); });
 function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
 
-// ---------- Добавление участников (group owner only) ----------
-// Отдельная точка фхода от ⋮-меню и + над участниками → #addMemberModal. В отличие от settings
-// overlay (где add-friends планируется в общем пейне настроек) — здесь только одно действие и
-// один пейлоад: {add: [...]}. gmAdd локально хранит выбранных, чистится при каждом открытии.
+// ---------- Добавление/предложение участников (group) ----------
+// Отдельная точка фхода от ⋮-меню и + над участниками → #addMemberModal. Один пейлоад, но ДВА
+// режима: amMode='add' для овнера (POST /members), amMode='suggest' для не-овнера (POST /suggest),
+// который создаёт заявку в pending-очередь и ждёт одобрения. gmAdd локально хранит выбранных.
 let gmAdd = new Set();
+let amMode = "add";     // 'add' | 'suggest' — определяется в openAddMembers() по data.owner
 function syncAddMemberUI() {
-  // Только овнер текущей открытой группы видит кнопки; в DM/non-chat скрываем.
+  // Только овнер текущей открытой группы видит infoAddBtn (быстрое добавление). НЕ-овнер использует
+  // только эту же модалку через ⋮-меню (suggest-режим) — так что infoAddBtn остатётся владельческим.
   const show = curKind === "group" && groupOwner;
   const infoBtn = $("infoAddBtn"); if (infoBtn) infoBtn.classList.toggle("hidden", !show);
 }
@@ -327,14 +343,21 @@ async function openAddMembers() {
   const id = myRoom.slice(5);
   const { ok, data } = await api("/api/groups/" + id, null, "GET");
   if (!ok) return;
-  // Сервер тоже проверит, но не показываем модал не-овнеру — лишний POST ловить у пользователя не нужно.
-  if (data.owner !== profile.login) { $("amError").textContent = ""; renderAmPicker([], []); $("addMemberModal").classList.remove("hidden"); return; }
-  // Подтянем свежие relations, если friends загружались до логина и пусты — без друзей пикер пустой.
-  if (!relations.friends.length) await loadRelations();
+  amMode = (data.owner === profile.login) ? "add" : "suggest";
+  // Сервер тоже проверит на '/members', но мы заранее выбираем endpoint чтобы клиент не шёл POST
+  // с пустой формой и не получал 403. amTargetLogin остаётся null (это не redeem-флоу).
+  amTargetLogin = null;
   const memberSet = new Set((data.members || []).map((m) => m.login));
   gmAdd.clear();
+  // Подтянем свежие relations, если friends не загружались — пикер бывает пуст от старта сессии.
+  if (!relations.friends.length) await loadRelations();
   renderAmPicker([...relations.friends].filter((l) => !memberSet.has(l)));
   $("amError").textContent = "";
+  // Заголовок и кнопка подписи зависят от режима (i18n).
+  const title = $("addMemberModal").querySelector(".modal-title");
+  if (title) title.textContent = t(amMode === "add" ? "add_members_title" : "suggest_members_title");
+  $("amConfirm").textContent = t(amMode === "add" ? "add_member_btn" : "suggest_member_btn");
+  $("amConfirm").disabled = true;
   $("addMemberModal").classList.remove("hidden");
 }
 function renderAmPicker(candidates) {
@@ -345,13 +368,10 @@ function renderAmPicker(candidates) {
     b.onclick = () => {
       if (gmAdd.has(l)) { gmAdd.delete(l); b.classList.remove("on"); }
       else { gmAdd.add(l); b.classList.add("on"); }
-      // Изначально disabled, пока никто не выбран — защита от пустого POST.
-      const any = gmAdd.size > 0;
-      const c = $("amConfirm"); if (c) c.disabled = !any;
+      $("amConfirm").disabled = gmAdd.size === 0;
     };
     box.appendChild(b);
   });
-  const c = $("amConfirm"); if (c) c.disabled = true;
 }
 $("amCancel").onclick = () => $("addMemberModal").classList.add("hidden");
 $("addMemberModal").addEventListener("click", (e) => { if (e.target === $("addMemberModal")) $("addMemberModal").classList.add("hidden"); });
@@ -360,15 +380,22 @@ $("amConfirm").onclick = async () => {
   $("amError").textContent = "";
   if (curKind !== "group" || !gmAdd.size) return;
   const id = myRoom.slice(5);
-  const payload = { add: [...gmAdd] };
-  const { ok, data } = await api("/api/groups/" + id + "/members", payload);
-  if (!ok) { const e = $("amError"); if (e) e.textContent = data.error || "Couldn't add members"; return; }
+  if (amMode === "add") {
+    const payload = { add: [...gmAdd] };
+    const { ok, data } = await api("/api/groups/" + id + "/members", payload);
+    if (!ok) { $("amError").textContent = data.error || "Couldn't add members"; return; }
+    notify(t("add_member_btn") + ": " + payload.add.join(", "));
+  } else {
+    // suggest: comma-list на сервере перебирает и молча пропускает уже-участников / несуществующих.
+    const payload = { target: [...gmAdd].join(",") };
+    const { ok, data } = await api("/api/groups/" + id + "/suggest", payload);
+    if (!ok) { $("amError").textContent = data.error || "error"; return; }
+    notify(data?.created ? t("redeem_pending") : t("redeem_already"));
+  }
   gmAdd.clear();
   $("addMemberModal").classList.add("hidden");
-  // Сервер рассылает group-updated всем — мы подхватим и перечитаем состав.
   loadGroupMembers();
   loadGroups();
-  notify(t("add_member_btn") + ": " + payload.add.join(", "));
 };
 
 // ---------- Настройки группы (живёт в settingsOverlay → пейн groups) ----------
@@ -412,6 +439,15 @@ async function populateGroupSettingsPane() {
     b.onclick = () => { if (gsAdd.has(l)) { gsAdd.delete(l); b.classList.remove("on"); } else { gsAdd.add(l); b.classList.add("on"); } };
     addBox.appendChild(b);
   });
+  // Параллельный рефетч инвайтов + (если овнер) заявок сразу после основного рендера. Без
+  // Promise.all пришлось бы делать последовательно — лишний RTT. Сетевые ошибки тихо проглатываем,
+  // соответствующий раздел UI просто останется пустым (см. gsInviteEmpty / gsPendingEmpty).
+  const [ir, pr] = await Promise.all([
+    api("/api/groups/" + gsId + "/invites", null, "GET"),
+    gsOwner ? api("/api/groups/" + gsId + "/pending", null, "GET") : Promise.resolve({ ok: false, data: {} }),
+  ]);
+  if (ir.ok) renderInviteList(ir.data.invites || []);
+  if (gsOwner && pr.ok) renderPendingList(pr.data.pending || []);
   return { ok: true };
 }
 $("gsAvaBtn").onclick = () => $("gsAvaFile").click();
@@ -426,6 +462,145 @@ $("gsSave").onclick = async () => {
 async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/members", { remove: login }); populateGroupSettingsPane(); }
 $("gsLeave").onclick = () => { closeSettings(); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
 $("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); closeSettings(); };
+
+// ---------- Group invites + pending queue (UI рисует; владельцу — pending, всем — инвайты) ----------
+// Копирование в буфер с fallback на execCommand: navigator.clipboard требует user gesture и secure
+// context, иначе promise reject — тогда используем textarea. В HTTP на ip-адресе это основной путь.
+async function copyToClipboard(text) {
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand("copy"); document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+function renderInviteList(invites) {
+  const box = $("gsInviteList"); if (!box) return;
+  box.innerHTML = "";
+  $("gsInviteEmpty").classList.toggle("hidden", invites.length > 0);
+  // Все участники видят все активные коды (прозрачность внутри группы). Revoke — овнер (любые)
+  // или сам создатель (свои).
+  invites.forEach((inv) => {
+    const row = document.createElement("div"); row.className = "contact-row";
+    const creator = inv.creator_login;
+    const label = creator === profile.login ? t("you_suffix") : creator;
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(creator)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(creator)}" onerror="this.remove()">${initials(creator)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">#${inv.id}</span></span>`;
+    const canRevoke = gsOwner || creator === profile.login;
+    if (canRevoke) {
+      const b = document.createElement("button"); b.className = "danger"; b.textContent = t("invite_revoke");
+      b.onclick = async () => {
+        if (!confirm(t("invite_revoke") + "?")) return;
+        await api("/api/groups/" + gsId + "/invites/" + inv.id, null, "DELETE");
+        renderInviteList(invites.filter((x) => x.id !== inv.id));
+      };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+}
+function renderPendingList(items) {
+  const box = $("gsPendingList"); if (!box) return;
+  box.innerHTML = "";
+  $("gsPendingEmpty").classList.toggle("hidden", items.length > 0);
+  items.forEach((p) => {
+    const row = document.createElement("div"); row.className = "contact-row";
+    const byName = p.invited_by === profile.login ? t("you_suffix") : p.invited_by;
+    const label = p.name || p.login;
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(p.login)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(p.login)}" onerror="this.remove()">${initials(label)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">${escapeHtml(t("pending_by", { name: byName }))}</span></span>`;
+    const a = document.createElement("button"); a.textContent = "✓"; a.style.color = "var(--green-300)";
+    a.title = t("pending_approve");
+    a.onclick = () => resolvePending(p.id, "approve");
+    row.appendChild(a);
+    const d = document.createElement("button"); d.className = "danger"; d.textContent = "✕";
+    d.title = t("pending_decline");
+    d.onclick = () => resolvePending(p.id, "decline");
+    row.appendChild(d);
+    box.appendChild(row);
+  });
+}
+async function resolvePending(pid, action) {
+  if (action === "approve" && !confirm(t("pending_approve") + "?")) return;
+  if (action === "decline" && !confirm(t("pending_decline") + "?")) return;
+  const { ok, data } = await api("/api/groups/" + gsId + "/pending/" + pid, { action });
+  if (!ok) { const e = $("gsInviteError"); if (e) e.textContent = data.error || "error"; return; }
+  // approve триггерит server-side group-updated через addGroupMembers: loadGroupMembers всё равно
+  // подхватит через socket; локальный рефетч pending ниже — UI сразу отражает решение.
+  const { ok: okList, data: dataList } = await api("/api/groups/" + gsId + "/pending", null, "GET");
+  if (okList) renderPendingList(dataList.pending || []);
+  if (action === "approve") loadGroupMembers();
+}
+$("gsGenerateCode").onclick = async () => {
+  $("gsInviteError").textContent = "";
+  const { ok, data } = await api("/api/groups/" + gsId + "/invites", {});
+  if (!ok) { $("gsInviteError").textContent = data.error || "Couldn't create invite"; return; }
+  // Endpoint возвращает plaintext ОДИН РАЗ (как пароль) — формируем полный URL и кладём в clipboard.
+  // Fallback: буфер недоступен → показываем URL/код в тосте, чтобы пользователь мог скопировать вручную.
+  const link = location.origin + (data.url || ("/?invite=" + encodeURIComponent(data.code || "")));
+  const okCopy = await copyToClipboard(link);
+  notify(t("invite_link_copied") + (okCopy ? "" : ": " + link));
+  // Рефетч списка:创建атель увидит новую запись; revoke теперь доступен.
+  const { ok: okList, data: dataList } = await api("/api/groups/" + gsId + "/invites", null, "GET");
+  if (okList) renderInviteList(dataList.invites || []);
+};
+async function refreshGsLists(id) {
+  // Работает только если активная группа соответствует интересующей И пейн groups сейчас открыт;
+  // иначе пользователь не смотрит на UI — фоновый refresh будет лишней работой.
+  if (curKind !== "group" || myRoom !== "@grp:" + id) return;
+  if (!settingsOpen) return;
+  const tab = $("settingsTabs")?.querySelector(".settings-tab.active")?.dataset.tab;
+  if (tab !== "groups") return;
+  const grpId = myRoom.slice(5);
+  const [ir, pr] = await Promise.all([
+    api("/api/groups/" + grpId + "/invites", null, "GET"),
+    groupOwner ? api("/api/groups/" + grpId + "/pending", null, "GET") : Promise.resolve({ ok: false, data: {} }),
+  ]);
+  if (ir.ok) renderInviteList(ir.data.invites || []);
+  if (groupOwner && pr.ok) renderPendingList(pr.data.pending || []);
+}
+
+// Capture URL ?invite=<code> на самом раннем этапе (top of file) — до login-flow. После авторизации
+// enterApp() подхватит код из sessionStorage и вызовет redeemStoredInvite(). Сохраняем и снимаем
+// query из адресной строки чтобы не «светить» код дальше по share.
+function readInviteFromUrl() {
+  try {
+    const p = new URLSearchParams(location.search);
+    const c = p.get("invite");
+    if (!c) return;
+    try { sessionStorage.setItem("dialog_inv", c); } catch {}
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete("invite");
+      const next = u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "") + u.hash;
+      history.replaceState(null, "", next);
+    } catch {}
+  } catch {}
+}
+async function redeemStoredInvite() {
+  let code;
+  try { code = sessionStorage.getItem("dialog_inv"); } catch {}
+  if (!code) return;
+  // Удаляем сразу — при retry ниже (loginRequired) положим обратно. Защита от двойного POST.
+  try { sessionStorage.removeItem("dialog_inv"); } catch {}
+  const { ok, data } = await api("/api/groups/redeem", { code });
+  if (!ok) return;
+  if (data.loginRequired) {
+    // Не залогинен — пусть висит до следующего enterApp(). Если token вообще нет, UI логина
+    // покажется и пользователь сам выберет регистрацию или вход.
+    try { sessionStorage.setItem("dialog_inv", code); } catch {}
+    return;
+  }
+  if (data.status === "already") {
+    notify(t("redeem_already")); loadGroups();
+    if (data.group) openRoomByKey("@grp:" + data.group);
+  } else if (data.status === "pending" || data.status === "duplicate") {
+    // duplicate — пользователь уже предложил этого юзера ранее; UX одинаков с pending.
+    notify(t("redeem_pending")); loadGroups();
+  } else if (data.status === "invalid") {
+    notify(t("redeem_invalid"));
+  }
+}
 // group-updated: если пейн groups активен — перечитать; иначе просто обновить список чатов/панели.
 // Если активна группа — перечитать её участников сразу (add/remove с любого клиента). Внутри
 // loadGroupMembers уже есть защита от stale ответов (сверка myRoom === "@grp:" + id) и она же
@@ -435,11 +610,37 @@ socket.on("group-updated", () => {
   if (curKind === "group") loadGroupMembers();
   if (curKind === "group" && settingsOpen && $("settingsTabs")?.querySelector('.settings-tab.active')?.dataset.tab === "groups") populateGroupSettingsPane();
 });
+
+// Invites + pending queue: сервер шлёт эти события когда кто-то создал/отозвал инвайт или
+// появилась новая заявка / заявка была approve/decline. UI-списки в settings → groups перерисуем
+// через refreshGsLists() если пейн сейчас открыт; тосты целевым юзерам — через notify().
+socket.on("invite-created", (p) => refreshGsLists(p.id));
+socket.on("invites-changed", (p) => refreshGsLists(p.id));
+socket.on("pending-new", (p) => {
+  refreshGsLists(p.id);
+  // Тот, кого пригласили, получает тост «заявка отправлена» даже если пейн закрыт — иначе
+  // действие invisible.
+  if (profile && p.login === profile.login) notify(t("redeem_pending"));
+});
+socket.on("pending-resolved", (p) => {
+  if (profile) notify(p.action === "approve" ? t("pending_approve") : t("pending_decline"));
+  if (p.action === "approve") {
+    loadGroups();
+    if (curKind === "group" && String(p.id || p.group) === myRoom.slice(5)) loadGroupMembers();
+  }
+  refreshGsLists(p.id);
+});
 socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); } if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
 
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
-function initials(n) { return (n || "?").trim().charAt(0).toUpperCase(); }
+function initials(n) { 
+  // Берём ПЕРВЫЙ непробельный символ имени; пустая/пробельная строка → "?", чтобы аватар никогда
+  // не оказался пустым. Раньше было `(n || "?").trim().charAt(0)` — а при name=" " (truthy!)
+  // trim() возвращал пустую строку, charAt(0) давал "", аватар выглядел blank-квадратом.
+  const s = String(n == null ? "" : n).trim();
+  return (s.charAt(0) || "?").toUpperCase();
+}
 function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
 
 // ---------- Новый чат ----------
@@ -562,7 +763,16 @@ async function openMiniProfile(login) {
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
 }
 $("mpCancel").onclick = () => $("mpModal").classList.add("hidden");
-$("chatAva").onclick = () => { if (curKind === "dm") openMiniProfile(myRoom.slice(4).split("~").find((l) => l !== profile.login)); };
+$("chatAva").onclick = () => {
+  // DM: открывает мини-профиль собеседника. Группа: открывает settings overlay на пейне «groups»
+  // с её составом, инвайтами и pending (как у myName → «Open profile», только это групповая страница).
+  if (curKind === "dm") openMiniProfile(myRoom.slice(4).split("~").find((l) => l !== profile.login));
+  else if (curKind === "group") openSettings("groups");
+};
+$("chatAva").onkeydown = (e) => {
+  // Клавиатурная активация для tabindex=0/role=button; предотвращаем скролл по Space.
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("chatAva").click(); }
+};
 
 // ---------- Присутствие ----------
 async function refreshPresence() {
@@ -629,9 +839,35 @@ function renderMembers() {
     const online = login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(login) || "offline");
     const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
     li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${escapeHtml(name)}</span>${callIcon}`;
+    // Inline remove для овнера: раньше единственный путь «удалить участника» был Settings → Groups,
+    // что далеко от списка, который сейчас у пользователя перед глазами. groupOwner уже учитывает
+    // ds.owner === profile.login (см. loadGroupMembers) → self-сравнение login !== profile.login
+    // одновременно исключает овнера из жертв и работает семантически «не удаляй самого себя».
+    if (groupOwner && curKind === "group" && login !== profile.login) {
+      const rm = document.createElement("button");
+      rm.className = "member-remove";
+      rm.title = t("remove");
+      rm.textContent = "✕";
+      rm.onclick = async (e) => {
+        // stopPropagation — иначе клик «пройдёт» на li.onclick → открылся бы мини-профиль удалённого.
+        e.stopPropagation();
+        if (!confirm(t("remove") + " " + name + "?")) return;
+        const gid = myRoom.slice(5);
+        const { ok, data } = await api("/api/groups/" + gid + "/members", { remove: login });
+        if (!ok) { notify(data.error || "Couldn't remove"); return; }
+        // group-updated от сервера триггерит loadGroupMembers через socket handler — этот list
+        // обновится автоматически. Дополнительный setTimeout отсутствует, ничего лишнего.
+      };
+      li.appendChild(rm);
+    }
     // Клавиатурная навигация по сайдпанели участников: Tab → focus (кольцо из .member:focus-visible), Enter/Space → то же, что и клик.
     li.tabIndex = 0; li.setAttribute("role", "button");
-    li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMiniProfile(login); } };
+    li.onkeydown = (e) => {
+      const t_ = e.target;
+      // Если фокус на кнопке удаления — пусть у неё свой обработчик (Enter/Space). Иначе открываем профиль.
+      if (t_ && t_.classList && t_.classList.contains("member-remove")) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMiniProfile(login); }
+    };
     li.onclick = () => openMiniProfile(login);
     ul.appendChild(li);
   }
