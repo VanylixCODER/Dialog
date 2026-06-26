@@ -129,7 +129,8 @@ function statusOf(el) {
   if (!el.classList.contains("me")) return;
   const id = Number(el.dataset.id) || 0;
   const acked = el.dataset.acked === "1";
-  const icon = el.querySelector(".msg-status");
+  // Кэшируем <span.status> на самом элементе — на большой ленте это снимает сотни querySelector за один watermark-event.
+  const icon = el._statusIcon || (el._statusIcon = el.querySelector(".msg-status"));
   if (!icon) return;
   if (!acked || !id) { setStatus(icon, "pending"); return; }
   const others = othersInRoom();
@@ -195,6 +196,7 @@ function renderChatList(filter = "") {
     shown++;
     const li = document.createElement("li");
     li.className = "chat-item" + (c.key === activeKey ? " active" : "");
+    li._chatKey = c.key; // метка для быстрого in-place обновления точек (см. updateDots)
     const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
     const avaInner = c.type === "group"
       ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#`
@@ -219,6 +221,7 @@ function openChat(c) {
   c = upsertChat(c);
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
+  watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
@@ -448,7 +451,26 @@ async function refreshPresence() {
   if (ok) { for (const [l, st] of Object.entries(data)) presence.set(l, st); updateDots(); }
 }
 function statusClass(s) { return s === "online" ? "online" : s === "dnd" ? "dnd" : "offline"; }
-function updateDots() { renderChatList($("searchInput").value); setMyAvatar(); }
+function updateDots() {
+  // Точечное обновление: меняем только статус-точку на видимых строках списка чатов,
+  // не пересобирая весь список и не перезагружая аватарки (раньше на каждый presence-событие
+  // делался полный innerHTML="" + appendChild N <li> с новыми <img src> — это и был главный источник лагов).
+  const ul = $("chatList");
+  if (ul) {
+    for (const li of ul.children) {
+      const key = li._chatKey;
+      if (!key) continue;
+      const c = chats.get(key);
+      if (!c || c.type !== "dm") continue;
+      const dot = li.querySelector(".ci-status");
+      if (!dot) continue;
+      const cls = "st-dot ci-status st-" + statusClass(presence.get(c.login));
+      if (dot.className === cls) continue;
+      dot.className = cls;
+    }
+  }
+  setMyAvatar();
+}
 socket.on("presence", ({ login, status }) => { presence.set(login, status); updateDots(); });
 socket.on("relations-changed", () => loadRelations());
 
@@ -646,16 +668,23 @@ socket.on("msg-reaction", ({ id, reactions }) => { const el = messagesEl.querySe
 let localIdCounter = 0;
 // Снимок курсоров доставки/просмотра по логинам (заполняется сервером и обновляется live).
 const watermarks = new Map(); // login -> { delivered, seen }
+// watermarkSnapshotApplied сбрасывается на openChat: первый снимок для активной комнаты
+// всегда пересчитывает статусы; повторные event'ы без продвижения курсоров — нет.
+let watermarkSnapshotApplied = false;
 function applyWatermarkUpdates(updates) {
   if (!updates) return;
+  let advanced = !watermarkSnapshotApplied;
   for (const u of updates) {
     const cur = watermarks.get(u.login) || { delivered: 0, seen: 0 };
-    cur.delivered = Math.max(Number(cur.delivered) || 0, Number(u.delivered) || 0);
-    cur.seen = Math.max(Number(cur.seen) || 0, Number(u.seen) || 0);
+    const nd = Math.max(Number(cur.delivered) || 0, Number(u.delivered) || 0);
+    const ns = Math.max(Number(cur.seen) || 0, Number(u.seen) || 0);
+    if (nd > cur.delivered || ns > cur.seen) advanced = true;
+    cur.delivered = nd; cur.seen = ns;
     watermarks.set(u.login, cur);
   }
-  // Пересчитать статусы наших исходящих сообщений в видимой ленте.
-  refreshOutgoingStatuses();
+  watermarkSnapshotApplied = true;
+  // Тяжёлая операция только если хотя бы один курсор реально сдвинулся вперёд.
+  if (advanced) refreshOutgoingStatuses();
 }
 function sendText() {
   const input = $("msgInput"); const text = input.value.trim();
@@ -1099,6 +1128,8 @@ function startCallMatrix() {
   const c = $("callMatrix"); if (!c) return; const ctx = c.getContext("2d");
   const chars = "アイウエオカキ0123456789ABCDEF<>/{}".split(""); let cols = 0, drops = [];
   const frame = () => {
+    // Вкладка скрыта — пауза canvas: снижаем нагрузку на CPU в фоне; возобновляется через visibilitychange.
+    if (document.hidden) { callMatrixRaf = 0; return; }
     callMatrixRaf = requestAnimationFrame(frame);
     if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; cols = Math.floor(c.width / 16); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
     ctx.fillStyle = "rgba(0,7,0,0.09)"; ctx.fillRect(0, 0, c.width, c.height); ctx.font = "14px monospace";
@@ -1110,7 +1141,9 @@ function stopCallMatrix() { cancelAnimationFrame(callMatrixRaf); callMatrixRaf =
 async function requestWakeLock() { if (!("wakeLock" in navigator)) return; try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    if (call.active) { requestWakeLock(); vGrid.querySelectorAll("video").forEach((v) => v.play().catch(() => {})); }
+    if (call.active) { requestWakeLock(); vGrid.querySelectorAll("video").forEach((v) => v.play().catch(() => {}));
+      if (!callMatrixRaf) startCallMatrix(); // матрица стояла на паузе на скрытой вкладке — вернём её
+    }
     if (profile && myRoom) setTimeout(markDeliveredSeenUpToLast, 50); // пометить просмотренным при возврате на вкладку
   }
 });

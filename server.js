@@ -375,14 +375,36 @@ async function getRoomWatermarkSnapshot(room) {
   }
   return snap;
 }
-// Применить bump и сразу emit'ить только изменённые записи в комнату.
+// Применить bump и emit'ить только тех, у кого курсор реально сдвинулся.
+// Раньше каждый дубликат (напр. двойной «seen» с тем же maxId) рассылал watermark по всей комнате,
+// хотя GREATEST ничего не менял — клиенты пересчитывали статусы впустую и дёргали DOM.
+// snap[l] фиксируется только ПОСЛЕ успешной записи в БД: иначе при DB-сбое snap уже считал курсор
+// продвинутым, и последующие идентичные бампы молча no-op'или — рассогласование с диском.
 async function applyWatermarkBump(room, logins, { delivered, seen } = {}) {
   if (!logins || !logins.length) return;
-  try { await bumpWatermarks(room, logins, { delivered, seen }); } catch (e) { console.error("watermark bump", e.message); }
   const snap = await getRoomWatermarkSnapshot(room);
-  io.to(room).emit("watermark", { room, updates: logins.map((l) => {
+  const advanced = [];
+  const planned = {};
+  for (const l of logins) {
     const w = snap[l] || { delivered: 0, seen: 0 };
-    return { login: l, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 };
+    const curD = Number(w.delivered) || 0, curS = Number(w.seen) || 0;
+    const wantD = delivered != null ? Number(delivered) : curD;
+    const wantS = seen != null ? Number(seen) : curS;
+    const willD = Math.max(curD, wantD), willS = Math.max(curS, wantS);
+    if (willD <= curD && willS <= curS) continue; // GREATEST ничего реально не улучшит — пропускаем
+    advanced.push(l);
+    planned[l] = { delivered: willD, seen: willS };
+  }
+  if (!advanced.length) return;
+  try {
+    await bumpWatermarks(room, advanced, { delivered, seen });
+  } catch (e) {
+    console.error("watermark bump", e.message);
+    return; // без коммита в snap и без broadcast — следующий bump с тем же id сможет попробовать снова
+  }
+  for (const l of advanced) snap[l] = planned[l];
+  io.to(room).emit("watermark", { room, updates: advanced.map((l) => {
+    const w = snap[l]; return { login: l, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 };
   }) });
 }
 
