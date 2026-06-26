@@ -8,6 +8,6 @@
   "orientation": "portrait",
   "background_color": "#000700",
   "theme_color": "#00ff5a",  "icons": [
-    { "src": "/src/LIL_DIALOG.svg", "sizes": "516x471", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/src/LIL_DIALOG.svg", "sizes": "516x471", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/src/lil_dialog.webp", "sizes": "516x471", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/src/lil_dialog.webp", "sizes": "516x471", "type": "image/svg+xml", "purpose": "maskable" }
   ]}
