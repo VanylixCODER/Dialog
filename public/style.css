@@ -2403,29 +2403,50 @@ body[data-theme="flashbang"] .msg.me .mention { color: #ffffff; }
 /* Monochrome — чисто чёрно-белая светлая тема («newspaper» style): только серые тона + чистый чёрный текст.
    Удобно для печати/чтения — ни одного цветного акцента, только градации серого. primary-rgb — чисто чёрный (R=G=B=24), так что все rgba(—primary-rgb,··) оверлеи тоже становятся чисто серыми. */
 body[data-theme="mono"] {
-  --primary-rgb: 24, 24, 27;                     /* neutral charcoal — primary #18181b */
-  --accent-100: #fafafa; --accent-200: #e4e4e7; --accent-300: #a1a1aa;
-  --accent-400: #18181b; --accent-500: #27272a; --accent-600: #09090b;
-  --accent-glow: rgba(var(--primary-rgb), 0.4); --accent-soft: rgba(var(--primary-rgb), 0.16);
-  --accent-faint: rgba(var(--primary-rgb), 0.06);
-  --bg-0: #ffffff; --bg-1: #ffffff; --bg-2: #fafafa; --bg-3: #f4f4f5; --bg-4: #e4e4e7;
-  --surface-1: rgba(0, 0, 0, 0.025); --surface-2: rgba(0, 0, 0, 0.06); --surface-3: rgba(0, 0, 0, 0.10);
-  --border-1: rgba(0, 0, 0, 0.10); --border-2: rgba(0, 0, 0, 0.18); --border-3: rgba(0, 0, 0, 0.32);
-  --text: #27272a; --text-strong: #09090b; --text-dim: #71717a;
-  --glow-sm: 0 0 0 1px rgba(0, 0, 0, 0.12);
-  --glow-md: 0 0 0 1px rgba(0, 0, 0, 0.18);
-  --glow-lg: 0 0 0 2px rgba(0, 0, 0, 0.28);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.10);
-  --cyan-300: #71717a;                            /* нейтральный серый, чтобы "read" тик не выделялся */
-  --danger: #18181b;                             /* черный — чёрно-белая тема */
+  --primary-rgb: 255, 255, 255;
+  --bg-0: #000000;
+  --bg-1: #050505;
+  --bg-2: #0a0a0a;
+  --bg-3: #111111;
+  --bg-4: #181818;
+
+  --accent-100: #ffffff;
+  --accent-200: #f5f5f5;
+  --accent-300: #d4d4d4;
+  --accent-400: #ffffff;
+  --accent-500: #e4e4e4;
+  --accent-600: #a1a1aa;
+  --accent-700: rgba(255, 255, 255, 0.35);
+  --accent-glow: rgba(255, 255, 255, 0.5);
+  --accent-soft: rgba(255, 255, 255, 0.16);
+  --accent-faint: rgba(255, 255, 255, 0.08);
+
+  --cyan-300: #ffffff;
+  --danger: #ffffff;
+
+  --surface-1: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-3: rgba(255, 255, 255, 0.14);
+
+  --border-1: rgba(255, 255, 255, 0.14);
+  --border-2: rgba(255, 255, 255, 0.28);
+  --border-3: rgba(255, 255, 255, 0.55);
+
+  --text: #d4d4d4;
+  --text-strong: #ffffff;
+  --text-dim: #71717a;
+
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 4px 14px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 12px 38px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 22px 64px rgba(0, 0, 0, 0.85);
+
+  --glow-sm: 0 0 6px rgba(255, 255, 255, 0.3);
+  --glow-md: 0 0 14px rgba(255, 255, 255, 0.22);
+  --glow-lg: 0 0 24px rgba(255, 255, 255, 0.3);
+
   background: var(--bg-1);
-  background-image: none;
   color: var(--text);
-  text-shadow: none;
 }
-/* Mono специфика: выключаем цветные glow/scan слои и flat белые панели */
 body[data-theme="mono"]::before { display: none; }
 body[data-theme="mono"] .chat::before { display: none; }
 body[data-theme="mono"] .chatlist::before { display: none; }
@@ -2443,18 +2464,16 @@ body[data-theme="mono"] .chat-menu,
 body[data-theme="mono"] .react-picker,
 body[data-theme="mono"] .me-status-menu,
 body[data-theme="mono"] .emoji-picker,
-body[data-theme="mono"] .gif-panel { background: #ffffff; border-color: var(--border-2); box-shadow: var(--shadow-md); }
-body[data-theme="mono"] .chat-head { background: #ffffff; border-bottom-color: var(--border-1); }
-body[data-theme="mono"] .composer { background: #ffffff; border-top-color: var(--border-1); }
-body[data-theme="mono"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); }
-body[data-theme="mono"] .bubble { background: #ffffff; color: var(--text); }
-body[data-theme="mono"] .msg.me .bubble { background: var(--accent-400); color: #ffffff; border-color: var(--accent-500); }
-body[data-theme="mono"] .login-card { background: #ffffff; box-shadow: var(--shadow-lg); }
+body[data-theme="mono"] .gif-panel { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-md); color: var(--text); }
+body[data-theme="mono"] .chat-head { background: var(--bg-1); border-bottom-color: var(--border-1); color: var(--text-strong); }
+body[data-theme="mono"] .composer { background: var(--bg-1); border-top-color: var(--border-1); color: var(--text); }
+body[data-theme="mono"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); color: var(--text); }
+body[data-theme="mono"] .bubble { background: var(--bg-3); color: var(--text); border-color: var(--border-1); box-shadow: var(--shadow-sm); }
+body[data-theme="mono"] .msg.me .bubble { background: #ffffff; color: #000000; border-color: #ffffff; box-shadow: var(--shadow-md); }
+body[data-theme="mono"] .msg.me .mention { color: rgba(0, 0, 0, 0.85); }
+body[data-theme="mono"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
 body[data-theme="mono"] .bubble, body[data-theme="mono"] .msg, body[data-theme="mono"] .chat-title,
 body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-theme="mono"] .setting-tab { animation: none; text-shadow: none; }
-
-/* Aero — Frutiger Aero (Vista-era): небо + трава + сатинат, фростный глас (backdrop-filter blur),
-   мягкие градиенты и словно «летающий» «приливный» панельный слой. primary-rgb — яркий небосный (#00bfff). */
 body[data-theme="aero"] {
   --primary-rgb: 0, 191, 255;                    /* sky aero blue — primary #00bfff */
   --accent-100: #f0f9ff; --accent-200: #bae6fd; --accent-300: #7dd3fc;
