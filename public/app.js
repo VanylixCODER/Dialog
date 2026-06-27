@@ -1034,88 +1034,146 @@ function initials(n) {
 }
 function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
 
-// ---------- Новый чат ----------
-// (#newChatBtn теперь открывает settingsOverlay → пейн «newchat»; #newChatModal удалён.)
-// Финальная привязка — ниже в блоке «Перенаправляем хедер-кнопки на settings overlay».
-// (#newChatCancel устарел вместе с #newChatModal — форма «Новый чат» теперь в #settingsOverlay → пейн «newchat».)
-$("newChatCancel") && ($("newChatCancel").onclick = () => closeSettings());
-$("emptyNewChat"); // removed
-$("emptyAddFriend").onclick = () => $("contactsBtn").click();
-function renderFriendChips() {
-  const box = $("friendsQuick"); box.innerHTML = "";
-  relations.friends.forEach((l) => { const b = document.createElement("button"); b.className = "room-chip"; b.textContent = l; b.onclick = () => openDM(l); box.appendChild(b); });
+// ---------- Создание новой группы с друзьями ----------
+// (#newchat пейн в #settingsOverlay удалён → новая группа создаётся через #createGroupModal.
+// Точки входа: + в хедере чатлиста (#newGroupBtn) и CTA empty-state (#emptyNewGroup). Один и тот
+// же flow, одна и та же модалка из двух мест.)
+let cgPicked = new Set();    // логин → выбранный для новой группы
+let cgAvatar = null;          // dataURL или null (опциональный логотип)
+let cgFriends = [];           // отфильтрованный список при search
+function openCreateGroup() {
+  if (!profile) return;
+  cgPicked.clear(); cgAvatar = null; cgFriends = [];
+  const nameInp = $("cgName"); if (nameInp) nameInp.value = "";
+  const search = $("cgSearch"); if (search) search.value = "";
+  if (!relations.friends.length) loadRelations().then(() => renderCgPicker());
+  else renderCgPicker();
+  $("cgAvaImg").style.display = "none";
+  $("cgAvaInit").style.display = "grid";
+  $("cgAvaImg").src = "";
+  $("cgAvaInit").textContent = "#";
+  $("cgAvaClear").classList.add("hidden");
+  $("cgError").textContent = "";
+  updateCgCount();
+  $("cgCreate").disabled = true;
+  $("createGroupModal").classList.remove("hidden");
+  setTimeout(() => nameInp?.focus(), 50);
 }
-// Мультивыбор друзей для новой группы
-const groupPicked = new Set();
-function renderGroupPick() {
-  groupPicked.clear(); const box = $("groupFriendPick"); box.innerHTML = "";
-  relations.friends.forEach((l) => {
-    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
-    b.onclick = () => { if (groupPicked.has(l)) { groupPicked.delete(l); b.classList.remove("on"); } else { groupPicked.add(l); b.classList.add("on"); } };
-    box.appendChild(b);
+function closeCreateGroup() {
+  $("createGroupModal").classList.add("hidden");
+  const p = $("cgPicker"); if (p) p.innerHTML = "";
+  const err = $("cgError"); if (err) err.textContent = "";
+}
+function renderCgPicker() {
+  const q = ($("cgSearch")?.value || "").trim().toLowerCase();
+  // Любой подходящий суффикс матчится — username быстрее печатать, но display name тоже полезен.
+  cgFriends = (relations.friends || []).filter((l) => l.toLowerCase().includes(q));
+  // Если есть relations.friendsNames (login→name), фильтруем по имени тоже. Раньше этот маппинг
+  // не хранился на клиенте; загружаем по требованию — каждый draw уже подтянут через /api/relations
+  // с friends:[logins], без отдельных имён. Поэтому матчим только по логину (он уникальный).
+  const box = $("cgPicker"); if (!box) return; box.innerHTML = "";
+  $("cgEmpty").classList.toggle("hidden", cgFriends.length > 0);
+  $("cgSelectAll").classList.toggle("hidden", cgFriends.length === 0);
+  cgFriends.forEach((l) => {
+    const row = document.createElement("div");
+    row.className = "cg-row" + (cgPicked.has(l) ? " on" : "");
+    row.dataset.login = l;
+    row.innerHTML = `<div class="avatar cg-ava-mini" data-login="${escapeHtml(l)}"><img src="${avaUrl(l)}" onerror="this.remove()">${initials(l)}</div>` +
+      `<span class="cg-row-name">${escapeHtml(l)}</span>` +
+      `<span class="cg-tick" aria-hidden="true">${cgPicked.has(l) ? "✓" : ""}</span>`;
+    row.onclick = () => {
+      if (cgPicked.has(l)) cgPicked.delete(l); else cgPicked.add(l);
+      row.classList.toggle("on", cgPicked.has(l));
+      row.querySelector(".cg-tick").textContent = cgPicked.has(l) ? "✓" : "";
+      updateCgCount();
+    };
+    box.appendChild(row);
   });
+  updateCgCount();
 }
+function updateCgCount() {
+  const total = (relations.friends || []).length;
+  const picked = cgPicked.size;
+  const el = $("cgCount");
+  if (el) {
+    el.textContent = t("members_n_of_m", { n: picked, m: total });
+    el.classList.toggle("full", picked > 0);
+  }
+  const nm = ($("cgName")?.value || "").trim();
+  $("cgCreate").disabled = !(nm && picked > 0);
+}
+$("cgCloseBtn")?.addEventListener?.("click", closeCreateGroup);
+$("cgCancel")?.addEventListener?.("click", closeCreateGroup);
+$("createGroupModal")?.addEventListener?.("click", (e) => { if (e.target === $("createGroupModal")) closeCreateGroup(); });
+$("cgAvaBtn")?.addEventListener?.("click", () => $("cgAvaFile")?.click());
+$("cgAvaFile")?.addEventListener?.("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { $("cgError").textContent = "≤ 2 MB"; return; }
+  const r = new FileReader();
+  r.onload = () => {
+    cgAvatar = r.result;
+    const img = $("cgAvaImg"); img.src = r.result; img.style.display = "block";
+    $("cgAvaInit").style.display = "none";
+    $("cgAvaClear").classList.remove("hidden");
+  };
+  r.readAsDataURL(f);
+  e.target.value = "";
+});
+$("cgAvaClear")?.addEventListener?.("click", () => {
+  cgAvatar = null;
+  const img = $("cgAvaImg"); img.src = ""; img.style.display = "none";
+  $("cgAvaInit").style.display = "grid";
+  $("cgAvaClear").classList.add("hidden");
+});
+$("cgName")?.addEventListener?.("input", updateCgCount);
+$("cgSearch")?.addEventListener?.("input", renderCgPicker);
+$("cgSelectAll")?.addEventListener?.("click", () => {
+  // Тоггл «выбрать всех видимых» — клик на пустом фильтре = все друзья. Если уже все выбраны → сброс.
+  const allInView = cgFriends.length > 0 && cgFriends.every((l) => cgPicked.has(l));
+  cgFriends.forEach((l) => allInView ? cgPicked.delete(l) : cgPicked.add(l));
+  renderCgPicker();
+});
+async function submitCreateGroup() {
+  $("cgError").textContent = "";
+  const name = ($("cgName")?.value || "").trim();
+  if (!name) { $("cgError").textContent = t("err_group_name"); return; }
+  if (cgPicked.size === 0) { $("cgError").textContent = t("err_pick_members"); return; }
+  const body = { name, members: [...cgPicked].join(",") };
+  if (cgAvatar) body.avatar = cgAvatar;
+  $("cgCreate").disabled = true;
+  const { ok, data } = await api("/api/groups", body);
+  if (!ok) {
+    $("cgCreate").disabled = false;
+    $("cgError").textContent = data.error || "error";
+    return;
+  }
+  closeCreateGroup();
+  const key = "@grp:" + data.id;
+  chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
+  renderChatList($("searchInput").value);
+  openChat(chats.get(key));
+  notify(t("group_created_toast", { name }));
+  // Очищаем FormData-state, чтобы следующее открытие было чистым
+  cgPicked.clear(); cgAvatar = null; cgFriends = [];
+  $("cgName").value = ""; $("cgSearch").value = "";
+}
+$("cgCreate")?.addEventListener?.("click", submitCreateGroup);
+
+// Хедер чатлиста: doвесить пусковые кнопки к фиксированным id.
+$("newGroupBtn")?.addEventListener?.("click", openCreateGroup);
+$("emptyNewGroup")?.addEventListener?.("click", openCreateGroup);
+$("emptyAddFriend")?.addEventListener?.("click", () => $("contactsBtn")?.click());
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("createGroupModal").classList.contains("hidden")) closeCreateGroup();
+});
 async function openDM(login) {
-  login = (login || $("dmInput")?.value || "").trim().toLowerCase();
-  if (!login || login === profile.login) { const e = $("dmError"); if (e) e.textContent = t("err_user_not_found"); return; }
+  login = (login || "").trim().toLowerCase();
+  if (!login || !profile || login === profile.login) return;
   const { ok, data } = await api("/api/user/" + login, null, "GET");
-  if (!ok) { const e = $("dmError"); if (e) e.textContent = t("err_user_not_found"); return; }
-  closeSettings(); const di = $("dmInput"); if (di) di.value = "";
+  if (!ok) return notify(t("err_user_not_found"));
   openChat({ key: dmKey(login), type: "dm", login, name: data.name || login, last: "", ts: Date.now(), unread: 0 });
   persistDMs();
 }
-$("dmOpenBtn").onclick = () => openDM();
-// ---- Inline group-create form (lives inside #settingsOverlay → Groups pane) ----
-let gcPicked = new Set();
-function renderGcPicker() {
-  const box = $("gcMemberPick"); if (!box) return;
-  box.innerHTML = "";
-  if (!relations.friends.length) {
-    box.innerHTML = `<div class="contacts-empty" data-i18n="gc_no_friends">${t("gc_no_friends")}</div>`;
-    return;
-  }
-  relations.friends.forEach((l) => {
-    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
-    b.onclick = () => {
-      if (gcPicked.has(l)) { gcPicked.delete(l); b.classList.remove("on"); }
-      else { gcPicked.add(l); b.classList.add("on"); }
-      updateGcPreview();
-    };
-    box.appendChild(b);
-  });
-}
-function updateGcPreview() {
-  const nm = $("gcName"); if (!nm) return;
-  const nameValid = (nm.value || "").trim().length > 0;
-  $("gcCreateBtn").disabled = !(nameValid && gcPicked.size >= 1);
-  const preview = $("gcPreview");
-  const title = (nm.value || "").trim() || t("gc_preview_default");
-  preview.textContent = title + " · " + t("gc_preview_with_n", { n: gcPicked.size });
-}
-function setupGroupCreate() {
-  gcPicked.clear();
-  const nm = $("gcName"); if (nm) nm.value = "";
-  const ds = $("gcDesc"); if (ds) ds.value = "";
-  const err = $("gcError"); if (err) err.textContent = "";
-  renderGcPicker();
-  updateGcPreview();
-}
-$("gcName") && $("gcName").addEventListener("input", updateGcPreview);
-$("gcCancelBtn") && ($("gcCancelBtn").onclick = setupGroupCreate);
-$("gcCreateBtn") && ($("gcCreateBtn").onclick = async () => {
-  const name = ($("gcName").value || "").trim();
-  if (!name) { $("gcError").textContent = t("err_group_name"); return; }
-  const { ok, data } = await api("/api/groups", { name, description: ($("gcDesc").value || "").trim(), members: [...gcPicked].join(",") });
-  if (!ok) { $("gcError").textContent = data.error || "error"; return; }
-  closeSettings();
-  setupGroupCreate();
-  const key = "@grp:" + data.id;
-  chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
-  openChat(chats.get(key));
-});
-
-$("createGroupBtn"); // legacy button removed (group create moved inline)
-
 
 // ---------- Профиль (пейн «Profile» в #settingsOverlay) ----------
 // Старые #profileModal / #contactsModal / #newChatModal / #groupSettingsModal удалены —
@@ -1161,7 +1219,7 @@ async function loadRelations() {
   const { ok, data } = await api("/api/relations", null, "GET");
   if (!ok) return;
   Object.assign(relations, data); blocked.clear(); (data.blocked || []).forEach((l) => blocked.add(l));
-  renderContacts(); renderFriendChips(); renderChatList($("searchInput").value); setupGroupCreate();
+  renderContacts(); renderChatList($("searchInput").value);
 }
 function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
@@ -2142,7 +2200,7 @@ function notify(text) { let el = $("notifyToast"); if (!el) { el = document.crea
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "contacts", "themes", "groups", "newchat"];
+const SETTINGS_TABS = ["profile", "contacts", "themes", "groups"];
 function openSettings(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
@@ -2156,7 +2214,7 @@ function openSettings(tab) {
   if (tab === "contacts") loadRelations();
   if (tab === "profile") refreshProfilePane();
   if (tab === "groups") populateGroupSettingsPane();
-  if (tab === "newchat") { renderFriendChips(); renderGroupPick(); }
+  // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
   renderChatList($("searchInput").value);
 }
 function closeSettings() {
@@ -2193,7 +2251,6 @@ function hydratePane(tab) {
       .finally(() => { gsFetching = false; });
     return;
   }
-  else if (tab === "newchat") { renderFriendChips(); renderGroupPick(); }
   // themes: один раз через renderThemes() + _themesRendered guard
 }
 function refreshProfilePane() {
@@ -2213,7 +2270,7 @@ function refreshProfilePane() {
 // в консоли. Такой же приём уже стоит на других опциональных кнопках.)
 $("contactsBtn").onclick = () => openSettings("contacts");
 $("profileBtn") && ($("profileBtn").onclick = () => openSettings("profile"));
-$("newChatBtn"); // button removed from toolbar
+$("newChatBtn").onclick = () => openSettings();
 
 // Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
