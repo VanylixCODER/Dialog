@@ -50,3 +50,6 @@ scripts/resolve-rebase-conflicts.py
 .tmp/settings_tabs.txt
 .tmp/wallpaper_fixes.py
 .tmp/wallpaper_refactor.py
+.tmp/fix2.py
+.tmp/fix_appjs.py
+.tmp/fix_css.py

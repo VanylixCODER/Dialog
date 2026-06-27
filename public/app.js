@@ -344,7 +344,48 @@ function applyTheme(key) {
 // Reads the saved key and stamps body[data-theme] directly. Invalid/missing keys leave
 // the attribute empty, so :root defaults (matrix-style tokens) apply — same as before
 // this fix, except now an actual saved pick keeps across reloads.
-function loadSavedTheme() {
+// User-facing theme entry. For every theme except flashbang, just applyTheme() directly.
+  // For flashbang, open the centered confirmation modal first; only on confirm do we call
+  // applyTheme() (which then runs maybeFlashbangEgg() after the 2s timer). loadSavedTheme()
+  // still calls applyTheme() directly so init restore never shows the modal.
+  function selectTheme(key) {
+    if (key === "flashbang") {
+      openFlashbangConfirm(() => applyTheme(key));
+      return;
+    }
+    applyTheme(key);
+  }
+  // Show the centered flashbang confirm dialog. onConfirm runs only if the user clicks Yes.
+  // Closes on: Yes, Cancel, ✕, backdrop click, Escape. Idempotent — re-opening while
+  // already visible is a no-op (guard via the .hidden class, matching the codebase convention).
+  // Auto-focuses the Yes button so Enter confirms without tabbing.
+  function openFlashbangConfirm(onConfirm) {
+    const m = $("flashbangConfirmModal");
+    if (!m) return;
+    if (!m.classList.contains("hidden")) return;
+    const yesBtn   = $("flashbangConfirmYes");
+    const noBtn    = $("flashbangConfirmNo");
+    const closeBtn = $("flashbangConfirmClose");
+    const onYes  = () => { m.classList.add("hidden");    cleanup(); if (onConfirm) onConfirm(); };
+    const onNo   = () => { m.classList.add("hidden");    cleanup(); };
+    const onKey  = (e) => { if (e.key === "Escape") onNo(); };
+    const onBack = (e) => { if (e.target === m) onNo(); };
+    function cleanup() {
+      if (yesBtn)   yesBtn.removeEventListener("click", onYes);
+      if (noBtn)    noBtn.removeEventListener("click", onNo);
+      if (closeBtn) closeBtn.removeEventListener("click", onNo);
+      document.removeEventListener("keydown", onKey);
+      m.removeEventListener("click", onBack);
+    }
+    m.classList.remove("hidden");
+    if (yesBtn)   yesBtn.addEventListener("click", onYes);
+    if (noBtn)    noBtn.addEventListener("click", onNo);
+    if (closeBtn) closeBtn.addEventListener("click", onNo);
+    document.addEventListener("keydown", onKey);
+    m.addEventListener("click", onBack);
+    if (yesBtn) yesBtn.focus();
+  }
+    function loadSavedTheme() {
   try {
     const saved = localStorage.getItem("dialog_theme");
     if (saved && THEMES.find((x) => x.key === saved)) document.body.dataset.theme = saved;
@@ -425,7 +466,7 @@ function renderThemes() {
     b.dataset.theme = theme.key;
     b.type = "button";
     b.innerHTML = `<div class="theme-swatch">${theme.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(window.t("theme_" + theme.key))}</span><span class="theme-desc">${escapeHtml(window.t("theme_desc_" + theme.key))}</span>`;
-    b.onclick = () => applyTheme(theme.key);
+    b.onclick = () => selectTheme(theme.key);
     grid.appendChild(b);
   }
   // Highlight active

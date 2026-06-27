@@ -361,6 +361,21 @@
     </div>
   </div>
 
+  <!-- Flashbang confirm dialog — fires before applying the Flashbang theme.
+       Intercept at the swatch click level (selectTheme), not in applyTheme(), so the
+       init path (loadSavedTheme) keeps restoring saved themes silently. -->
+  <div id="flashbangConfirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="flashbangConfirmTitle">
+    <div class="modal-card fb-confirm-card">
+      <button class="hub-close" id="flashbangConfirmClose" data-i18n-title="close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title" id="flashbangConfirmTitle" data-i18n="flashbang_confirm_title">Apply Flashbang?</div>
+      <p class="fb-confirm-body" data-i18n="flashbang_confirm_body">Do you really want to be blinded? This will flash a bright white screen and play a loud sound.</p>
+      <div class="modal-actions">
+        <button id="flashbangConfirmNo"  class="btn-ghost"            data-i18n="flashbang_confirm_no">Cancel</button>
+        <button id="flashbangConfirmYes" class="btn-primary btn-danger" data-i18n="flashbang_confirm_yes">Yes, blind me</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Per-chat wallpaper mini-modal — открывается из ⋮ меню чата (Chat background).
        Позволяет задать фон конкретной комнаты (override'ит глобальный) или вернуться
        на глобальный. ESC / клик снаружи / ✕ — закрыть, как остальные .modal-диалоги. -->
