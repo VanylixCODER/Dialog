@@ -319,8 +319,29 @@
       <div class="modal-title" data-i18n="custom_theme_title">Custom theme</div>
       <label class="ct-label" data-i18n="custom_theme_name_ph">Theme name</label>
       <input id="ctName" class="field" maxlength="32" autocomplete="off" />
-      <label class="ct-label" data-i18n="custom_theme_css_hint">CSS</label>
-      <textarea id="ctCss" class="field ct-css" rows="11" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      <div class="ct-editor-grid">
+        <div class="ct-editor-col">
+          <label class="ct-label" data-i18n="custom_theme_css_hint">CSS</label>
+          <textarea id="ctCss" class="field ct-css" rows="11" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </div>
+        <div class="ct-editor-col">
+          <label class="ct-label" data-i18n="custom_theme_preview_label">Live preview</label>
+          <div class="ct-preview-scope" aria-hidden="true">
+            <div class="ct-preview-inner">
+              <div class="ct-preview-login">
+                <div class="ct-preview-title">Dialog</div>
+                <input class="ct-preview-field" placeholder="Username" disabled>
+                <button class="ct-preview-btn" disabled>Sign in</button>
+              </div>
+              <div class="ct-preview-chat">
+                <div class="ct-preview-bubble ct-preview-in">hey, you around?</div>
+                <div class="ct-preview-bubble ct-preview-out">yeah, almost done</div>
+                <div class="ct-preview-bubble ct-preview-out ct-preview-tail">push the build?</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="ctError" class="form-error"></div>
       <div class="modal-actions">
         <button id="ctCancel" class="btn-ghost" data-i18n="custom_theme_cancel">Cancel</button>

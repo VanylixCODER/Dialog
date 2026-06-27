@@ -7,6 +7,27 @@ const $ = (id) => document.getElementById(id);
 // логина/регистрации. Без этого IIFE весь URL-invite-флоу немой.
 (function () { try { readInviteFromUrl(); } catch {} })();
 
+
+function debounce(fn, ms) {
+  let t;
+  return function () {
+    const args = arguments, ctx = this;
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(ctx, args), ms);
+  };
+}
+
+// ---- Live preview wiring for the custom-theme editor ----
+// Bound once: typing in #ctCss re-wraps the CSS via wrapCssInScope under .ct-preview-scope
+// and injects into a dedicated <style id="ct-live-preview">. Debounced so we don't thrash
+// on every keystroke while still feeling live.
+function bindLivePreview() {
+  const ta = $('ctCss');
+  if (!ta) return;
+  const onInput = debounce(() => renderLivePreview(ta.value), 80);
+  ta.addEventListener('input', onInput);
+}
+
 // ---------- Состояние ----------
 let token = localStorage.getItem("dialog_token") || null;
 let profile = null, myName = "";
@@ -155,6 +176,7 @@ const THEMES = [
   { key: "matrix",     name: "theme_matrix",     desc: "theme_desc_matrix",     swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
   { key: "dracula",    name: "theme_dracula",    desc: "theme_desc_dracula",    swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "nord",       name: "theme_nord",       desc: "theme_desc_nord",       swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
+  { key: "nord-light", name: "theme_nord_light", desc: "theme_desc_nord_light", swatch: ["#88c0d0", "#5e81ac", "#4c566a", "#eceff4"] },
   { key: "mono",       name: "theme_mono",       desc: "theme_desc_mono",       swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
   { key: "mono-light", name: "theme_mono_light", desc: "theme_desc_mono_light", swatch: ["#000000", "#404040", "#6a6a6a", "#ffffff"] },
   { key: "flashbang",  name: "theme_flashbang",  desc: "theme_desc_flashbang",  swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
@@ -222,8 +244,42 @@ function injectCustomThemeStyle(key) {
 // Mixed-entry case: when a chunk has leading bare decls AND a trailing selector
 // block (`--x: y;\n.foo { ... }`), split on the LAST `;` before `{` so decls go
 // under their own scoped block and the selector stays a clean selector.
+// Thin wrapper: custom themes always live under body[data-theme="custom_X"].
 function wrapCssForCustomScope(css, key) {
-  const scope = 'body[data-theme="' + key + '"]';
+  return wrapCssInScope(css, 'body[data-theme="' + key + '"]');
+}
+
+// ---- Custom-theme live preview ----------------------------------------------------
+// Mount a <style> tag once that scopes user-typed CSS into .ct-preview-scope, so the
+// preview sample (fake login card + chat bubbles + buttons) reflects the user's CSS
+// as they type. Using the same wrapCssInScope primitive keeps scoping semantics
+// identical to the saved theme: bare --vars get nested under the scope, @media inner
+// rules inherit the scope recursively, @keyframes/@font-face pass through.
+let _livePreviewStyleEl = null;
+function ensureLivePreviewStyle() {
+  if (_livePreviewStyleEl && _livePreviewStyleEl.isConnected) return _livePreviewStyleEl;
+  _livePreviewStyleEl = document.createElement('style');
+  _livePreviewStyleEl.id = 'ct-live-preview';
+  document.head.appendChild(_livePreviewStyleEl);
+  return _livePreviewStyleEl;
+}
+function renderLivePreview(rawCss) {
+  const el = ensureLivePreviewStyle();
+  // If empty, clear so the preview falls back to default (matrix) tokens.
+  if (!rawCss || !rawCss.trim()) { el.textContent = ''; return; }
+  try {
+    el.textContent = wrapCssInScope(rawCss, '.ct-preview-scope');
+  } catch (err) {
+    // Bad CSS: leave previous render in place; the syntax-highlight of the textarea
+    // will show the problem. Don't crash the modal.
+    console.warn('live preview wrap failed', err);
+  }
+}
+function clearLivePreview() {
+  if (_livePreviewStyleEl) _livePreviewStyleEl.textContent = '';
+}
+function wrapCssInScope(css, scope) {
+
   let out = '', buf = '', depth = 0, i = 0, inString = null, inComment = false;
   const emitTopLevel = (chunk) => {
     const trimmed = chunk.trim();
@@ -241,7 +297,7 @@ function wrapCssForCustomScope(css, key) {
         const header = chunk.slice(0, openIdx + 1);
         const inner = chunk.slice(openIdx + 1, lastClose);
         const footer = chunk.slice(lastClose);
-        out += header + wrapCssForCustomScope(inner, key) + footer;
+        out += header + wrapCssInScope(inner, scope) + footer;
       } else { out += chunk; }
       return;
     }
@@ -253,16 +309,26 @@ function wrapCssForCustomScope(css, key) {
     }
     const head = chunk.slice(0, braceIdx);
     const body = chunk.slice(braceIdx);
+    // Mixed entry: `--x: y;\n.foo { ... }`. Split on the LAST ';' that occurs in head so
+    // everything before becomes a scoped decl-block and everything after is a clean selector.
+    // The original heuristic checked `head.trimEnd().endsWith(';')` — which is FALSE when the
+    // head extends past the ';' into a selector, so mixed entries got concatenated malformed.
     const lastSemi = head.lastIndexOf(';');
-    const endsDecl = head.trimEnd().endsWith(';');
-    if (endsDecl && lastSemi >= 0) {
+    if (lastSemi >= 0 && head.slice(lastSemi + 1).trim().length > 0) {
       const decls = head.slice(0, lastSemi + 1).trim();
-      const sel = head.slice(lastSemi + 1).trim();
+      const sel   = head.slice(lastSemi + 1).trim();
       if (decls) out += scope + ' {\n' + decls + '\n}\n';
       out += scope + ' ' + sel + body;
+      return;
+    }
+    // Pure selector (no ';' in head — `.foo { ... }`) OR trailing semicolon only
+    // (`--x: y;` with no selector after, but treat the decls as their own scoped block).
+    if (lastSemi >= 0) {
+      const decls = head.trim();
+      if (decls) out += scope + ' {\n' + decls + '\n}\n';
     } else {
       const sel = head.trim();
-      out += scope + ' ' + sel + body;
+      if (sel) out += scope + ' ' + sel + body;
     }
   };
   while (i < css.length) {
@@ -329,8 +395,9 @@ function openCustomThemeModal(editId) {
   $("ctSave").dataset.editId = editId || "";
   m.classList.remove("hidden");
   setTimeout(() => $("ctName").focus(), 30);
+  renderLivePreview($("ctCss").value || "");
 }
-function closeCustomThemeModal() { $("customThemeModal").classList.add("hidden"); }
+function closeCustomThemeModal() { clearLivePreview(); $("customThemeModal").classList.add("hidden"); }
 function submitCustomTheme() {
   const id = $("ctSave").dataset.editId || nextCustomThemeId();
   const name = ($("ctName").value || "").trim();
@@ -431,7 +498,9 @@ $("registerForm").onsubmit = async (e) => {
   if (!ok) { $("registerError").textContent = data.error || t("err_register_failed"); return; }
   onAuth(data);
 };
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
+function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); // ---- bind live preview once ----
+  bindLivePreview();
+  enterApp(); }
 async function checkSession() {
   if (!token) return;
   const { ok, data } = await api("/api/me", null, "GET");
