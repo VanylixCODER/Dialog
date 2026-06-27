@@ -2321,8 +2321,6 @@ body[data-theme="matrix"] [data-tip]::after { transition: opacity var(--t-fast) 
 body[data-theme="matrix"] .es-logo { animation: none; text-shadow: none; }
 
 /* Amber CRT — янтарный фосфор */
-<<<<<<< HEAD
-=======
 body[data-theme="midnight"] {
   --primary-rgb: 90, 138, 255;                    /* icy blue — primary #5a8aff */
   --accent-100: #e5f0ff; --accent-200: #b6d2ff; --accent-300: #88aedb;
@@ -2331,7 +2329,6 @@ body[data-theme="midnight"] {
   --bg-0: #06080f; --bg-1: #0a0e1c; --bg-2: #0f1428; --bg-3: #141c34; --bg-4: #1d2748;
   --cyan-300: #6ed8ff;
 }
->>>>>>> f507f15 (removed msn and other shit)
 /* Vice City — неоновый Майами 80-х: розовый как primary + бирюза как cyan. На пурпурной
    ночи, без оранжево-зелёного tone. .msg.me .bubble получает ярко-малиновую подложку. */
 body[data-theme="dracula"] {
@@ -2514,7 +2511,6 @@ body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-th
    Flat pale-blue background, white panels, classic #0a78d3 blue accents.
    Triangle bubble tails (WLM wedge) rendered via ::before + ::after.
    No glassmorphism, no bokeh, no animations — calm and readable. */
-<<<<<<< HEAD
 /* Mono Light — зеркальный близнец mono. Чёрный фон / белый текст → белый фон / чёрный текст,
    все декоративные overlays отключены. Используется как «пара» к mono (dark + light версии
    одной чёрно-белой палитры). primary = 0,0,0 → rgba(--primary-rgb) для свечений работает как
@@ -2699,8 +2695,6 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
   min-height: 180px; max-height: 320px; resize: vertical;
 }
 
-=======
->>>>>>> f507f15 (removed msn and other shit)
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }

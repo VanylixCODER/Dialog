@@ -53,7 +53,6 @@
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
-        <button id="newChatBtn" class="hicon-btn" data-i18n-title="settings" title="Settings">⚙</button>
         <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
@@ -67,7 +66,6 @@
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
         <button id="emptyAddFriend" class="btn-primary" data-i18n="add_friend">Add friend</button>
-        <button id="emptyNewChat" class="btn-ghost" data-i18n="new_chat">New chat</button>
       </div>
     </aside>
 
@@ -164,7 +162,6 @@
         <button class="settings-tab"        data-tab="contacts"   data-i18n="tab_contacts"   role="tab">Contacts</button>
         <button class="settings-tab"        data-tab="themes"     data-i18n="tab_themes"     role="tab">Themes</button>
         <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
-        <button class="settings-tab"        data-tab="newchat"    data-i18n="new_chat"      role="tab">New chat</button>
       </nav>
       <div class="settings-panes" id="settingsPanes">
         <!-- Profile -->
@@ -224,6 +221,21 @@
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
           <h3 data-i18n="group_section">Manage groups</h3>
+          <!-- Inline Create Group (always visible at top of Groups pane) -->
+          <div style="display:flex;flex-direction:column;gap:12px" id="groupCreateBox">
+            <div class="pick-label" data-i18n="gc_create_title">Create a group</div>
+            <input id="gcName" class="field" type="text" data-i18n-ph="gc_name_ph" maxlength="50" autocomplete="off" />
+            <textarea id="gcDesc" class="field" rows="2" data-i18n-ph="gc_desc_ph" maxlength="200"></textarea>
+            <div class="pick-label" data-i18n="gc_invite_label">Invite friends</div>
+            <div id="gcMemberPick" class="friend-pick"></div>
+            <div id="gcError" class="form-error"></div>
+            <div class="modal-actions">
+              <button id="gcCreateBtn" class="btn-primary" disabled data-i18n="gc_create_btn">Create group</button>
+              <button id="gcCancelBtn" class="btn-ghost" data-i18n="gc_cancel_btn">Cancel</button>
+            </div>
+            <div id="gcPreview" style="font-size:11px;color:var(--text-dim);text-align:center" data-i18n="gc_preview_default">New group</div>
+          </div>
+          <div class="modal-sep">—</div>
           <div id="groupPanelPlaceholder" class="contacts-empty" data-i18n="pick_chat">Select a group chat to manage its settings</div>
           <div id="groupSettingsBody" class="hidden" style="display:flex;flex-direction:column;gap:12px">
             <div class="profile-ava avatar ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit">#</span></div>
@@ -252,20 +264,6 @@
             <div id="gsPendingList" class="contacts-list gs-owner"></div>
             <div id="gsPendingEmpty" class="contacts-empty gs-owner hidden" data-i18n="pending_empty">No pending requests</div>
           </div>
-        </section>
-        <!-- New chat (отдельная вкладка — удобно для пустого списка чатов) -->
-        <section class="settings-pane" data-pane="newchat" role="tabpanel">
-          <h3 data-i18n="new_chat">New chat</h3>
-          <input id="dmInput" class="field" type="text" data-i18n-ph="ph_dm_user" maxlength="24" autocomplete="off" />
-          <button id="dmOpenBtn" class="btn-primary" data-i18n="btn_open_dm">Message</button>
-          <div class="form-error" id="dmError"></div>
-          <div id="friendsQuick" class="room-chips"></div>
-          <div class="modal-sep" data-i18n="or">— or create a group —</div>
-          <input id="groupName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
-          <div class="pick-label" data-i18n="pick_members">Pick members:</div>
-          <div id="groupFriendPick" class="friend-pick"></div>
-          <button id="createGroupBtn" class="btn-primary" data-i18n="btn_create_group">Create group</button>
-          <div class="form-error" id="groupError"></div>
         </section>
       </div>
     </div>

@@ -169,22 +169,11 @@ document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 // затем цветные/retros (не видены по умолчанию, но остаются в списке).
 // swatch = [accent1, accent2, accent3, bg] — 4 цвета для превью-полоски в #themeGrid.
 const THEMES = [
-<<<<<<< HEAD
-  { key: "matrix",     name: "theme_matrix",     desc: "theme_desc_matrix",     swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
-  { key: "dracula",    name: "theme_dracula",    desc: "theme_desc_dracula",    swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
-  { key: "nord",       name: "theme_nord",       desc: "theme_desc_nord",       swatch: ["#88c0d0", "#eceff4", "#5e81ac", "#3b4252"] },
-  { key: "nord-light", name: "theme_nord_light", desc: "theme_desc_nord_light", swatch: ["#88c0d0", "#5e81ac", "#4c566a", "#eceff4"] },
-  { key: "mono",       name: "theme_mono",       desc: "theme_desc_mono",       swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
-  { key: "mono-light", name: "theme_mono_light", desc: "theme_desc_mono_light", swatch: ["#000000", "#404040", "#6a6a6a", "#ffffff"] },
-  { key: "flashbang",  name: "theme_flashbang",  desc: "theme_desc_flashbang",  swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-=======
   { key: "contrast",  name: "theme_contrast",  desc: "theme_desc_contrast",  swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
   { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
   { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
->>>>>>> f507f15 (removed msn and other shit)
-];
+  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },];
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix; unknown keys → matrix; ghost custom keys
   // (e.g. localStorage kept dialog_theme="custom_5" while the user deleted that
@@ -1050,7 +1039,7 @@ function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", p
 // Финальная привязка — ниже в блоке «Перенаправляем хедер-кнопки на settings overlay».
 // (#newChatCancel устарел вместе с #newChatModal — форма «Новый чат» теперь в #settingsOverlay → пейн «newchat».)
 $("newChatCancel") && ($("newChatCancel").onclick = () => closeSettings());
-$("emptyNewChat").onclick = () => $("newChatBtn").click();
+$("emptyNewChat"); // removed
 $("emptyAddFriend").onclick = () => $("contactsBtn").click();
 function renderFriendChips() {
   const box = $("friendsQuick"); box.innerHTML = "";
@@ -1076,15 +1065,57 @@ async function openDM(login) {
   persistDMs();
 }
 $("dmOpenBtn").onclick = () => openDM();
-$("createGroupBtn").onclick = async () => {
-  const name = ($("groupName")?.value || "").trim();
-  if (!name) { const e = $("groupError"); if (e) e.textContent = t("err_group_name"); return; }
-  const { ok, data } = await api("/api/groups", { name, members: [...groupPicked].join(",") });
-  if (!ok) { const e = $("groupError"); if (e) e.textContent = data.error || "error"; return; }
-  closeSettings(); const gn = $("groupName"); if (gn) gn.value = ""; groupPicked.clear();
-  const key = "@grp:" + data.id; chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
+// ---- Inline group-create form (lives inside #settingsOverlay → Groups pane) ----
+let gcPicked = new Set();
+function renderGcPicker() {
+  const box = $("gcMemberPick"); if (!box) return;
+  box.innerHTML = "";
+  if (!relations.friends.length) {
+    box.innerHTML = `<div class="contacts-empty" data-i18n="gc_no_friends">${t("gc_no_friends")}</div>`;
+    return;
+  }
+  relations.friends.forEach((l) => {
+    const b = document.createElement("button"); b.className = "fp-chip"; b.textContent = l;
+    b.onclick = () => {
+      if (gcPicked.has(l)) { gcPicked.delete(l); b.classList.remove("on"); }
+      else { gcPicked.add(l); b.classList.add("on"); }
+      updateGcPreview();
+    };
+    box.appendChild(b);
+  });
+}
+function updateGcPreview() {
+  const nm = $("gcName"); if (!nm) return;
+  const nameValid = (nm.value || "").trim().length > 0;
+  $("gcCreateBtn").disabled = !(nameValid && gcPicked.size >= 1);
+  const preview = $("gcPreview");
+  const title = (nm.value || "").trim() || t("gc_preview_default");
+  preview.textContent = title + " · " + t("gc_preview_with_n", { n: gcPicked.size });
+}
+function setupGroupCreate() {
+  gcPicked.clear();
+  const nm = $("gcName"); if (nm) nm.value = "";
+  const ds = $("gcDesc"); if (ds) ds.value = "";
+  const err = $("gcError"); if (err) err.textContent = "";
+  renderGcPicker();
+  updateGcPreview();
+}
+$("gcName") && $("gcName").addEventListener("input", updateGcPreview);
+$("gcCancelBtn") && ($("gcCancelBtn").onclick = setupGroupCreate);
+$("gcCreateBtn") && ($("gcCreateBtn").onclick = async () => {
+  const name = ($("gcName").value || "").trim();
+  if (!name) { $("gcError").textContent = t("err_group_name"); return; }
+  const { ok, data } = await api("/api/groups", { name, description: ($("gcDesc").value || "").trim(), members: [...gcPicked].join(",") });
+  if (!ok) { $("gcError").textContent = data.error || "error"; return; }
+  closeSettings();
+  setupGroupCreate();
+  const key = "@grp:" + data.id;
+  chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
   openChat(chats.get(key));
-};
+});
+
+$("createGroupBtn"); // legacy button removed (group create moved inline)
+
 
 // ---------- Профиль (пейн «Profile» в #settingsOverlay) ----------
 // Старые #profileModal / #contactsModal / #newChatModal / #groupSettingsModal удалены —
@@ -1130,7 +1161,7 @@ async function loadRelations() {
   const { ok, data } = await api("/api/relations", null, "GET");
   if (!ok) return;
   Object.assign(relations, data); blocked.clear(); (data.blocked || []).forEach((l) => blocked.add(l));
-  renderContacts(); renderFriendChips(); renderChatList($("searchInput").value);
+  renderContacts(); renderFriendChips(); renderChatList($("searchInput").value); setupGroupCreate();
 }
 function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
@@ -2182,7 +2213,7 @@ function refreshProfilePane() {
 // в консоли. Такой же приём уже стоит на других опциональных кнопках.)
 $("contactsBtn").onclick = () => openSettings("contacts");
 $("profileBtn") && ($("profileBtn").onclick = () => openSettings("profile"));
-$("newChatBtn").onclick = () => openSettings("newchat");
+$("newChatBtn"); // button removed from toolbar
 
 // Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
