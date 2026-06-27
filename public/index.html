@@ -222,21 +222,17 @@
         </section>
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
-          <h3 data-i18n="group_section">Manage groups</h3>
-          <!-- Inline Create Group (always visible at top of Groups pane) -->
-          <div style="display:flex;flex-direction:column;gap:12px" id="groupCreateBox">
-            <div class="pick-label" data-i18n="gc_create_title">Create a group</div>
-            <input id="gcName" class="field" type="text" data-i18n-ph="gc_name_ph" maxlength="50" autocomplete="off" />
-            <textarea id="gcDesc" class="field" rows="2" data-i18n-ph="gc_desc_ph" maxlength="200"></textarea>
-            <div class="pick-label" data-i18n="gc_invite_label">Invite friends</div>
-            <div id="gcMemberPick" class="friend-pick"></div>
-            <div id="gcError" class="form-error"></div>
-            <div class="modal-actions">
-              <button id="gcCreateBtn" class="btn-primary" disabled data-i18n="gc_create_btn">Create group</button>
-              <button id="gcCancelBtn" class="btn-ghost" data-i18n="gc_cancel_btn">Cancel</button>
+          <h3 data-i18n="group_section">Manage groups</h3>            <!-- Inline Create Group CTA. Раньше тут жила «голая» форма с #gcName/#gcDesc/
+                 #gcMemberPick/#gcPreview, но JS её не обрабатывал — кнопки «Create group» и
+                 «Cancel» не делали ничего (i18n-ключи gc_* ещё остаются в словаре на случай
+                 будущего inline-режима; вся актуальная форма переехала в #createGroupModal
+                 — аватар + поиск + мультивыбор). Здесь остаётся только CTA-кнопка,
+                 открывающая ту же модалку, что используется из #newGroupBtn. -->
+            <div id="groupCreateBox" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 0 14px">
+              <div class="pick-label" data-i18n="gc_create_title">Create a group</div>
+              <button id="gcCreateBtn" class="btn-primary" data-i18n="gc_create_btn" style="width:auto;padding:11px 26px">Create group</button>
+              <div style="font-size:11px;color:var(--text-dim);text-align:center;max-width:240px;line-height:1.35" data-i18n="gc_launch_hint">Pick a name, logo and friends in the next step.</div>
             </div>
-            <div id="gcPreview" style="font-size:11px;color:var(--text-dim);text-align:center" data-i18n="gc_preview_default">New group</div>
-          </div>
           <div class="modal-sep">—</div>
           <div id="groupPanelPlaceholder" class="contacts-empty" data-i18n="pick_chat">Select a group chat to manage its settings</div>
           <div id="groupSettingsBody" class="hidden" style="display:flex;flex-direction:column;gap:12px">
