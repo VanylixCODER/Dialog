@@ -177,13 +177,15 @@ function renderThemes() {
   const grid = $("themeGrid");
   if (!grid) return;
   grid.querySelectorAll(".theme-opt").forEach((el) => el.remove());
-  for (const t of THEMES) {
+  // Loop var MUST not be `t` — local `t` would shadow window.t() (i18n) and the
+  // first `t("theme_" + …)` would throw, leaving the theme grid empty.
+  for (const theme of THEMES) {
     const b = document.createElement("button");
     b.className = "theme-opt";
-    b.dataset.theme = t.key;
+    b.dataset.theme = theme.key;
     b.type = "button";
-    b.innerHTML = `<div class="theme-swatch">${t.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(t("theme_" + t.key))}</span><span class="theme-desc">${escapeHtml(t("theme_desc_" + t.key))}</span>`;
-    b.onclick = () => applyTheme(t.key);
+    b.innerHTML = `<div class="theme-swatch">${theme.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(window.t("theme_" + theme.key))}</span><span class="theme-desc">${escapeHtml(window.t("theme_desc_" + theme.key))}</span>`;
+    b.onclick = () => applyTheme(theme.key);
     grid.appendChild(b);
   }
   // Highlight active
