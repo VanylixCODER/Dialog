@@ -2243,8 +2243,11 @@ body[data-theme="nord-light"] .es-logo, body[data-theme="nord-light"] .mention, 
   .hicon-btn { width: 42px; height: 42px; }
   .hicon-btn svg { width: 20px; height: 20px; }
   .chat-title { font-size: 14px; }
-  /* Звонок на телефоне — всегда на полный экран */
-  .call-stage:not(.hidden) { position: fixed; inset: 0; z-index: 200; max-height: none; border-radius: 0; }
+  /* Звонок на телефоне — всегда на полный экран. background: var(--bg-1)
+     обязателен: базовый .call-stage имеет градиент с rgba(.04) первым цветом,
+     и без override сквозь него проглядывал чат + matrix-канвас (см. "background
+     transparent on mobile"). На десктопе .fullscreen уже использует тот же фон. */
+  .call-stage:not(.hidden) { position: fixed; inset: 0; z-index: 200; max-height: none; border-radius: 0; background: var(--bg-1); }
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
   .call-btn { width: 48px; height: 48px; }

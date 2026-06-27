@@ -1163,6 +1163,18 @@ $("cgCreate")?.addEventListener?.("click", submitCreateGroup);
 $("newGroupBtn")?.addEventListener?.("click", openCreateGroup);
 $("emptyNewGroup")?.addEventListener?.("click", openCreateGroup);
 $("emptyAddFriend")?.addEventListener?.("click", () => $("contactsBtn")?.click());
+
+// Settings overlay → Groups pane → "Create group" CTA. До рефакторинга флоу
+// создания группы присутствовал в HTML двумя формами одновременно (Compact-inline gc-* и
+// полноценная #createGroupModal). JS обслуживал только cg-* модалку, поэтому клики по
+// #gcCreateBtn / #gcCancelBtn ничего не делали → жалобы «buttons work like shit».
+// Сейчас в пейне остался только CTA, который открывает ту же модалку, что и #newGroupBtn
+// (там и аватар, и поиск, и мультивыбор). На закрытии оверлея настроек он перекрывал бы
+// .modal (z-index 1100 > 250) → закрываем его перед open.
+$("gcCreateBtn")?.addEventListener?.("click", () => {
+  if (settingsOpen) closeSettings();
+  openCreateGroup();
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("createGroupModal").classList.contains("hidden")) closeCreateGroup();
 });
