@@ -45,3 +45,8 @@ scripts/resolve-rebase-conflicts.py
 .tmp/fix_issues.py
 .tmp/fix_renderThemes.py
 .tmp/renderThemes_exact.txt
+.tmp/info_panel.txt
+.tmp/profile_pane.txt
+.tmp/settings_tabs.txt
+.tmp/wallpaper_fixes.py
+.tmp/wallpaper_refactor.py

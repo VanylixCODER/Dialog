@@ -151,6 +151,171 @@ loadRingtone();
 function msgSfxForTheme() { return sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
+// ---- Wallpaper (global + per-chat background images) ----
+// BSAV: хранилище — localStorage. Один глобальный dataURL + map chatKey→dataURL
+// для per-chat overrides. Resolution: per-chat > global > null (тема по умолчанию).
+// Cap 2 MB raw (~2.7 MB base64) — фактор 1.36x для localStorage budget; там же
+// живут token, profile, ringtone, до 50 DM чатов. Превышение лимита ловим в UI:
+// показываем i18n error в .form-error, файл просто не сохраняем.
+const BG_MAX_BYTES = 2 * 1024 * 1024;
+const BG_GLOBAL_KEY = "dialog_bg_global";
+const BG_PER_CHAT_KEY = "dialog_bg_per_chat";
+function getGlobalBg() { try { const v = localStorage.getItem(BG_GLOBAL_KEY); return v && v.startsWith("data:") ? v : null; } catch { return null; } }
+// Общий детектор quota-exceeded: разные браузеры называют ошибку по-разному —
+// Firefox использует `name === "QuotaExceededError"`, WebKit `code === 22`, Safari
+// (iOS) исторически кидал `code === 1014` для QUOTA_EXCEEDED_ERR. Если не эта ошибка
+// — пробрасываем дальше (это либо наш баг, либо недоступность storage, не проглатываем).
+function isQuotaError(e) { return e && (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014); }
+// Булль возврата: `true` — запись прошла (или был удалён), `false` — quota exceeded.
+// Старый silent try/catch проглатывал quota-ошибки — обои «сохранялись» в UI, исчезали
+// после reload. Caller теперь показывает локализованную "bg_quota" ошибку в .form-error.
+function setGlobalBg(dataUrl) {
+  try { if (dataUrl) localStorage.setItem(BG_GLOBAL_KEY, dataUrl); else localStorage.removeItem(BG_GLOBAL_KEY); return true; }
+  catch (e) { if (isQuotaError(e)) return false; throw e; }
+}
+function getBgPerChatMap() { try { const raw = localStorage.getItem(BG_PER_CHAT_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
+function setBgPerChatMap(map) {
+  try { localStorage.setItem(BG_PER_CHAT_KEY, JSON.stringify(map || {})); return true; }
+  catch (e) { if (isQuotaError(e)) return false; throw e; }
+}
+function getChatBg(chatKey) { return chatKey ? (getBgPerChatMap()[chatKey] || null) : null; }
+function setChatBg(chatKey, dataUrl) {
+  if (!chatKey) return true;
+  const map = getBgPerChatMap();
+  if (dataUrl) map[chatKey] = dataUrl; else delete map[chatKey];
+  return setBgPerChatMap(map);
+}
+function resolveBgForChat(chatKey) {
+  // Per-chat override > global fallback > null.
+  const per = getChatBg(chatKey);
+  if (per && per.startsWith("data:")) return per;
+  const glob = getGlobalBg();
+  return glob && glob.startsWith("data:") ? glob : null;
+}
+// Применяем wallpaper на уровне .chat (= #chatPane): при активном чате достаём URL
+// из resolveBg, кладём в CSS custom property + добавляем .has-wallpaper. При отсутствии
+// чата (empty state / log outs) — снимаем оба. Также обновляем статус-строки в
+// открытых настроечных UI (Settings → Themes + chat-bg modal) — текст мог устареть.
+function applyWallpaper() {
+  const cp = $("chatPane");
+  if (!cp) return;
+  const url = myRoom ? resolveBgForChat(myRoom) : null;
+  if (url) {
+    // URL-escape кавычек (теоретически dataURL содержит base64 без них, но безопаснее).
+    cp.style.setProperty("--chat-wallpaper-url", "url(\"" + url.replace(/"/g, "%22") + "\")");
+    cp.classList.add("has-wallpaper");
+  } else {
+    cp.style.removeProperty("--chat-wallpaper-url");
+    cp.classList.remove("has-wallpaper");
+  }
+  refreshBgStatusTexts();
+}
+// Обновить «status: global/per-chat/none» подписи в обоих местах: Settings секция и
+// chat-bg modal. Используется И после изменения apply (upload/clear), И из langchange
+// листенера ниже чтобы при переключении языка цифры переводились на лету.
+function refreshBgStatusTexts() {
+  const gEl = $("bgGlobalStatus");
+  if (gEl) { const hasG = !!getGlobalBg(); const k = hasG ? "bg_status_global" : "bg_status_none"; gEl.dataset.i18n = k; gEl.textContent = t(k); }
+  // Скрываем "Use global" если глобального фона нет — иначе клик просто снимает per-chat
+  // override и откатывает к теме по дефолту (а не «использует глобальный»), что misleading.
+  // "Remove" остаётся видимым — clearing override семантически валиден в любом случае.
+  const useGlobalBtn = $("cbgUseGlobalBtn");
+  if (useGlobalBtn) useGlobalBtn.classList.toggle("hidden", !getGlobalBg());
+  const m = $("chatBgModal"); const cEl = $("cbgStatus");
+  if (cEl && m && m.dataset.chatkey) {
+    const per = getChatBg(m.dataset.chatkey);
+    const hasPB = !!(per && per.startsWith("data:"));
+    const hasG = !!getGlobalBg();
+    let k;
+    if (hasPB) k = "bg_status_per_chat";
+    else if (hasG) k = "bg_per_chat_use_global_help";
+    else k = "bg_status_none";
+    cEl.textContent = t(k);
+  }
+}
+// Превью-thumbnails (если картинка загружена) — в обеих UI локациях.
+function renderBgPreviews() {
+  const globalP = $("bgGlobalPreview"); if (globalP) {
+    globalP.innerHTML = "";
+    const u = getGlobalBg();
+    if (u) { const img = document.createElement("img"); img.src = u; globalP.appendChild(img); }
+    // Явный класс вместо `:not(:empty)` — последний ломается от любого whitespace внутри
+    // блока, который легко залетает через VS Code "format on save" / prettier-html.
+    globalP.classList.toggle("has-img", !!u);
+  }
+  const chatP = $("cbgPreview"); const m = $("chatBgModal");
+  if (chatP && m && m.dataset.chatkey) {
+    chatP.innerHTML = "";
+    const u = resolveBgForChat(m.dataset.chatkey);
+    if (u) { const img = document.createElement("img"); img.src = u; chatP.appendChild(img); }
+    chatP.classList.toggle("has-img", !!u);
+  }
+}
+// Глобальная фон-секция (Settings → Themes): wire кнопок и загрузку файла.
+$("bgChooseGlobal") && ($("bgChooseGlobal").onclick = () => $("bgFileGlobal")?.click());
+$("bgFileGlobal") && $("bgFileGlobal").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const err = $("bgGlobalError"); if (err) err.textContent = "";
+  if (f.size > BG_MAX_BYTES) { if (err) err.textContent = t("bg_too_big"); e.target.value = ""; return; }
+  const r = new FileReader();
+  r.onload = () => {
+    if (!setGlobalBg(r.result)) { if (err) err.textContent = t("bg_quota"); return; }
+    renderBgPreviews(); applyWallpaper();
+  };
+  r.onerror = () => { if (err) err.textContent = "Read error"; };
+  r.readAsDataURL(f); e.target.value = "";
+});
+$("bgRemoveGlobal") && ($("bgRemoveGlobal").onclick = () => { setGlobalBg(null); renderBgPreviews(); applyWallpaper(); });
+
+// Per-chat wallpaper modal: open/close + file upload + удалить override + сбросить на глобальный.
+// modal.dataset.chatkey хранит текущий ключ комнаты (chatKey) — ставим при open, чистим при close.
+function openChatBgModal() {
+  if (!myRoom) return;
+  const m = $("chatBgModal"); if (!m) return;
+  m.dataset.chatkey = myRoom;
+  renderBgPreviews(); refreshBgStatusTexts(); m.classList.remove("hidden");
+}
+function closeChatBgModal() {
+  const m = $("chatBgModal"); if (m) { m.removeAttribute("data-chatkey"); m.classList.add("hidden"); }
+}
+$("cbgCloseBtn") && ($("cbgCloseBtn").onclick = closeChatBgModal);
+$("chatBgModal") && $("chatBgModal").addEventListener("click", (e) => { if (e.target === $("chatBgModal")) closeChatBgModal(); });
+// Esc отдельно ловим здесь, чтобы не конфликтовать с существующим Escape-listener на lightbox/createGroupModal
+// (каждый modal сам проверяет свою открытость).
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("chatBgModal").classList.contains("hidden")) closeChatBgModal(); });
+$("cbgChooseBtn") && ($("cbgChooseBtn").onclick = () => $("bgFileChat")?.click());
+$("bgFileChat") && $("bgFileChat").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const err = $("cbgError"); if (err) err.textContent = "";
+  if (f.size > BG_MAX_BYTES) { if (err) err.textContent = t("bg_too_big"); e.target.value = ""; return; }
+  const key = $("chatBgModal").dataset.chatkey; if (!key) return;
+  const r = new FileReader();
+  r.onload = () => {
+    if (!setChatBg(key, r.result)) { if (err) err.textContent = t("bg_quota"); return; }
+    renderBgPreviews(); applyWallpaper(); refreshBgStatusTexts();
+  };
+  r.onerror = () => { if (err) err.textContent = "Read error"; };
+  r.readAsDataURL(f); e.target.value = "";
+});
+// «Remove» — снимает override для текущего чата. Если глобальный фон задан, chat
+// автоматически перейдёт на него (resolveBgForChat). Если глобального нет — уйдёт
+// в тему по умолчанию.
+$("cbgClearBtn") && ($("cbgClearBtn").onclick = () => {
+  const key = $("chatBgModal").dataset.chatkey; if (!key) return;
+  setChatBg(key, null); renderBgPreviews(); applyWallpaper(); refreshBgStatusTexts();
+});
+// «Use global background» — то же действие семантически (снять override). Дублируем
+// для UX ясности. Если нет глобального, перейдёт на тему по умолчанию.
+$("cbgUseGlobalBtn") && ($("cbgUseGlobalBtn").onclick = () => {
+  const key = $("chatBgModal").dataset.chatkey; if (!key) return;
+  setChatBg(key, null); renderBgPreviews(); applyWallpaper(); refreshBgStatusTexts();
+});
+// При смене языка — пере-отрисовать status-строки wallpaper-UI (они написаны напрямую
+// через t(), а не через data-i18n, поэтому applyI18n не подхватит).
+window.addEventListener("langchange", refreshBgStatusTexts);
+
+// ---------- Темы ----------
+
 // ---------- Темы ----------
 // 5 pre-stabilized themes. Matrix — дефолт; legacy "contrast"/"high_contrast" localStorage
 // значения мигрируются в "matrix" в applyTheme() ниже. swatch = [accent1, accent2, accent3, bg]
@@ -392,7 +557,7 @@ function renderChatList(filter = "") {
 function deleteChat(c) {
   if (c.type === "group") { if (!confirm(t("leave_group"))) return; api("/api/groups/" + c.id + "/leave"); }
   chats.delete(c.key); persistDMs();
-  if (c.key === activeKey) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); }
+  if (c.key === activeKey) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); applyWallpaper(); /* no room → drop wallpaper class */ }
   renderChatList($("searchInput").value);
 }
 
@@ -424,6 +589,7 @@ function openChat(c) {
   renderChatList($("searchInput").value);
   if (call.active && c.key === call.roomKey) call.minimized = false; // вернулись в чат звонка
   syncCallUI(); updateCallButton();
+  applyWallpaper();  // per-chat→global wallpaper resolution, вызывается при каждой смене чата
 }
 $("backBtnMobile").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
@@ -437,6 +603,8 @@ $("chatMenuBtn").onclick = (e) => {
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
   if (curKind === "group") {
+    // Wallpaper — первым пунктом (эстетический, не чат-контроль). Пункты ниже — control.
+    item(t("chat_wallpaper"), "image", () => openChatBgModal());
     // Овнер может добавлять участников прямо из меню чата — отдельный пункт над «Group settings»,
     // потому что открывать пейн настроек ради одного действия было неочевидно (жалоба «не могу
     // добавить пользователя после создания группы»). Не-овнер тоже получает кнопку — но в режиме
@@ -445,6 +613,8 @@ $("chatMenuBtn").onclick = (e) => {
     item(t("group_settings"), "settings", () => openSettings("groups"));
     item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
   } else if (curKind === "dm") {
+    // DM background — первым пунктом (эстетика выше блокировки).
+    item(t("chat_wallpaper"), "image", () => openChatBgModal());
     const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
     const isB = blocked.has(partner);
     item(isB ? t("unblock_user") : t("block_user"), "block", () => block(partner, isB ? "unblock" : "block"), !isB);
