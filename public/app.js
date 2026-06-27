@@ -351,22 +351,52 @@ function loadSavedTheme() {
   } catch {}
 }
 
-// ---- Flashbang easter egg ----
-// 5% chance on user-driven theme selection → 2s later a full-screen #fff overlay drops;
-// clicking it (or Enter/Space when focused) plays /src/cs-go-flashbang.mp3 and dismisses.
-// Pending guard prevents the 2s timer from stacking on spam-clicks of the Flashbang swatch;
-// triggerFlashbangEgg() guards against the user switching OFF Flashbang during the wait
+// ---- Flashbang easter egg + effect toggle ----
+// Every explicit user-driven selection of the Flashbang swatch (in Settings → Themes)
+// triggers a 2-second-delayed full-screen #fff overlay; click (or Enter/Space) plays
+// /src/cs-go-flashbang.mp3 once and dismisses. The effect can be turned off via the
+// toggle in Settings → Themes (persisted in localStorage).
+//   _flashbangEggPending: prevents the 2s timer from stacking on spam-clicks.
+//   _flashbangEffEnabled: read once on init + on toggle change; consulted in maybeFlashbangEgg().
+// triggerFlashbangEgg() also guards against the user switching OFF Flashbang during the wait
 // (we don't want a white overlay dropping over Matrix/Midnight/etc).
+const FLASHBANG_EFF_KEY = "dialog_flashbang_eff";   // "1" = enabled (default), "0" = disabled
 let _flashbangEggPending = false;
+let _flashbangEffEnabled = true;                    // default ON; users opt out via the toggle
+function loadFlashbangEff() {
+  try {
+    const v = localStorage.getItem(FLASHBANG_EFF_KEY);
+    // Explicit "0" disables; anything else (missing, "1", unknown) keeps it on.
+    _flashbangEffEnabled = v !== "0";
+  } catch { _flashbangEffEnabled = true; }
+}
+function syncFlashbangEffToggle() {
+  const el = $("flashbangEffToggle");
+  if (!el) return;
+  el.classList.toggle("on", _flashbangEffEnabled);
+  el.setAttribute("aria-checked", _flashbangEffEnabled ? "true" : "false");
+  el.title = t(_flashbangEffEnabled ? "flashbang_effect_on" : "flashbang_effect_off");
+}
+// Toggle the persisted flag + UI on click. Setting it OFF makes maybeFlashbangEgg() a no-op
+// without touching the pending-flag logic (so a queued timer already in-flight still bails
+// cleanly via the dataset.theme guard inside triggerFlashbangEgg).
+$("flashbangEffToggle")?.addEventListener?.("click", () => {
+  _flashbangEffEnabled = !_flashbangEffEnabled;
+  try { localStorage.setItem(FLASHBANG_EFF_KEY, _flashbangEffEnabled ? "1" : "0"); } catch {}
+  syncFlashbangEffToggle();
+});
 function maybeFlashbangEgg() {
   if (_flashbangEggPending) return;
-  if (Math.random() >= 0.05) return;     // 5% chance
+  // Honors _flashbangEffEnabled (Settings → Themes toggle). When false, no overlay / no sound.
+  if (!_flashbangEffEnabled) return;
   _flashbangEggPending = true;
   setTimeout(triggerFlashbangEgg, 2000);
 }
 function triggerFlashbangEgg() {
   _flashbangEggPending = false;
   if (document.body.dataset.theme !== "flashbang") return;
+  // Re-check the toggle: user may have turned the effect OFF during the 2s wait.
+  if (!_flashbangEffEnabled) return;
   const overlay = document.createElement("div");
   overlay.className = "flashbang-egg";
   overlay.setAttribute("role", "button");
@@ -412,7 +442,14 @@ function initLang() {
   [$("langSelect"), $("langSelect2")].forEach((sel) => { if (sel) { sel.value = v; sel.onchange = () => window.setLang(sel.value); } });
   applyI18n();
 }
-window.addEventListener("langchange", () => { [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang())); renderChatList($("searchInput").value); });
+window.addEventListener("langchange", () => {
+  [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang()));
+  renderChatList($("searchInput").value);
+  // Re-translate the flashbang effect toggle's On/Off tooltip + the disclaimer text below
+  // the theme grid (toggle title is set directly here; disclaimer goes through applyI18n).
+  syncFlashbangEffToggle();
+  applyI18n(document.querySelector('[data-pane="themes"]'));
+});
 
 // ---------- API ----------
 async function api(path, body, method = "POST") {
@@ -2352,7 +2389,7 @@ function setIcons() {
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 
 // ---------- Старт ----------
-loadSavedTheme(); initLang(); setIcons(); checkSession();
+loadSavedTheme(); loadFlashbangEff(); syncFlashbangEffToggle(); initLang(); setIcons(); checkSession();
 
 // Wire up custom-theme modal + + Custom button
 (function () {

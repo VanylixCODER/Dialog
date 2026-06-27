@@ -2784,6 +2784,45 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
    2s delay). Click -> plays /src/cs-go-flashbang.mp3 via injected Audio (user-gesture),
    then removes itself. z-index 99999 above settings (1100), call-incoming (1200),
    status menu (1400), chat-menu (1900), emoji picker (300) and lightbox (500). */
+/* ============ Flashbang disclaimer + effect toggle (Themes pane) ============ */
+/* Disclaimer sits BELOW the theme grid; bright accent border to draw attention BEFORE
+   the user clicks the Flashbang swatch. The toggle row below mirrors the .ringtone-row
+   layout so it's visually familiar. */
+.flashbang-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-400);
+  border-radius: var(--r-2);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-strong);
+  /* punctuation neutralises theme-color differences; flashbang white-on-green stays legible */
+  word-break: break-word;
+}
+.flashbang-effect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.flashbang-effect-row:hover { border-color: var(--border-2); background: var(--surface-2); }
+.flashbang-effect-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: 0.2px;
+}
+
 .flashbang-egg {
   position: fixed;
   inset: 0;

@@ -218,6 +218,13 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
+          <div class="flashbang-disclaimer" id="flashbangDisclaimer" data-i18n="flashbang_disclaimer">⚠️ Flashbang plays a CS:GO flashbang sound and flashes the screen. Leave the room or lower your volume before applying. You can disable the effect below.</div>
+          <div class="flashbang-effect-row">
+            <span class="flashbang-effect-label" data-i18n="flashbang_effect_label">Flashbang effect</span>
+            <!-- Title is owned by syncFlashbangEffToggle() (state-aware: "flashbang_effect_on" / "_off").
+                 Don't add data-i18n-title here — applyI18n() would overwrite the state-aware title on langchange. -->
+            <button id="flashbangEffToggle" type="button" role="switch" class="dd-toggle on" aria-checked="true" title="On"></button>
+          </div>
           <div class="bg-section">
             <h4 data-i18n="bg_section_title">Background image</h4>
             <p class="bg-status" id="bgGlobalStatus" data-i18n="bg_status_none">No custom background — using theme defaults</p>
