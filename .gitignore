@@ -43,3 +43,5 @@ scripts/resolve-rebase-conflicts.py
 .tmp/themes_css.txt
 .tmp/themes_js.txt
 .tmp/fix_issues.py
+.tmp/fix_renderThemes.py
+.tmp/renderThemes_exact.txt
