@@ -648,7 +648,7 @@ function renderChatList(filter = "") {
     li._chatKey = c.key; // метка для быстрого in-place обновления точек (см. updateDots)
     const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
     const avaInner = c.type === "group"
-      ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#`
+      ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
@@ -697,7 +697,7 @@ function openChat(c) {
   $("chatSub").textContent = c.type === "group" ? t("room_sub_group") : t("room_sub_dm");
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
-  $("chatAva").innerHTML = c.type === "group" ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.remove()">#` : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+  $("chatAva").innerHTML = c.type === "group" ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">` : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
   // Title для чат-аватара: DM → open_profile (мини-профиль собеседника), группа → settings overlay
   // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
   // по факту смены чата, а не через data-i18n-title.
