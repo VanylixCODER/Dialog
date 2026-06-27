@@ -155,6 +155,7 @@
   <!-- Settings overlay — единый оверлей настроек (Discord-style, 80% экрана). 4 вкладки: Profile / Contacts / Themes / Group. -->
   <div id="settingsOverlay" class="settings-overlay hidden" role="dialog" aria-modal="true">
     <div class="settings-card" role="document">
+      <div class="flashbang-banner" id="flashbangDisclaimer" role="note" data-i18n="flashbang_disclaimer">⚠️ Flashbang plays a CS:GO flashbang sound and flashes the screen. Leave the room or lower your volume before applying. You can disable the effect in the Themes tab.</div>
       <div class="settings-head">
         <h2 id="settingsTitle" data-i18n="settings">Settings</h2>
         <button id="settingsClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
@@ -218,7 +219,6 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
-          <div class="flashbang-disclaimer" id="flashbangDisclaimer" data-i18n="flashbang_disclaimer">⚠️ Flashbang plays a CS:GO flashbang sound and flashes the screen. Leave the room or lower your volume before applying. You can disable the effect below.</div>
           <div class="flashbang-effect-row">
             <span class="flashbang-effect-label" data-i18n="flashbang_effect_label">Flashbang effect</span>
             <!-- Title is owned by syncFlashbangEffToggle() (state-aware: "flashbang_effect_on" / "_off").

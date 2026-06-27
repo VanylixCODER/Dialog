@@ -53,3 +53,9 @@ scripts/resolve-rebase-conflicts.py
 .tmp/fix2.py
 .tmp/fix_appjs.py
 .tmp/fix_css.py
+.tmp/fix_banner.py
+.tmp/fix_consistency.py
+.tmp/fix_i18n.py
+.tmp/move_disclaimer.py
+.tmp/peek.py
+.tmp/peek2.py
