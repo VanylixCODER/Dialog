@@ -1679,6 +1679,71 @@ a:focus-visible {
   100% { transform: scale(1.06); opacity: 0; }
 }
 
+/* ============ Wallpaper (global + per-chat background images) ============ */
+/* Reusable pieces: status-line, preview-frame, action-row. Used both in the
+   Settings → Themes subsection (bg-section) and the per-chat mini-modal
+   (#chatBgModal / cbg-*). Превью 16:9 маленький thumb для низких разрешений. */
+.bg-section {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-1);
+}
+.bg-section h4 {
+  font-weight: 800; font-size: 12px; color: var(--accent-300);
+  letter-spacing: 1.4px; text-transform: uppercase; margin: 0;
+}
+.bg-status, .cbg-status {
+  color: var(--text-dim); font-size: 11px; letter-spacing: 0.4px; margin: 0;
+}
+.bg-preview, .cbg-preview {
+  width: 100%; aspect-ratio: 16 / 9;
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  display: none;
+  position: relative;
+}
+/* Явный класс вместо `:not(:empty)` — последний ломается от любого whitespace внутри
+   <div>, что легко залетает через format-on-save / prettier-html / редактор рефакторов.
+   `.has-img` ставится/снимается из JS в renderBgPreviews() и надёжно держится. */
+.bg-preview.has-img, .cbg-preview.has-img { display: block; }
+.bg-preview img, .cbg-preview img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.bg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bg-actions .btn-ghost { flex: 1 1 130px; min-width: 130px; padding: 9px 12px; font-size: 12px; }
+
+/* Per-chat wallpaper mini-modal — reuses .modal и .modal-card, чуть шире ради
+   панели предпросмотра и трёх кнопок. Без z-index override, потому что .modal уже
+   250 (< settings overlay 1100) — но окно открывается ТОЛЬКО после клика в
+   chat-меню, поверх чата, не поверх настроек. На clash с .chat-menu (1900) не
+   влияет: chat-меню закрывается перед openChatBgModal(). */
+.cbg-card { width: min(440px, 94vw); padding: 24px 22px 18px; gap: 11px; }
+
+/* === .chat.has-wallpaper === */
+/* `linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75))` СВЕРХУ background-list →
+   это стек как слои CSS bg (background-image несколько значений рисуются по
+   порядку, первый — самый верхний). То есть: сначала 75%-чёрный скрим, ПОД ним
+   пользовательская картинка. Сама картинка НЕ получает opacity, а СКРИМ отрезает
+   её до ~25% видимости — но контраст гарантирован, пузыри читаются на любом фото.
+   background-attachment: fixed — стендалон неподвижен при скролле ленты. */
+.chat.has-wallpaper {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)),
+    var(--chat-wallpaper-url, none) center / cover no-repeat;
+  background-attachment: fixed;
+}
+/* Matrix-фоновая сетка на стенке отключается — иначе цветные линии поверх фото
+   выглядят шумно. При wallpaper мы рисуем реальную картинку, grid mask теряет
+   смысл. .chat::before срабатывает только когда НЕТ wallpaper. */
+.chat.has-wallpaper::before { display: none; }
+/* `.chat-head::after` — 5s animated scan-beam gradient. У .chat-head фон-градиент
+   feathered на 60% alpha в нижней части, поэтому тонкая зелёная полоска просвечивала
+   сквозь зону перехода и читалась визуальным шумом на фото. Гасим её при wallpaper. */
+.chat.has-wallpaper .chat-head::after { display: none; }
+
 .tile.screen {
   width: 100% !important;
   aspect-ratio: 16/9; max-height: 36vh;

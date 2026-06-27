@@ -35,5 +35,6 @@
     clock: s('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>'),
     check: s('<polyline points="5 12 10 17 19 7"/>'),
     checkCheck: s('<polyline points="2 12 7 17 10 13"/><polyline points="9 12 14 17 21 7"/>'),
+    image: s('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'),
   };
 })();

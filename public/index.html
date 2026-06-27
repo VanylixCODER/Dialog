@@ -179,21 +179,21 @@
           <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
           <div class="form-error" id="profileError"></div>
           <div class="modal-actions">
-            <div class="ringtone-row">
-        <div class="ringtone-meta">
-          <span data-i18n="ringtone_label">Ringtone</span>
-          <strong id="ringtoneName" data-i18n="ringtone_none">Default sound only</strong>
-        </div>
-        <input id="ringtoneFile" type="file" accept="audio/*" hidden>
-        <div class="ringtone-actions">
-          <button type="button" id="ringtoneChoose" class="ringtone-btn" data-i18n="ringtone_choose">Choose audio</button>
-          <button type="button" id="ringtonePreview" class="ringtone-btn" data-i18n="ringtone_preview">Preview</button>
-          <button type="button" id="ringtoneRemove" class="ringtone-btn danger" data-i18n="ringtone_remove">Remove</button>
-        </div>
-        <div id="ringtoneError" class="form-error"></div>
-      </div>
-      <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
+            <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
             <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
+          </div>
+          <div class="ringtone-row">
+            <div class="ringtone-meta">
+              <span data-i18n="ringtone_label">Ringtone</span>
+              <strong id="ringtoneName" data-i18n="ringtone_none">Default sound only</strong>
+            </div>
+            <input id="ringtoneFile" type="file" accept="audio/*" hidden>
+            <div class="ringtone-actions">
+              <button type="button" id="ringtoneChoose" class="ringtone-btn" data-i18n="ringtone_choose">Choose audio</button>
+              <button type="button" id="ringtonePreview" class="ringtone-btn" data-i18n="ringtone_preview">Preview</button>
+              <button type="button" id="ringtoneRemove" class="ringtone-btn danger" data-i18n="ringtone_remove">Remove</button>
+            </div>
+            <div id="ringtoneError" class="form-error"></div>
           </div>
           <div class="uppercase-tag" data-i18n="set_status">Set status</div>
           <div style="color:var(--text-dim);font-size:12px;line-height:1.4" data-i18n="esc_to_close">Esc / click outside to close</div>
@@ -218,6 +218,17 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
+          <div class="bg-section">
+            <h4 data-i18n="bg_section_title">Background image</h4>
+            <p class="bg-status" id="bgGlobalStatus" data-i18n="bg_status_none">No custom background — using theme defaults</p>
+            <div class="bg-preview" id="bgGlobalPreview"></div>
+            <input id="bgFileGlobal" type="file" accept="image/*" hidden />
+            <div class="bg-actions">
+              <button type="button" id="bgChooseGlobal" class="btn-ghost" data-i18n="bg_choose">Choose image</button>
+              <button type="button" id="bgRemoveGlobal" class="btn-ghost" data-i18n="bg_remove">Remove</button>
+            </div>
+            <div id="bgGlobalError" class="form-error"></div>
+          </div>
         </section>
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
@@ -340,6 +351,25 @@
         <button id="cgCancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
         <button id="cgCreate" class="btn-primary" data-i18n="btn_create_group" disabled>Create group</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Per-chat wallpaper mini-modal — открывается из ⋮ меню чата (Chat background).
+       Позволяет задать фон конкретной комнаты (override'ит глобальный) или вернуться
+       на глобальный. ESC / клик снаружи / ✕ — закрыть, как остальные .modal-диалоги. -->
+  <div id="chatBgModal" class="modal hidden">
+    <div class="modal-card cbg-card">
+      <button id="cbgCloseBtn" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="bg_modal_title">Chat background</div>
+      <p class="cbg-status" id="cbgStatus" data-i18n="bg_status_none">No custom background</p>
+      <div class="cbg-preview" id="cbgPreview"></div>
+      <input id="bgFileChat" type="file" accept="image/*" hidden />
+      <div class="bg-actions">
+        <button type="button" id="cbgChooseBtn" class="btn-ghost" data-i18n="bg_choose">Choose image</button>
+        <button type="button" id="cbgClearBtn" class="btn-ghost" data-i18n="bg_remove">Remove</button>
+        <button type="button" id="cbgUseGlobalBtn" class="btn-ghost" data-i18n="bg_per_chat_use_global">Use global background</button>
+      </div>
+      <div id="cbgError" class="form-error"></div>
     </div>
   </div>
 
