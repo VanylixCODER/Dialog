@@ -33,7 +33,7 @@ import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction,
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
-  isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, deleteGroup,
+  isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
@@ -158,6 +158,65 @@ app.get("/api/group-avatar/:id", async (req, res) => {
     res.send(Buffer.from(m[2], "base64"));
   } catch { sendPfpDefault(res); }
 });
+// Основные CRUD для групп: list / create / leave.
+// ВАЖНО: эти маршруты идут ПЕРВЫМИ — Express сопоставляет по порядку объявления. Если поставить их после , GET /api/groups уйдёт в POST с :id='', а POST /api/groups/:id/leave может перепутаться.
+// Клиент (app.js) вызывает вот эти три маршрута, но раньше сервер возвращал 404 — отсюда жалобы «группы сломались».
+
+app.get("/api/groups", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    res.json({ groups: await getUserGroups(me.login) });
+  } catch (e) { console.error("group list", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/groups", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const name = String(req.body?.name || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    // Дублирруем name обрезкой и лимитом (VARCHAR(64) в schema), отбрасываем пустые.
+    const cleanName = name.slice(0, 64);
+    // members — comma-list (UI пикер может отправить несколько за раз). createGroup() сам добавляет owner
+    // и дедупит INSERT IGNORE по (group_id,login) — дубли и owner-дубли безопасно.
+    const memberList = [...new Set(String(req.body?.members || "").split(",").map((s) => s.trim().toLowerCase()).filter((l) => l && l !== me.login))];
+    const id = await createGroup(cleanName, me.login, memberList);
+    // Опциональный аватар: если передали — ставим отдельным UPDATE (не в createGroup, тот его не принимает). Лимит 3 MB как в rename/avatar верху.
+    if (typeof req.body?.avatar === "string" && req.body.avatar) await setGroupAvatar(id, req.body.avatar.slice(0, 3_000_000));
+    // Рассылаем group-updated всем новым участникам (включая овнера), чтобы их клиенты показали группу в списке чатов без ручного refetch.
+    try { for (const l of await getGroupMembers(id)) notifyUser(l, "group-updated", { id }); } catch {}
+    res.json({ ok: true, id, name: cleanName });
+  } catch (e) { console.error("group create", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/groups/:id/leave", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
+    // Проверяем что группа вообще существует и пользователь её участник — иначе 404 вместо молчаливого 200.
+    const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
+    if (!(await isGroupMember(id, me.login))) return res.status(404).json({ error: "not a member" });
+    // Если уходит овнер — группа становится «безхозной». Мы не передаём владение автоматом (это большой UX-шок) — вместо этого: если овнер в группе один, автоматически удаляем группу; иначе просто выводим из group_members.
+    const wasOwner = g.owner === me.login;
+    const membersBefore = await getGroupMembers(id);
+    await leaveGroup(id, me.login);
+    if (wasOwner && membersBefore.length === 1) {
+      // Одинокий участник — он же овнер; после leaveGroup() группа пуста, а сообщения в нёй орфаны. Проще всё удалить целиком.
+      await deleteGroup(id);
+      notifyUser(me.login, "group-deleted", { id });
+    } else {
+      // Если ушёл овнер и в группе остались люди — передаём владение первому по алфавиту
+      // (getGroupMembersDetailed сортирует по u.name). Иначе chat_groups.owner останется указывать
+      // на ушедшего, и все owner-only маршруты (rename/avatar/members/delete/pending) начнут 403'ить.
+      if (wasOwner) {
+        const remaining = await getGroupMembersDetailed(id);
+        if (remaining.length) await setGroupOwner(id, remaining[0].login);
+      }
+      // Оповещаем оставшихся участников — они должны увидеть обновлённый список без этого юзера.
+      try { for (const l of await getGroupMembers(id)) notifyUser(l, "group-updated", { id }); } catch {}
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error("group leave", e.message); res.status(500).json({ error: "server error" }); }
+});
+
 // Управление (только владелец): rename / avatar / add / remove / delete
 async function notifyGroup(id, event, data) { try { for (const l of await getGroupMembers(id)) notifyUser(l, event, data); } catch {} }
 app.post("/api/groups/:id", async (req, res) => {

@@ -260,6 +260,10 @@ export async function addGroupMembers(id, logins) {
 export async function removeGroupMember(id, login) { await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]); }
 export async function renameGroup(id, name) { await execute("UPDATE chat_groups SET name=? WHERE id=?", [name, id]); }
 export async function setGroupAvatar(id, avatar) { await execute("UPDATE chat_groups SET avatar=? WHERE id=?", [avatar, id]); }
+// Смена владельца (используется при /api/groups/:id/leave, когда уходит овнер с другими участниками).
+// chat_groups.owner — единственный VARCHAR, поэтому при уходе овнера надо явно передать владение
+// кому-то из оставшихся, иначе все owner-only маршруты начнут возвращать 403.
+export async function setGroupOwner(id, owner) { await execute("UPDATE chat_groups SET owner=? WHERE id=?", [owner, id]); }
 export async function deleteGroup(id) {
   await execute("DELETE FROM group_members WHERE group_id=?", [id]);
   await execute("DELETE FROM chat_groups WHERE id=?", [id]);
