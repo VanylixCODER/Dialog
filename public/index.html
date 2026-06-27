@@ -53,6 +53,7 @@
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
         <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
+        <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
         <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
@@ -139,6 +140,11 @@
              dragenter реально принёс файлы. -->
         <div class="input-wrap"><textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea></div>
         <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
+        <div id="uploadProgress" class="upload-progress hidden">
+          <div class="up-bar"><div class="up-fill" id="upFill"></div></div>
+          <span class="up-text" id="upText">0%</span>
+          <button class="up-cancel" id="upCancel" title="Cancel">✕</button>
+        </div>
       </div>
       <div id="emojiPicker" class="emoji-picker hidden"><div class="emoji-tabs" id="emojiTabs"></div><div class="emoji-grid" id="emojiGrid"></div></div>
       <div id="gifPanel" class="gif-panel hidden">
