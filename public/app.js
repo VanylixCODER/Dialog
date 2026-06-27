@@ -395,7 +395,7 @@ function applyTheme(key) {
 // ---- Flashbang easter egg + effect toggle ----
 // Every explicit user-driven selection of the Flashbang swatch (in Settings → Themes)
 // triggers a 2-second-delayed full-screen #fff overlay; click (or Enter/Space) plays
-// /src/cs-go-flashbang.mp3 once and dismisses. The effect can be turned off via the
+// overlay (visual flash only) and dismisses. The effect can be turned off via the
 // toggle in Settings → Themes (persisted in localStorage).
 //   _flashbangEggPending: prevents the 2s timer from stacking on spam-clicks.
 //   _flashbangEffEnabled: read once on init + on toggle change; consulted in maybeFlashbangEgg().
@@ -445,7 +445,6 @@ function triggerFlashbangEgg() {
   overlay.tabIndex = 0;
   const dismiss = () => {
     // Click / keydown is the user-gesture window for Audio.play() — required by autoplay policies.
-    try { const a = new Audio("/src/cs-go-flashbang.mp3"); a.play().catch(() => {}); } catch {}
     overlay.remove();
   };
   overlay.onclick = dismiss;
