@@ -2047,6 +2047,34 @@ body[data-theme="nord"] {
   --bg-0: #2e3440; --bg-1: #3b4252; --bg-2: #434c5e; --bg-3: #4c566a; --bg-4: #303841;
   --cyan-300: #8fbcbb;
 }
+/* Nord Light — light Polar Night + ice-blue Frost accents (Nord для дневного использования: снежный фон Snow Storm + акценты Frost и текст Polar Night). */
+body[data-theme="nord-light"] {
+  --primary-rgb: 136, 192, 208;                   /* Frost-3 #88c0d0 */
+  --accent-100: #ffffff; --accent-200: #f5f7fa; --accent-300: #b8c4d6;
+  --accent-400: #88c0d0; --accent-500: #5e81ac; --accent-600: #434c5e;
+  --accent-glow: rgba(136, 192, 208, 0.45); --accent-soft: rgba(136, 192, 208, 0.18);
+  --bg-0: #eceff4; --bg-1: #e5e9f0; --bg-2: #d8dee9; --bg-3: #d8dee9; --bg-4: #c8d0e0;
+  --cyan-300: #8fbcbb;        /* Frost-4 — secondary ice-mint */
+  --surface-1: #ffffff; --surface-2: #f5f7fa; --surface-3: #eceff4;
+  --border-1: rgba(46, 52, 64, 0.08); --border-2: rgba(46, 52, 64, 0.16); --border-3: rgba(46, 52, 64, 0.32);
+  --text: #2e3440;            /* Polar Night-0 — body text */
+  --text-strong: #3b4252;     /* Polar Night-1 — headings */
+  --text-dim: #4c566a;        /* Polar Night-3 — secondary text */
+  --danger: #b00020;
+  --glow-sm: 0 0 6px rgba(136, 192, 208, 0.35);
+  --glow-md: 0 0 14px rgba(136, 192, 208, 0.5);
+  --glow-lg: 0 0 26px rgba(136, 192, 208, 0.55);
+  --shadow-sm: 0 1px 2px rgba(46, 52, 64, 0.08);
+  --shadow-md: 0 4px 10px rgba(46, 52, 64, 0.14);
+  --shadow-lg: 0 10px 24px rgba(46, 52, 64, 0.18);
+  background: #eceff4;
+  color: #2e3440;
+  text-shadow: none;
+}
+/* Decorative effects off on light backgrounds (matrix-rain filter etc). */
+body[data-theme="nord-light"] .es-logo, body[data-theme="nord-light"] .mention, body[data-theme="nord-light"] .setting-tab { animation: none; text-shadow: none; }
+
+
 
 body[data-theme="lofi"] {
   --primary-rgb: 106, 142, 122;                   /* muted green — primary #6a8e7a */
@@ -2603,6 +2631,56 @@ body[data-theme="mono-light"] .bubble, body[data-theme="mono-light"] .msg, body[
 body[data-theme="mono-light"] .es-logo, body[data-theme="mono-light"] .mention, body[data-theme="mono-light"] .setting-tab { animation: none; text-shadow: none; }
 body[data-theme="mono-light"] .icon-btn.send { background: #000000; color: #ffffff; border-color: #000000; box-shadow: 0 0 0 1px rgba(0,0,0,.2) inset, 0 2px 8px rgba(0,0,0,0.18); }
 body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(255,255,255,.15), 0 4px 14px rgba(0,0,0,0.22); }
+/* ============ Custom Theme Editor: 2-column layout + live preview ============ */
+/* Default tokens for the preview pane. The live-preview <style> injects the user's
+   CSS under .ct-preview-scope so these are what the sample looks like BEFORE they
+   type. We mirror the matrix-theme palette so the empty preview still feels like
+   part of the app. Override these in your custom CSS to recolor the sample. */
+.ct-preview-scope {
+  --primary-rgb: 0, 255, 90;
+  --bg-0: #000000; --bg-1: #001200; --bg-2: #001a06; --bg-3: #002a0d;
+  --text: #b6ffd2; --text-dim: #5fa37a;
+  --accent-100: #00ff5a; --accent-300: #88ffaa; --accent-500: #00cc6a;
+  --r-2: 6px; --r-4: 10px;
+  display: block;
+}
+/* 2-column editor layout. The CSS textarea sits on the left, the preview sample
+   on the right. Falls back to a single column under 720px so the textarea remains
+   usable on mobile. */
+.ct-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 14px;
+  align-items: stretch;
+}
+.ct-editor-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ct-editor-col .field.ct-css { flex: 1; min-height: 180px; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 12.5px; line-height: 1.45; }
+/* Preview pane border + background fall back to current theme tokens so the pane
+   blends in. Users can re-skin within via their .ct-preview-scope CSS. */
+.ct-preview-scope {
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-4);
+  padding: 12px;
+  min-height: 180px;
+  overflow: hidden;
+}
+.ct-preview-inner { display: flex; flex-direction: column; gap: 10px; }
+.ct-preview-title { font-size: 13px; font-weight: 600; letter-spacing: .04em; opacity: .85; }
+.ct-preview-login { display: flex; flex-direction: column; gap: 6px; }
+.ct-preview-field { background: var(--bg-0); color: var(--text); border: 1px solid var(--bg-3); border-radius: var(--r-2); padding: 6px 8px; font-size: 12px; opacity: .9; }
+.ct-preview-btn { background: rgb(var(--primary-rgb)); color: #001200; border: none; border-radius: var(--r-2); padding: 6px 10px; font-weight: 600; font-size: 12px; text-align: center; }
+.ct-preview-chat { display: flex; flex-direction: column; gap: 6px; }
+.ct-preview-bubble { background: var(--bg-2); color: var(--text); border: 1px solid var(--bg-3); border-radius: var(--r-4); padding: 6px 9px; font-size: 12px; max-width: 86%; }
+.ct-preview-bubble.ct-preview-out { background: rgb(var(--primary-rgb)); color: #001200; border-color: transparent; align-self: flex-end; }
+.ct-preview-bubble.ct-preview-tail { border-bottom-right-radius: 2px; }
+@media (max-width: 720px) {
+  .ct-editor-grid { grid-template-columns: 1fr; }
+  .ct-editor-col .field.ct-css { min-height: 140px; }
+  .ct-preview-scope { min-height: 110px; max-height: 28vh; overflow: auto; }
+}
+
 /* ============ Custom theme + ringtone UI ============ */
 .theme-opt-add {
   display: flex; align-items: center; justify-content: center;
