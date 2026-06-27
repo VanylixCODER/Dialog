@@ -218,7 +218,6 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
-<button class="theme-opt theme-opt-add" data-action="new-custom-theme" type="button"><span class="add-plus">+</span><span data-i18n="custom_theme_btn">Custom theme</span></button>
         </section>
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
@@ -340,46 +339,6 @@
       <div class="modal-actions">
         <button id="cgCancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
         <button id="cgCreate" class="btn-primary" data-i18n="btn_create_group" disabled>Create group</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Custom theme editor modal (was missing before commit fc95ede / "new start for groups").
-       JS handler на #customThemeModal / #ctName / #ctCss / #ctError / #ctSave / #ctCancel / #ctClose
-       полностью ready, click-delegation в самом низу app.js открывает / закрывает / сохраняет.
-       Без HTML клик по "+ Custom theme" в Settings → Themes ронял TypeError (null.classList).
-       Слева — .ct-preview-scope, куда live-превью (wrapCssInScope) инжектит пользовательский CSS;
-       справа — редактор имени + CSS-текстареа + errors. -->
-  <div id="customThemeModal" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card ct-card">
-      <button id="ctClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="custom_theme_title">Custom theme</div>
-      <div class="ct-grid">
-        <!-- Preview: live user CSS applied here. Sample contains a card mock with
-             title / field / button / chat bubble so themers can see their tokens. -->
-        <div class="ct-preview">
-          <div class="ct-label" data-i18n="custom_theme_preview_label">Live preview</div>
-          <div class="ct-preview-scope">
-            <div class="ct-preview-card">
-              <div class="ct-preview-title">DIALOG</div>
-              <div class="ct-preview-field">alice@chat</div>
-              <button class="ct-preview-btn" type="button">Send</button>
-              <div class="ct-preview-bubble">Hi! 👋</div>
-            </div>
-          </div>
-        </div>
-        <!-- Editor -->
-        <div class="ct-editor">
-          <div class="ct-label" data-i18n="custom_theme_name_ph">Theme name</div>
-          <input id="ctName" class="field ct-name" type="text" data-i18n-ph="custom_theme_name_ph" maxlength="40" autocomplete="off" />
-          <div class="ct-label">CSS</div>
-          <textarea id="ctCss" class="field ct-css" spellcheck="false" rows="10"></textarea>
-          <div id="ctError" class="form-error"></div>
-          <div class="modal-actions">
-            <button id="ctCancel" class="btn-ghost" data-i18n="custom_theme_cancel">Cancel</button>
-            <button id="ctSave" class="btn-primary" data-i18n="custom_theme_save">Save</button>
-          </div>
-        </div>
       </div>
     </div>
   </div>

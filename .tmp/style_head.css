@@ -1279,7 +1279,99 @@ a:focus-visible {
 .hub-close:hover { color: var(--accent-300); background: var(--accent-faint); border-color: var(--accent-400); }
 .hub-close:active { transform: rotate(90deg) scale(0.94); }
 
-
+/* Custom theme editor — live preview on the left, name + CSS textarea on the right.
+   .ct-preview-scope is the wrap target for the debounced live preview (see wrapCssInScope
+   <style id="ct-live-preview"> in app.js), so the .ct-preview-* sample elements below use
+   theme tokens — when the user types --bg-1, --primary-rgb and friends, the card/field/btn/
+   bubble here visibly react. Don't change .ct-* selectors without also updating the
+   sample HTML in <div id="customThemeModal">. */
+.modal-card.ct-card { width: min(760px, 96vw); padding: 24px 22px 20px; gap: 14px; }
+.ct-grid { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.ct-preview {
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 240px;
+}
+.ct-preview > .ct-preview-scope { flex: 1; display: flex; align-items: center; justify-content: center; padding: 6px; min-height: 0; }
+.ct-preview-card {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-3);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: var(--shadow-md), 0 0 24px rgba(var(--primary-rgb), 0.12);
+}
+.ct-preview-title {
+  font-weight: 800; font-size: 14px;
+  color: var(--accent-200); letter-spacing: 2px;
+  text-shadow: 0 0 6px rgba(var(--primary-rgb), 0.35);
+}
+.ct-preview-field {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text); font-size: 12px;
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+}
+.ct-preview-btn {
+  background: var(--accent-500); color: var(--bg-1);
+  border: none; border-radius: var(--r-2);
+  font-weight: 700; font-size: 12px;
+  padding: 9px 14px;
+  align-self: flex-start;
+  box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.25);
+  cursor: pointer;
+  transition: filter var(--t-fast) var(--ease);
+}
+.ct-preview-btn:hover { filter: brightness(1.08); }
+.ct-preview-bubble {
+  background: var(--accent-200); color: var(--bg-1);
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  font-size: 12px;
+  align-self: flex-end;
+  max-width: 85%;
+  box-shadow: var(--shadow-sm);
+}
+.ct-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ct-label {
+  font-size: 10px; color: var(--text-dim);
+  letter-spacing: 1.2px; text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.ct-css,
+#ctCss {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5;
+  background: var(--bg-0);
+  border: 1px solid var(--border-2);
+  color: var(--text);
+  resize: vertical;
+  width: 100%;
+  min-height: 220px;
+  tab-size: 2;
+  white-space: pre;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.ct-css:focus, #ctCss:focus {
+  outline: none;
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 2px var(--accent-faint);
+}
+@media (max-width: 640px) {
+  /* .ct-card width/height/radius already full-bleed via #customThemeModal .modal-card.ct-card
+     inside the 880px block (higher specificity); only the inner layout needs stacking here. */
+  .ct-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ct-preview { min-height: 180px; }
+  #ctCss { font-size: 12px; min-height: 200px; }
+}
 .req-add { display: flex; gap: 6px; }
 .req-add .field { flex: 1; }
 .req-add .btn-primary { width: auto; padding: 0 16px; flex: none; }
@@ -2131,6 +2223,44 @@ a:focus-visible {
 }
 [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
+/* ============ Mobile ============ */
+body[data-theme="nord"] {
+  --primary-rgb: 136, 192, 208;                   /* Frost-3 — primary #88c0d0 */
+  --accent-100: #eceff4; --accent-200: #d8dee9; --accent-300: #b8c4d6;
+  --accent-400: #88c0d0; --accent-500: #5e81ac; --accent-600: #4c566a;
+  --accent-glow: rgba(136, 192, 208, 0.5); --accent-soft: rgba(136, 192, 208, 0.16);
+  --bg-0: #2e3440; --bg-1: #3b4252; --bg-2: #434c5e; --bg-3: #4c566a; --bg-4: #303841;
+  --cyan-300: #8fbcbb;
+}
+/* Nord Light — light Polar Night + ice-blue Frost accents (Nord для дневного использования: снежный фон Snow Storm + акценты Frost и текст Polar Night). */
+body[data-theme="nord-light"] {
+  --primary-rgb: 136, 192, 208;                   /* Frost-3 #88c0d0 */
+  --accent-100: #ffffff; --accent-200: #f5f7fa; --accent-300: #b8c4d6;
+  --accent-400: #88c0d0; --accent-500: #5e81ac; --accent-600: #434c5e;
+  --accent-glow: rgba(136, 192, 208, 0.45); --accent-soft: rgba(136, 192, 208, 0.18);
+  --bg-0: #eceff4; --bg-1: #e5e9f0; --bg-2: #d8dee9; --bg-3: #d8dee9; --bg-4: #c8d0e0;
+  --cyan-300: #8fbcbb;        /* Frost-4 — secondary ice-mint */
+  --surface-1: #ffffff; --surface-2: #f5f7fa; --surface-3: #eceff4;
+  --border-1: rgba(46, 52, 64, 0.08); --border-2: rgba(46, 52, 64, 0.16); --border-3: rgba(46, 52, 64, 0.32);
+  --text: #2e3440;            /* Polar Night-0 — body text */
+  --text-strong: #3b4252;     /* Polar Night-1 — headings */
+  --text-dim: #4c566a;        /* Polar Night-3 — secondary text */
+  --danger: #b00020;
+  --glow-sm: 0 0 6px rgba(136, 192, 208, 0.35);
+  --glow-md: 0 0 14px rgba(136, 192, 208, 0.5);
+  --glow-lg: 0 0 26px rgba(136, 192, 208, 0.55);
+  --shadow-sm: 0 1px 2px rgba(46, 52, 64, 0.08);
+  --shadow-md: 0 4px 10px rgba(46, 52, 64, 0.14);
+  --shadow-lg: 0 10px 24px rgba(46, 52, 64, 0.18);
+  background: #eceff4;
+  color: #2e3440;
+  text-shadow: none;
+}
+/* Decorative effects off on light backgrounds (matrix-rain filter etc). */
+body[data-theme="nord-light"] .es-logo, body[data-theme="nord-light"] .mention, body[data-theme="nord-light"] .setting-tab { animation: none; text-shadow: none; }
+
+
+
 /* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
 @media (max-width: 720px) {
   .settings-overlay { padding: 0; align-items: end; }
@@ -2181,6 +2311,11 @@ a:focus-visible {
   .btn-primary, .btn-ghost { min-height: 48px; font-size: 14px; }
   .modal-actions { flex-wrap: wrap; }
   .modal-actions .btn-primary, .modal-actions .btn-ghost { flex: 1 1 140px; }
+  /* Custom theme modal is layered above settings — keep its own mobile sizing */
+  #customThemeModal .modal-card.ct-card { width: 100vw; max-height: 100dvh; border-radius: 0; }
+  .ct-label { font-size: 11px; }
+  #ctCss { font-size: 13px; min-height: 220px; }
+  #ctName, #ctSave, #ctCancel { min-height: 48px; font-size: 15px; }
 }
 
 @media (max-width: 720px) {
@@ -2352,14 +2487,12 @@ a:focus-visible {
 .theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
 
 /* ============ Themes ============ */
-/* :root задаёт базовые токены (legacy «High Contrast» / Matrix). Все темы СЕЙЧАС
-   пребилт-стайл — :root это дефолт-фон, а bоdy[data-theme="..."] переключает акценты и
-   декоративные слои (matrix/mono/midnight/dracula/flashbang). Никаких пользовательских
-   тем: swatch и пресеты зашиты в THEMES[] в app.js.
-   Тоны :root — это явный чёрный + неон, без зеленцовой дымки в --bg-* — поверх него
-   остальные темы — это переназначения токенов + (опц.) локальных декоративных слоёв. */
+/* :root уже задаёт base-токены чисто-чёрного default-вида (= «High Contrast»). Матрица
+   снята как тема: ключ «matrix» больше не появляется в пикере тем ни в i18n. Тоны :root
+   теперь — это явный чёрный + неон, без зеленцой дымки в --bg-*; поверх него остальные
+   темы — это переназначения токенов + (опц.) локальных декоративных слоёв. */
 
-/* Matrix — дефолт. Чёрный фон + неоновые акценты #00ff5a,
+/* Matrix — дефолт (= High Contrast, переименовано обратно). Чёрный фон + неоновые акценты #00ff5a,
    без движущейся скан-плёнки на чате (функциональные modalIn/cardIn/menuPop глушить нельзя —
    это «появилось/открылось» сигналы UI; их оставляем как есть). Матричный rAF-дождь из
    matrix.js сидит на логине поверх, а здесь его CSS-след выключен явно. */
@@ -2680,12 +2813,68 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
   background: var(--bg-1);
   color: var(--text);
   border: 1px solid var(--bg-3);
+  border-radius: var(--r-4);
+  padding: 12px;
+  min-height: 180px;
+  overflow: hidden;
+}
+.ct-preview-inner { display: flex; flex-direction: column; gap: 10px; }
+.ct-preview-title { font-size: 13px; font-weight: 600; letter-spacing: .04em; opacity: .85; }
+.ct-preview-login { display: flex; flex-direction: column; gap: 6px; }
+.ct-preview-field { background: var(--bg-0); color: var(--text); border: 1px solid var(--bg-3); border-radius: var(--r-2); padding: 6px 8px; font-size: 12px; opacity: .9; }
+.ct-preview-btn { background: rgb(var(--primary-rgb)); color: #001200; border: none; border-radius: var(--r-2); padding: 6px 10px; font-weight: 600; font-size: 12px; text-align: center; }
+.ct-preview-chat { display: flex; flex-direction: column; gap: 6px; }
+.ct-preview-bubble { background: var(--bg-2); color: var(--text); border: 1px solid var(--bg-3); border-radius: var(--r-4); padding: 6px 9px; font-size: 12px; max-width: 86%; }
+.ct-preview-bubble.ct-preview-out { background: rgb(var(--primary-rgb)); color: #001200; border-color: transparent; align-self: flex-end; }
+.ct-preview-bubble.ct-preview-tail { border-bottom-right-radius: 2px; }
+@media (max-width: 720px) {
+  .ct-editor-grid { grid-template-columns: 1fr; }
+  .ct-editor-col .field.ct-css { min-height: 140px; }
+  .ct-preview-scope { min-height: 110px; max-height: 28vh; overflow: auto; }
+}
 
-/* ============ Custom-theme cards (edit/delete actions) + ringtone UI ============ */
-/* Custom-theme rows used to live in a single shared block with theme-opt-add and the
-   ringtone pane. Custom themes are gone; the action-button / theme-badge CSS went with
-   them. We still need .ringtone-* styles below because the profile pane's ringtone
-   picker (HTML + JS) is still wired up. */
+/* ============ Custom theme + ringtone UI ============ */
+.theme-opt-add {
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px dashed var(--border-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.theme-opt-add:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-300);
+  background: var(--accent-faint);
+}
+.theme-opt-add .add-plus { font-size: 18px; margin-right: 8px; font-weight: 800; }
+
+/* Badged "custom" label inside a theme card */
+.theme-opt.custom .theme-badge {
+  display: inline-block;
+  font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent-300);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.theme-opt .theme-actions {
+  display: flex; gap: 4px; margin-top: 4px;
+}
+.theme-opt .theme-actions button {
+  flex: 1; font-size: 11px; padding: 4px 6px;
+  border: 1px solid var(--border-1);
+  background: transparent; color: var(--text-dim);
+  border-radius: 4px; cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.theme-opt .theme-actions button:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
+.theme-opt .theme-actions button.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.1); }
+
+/* Ringtone row in profile pane */
 .ringtone-row {
   display: flex; flex-direction: column; gap: 6px;
   padding: 8px 10px;
@@ -2713,6 +2902,13 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
 .ringtone-row .ringtone-btn:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
 .ringtone-row .ringtone-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.12); }
 .ringtone-row audio { width: 100%; margin-top: 6px; }
+
+/* CSS editor modal — textarea already styled by .field but slightly taller */
+#ctCss {
+  font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px; line-height: 1.45;
+  min-height: 180px; max-height: 320px; resize: vertical;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
