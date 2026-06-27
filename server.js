@@ -1,3 +1,22 @@
+// =====================================================================
+// REQUIRED ENVIRONMENT VARIABLES (read this before deploying!)
+// ---------------------------------------------------------------------
+// When DB_HOST is set, you MUST also set DB_PORT — otherwise db.js silently
+// defaults to port 4000 (its TiDB/Cloud-test fallback). With MySQL on 3306
+// you will get ECONNREFUSED retries forever. Set DB_PORT=3306 explicitly.
+//
+// Also recommended when DB_HOST is set:
+//   DB_USER     — sql user
+//   DB_PASS     — sql password (use a secret manager; do NOT commit)
+//   DB_NAME     — schema name
+//   DB_SSL=true — for managed MySQL/TiDB
+//   REDIS_HOST  — 127.0.0.1 in dev, your cache host in prod
+//   DB_POOL     — connection-pool size (default 10)
+//
+// Examples:
+//   Dev (local MySQL):   DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=dialog DB_PASS=dialog DB_NAME=dialog
+//   Prod (managed/TLS):  DB_HOST=mysql.example.com DB_PORT=3306 DB_USER=app DB_PASS=*** DB_NAME=dialog DB_SSL=true
+// =====================================================================
 import "dotenv/config";
 import express from "express";
 import { createServer as createHttp } from "http";
