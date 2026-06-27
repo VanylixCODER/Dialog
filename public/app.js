@@ -2276,6 +2276,13 @@ function switchTab(tab) {
   // Регидрация данных пейна при переключении вручную (иначе кликом по табу после открытия оверлея
   // демонстрируется placeholder / устаревший контент до явного повторного openSettings).
   hydratePane(tab);
+  // The flashbang-banner sits at the top of the settings card and is only
+  // relevant to the Themes tab; hide it on every other tab so it doesn't
+  // add unrelated noise to Profile / Contacts / Group. Uses the codebase's
+  // existing .hidden utility (display:none !important) for consistency with
+  // every other toggled-visibility element (modals, menus, etc.).
+  const banner = $("flashbangDisclaimer");
+  if (banner) banner.classList.toggle("hidden", tab !== "themes");
 }
 // Объявлен ДО hydratePane, чтобы не упасть в TDZ при первом вызове из openSettings().
 // { id: gsId, ts: Date.now() } — если уже фетчили эту группу в текущей открытой сессии оверлея, повторно не лупим /api/groups/:id.
