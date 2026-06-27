@@ -838,7 +838,7 @@ async function populateGroupSettingsPane() {
   if (body) body.classList.remove("hidden");
   const { ok, data } = await api("/api/groups/" + gsId, null, "GET");
   if (!ok) {
-    const err = $("gsError"); if (err) err.textContent = "Failed to load group"; // без i18n — отдельный ключ «t(\"err_*\")» в словаре не подходит
+    const err = $("gsError"); if (err) err.textContent = t("err_load_group"); // без i18n — отдельный ключ «t(\"err_*\")» в словаре не подходит
     return { ok: false };
   }
   gsOwner = data.owner === profile.login;
@@ -876,7 +876,7 @@ async function populateGroupSettingsPane() {
   return { ok: true };
 }
 $("gsAvaBtn").onclick = () => $("gsAvaFile").click();
-$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 2 * 1024 * 1024) { $("gsError").textContent = "≤ 2 MB"; return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
+$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 2 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
 $("gsSave").onclick = async () => {
   if (!gsOwner) return;
   const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
@@ -959,7 +959,7 @@ async function resolvePending(pid, action) {
 $("gsGenerateCode").onclick = async () => {
   $("gsInviteError").textContent = "";
   const { ok, data } = await api("/api/groups/" + gsId + "/invites", {});
-  if (!ok) { $("gsInviteError").textContent = data.error || "Couldn't create invite"; return; }
+  if (!ok) { $("gsInviteError").textContent = data.error || t("err_invite_create"); return; }
   // Endpoint возвращает plaintext ОДИН РАЗ (как пароль) — формируем полный URL и кладём в clipboard.
   // Fallback: буфер недоступен → показываем URL/код в тосте, чтобы пользователь мог скопировать вручную.
   const link = location.origin + (data.url || ("/?invite=" + encodeURIComponent(data.code || "")));
@@ -1142,7 +1142,7 @@ $("createGroupModal")?.addEventListener?.("click", (e) => { if (e.target === $("
 $("cgAvaBtn")?.addEventListener?.("click", () => $("cgAvaFile")?.click());
 $("cgAvaFile")?.addEventListener?.("change", (e) => {
   const f = e.target.files[0]; if (!f) return;
-  if (f.size > 2 * 1024 * 1024) { $("cgError").textContent = "≤ 2 MB"; return; }
+  if (f.size > 2 * 1024 * 1024) { $("cgError").textContent = t("err_avatar_too_big"); return; }
   const r = new FileReader();
   r.onload = () => {
     cgAvatar = r.result;
@@ -1228,7 +1228,7 @@ let pendingAvatar = null;
 $("avaUploadBtn") && ($("avaUploadBtn").onclick = () => $("avaFile").click());
 $("avaFile") && ($("avaFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
-  if (f.size > 2 * 1024 * 1024) { $("profileError").textContent = "≤ 2 MB"; return; }
+  if (f.size > 2 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
   const r = new FileReader();
   r.onload = () => { pendingAvatar = r.result; const img = $("profileAvaImg"); img.src = r.result; img.style.display = "block"; $("profileAvaInit").style.display = "none"; };
   r.readAsDataURL(f);
