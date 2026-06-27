@@ -2012,33 +2012,6 @@ a:focus-visible {
 [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
 /* ============ Mobile ============ */
-body[data-theme="amber"] {
-  --primary-rgb: 255, 140, 0;                     /* CRT amber — primary #ff8c00 */
-  --accent-100: #ffeac9; --accent-200: #ffce72; --accent-300: #ffae40;
-  --accent-400: #ff8c00; --accent-500: #b36800; --accent-600: #7a4a00;
-  --accent-glow: rgba(255, 174, 64, 0.55); --accent-soft: rgba(255, 174, 64, 0.16);
-  --bg-0: #0a0500; --bg-1: #100700; --bg-2: #180d00; --bg-3: #221300; --bg-4: #2e1a00;
-  --cyan-300: #ffd87a;
-}
-
-body[data-theme="red"] {
-  --primary-rgb: 221, 40, 40;                     /* alert red — primary #dd2828 */
-  --accent-100: #ffd1d1; --accent-200: #ff8a8a; --accent-300: #ff5252;
-  --accent-400: #dd2828; --accent-500: #aa1414; --accent-600: #800a0a;
-  --accent-glow: rgba(255, 82, 82, 0.55); --accent-soft: rgba(255, 82, 82, 0.16);
-  --bg-0: #100000; --bg-1: #170202; --bg-2: #200404; --bg-3: #2a0606; --bg-4: #380909;
-  --cyan-300: #ffae7a;
-}
-
-body[data-theme="vice"] {
-  --primary-rgb: 255, 58, 163;                    /* Miami pink — primary #ff3aa3 */
-  --accent-100: #ffd8ee; --accent-200: #ffa8d8; --accent-300: #ff7ec0;
-  --accent-400: #ff3aa3; --accent-500: #d11880; --accent-600: #94085c;
-  --accent-glow: rgba(255, 58, 163, 0.55); --accent-soft: rgba(255, 58, 163, 0.18);
-  --bg-0: #0d0612; --bg-1: #130820; --bg-2: #190c28; --bg-3: #241238; --bg-4: #341a50;
-  --cyan-300: #00e1ff;
-}
-
 body[data-theme="nord"] {
   --primary-rgb: 136, 192, 208;                   /* Frost-3 — primary #88c0d0 */
   --accent-100: #eceff4; --accent-200: #d8dee9; --accent-300: #b8c4d6;
@@ -2075,42 +2048,6 @@ body[data-theme="nord-light"] {
 body[data-theme="nord-light"] .es-logo, body[data-theme="nord-light"] .mention, body[data-theme="nord-light"] .setting-tab { animation: none; text-shadow: none; }
 
 
-
-body[data-theme="lofi"] {
-  --primary-rgb: 106, 142, 122;                   /* muted green — primary #6a8e7a */
-  --accent-100: #dfeae3; --accent-200: #a9c2b5; --accent-300: #84a892;
-  --accent-400: #6a8e7a; --accent-500: #557766; --accent-600: #425d50;
-  --accent-glow: rgba(106, 142, 122, 0.4); --accent-soft: rgba(106, 142, 122, 0.14);
-  --bg-0: #0a0e0c; --bg-1: #0e1311; --bg-2: #131917; --bg-3: #1a221e; --bg-4: #232d28;
-  --cyan-300: #88a4a8;
-}
-
-body[data-theme="aero"] {
-  --primary-rgb: 0, 191, 255;                    /* sky aero blue — primary #00bfff */
-  --accent-100: #f0f9ff; --accent-200: #bae6fd; --accent-300: #7dd3fc;
-  --accent-400: #00bfff; --accent-500: #0099cc; --accent-600: #006699;
-  --accent-glow: rgba(var(--primary-rgb), 0.5); --accent-soft: rgba(var(--primary-rgb), 0.18);
-  --accent-faint: rgba(var(--primary-rgb), 0.08);
-  --bg-0: #ffffff; --bg-1: #f3f9fd; --bg-2: #e3eff8; --bg-3: #c8dff0; --bg-4: #a5cce6;
-  --surface-1: rgba(255, 255, 255, 0.4); --surface-2: rgba(255, 255, 255, 0.6); --surface-3: rgba(255, 255, 255, 0.85);
-  --border-1: rgba(0, 80, 130, 0.08); --border-2: rgba(0, 80, 130, 0.18); --border-3: rgba(0, 80, 130, 0.32);
-  --text: #0c2a3d; --text-strong: #082030; --text-dim: #2e5a78;
-  /* «Aero» софт-глоу и лёгкая глубина теней — словно «стекло на столе» */
-  --glow-sm: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 8px rgba(var(--primary-rgb), 0.2);
-  --glow-md: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 14px rgba(var(--primary-rgb), 0.3);
-  --glow-lg: 0 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 22px rgba(var(--primary-rgb), 0.35);
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 6px rgba(0, 80, 130, 0.10);
-  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 22px rgba(0, 80, 130, 0.14);
-  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 46px rgba(0, 80, 130, 0.20);
-  --cyan-300: #7cb342;                          /* Frutiger grass-green — «трава» акцент */
-  --danger: #c13838;
-  background: var(--bg-1);
-  background-image:
-    radial-gradient(ellipse at 30% 20%, rgba(124, 179, 66, 0.10), transparent 60%),
-    radial-gradient(ellipse at 70% 80%, rgba(0, 191, 255, 0.10), transparent 60%);
-  color: var(--text);
-  text-shadow: none;
-}
 
 /* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
 @media (max-width: 720px) {
@@ -2384,14 +2321,6 @@ body[data-theme="matrix"] [data-tip]::after { transition: opacity var(--t-fast) 
 body[data-theme="matrix"] .es-logo { animation: none; text-shadow: none; }
 
 /* Amber CRT — янтарный фосфор */
-body[data-theme="midnight"] {
-  --primary-rgb: 90, 138, 255;                    /* icy blue — primary #5a8aff */
-  --accent-100: #e5f0ff; --accent-200: #b6d2ff; --accent-300: #88aedb;
-  --accent-400: #5a8aff; --accent-500: #3868d8; --accent-600: #2a4ea8;
-  --accent-glow: rgba(90, 138, 255, 0.55); --accent-soft: rgba(90, 138, 255, 0.16);
-  --bg-0: #06080f; --bg-1: #0a0e1c; --bg-2: #0f1428; --bg-3: #141c34; --bg-4: #1d2748;
-  --cyan-300: #6ed8ff;
-}
 /* Vice City — неоновый Майами 80-х: розовый как primary + бирюза как cyan. На пурпурной
    ночи, без оранжево-зелёного tone. .msg.me .bubble получает ярко-малиновую подложку. */
 body[data-theme="dracula"] {

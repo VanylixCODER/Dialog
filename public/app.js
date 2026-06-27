@@ -61,9 +61,6 @@ const sfx = {
   leave: () => beepSeq([[784, 0.09], [415, 0.13]]),              // участник вышел
   mute: () => beep(300, 0.07),
   unmute: () => beep(560, 0.07),
-  // MSN / Windows Live Messenger «door knock» — два коротких перкуссионных удара (tok-tok).
-  // 620 Hz then 540 Hz with quick exponential decay, ~90 ms между ударами. Только для темы aero.
-  knock: () => { beep(620, 0.04, 0.1); setTimeout(() => beep(540, 0.06, 0.12), 90); },
 };
 
 // ---- Custom ringtone (localStorage, ≤13s, ≤4MB) ----
@@ -157,15 +154,14 @@ document.addEventListener("change", (e) => {
 });
 loadRingtone();
 
-// MSN aero theme uses the classic door-knock sound; остальные темы — обычный beep.
-function msgSfxForTheme() { return document.body.dataset.theme === "aero" ? sfx.knock : sfx.msg; }
+// Per-theme msg SFX hook (currently uniform for all built-in themes).
+function msgSfxForTheme() { return sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
 // ---------- Темы ----------
 // Конфиг каждой темы: ключ применяется к <body data-theme="...">; name/desc — i18n-ключи;
 // swatch — 4 hex-цвета для превью в #themeGrid (фон, акцент 1, акцент 2, тёмный фон).
 // Матрица была выпилена как отдельная тема — High Contrast стал дефолтом. Вместо неё
-// добавлены: midnight (глубокий синий), vice (80s neon), dracula (палитра Dracula),
 // nord (палитра Nord) и светлый flashbang. Порядок — от дефолтной и популярных неоновых
 // к более «нишевым», flashbang идёт последним как «наоборот-тема».
 // Встроенные темы — видны сразу в Settings → Themes. Порядок от наиболее «дефолтных» к «нишевым»:
@@ -180,12 +176,6 @@ const THEMES = [
   { key: "mono",       name: "theme_mono",       desc: "theme_desc_mono",       swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },
   { key: "mono-light", name: "theme_mono_light", desc: "theme_desc_mono_light", swatch: ["#000000", "#404040", "#6a6a6a", "#ffffff"] },
   { key: "flashbang",  name: "theme_flashbang",  desc: "theme_desc_flashbang",  swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-  { key: "vice",       name: "theme_vice",       desc: "theme_desc_vice",       swatch: ["#ff3aa3", "#00e1ff", "#d11880", "#130820"] },
-  { key: "midnight",   name: "theme_midnight",   desc: "theme_desc_midnight",   swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
-  { key: "amber",      name: "theme_amber",      desc: "theme_desc_amber",      swatch: ["#ff8c00", "#ffae40", "#b36800", "#180d00"] },
-  { key: "red",        name: "theme_red",        desc: "theme_desc_red",        swatch: ["#dd2828", "#ff5252", "#aa1414", "#200404"] },
-  { key: "lofi",       name: "theme_lofi",       desc: "theme_desc_lofi",       swatch: ["#6a8e7a", "#84a892", "#557766", "#131917"] },
-  { key: "aero",       name: "theme_aero",       desc: "theme_desc_aero",       swatch: ["#00bfff", "#7cb342", "#082030", "#f0f9ff"] },
 ];
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix; unknown keys → matrix; ghost custom keys
