@@ -4,27 +4,31 @@ import { cacheGet, cacheSet, cacheDel } from "./cache.js";
 const HIST_TTL = 60;                // история комнаты живёт в кэше до 60с
 const HIST_MAX_CACHE = 256 * 1024;  // не кэшируем тяжёлые (медиа) комнаты
 
-// Конфиг подключения: либо отдельные DB_HOST/DB_USER/... (удобно для TiDB — не надо
-// URL-кодировать пароль), либо единый DATABASE_URL, либо localhost по умолчанию.
-let config;
-if (process.env.DB_HOST) {
-  config = {
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT || 4000),
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASS || "",
-    database: process.env.DB_NAME || "test",
-  };
-} else {
-  const u = new URL(process.env.DATABASE_URL || "mysql://dialog:dialog@localhost:3306/dialog");
-  config = {
-    host: u.hostname,
-    port: u.port ? Number(u.port) : 3306,
-    user: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    database: u.pathname.replace(/^\//, ""),
-  };
+// Конфиг подключения: только через отдельные env vars (DB_HOST, DB_PORT, DB_USER,
+// DB_PASS, DB_NAME). URL-форма с credentials в явном виде не поддерживается — такие
+// строки попадают в логи и stack traces.
+// SECURITY: DB credentials are configured via individual env vars ONLY. We intentionally
+// do NOT support DATABASE_URL-style connection strings where the username and password
+// are embedded in the URL — they get logged, cached, and exposed in stack traces, which
+// is the leak we are explicitly avoiding here.
+if (process.env.DATABASE_URL) {
+  console.warn("[db] DATABASE_URL is set but ignored — use DB_HOST/DB_PORT/DB_USER/DB_PASS/DB_NAME instead. URL-form credentials leak via logs and stack traces.");
 }
+let config;
+if (!process.env.DB_HOST) {
+  throw new Error(
+    "DB_HOST is required. Set DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME env vars " +
+    "(see server.js header for examples). Do not use a DATABASE_URL with embedded " +
+    "credentials — it is not supported."
+  );
+}
+config = {
+  host:     process.env.DB_HOST,
+  port:     Number(process.env.DB_PORT || 3306),   // 3306 is the MySQL standard; the old env-var branch defaulted to 4000 (typo, corrected)
+  user:     process.env.DB_USER || "root",
+  password: process.env.DB_PASS || "",
+  database: process.env.DB_NAME || "test",
+};
 config.charset = "utf8mb4";
 config.connectionLimit = Number(process.env.DB_POOL || 10);
 config.waitForConnections = true;
@@ -43,7 +47,7 @@ export async function waitForDb(retries = 30, delayMs = 1000) {
     try { await pool.query("SELECT 1"); return; }
     catch (e) {
       console.error("Не удалось подключиться к MySQL:", e.message);
-      console.error("Проверьте DATABASE_URL/DB_* или запустите контейнер dialog-mysql.");
+      console.error("Проверьте DB_HOST/DB_USER/DB_PASS/DB_NAME или запустите контейнер dialog-mysql.");
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }

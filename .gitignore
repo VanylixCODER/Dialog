@@ -59,3 +59,13 @@ scripts/resolve-rebase-conflicts.py
 .tmp/move_disclaimer.py
 .tmp/peek.py
 .tmp/peek2.py
+.tmp/db_head.txt
+.tmp/fix_db_polish.py
+.tmp/fix_db.py
+.tmp/fix_db2.py
+.tmp/fix_db3.py
+.tmp/peek_db.py
+.tmp/peek_db2.py
+.tmp/peek_now.py
+.tmp/peek3.py
+.tmp/remove_sound.py
