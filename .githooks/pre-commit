@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block commits containing unmerged git conflict markers.
+# Catches the broken state that previously slipped past `node --check`
+# because V8 silently tolerated `<<<<<<<` / `=======` / `>>>>>>>` as
+# ASCII text inside JS string literals until very specific line patterns.
+#
+# Install: `git config core.hooksPath .githooks` (one-time per clone).
+
+set -e
+
+# Staged files only — what would actually land in this commit.
+files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+if [ -z "$files" ]; then
+  exit 0
+fi
+
+# Restrict the grep to a strict line-anchored pattern so decorative
+# `==========` inside comments / string literals don't false-positive.
+conflicts=$(printf '%s\n' "$files" | xargs -r grep -HnE '^(<<<<<<< |=======$|>>>>>>> )' 2>/dev/null || true)
+
+if [ -n "$conflicts" ]; then
+  cat <<'EOF'
+
+[error] COMMIT BLOCKED — unmerged git conflict markers found in staged files:
+EOF
+  echo "$conflicts"
+  cat <<'EOF'
+
+Resolve the conflicts (<<<<<<< / ======= / >>>>>>>) before committing.
+If a decoratively-named comment contains `===========` it's not a conflict —
+use a different marker or reword the comment, then try again.
+EOF
+  exit 1
+fi
+
+exit 0
