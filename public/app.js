@@ -147,6 +147,7 @@ document.addEventListener("change", (e) => {
 });
 loadRingtone();
 
+
 // Per-theme msg SFX hook (currently uniform for all built-in themes).
 function msgSfxForTheme() { return sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
@@ -336,6 +337,50 @@ function applyTheme(key) {
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+  // Easter egg hook — fires only on explicit user selection (NOT on init restore, see loadSavedTheme()).
+  if (key === "flashbang") maybeFlashbangEgg();
+}
+// Restore theme from localStorage on init WITHOUT triggering the flashbang easter egg.
+// Reads the saved key and stamps body[data-theme] directly. Invalid/missing keys leave
+// the attribute empty, so :root defaults (matrix-style tokens) apply — same as before
+// this fix, except now an actual saved pick keeps across reloads.
+function loadSavedTheme() {
+  try {
+    const saved = localStorage.getItem("dialog_theme");
+    if (saved && THEMES.find((x) => x.key === saved)) document.body.dataset.theme = saved;
+  } catch {}
+}
+
+// ---- Flashbang easter egg ----
+// 5% chance on user-driven theme selection → 2s later a full-screen #fff overlay drops;
+// clicking it (or Enter/Space when focused) plays /src/cs-go-flashbang.mp3 and dismisses.
+// Pending guard prevents the 2s timer from stacking on spam-clicks of the Flashbang swatch;
+// triggerFlashbangEgg() guards against the user switching OFF Flashbang during the wait
+// (we don't want a white overlay dropping over Matrix/Midnight/etc).
+let _flashbangEggPending = false;
+function maybeFlashbangEgg() {
+  if (_flashbangEggPending) return;
+  if (Math.random() >= 0.05) return;     // 5% chance
+  _flashbangEggPending = true;
+  setTimeout(triggerFlashbangEgg, 2000);
+}
+function triggerFlashbangEgg() {
+  _flashbangEggPending = false;
+  if (document.body.dataset.theme !== "flashbang") return;
+  const overlay = document.createElement("div");
+  overlay.className = "flashbang-egg";
+  overlay.setAttribute("role", "button");
+  overlay.setAttribute("aria-label", "flashbang");
+  overlay.tabIndex = 0;
+  const dismiss = () => {
+    // Click / keydown is the user-gesture window for Audio.play() — required by autoplay policies.
+    try { const a = new Audio("/src/cs-go-flashbang.mp3"); a.play().catch(() => {}); } catch {}
+    overlay.remove();
+  };
+  overlay.onclick = dismiss;
+  overlay.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); dismiss(); } };
+  document.body.appendChild(overlay);
+  overlay.focus(); // so Enter/Space work without a prior click
 }
 
 function renderThemes() {
@@ -2307,7 +2352,7 @@ function setIcons() {
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
 
 // ---------- Старт ----------
-initLang(); setIcons(); checkSession();
+loadSavedTheme(); initLang(); setIcons(); checkSession();
 
 // Wire up custom-theme modal + + Custom button
 (function () {
