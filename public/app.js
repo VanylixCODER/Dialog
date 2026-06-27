@@ -21,13 +21,6 @@ function debounce(fn, ms) {
 // Bound once: typing in #ctCss re-wraps the CSS via wrapCssInScope under .ct-preview-scope
 // and injects into a dedicated <style id="ct-live-preview">. Debounced so we don't thrash
 // on every keystroke while still feeling live.
-function bindLivePreview() {
-  const ta = $('ctCss');
-  if (!ta) return;
-  const onInput = debounce(() => renderLivePreview(ta.value), 80);
-  ta.addEventListener('input', onInput);
-}
-
 // ---------- Состояние ----------
 let token = localStorage.getItem("dialog_token") || null;
 let profile = null, myName = "";
@@ -159,289 +152,38 @@ function msgSfxForTheme() { return sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
 
 // ---------- Темы ----------
-// Конфиг каждой темы: ключ применяется к <body data-theme="...">; name/desc — i18n-ключи;
-// swatch — 4 hex-цвета для превью в #themeGrid (фон, акцент 1, акцент 2, тёмный фон).
-// Матрица была выпилена как отдельная тема — High Contrast стал дефолтом. Вместо неё
-// nord (палитра Nord) и светлый flashbang. Порядок — от дефолтной и популярных неоновых
-// к более «нишевым», flashbang идёт последним как «наоборот-тема».
-// Встроенные темы — видны сразу в Settings → Themes. Порядок от наиболее «дефолтных» к «нишевым»:
-// Matrix (default), Dracula, Nord, mono-дуэт (dark), mono-light (его «зеркальная версия»), flashbang (чисто белый),
-// затем цветные/retros (не видены по умолчанию, но остаются в списке).
-// swatch = [accent1, accent2, accent3, bg] — 4 цвета для превью-полоски в #themeGrid.
+// 5 pre-stabilized themes. Matrix — дефолт; legacy "contrast"/"high_contrast" localStorage
+// значения мигрируются в "matrix" в applyTheme() ниже. swatch = [accent1, accent2, accent3, bg]
+// — 4 цвета для превью-полоски в #themeGrid.
 const THEMES = [
-  { key: "contrast",  name: "theme_contrast",  desc: "theme_desc_contrast",  swatch: ["#00ff5a", "#88ffaa", "#ffffff", "#000000"] },
+  { key: "matrix",    name: "theme_matrix",    desc: "theme_desc_matrix",    swatch: ["#00ff5a", "#88ffaa", "#b6ffd2", "#000000"] },
+  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#ffffff", "#cccccc", "#888888", "#000000"] },
   { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
   { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-  { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#18181b", "#71717a", "#27272a", "#ffffff"] },];
+];
 function applyTheme(key) {
-  // Legacy "contrast"/"high_contrast" → matrix; unknown keys → matrix; ghost custom keys
-  // (e.g. localStorage kept dialog_theme="custom_5" while the user deleted that
-  // custom theme) also → matrix so the body attr never sticks on a non-existent theme.
+  // Legacy "contrast"/"high_contrast" → matrix (migration for users with old localStorage);
+  // unknown keys → matrix. Custom themes no longer exist, so we don't try to remap those.
   if (key === "contrast" || key === "high_contrast") key = "matrix";
-  else if (!THEMES.find((x) => x.key === key) && !(key.startsWith("custom_") && loadCustomThemes().some((c) => c.id === key))) key = "matrix";
+  else if (!THEMES.find((x) => x.key === key)) key = "matrix";
   document.body.dataset.theme = key;
   try { localStorage.setItem("dialog_theme", key); } catch {}
-  injectCustomThemeStyle(key);
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
-}
-
-// ---- Custom theme CSS injection (set/clear <style> tag with body[data-theme="custom_X"] rules) ----
-let _customThemeStyleEl = null;
-function injectCustomThemeStyle(key) {
-  if (!_customThemeStyleEl) {
-    _customThemeStyleEl = document.createElement("style");
-    _customThemeStyleEl.id = "custom-theme-style";
-    document.head.appendChild(_customThemeStyleEl);
-  }
-  if (!key.startsWith("custom_")) { _customThemeStyleEl.textContent = ""; return; }
-  const ct = loadCustomThemes().find((t) => t.id === key);
-  if (!ct) { _customThemeStyleEl.textContent = ""; return; }
-  // Inject under body[data-theme="custom_X"] so user CSS can't escape.
-  // We need to prefix each top-level rule with that selector. Naive approach (works for simple CSS): wrap whole CSS in a top-level selector.
-  _customThemeStyleEl.textContent = wrapCssForCustomScope(ct.css, key);
-}
-// Wrap user CSS so it can't leak outside `body[data-theme="custom_X"]`. State-machine parser
-// tracks string (' "), comment (/* */) and brace depth so braces inside {url('a{b}')} or
-// `/* { */` don't break depth counting. For each top-level rule:
-//   • @keyframes / @font-face — pass through (defines keyframe names / `@font-face src: url()`);
-//     scoping the inner rules with body[data-theme=...] would break them.
-//   • @media / @supports / @container / @document / @-rule-with-inner-block — recurse: only the
-//     inner block gets wrapped rule-by-rule, header stays untouched.
-//   • Bare declarations (`--primary-rgb: 0,255,90;`) — fit them under body[data-theme="..."] so
-//     CSS custom-properties cascade to UI descendants. This is the bug the old parser had:
-//     bare decls have no `{}`, so they fell into the trailing-junk fallback and were appended
-//     verbatim — browser rejected them as invalid top-level.
-//   • Any other selector — prefix selector with body[data-theme="custom_X"].
-// Wrap user CSS so it can't leak outside `body[data-theme="custom_X"]`. State-machine
-// tokenizer tracks string (' "), comment (/* */) and brace depth so braces inside
-// `url("a{b}")` or comments don't break depth counting. For each top-level rule:
-//   - @keyframes (@-webkit-keyframes / @-moz-keyframes), @font-face, @page, @charset,
-//     @import - pass through untouched. @keyframes names are global; @font-face src:
-//     url() must be unscoped or the URL breaks.
-//   - @media / @supports / @container / @-rule-with-inner-block - recurse: header
-//     stays intact, only the inner block is re-wrapped rule-by-rule.
-//   - Bare declarations (`--primary-rgb: 0,255,90;`) - wrap under
-//     `body[data-theme="custom_X"] { ... }` so CSS custom-properties actually apply
-//     when this theme is active. The old naive parser dumped these verbatim and
-//     the browser rejected them as invalid top-level.
-//   - Selector rules - prefix selector with `body[data-theme="custom_X"]`.
-//
-// Mixed-entry case: when a chunk has leading bare decls AND a trailing selector
-// block (`--x: y;\n.foo { ... }`), split on the LAST `;` before `{` so decls go
-// under their own scoped block and the selector stays a clean selector.
-// Thin wrapper: custom themes always live under body[data-theme="custom_X"].
-function wrapCssForCustomScope(css, key) {
-  return wrapCssInScope(css, 'body[data-theme="' + key + '"]');
-}
-
-// ---- Custom-theme live preview ----------------------------------------------------
-// Mount a <style> tag once that scopes user-typed CSS into .ct-preview-scope, so the
-// preview sample (fake login card + chat bubbles + buttons) reflects the user's CSS
-// as they type. Using the same wrapCssInScope primitive keeps scoping semantics
-// identical to the saved theme: bare --vars get nested under the scope, @media inner
-// rules inherit the scope recursively, @keyframes/@font-face pass through.
-let _livePreviewStyleEl = null;
-function ensureLivePreviewStyle() {
-  if (_livePreviewStyleEl && _livePreviewStyleEl.isConnected) return _livePreviewStyleEl;
-  _livePreviewStyleEl = document.createElement('style');
-  _livePreviewStyleEl.id = 'ct-live-preview';
-  document.head.appendChild(_livePreviewStyleEl);
-  return _livePreviewStyleEl;
-}
-function renderLivePreview(rawCss) {
-  const el = ensureLivePreviewStyle();
-  // If empty, clear so the preview falls back to default (matrix) tokens.
-  if (!rawCss || !rawCss.trim()) { el.textContent = ''; return; }
-  try {
-    el.textContent = wrapCssInScope(rawCss, '.ct-preview-scope');
-  } catch (err) {
-    // Bad CSS: leave previous render in place; the syntax-highlight of the textarea
-    // will show the problem. Don't crash the modal.
-    console.warn('live preview wrap failed', err);
-  }
-}
-function clearLivePreview() {
-  if (_livePreviewStyleEl) _livePreviewStyleEl.textContent = '';
-}
-function wrapCssInScope(css, scope) {
-
-  let out = '', buf = '', depth = 0, i = 0, inString = null, inComment = false;
-  const emitTopLevel = (chunk) => {
-    const trimmed = chunk.trim();
-    if (!trimmed) return;
-    if (trimmed.startsWith('@')) {
-      const m = trimmed.match(/^@[a-zA-Z-]+/);
-      const atName = m ? m[0] : '@';
-      const passthrough = atName === '@keyframes' || atName === '@-webkit-keyframes' ||
-                           atName === '@-moz-keyframes' || atName === '@font-face' ||
-                           atName === '@page' || atName === '@charset' || atName === '@import';
-      if (passthrough) { out += chunk; return; }
-      const openIdx = chunk.indexOf('{');
-      const lastClose = chunk.lastIndexOf('}');
-      if (openIdx !== -1 && lastClose !== -1 && lastClose > openIdx) {
-        const header = chunk.slice(0, openIdx + 1);
-        const inner = chunk.slice(openIdx + 1, lastClose);
-        const footer = chunk.slice(lastClose);
-        out += header + wrapCssInScope(inner, scope) + footer;
-      } else { out += chunk; }
-      return;
-    }
-    const braceIdx = chunk.indexOf('{');
-    if (braceIdx === -1) {
-      const decls = chunk.trim();
-      if (decls) out += scope + ' {\n' + decls + '\n}\n';
-      return;
-    }
-    const head = chunk.slice(0, braceIdx);
-    const body = chunk.slice(braceIdx);
-    // Mixed entry: `--x: y;\n.foo { ... }`. Split on the LAST ';' that occurs in head so
-    // everything before becomes a scoped decl-block and everything after is a clean selector.
-    // The original heuristic checked `head.trimEnd().endsWith(';')` — which is FALSE when the
-    // head extends past the ';' into a selector, so mixed entries got concatenated malformed.
-    const lastSemi = head.lastIndexOf(';');
-    if (lastSemi >= 0 && head.slice(lastSemi + 1).trim().length > 0) {
-      const decls = head.slice(0, lastSemi + 1).trim();
-      const sel   = head.slice(lastSemi + 1).trim();
-      if (decls) out += scope + ' {\n' + decls + '\n}\n';
-      out += scope + ' ' + sel + body;
-      return;
-    }
-    // Pure selector (no ';' in head — `.foo { ... }`) OR trailing semicolon only
-    // (`--x: y;` with no selector after, but treat the decls as their own scoped block).
-    if (lastSemi >= 0) {
-      const decls = head.trim();
-      if (decls) out += scope + ' {\n' + decls + '\n}\n';
-    } else {
-      const sel = head.trim();
-      if (sel) out += scope + ' ' + sel + body;
-    }
-  };
-  while (i < css.length) {
-    const c = css[i];
-    if (inComment) {
-      buf += c;
-      if (c === '*' && css[i + 1] === '/') { buf += '/'; i += 2; inComment = false; continue; }
-      i++; continue;
-    }
-    if (inString) {
-      buf += c;
-      if (c === '\\' && i + 1 < css.length) { buf += css[i + 1]; i += 2; continue; }
-      if (c === inString) inString = null;
-      i++; continue;
-    }
-    if (c === '/' && css[i + 1] === '*') { inComment = true; buf += '/*'; i += 2; continue; }
-    if (c === '"' || c === "'") { inString = c; buf += c; i++; continue; }
-    if (c === '{') { depth++; buf += c; i++; continue; }
-    if (c === '}') {
-      buf += c; depth--; i++;
-      if (depth === 0) {
-        const trimmed = buf.trim();
-        if (trimmed) emitTopLevel(buf);
-        buf = '';
-      }
-      continue;
-    }
-    buf += c; i++;
-  }
-  if (buf.trim()) {
-    const trimmed = buf.trimStart();
-    if (!trimmed.startsWith('@') && trimmed.includes(':')) emitTopLevel(buf);
-    else if (trimmed.startsWith('@')) out += buf;
-  }
-  return out;
-}
-// ---- Custom themes (localStorage) ----
-const CUSTOM_THEMES_KEY = "dialog_custom_themes";
-const CUSTOM_CSS_CAP = 8000;
-const CUSTOM_THEMES_CAP = 5;
-
-function loadCustomThemes() {
-  try { const raw = localStorage.getItem(CUSTOM_THEMES_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
-}
-function saveCustomThemes(list) { try { localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(list.slice(0, CUSTOM_THEMES_CAP))); } catch {} }
-function genCustomThemeId() {
-  const list = loadCustomThemes();
-  let n = 1;
-  while (list.some((t) => t.id === "custom_" + n)) n++;
-  return "custom_" + n;
-}
-function nextCustomThemeId() { return genCustomThemeId(); }
-function openCustomThemeModal(editId) {
-  const list = loadCustomThemes();
-  const isEdit = !!(editId && list.find((t) => t.id === editId));
-  if (!isEdit && list.length >= CUSTOM_THEMES_CAP) {
-    notify(t("custom_theme_limit")); return;
-  }
-  const m = $("customThemeModal");
-  const ex = isEdit ? list.find((t) => t.id === editId) : null;
-  $("ctName").value = ex ? ex.name : "";
-  $("ctCss").value = ex ? ex.css : "/* sample rules */\n--primary-rgb: 0, 255, 90;\n--bg-1: #001200;\n--text: #b6ffd2;";
-  $("ctError").textContent = "";
-  $("ctSave").dataset.editId = editId || "";
-  m.classList.remove("hidden");
-  setTimeout(() => $("ctName").focus(), 30);
-  renderLivePreview($("ctCss").value || "");
-}
-function closeCustomThemeModal() { clearLivePreview(); $("customThemeModal").classList.add("hidden"); }
-function submitCustomTheme() {
-  const id = $("ctSave").dataset.editId || nextCustomThemeId();
-  const name = ($("ctName").value || "").trim();
-  let css = $("ctCss").value || "";
-  const err = $("ctError");
-  err.textContent = "";
-  if (!name) { err.textContent = t("custom_theme_name_ph") + "?"; return; }
-  if (!css.trim()) { err.textContent = t("custom_theme_empty"); return; }
-  if (css.length > CUSTOM_CSS_CAP) { err.textContent = t("custom_theme_too_long"); return; }
-  const list = loadCustomThemes();
-  const existing = list.find((t) => t.id === id);
-  if (existing) { existing.name = name; existing.css = css; }
-  else { list.push({ id, name, css, createdAt: Date.now() }); }
-  saveCustomThemes(list);
-  closeCustomThemeModal();
-  renderThemes();
-  applyTheme(id);
-  notify(t("custom_theme_active"));
-}
-function deleteCustomTheme(id) {
-  let list = loadCustomThemes().filter((t) => t.id !== id);
-  saveCustomThemes(list);
-  if (document.body.dataset.theme === id) {
-    applyTheme("matrix");
-    notify(t("custom_theme_removed"));
-  }
-  renderThemes();
 }
 
 function renderThemes() {
   const grid = $("themeGrid");
   if (!grid) return;
-  // Wipe ALL .theme-opt (keep the .theme-opt-add button we have in HTML)
   grid.querySelectorAll(".theme-opt").forEach((el) => el.remove());
-  // Static built-in themes
   for (const t of THEMES) {
     const b = document.createElement("button");
     b.className = "theme-opt";
     b.dataset.theme = t.key;
     b.type = "button";
-        // Use real key for i18n lookup
     b.innerHTML = `<div class="theme-swatch">${t.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(t("theme_" + t.key))}</span><span class="theme-desc">${escapeHtml(t("theme_desc_" + t.key))}</span>`;
     b.onclick = () => applyTheme(t.key);
-    grid.appendChild(b);
-  }
-  // Custom themes (after built-ins)
-  const customs = loadCustomThemes();
-  for (const ct of customs) {
-    const b = document.createElement("div");
-    b.className = "theme-opt custom";
-    b.dataset.theme = ct.id;
-    b.innerHTML = `<div class="theme-swatch">${(ct.swatch || ["#888","#aaa","#ccc","#444"]).map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(ct.name)}<span class="theme-badge">CUSTOM</span></span><span class="theme-actions"><button class="theme-edit" type="button">${escapeHtml(t("custom_theme_save"))}</button><button class="theme-del danger" type="button">${escapeHtml(t("custom_theme_delete"))}</button></div>`;
-    b.onclick = (e) => {
-      if (e.target.closest(".theme-edit")) { openCustomThemeModal(ct.id); return; }
-      if (e.target.closest(".theme-del")) { deleteCustomTheme(ct.id); return; }
-      applyTheme(ct.id);
-    };
     grid.appendChild(b);
   }
   // Highlight active
@@ -485,9 +227,7 @@ $("registerForm").onsubmit = async (e) => {
   if (!ok) { $("registerError").textContent = data.error || t("err_register_failed"); return; }
   onAuth(data);
 };
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); // ---- bind live preview once ----
-  bindLivePreview();
-  enterApp(); }
+function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
 async function checkSession() {
   if (!token) return;
   const { ok, data } = await api("/api/me", null, "GET");
