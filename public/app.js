@@ -2277,12 +2277,12 @@ function refreshProfilePane() {
   $("profileAvaInit").textContent = initials(myName);
 }
 
-// Перенаправляем хедер-кнопки на settings overlay (`&&` гард — кнопка могла быть удалена из разметки,
-// и тогда `$("id")` вернёт null и «Uncaught TypeError: can't access property "onclick", $(...) is null»
-// в консоли. Такой же приём уже стоит на других опциональных кнопках.)
+// Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
+// он живой и в HTML, и в логике; зато аватар/profileSave/logoutBtn и т.д. обёрнуты
+// в `&&` гард по тому же шаблону: разметка может их удалить, и тогда $() вернёт null,
+// а .onclick на null роняет весь дальнейший init (один такой баг уже сломал скрипт после
+// рефакторинга «new start for groups» — кнопки в settings и темах не открывались).
 $("contactsBtn").onclick = () => openSettings("contacts");
-$("profileBtn") && ($("profileBtn").onclick = () => openSettings("profile"));
-$("newChatBtn").onclick = () => openSettings();
 
 // Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
@@ -2382,8 +2382,8 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", profileBtn: "settings", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", profileBtn: "settings", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,

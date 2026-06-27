@@ -12,3 +12,13 @@ data/
 .env
 Dialog.apk
 scripts/resolve-rebase-conflicts.py
+.tmp/css_dump.txt
+.gitignore
+.tmp/dump_dead.txt
+.tmp/dump_tips.txt
+.gitignore
+.tmp/exact_lines.txt
+.tmp/html_dump.txt
+.tmp/modal_dump.txt
+.gitignore
+.tmp/raw_bytes.txt
