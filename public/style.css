@@ -2654,6 +2654,17 @@ body[data-theme="mono"] .msg.me .mention { color: rgba(0, 0, 0, 0.85); }
 body[data-theme="mono"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
 body[data-theme="mono"] .bubble, body[data-theme="mono"] .msg, body[data-theme="mono"] .chat-title,
 body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-theme="mono"] .setting-tab { animation: none; text-shadow: none; }
+/* Monochrome deliberately nukes the theme palette to greyscale, which would also flatten
+   the .st-online / .st-dnd dots to white-on-white. Force them back to their canonical
+   red/green so users can still tell "online" vs "do not disturb" at a glance. */
+body[data-theme="mono"] .st-online {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 0 8px #22c55e;
+}
+body[data-theme="mono"] .st-dnd {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
 /* ============ MSN / Windows Live Messenger (2009) ============
    Flat pale-blue background, white panels, classic #0a78d3 blue accents.
    Triangle bubble tails (WLM wedge) rendered via ::before + ::after.
@@ -2842,4 +2853,42 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+/* ============ Flashbang confirm dialog ============ */
+/* Centered warning modal that asks the user to confirm the destructive flashbang effect.
+   Reuses .modal / .modal-card / .hub-close / .modal-actions — no overrides needed there. */
+.btn-danger {
+  background: linear-gradient(180deg, #ff5252, #b22020);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25), 0 8px 22px rgba(255, 82, 82, 0.28);
+}
+.btn-danger:hover {
+  /* keep :hover lift consistent with .btn-primary; brightness boost + slightly stronger shadow */
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3), 0 12px 28px rgba(255, 82, 82, 0.45);
+}
+.btn-danger:active { transform: translateY(0); filter: brightness(0.96); }
+.btn-danger:disabled { filter: grayscale(0.6) brightness(0.7); cursor: not-allowed; transform: none; }
+.btn-danger:focus-visible {
+  outline: 2px solid #ff7878;
+  outline-offset: 3px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(255, 82, 82, 0.32);
+  transform: none;
+}
+.fb-confirm-card { width: min(420px, 92vw); }
+.fb-confirm-body {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--text-strong);
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+  /* Pinned to literal red so the warning stays visible in monochrome theme (where --danger
+     is overridden to white by the mono palette). Matches the precedent set by the
+     .st-online / .st-dnd force-color overrides. */
+  border-left: 3px solid #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 4px;
 }
