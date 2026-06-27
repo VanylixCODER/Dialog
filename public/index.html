@@ -52,6 +52,7 @@
           <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
+        <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
         <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
@@ -65,7 +66,8 @@
       <ul id="chatList" class="chats"></ul>
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
-        <button id="emptyAddFriend" class="btn-primary" data-i18n="add_friend">Add friend</button>
+        <button id="emptyNewGroup" class="btn-primary" data-i18n="btn_new_group_p">Create group</button>
+        <button id="emptyAddFriend" class="btn-ghost" data-i18n="add_friend">Add friend</button>
       </div>
     </aside>
 
@@ -265,6 +267,8 @@
             <div id="gsPendingEmpty" class="contacts-empty gs-owner hidden" data-i18n="pending_empty">No pending requests</div>
           </div>
         </section>
+        <!-- (Старый New-chat пейн удалён. Создание группы переехало в #createGroupModal — отдельный
+             флоу из хедера чатлиста (#newGroupBtn) и empty-state (#emptyNewGroup).) -->
       </div>
     </div>
   </div>
@@ -308,42 +312,38 @@
     </div>
   </div>
 
-  <!-- Custom theme editor modal — opens from "+ Custom theme" button in #themeGrid or
-       the per-card Edit action. Body-level (not inside #settingsOverlay) so it can layer
-       above the overlay without z-index gymnastics. -->
-  <div id="customThemeModal" class="modal hidden">
-    <div class="modal-card ct-card">
-      <button id="ctClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="custom_theme_title">Custom theme</div>
-      <label class="ct-label" data-i18n="custom_theme_name_ph">Theme name</label>
-      <input id="ctName" class="field" maxlength="32" autocomplete="off" />
-      <div class="ct-editor-grid">
-        <div class="ct-editor-col">
-          <label class="ct-label" data-i18n="custom_theme_css_hint">CSS</label>
-          <textarea id="ctCss" class="field ct-css" rows="11" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  <!-- Create group — отдельный flow (НЕ внутри #settingsOverlay). Открывается из двух точек:
+       + в хедере чатлиста (#newGroupBtn) и CTA empty-state (#emptyNewGroup). Здесь же — аватар
+       (опциональный), поиск по друзьям, мультивыбор и primary-кнопка Create. POST /api/groups
+       поддерживает {name, members, avatar} — сохраняем поведение бэкенда. -->
+  <div id="createGroupModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card cg-card">
+      <button id="cgCloseBtn" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="create_group_title">Create group</div>
+      <div class="cg-hero">
+        <div class="profile-ava avatar ava cg-ava" id="cgAva">
+          <img id="cgAvaImg" alt="" style="display:none" />
+          <span class="ava-fallback" id="cgAvaInit">#</span>
         </div>
-        <div class="ct-editor-col">
-          <label class="ct-label" data-i18n="custom_theme_preview_label">Live preview</label>
-          <div class="ct-preview-scope" aria-hidden="true">
-            <div class="ct-preview-inner">
-              <div class="ct-preview-login">
-                <div class="ct-preview-title">Dialog</div>
-                <input class="ct-preview-field" placeholder="Username" disabled>
-                <button class="ct-preview-btn" disabled>Sign in</button>
-              </div>
-              <div class="ct-preview-chat">
-                <div class="ct-preview-bubble ct-preview-in">hey, you around?</div>
-                <div class="ct-preview-bubble ct-preview-out">yeah, almost done</div>
-                <div class="ct-preview-bubble ct-preview-out ct-preview-tail">push the build?</div>
-              </div>
-            </div>
-          </div>
+        <div class="cg-hero-side">
+          <button id="cgAvaBtn" class="btn-ghost cg-compact" data-i18n="upload_avatar">Upload avatar</button>
+          <button type="button" id="cgAvaClear" class="cg-clear hidden" data-i18n-title="clear_avatar" title="Clear">✕</button>
         </div>
+        <input id="cgAvaFile" type="file" accept="image/*" hidden />
       </div>
-      <div id="ctError" class="form-error"></div>
+      <input id="cgName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
+      <div class="cg-search-row">
+        <input id="cgSearch" class="field" type="text" data-i18n-ph="ph_friend_search" autocomplete="off" />
+        <span id="cgCount" class="cg-count" data-i18n="members_0_of_0">0 / 0</span>
+        <button id="cgSelectAll" class="cg-bulk hidden" data-i18n="select_all_btn">All</button>
+      </div>
+      <div class="pick-label" data-i18n="pick_members">Pick members:</div>
+      <div id="cgPicker" class="cg-picker"></div>
+      <div id="cgEmpty" class="contacts-empty hidden" data-i18n="add_member_no_friends">No friends yet</div>
+      <div class="form-error" id="cgError"></div>
       <div class="modal-actions">
-        <button id="ctCancel" class="btn-ghost" data-i18n="custom_theme_cancel">Cancel</button>
-        <button id="ctSave" class="btn-primary" data-i18n="custom_theme_save">Save</button>
+        <button id="cgCancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
+        <button id="cgCreate" class="btn-primary" data-i18n="btn_create_group" disabled>Create group</button>
       </div>
     </div>
   </div>

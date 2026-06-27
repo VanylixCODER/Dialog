@@ -1370,6 +1370,124 @@ a:focus-visible {
 
 .mp-card { align-items: center; text-align: center; }
 
+/* === Create-group modal (пост-way создания групп с друзьями). Вынес
+   из #settingsOverlay, чтобы flow был коротким и дискретным: вход из
+   хедера чатлиста (#newGroupBtn «+») или empty-state (#emptyNewGroup).
+   Структурно похож на #addMemberModal но крупнее и интерактивнее: аватар
+   + поиск + мультивыбор с подсчётом + селект-всё. === */
+.cg-card {
+  width: min(440px, 94vw);
+  padding: 26px 26px 22px;
+  gap: 14px;
+}
+.cg-hero {
+  display: flex; align-items: center; gap: 14px;
+  align-self: center;
+  margin-bottom: 4px;
+}
+.cg-ava {
+  width: 72px; height: 72px;
+  font-size: 28px;
+  border-color: var(--accent-400);
+  border-radius: 14px;
+}
+.cg-hero-side {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+}
+.cg-compact { width: auto; padding: 8px 14px; font-size: 12px; }
+.cg-clear {
+  width: 28px; height: 28px;
+  border: 1px solid var(--border-1);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  padding: 0;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.cg-clear:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.12); }
+.cg-search-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.cg-search-row .field { flex: 1; }
+.cg-count {
+  font-size: 11px; color: var(--text-dim);
+  padding: 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.cg-count.full { color: var(--accent-300); border-color: var(--accent-400); background: rgba(var(--primary-rgb), 0.16); }
+.cg-bulk {
+  font-size: 11px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border-1);
+  color: var(--text-dim);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.cg-bulk:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
+.cg-bulk.hidden { display: none; }
+.cg-picker {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 240px;
+  min-height: 64px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+.cg-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.cg-row:hover { background: var(--surface-2); transform: translateX(2px); }
+.cg-row:active { transform: translateX(2px) scale(0.99); }
+.cg-row.on {
+  background: rgba(var(--primary-rgb), 0.14);
+  border-color: var(--accent-400);
+  box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.18);
+}
+.cg-ava-mini {
+  width: 28px; height: 28px; font-size: 11px;
+  border-radius: 8px;
+}
+.cg-row-name {
+  flex: 1; min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cg-row.on .cg-row-name { color: var(--accent-100); font-weight: 700; }
+.cg-tick {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  color: var(--accent-300);
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 50%;
+  background: transparent;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.cg-row.on .cg-tick {
+  background: linear-gradient(180deg, var(--accent-400), var(--accent-600));
+  color: #001a08;
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.4);
+}
+
 /* Add-member mini-modal: компактнее обычного модала, ровно одна колонка выбора друзей + Add. */
 .am-card {
   width: min(380px, 94vw);
