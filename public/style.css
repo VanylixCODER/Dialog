@@ -1278,6 +1278,100 @@ a:focus-visible {
 }
 .hub-close:hover { color: var(--accent-300); background: var(--accent-faint); border-color: var(--accent-400); }
 .hub-close:active { transform: rotate(90deg) scale(0.94); }
+
+/* Custom theme editor — live preview on the left, name + CSS textarea on the right.
+   .ct-preview-scope is the wrap target for the debounced live preview (see wrapCssInScope
+   <style id="ct-live-preview"> in app.js), so the .ct-preview-* sample elements below use
+   theme tokens — when the user types --bg-1, --primary-rgb and friends, the card/field/btn/
+   bubble here visibly react. Don't change .ct-* selectors without also updating the
+   sample HTML in <div id="customThemeModal">. */
+.modal-card.ct-card { width: min(760px, 96vw); padding: 24px 22px 20px; gap: 14px; }
+.ct-grid { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.ct-preview {
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 240px;
+}
+.ct-preview > .ct-preview-scope { flex: 1; display: flex; align-items: center; justify-content: center; padding: 6px; min-height: 0; }
+.ct-preview-card {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-3);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: var(--shadow-md), 0 0 24px rgba(var(--primary-rgb), 0.12);
+}
+.ct-preview-title {
+  font-weight: 800; font-size: 14px;
+  color: var(--accent-200); letter-spacing: 2px;
+  text-shadow: 0 0 6px rgba(var(--primary-rgb), 0.35);
+}
+.ct-preview-field {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text); font-size: 12px;
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+}
+.ct-preview-btn {
+  background: var(--accent-500); color: var(--bg-1);
+  border: none; border-radius: var(--r-2);
+  font-weight: 700; font-size: 12px;
+  padding: 9px 14px;
+  align-self: flex-start;
+  box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.25);
+  cursor: pointer;
+  transition: filter var(--t-fast) var(--ease);
+}
+.ct-preview-btn:hover { filter: brightness(1.08); }
+.ct-preview-bubble {
+  background: var(--accent-200); color: var(--bg-1);
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  font-size: 12px;
+  align-self: flex-end;
+  max-width: 85%;
+  box-shadow: var(--shadow-sm);
+}
+.ct-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ct-label {
+  font-size: 10px; color: var(--text-dim);
+  letter-spacing: 1.2px; text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.ct-css,
+#ctCss {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5;
+  background: var(--bg-0);
+  border: 1px solid var(--border-2);
+  color: var(--text);
+  resize: vertical;
+  width: 100%;
+  min-height: 220px;
+  tab-size: 2;
+  white-space: pre;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.ct-css:focus, #ctCss:focus {
+  outline: none;
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 2px var(--accent-faint);
+}
+@media (max-width: 640px) {
+  /* .ct-card width/height/radius already full-bleed via #customThemeModal .modal-card.ct-card
+     inside the 880px block (higher specificity); only the inner layout needs stacking here. */
+  .ct-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ct-preview { min-height: 180px; }
+  #ctCss { font-size: 12px; min-height: 200px; }
+}
 .req-add { display: flex; gap: 6px; }
 .req-add .field { flex: 1; }
 .req-add .btn-primary { width: auto; padding: 0 16px; flex: none; }
