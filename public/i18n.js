@@ -115,7 +115,8 @@ const I18N = {
     drop_some_too_big: "Skipped {n} file(s) over {mb} MB",
     drop_no_room: "Open a chat to drop files",
     file_rejected_size: "Server rejected: file over {mb} MB",
-
+    install_app: "Install app",
+ 
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -233,7 +234,8 @@ const I18N = {
     drop_some_too_big: "Пропущено файлов больше {mb} МБ: {n}",
     drop_no_room: "Откройте чат, чтобы перетащить файлы",
     file_rejected_size: "Сервер отклонил: файл больше {mb} МБ",
-
+    install_app: "Установить приложение",
+ 
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";

@@ -1646,12 +1646,11 @@ $("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto";
 const typingUsers = new Set();
 socket.on("typing", ({ name, isTyping }) => { if (isTyping) typingUsers.add(name); else typingUsers.delete(name); const arr = [...typingUsers]; $("typingIndicator").textContent = arr.length ? (arr.length === 1 ? t("typing_one", { name: arr[0] }) : t("typing_many", { names: arr.join(", ") })) : ""; });
 
-// ---------- Медиа / файлы ----------
-// Caps & defaults kept in lockstep with server.js MAX_FILE_SIZE_MB. Базовый HTML не имеет
-// accept="..." — мы хотим слать ЛЮБЫЕ файлы (zip, pdf, …) до 75 MB.
+// ---------- Медиа / файлы / прогресс ----------
 const MAX_FILE_SIZE_MB = 75;
 const MAX_FILE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-// Helper: превратить сырые байты в локализованную «2.3 MB» строку — в чат-пузыре и списке чатов.
+let uploadingCount = 0;
+
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
   if (bytes < 1024) return t("file_size_b", { n: bytes });
@@ -1659,17 +1658,14 @@ function formatFileSize(bytes) {
   if (bytes < 1024 * 1024 * 1024) return t("file_size_mb", { n: (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 2 : 1) });
   return t("file_size_gb", { n: (bytes / (1024 * 1024 * 1024)).toFixed(2) });
 }
-// Восстанавливаем примерный raw-размер dataURL: 3 байта → 4 base64-символа, trailing '=' пады
-// округляются вниз на 0–2 байта. Достаточно для UI; точные байты знает только отправитель —
-// мы их храним локально (m.mediaSize) и используем, пока сообщение ещё «своё».
+
 function mediaBytesFromDataUrl(url) {
   if (!url || typeof url !== "string") return 0;
   const i = url.indexOf(",");
   const b64 = i >= 0 ? url.slice(i + 1) : url;
   return Math.floor(b64.length * 3 / 4);
 }
-// Чистое определение типа для индикации «картинка / видео / голос / файл». Голос (.webm из диктофона)
-// маркируется audio MIME — оставляем audio branch чтобы он рендерился через <audio>.
+
 function pickMediaType(file) {
   if (!file) return "file";
   if (file.type) {
@@ -1678,25 +1674,48 @@ function pickMediaType(file) {
     if (file.type.startsWith("video/")) return "video";
     if (file.type.startsWith("audio/")) return "audio";
   }
-  // Без MIME (zip, exe, rar, …) — честный file bubble; lightbox / <video> тут не сработают.
   return "file";
 }
-// Отправка ОДНОГО файла. Раньше логика была inline в обработчике #fileInput.change — DRY-вынос
-// позволил переиспользовать тот же путь из drag-and-drop и (в будущем) clipboard paste.
+
+function showProgress(file, pct) {
+  const bar = $("uploadProgress"); if (!bar) return;
+  bar.classList.remove("hidden");
+  const fill = $("upFill"); if (fill) fill.style.width = Math.min(100, pct) + "%";
+  const txt = $("upText");
+  if (txt) {
+    const total = formatFileSize(file.size);
+    const done = formatFileSize(file.size * pct / 100);
+    txt.textContent = Math.round(pct) + "%";
+  }
+}
+function hideProgress() {
+  const bar = $("uploadProgress"); if (!bar) bar.classList.add("hidden");
+  const fill = $("upFill"); if (fill) fill.style.width = "0%";
+  const txt = $("upText"); if (txt) txt.textContent = "0%";
+}
+$("upCancel")?.addEventListener?.("click", () => {
+  // Allow user to dismiss progress bar (file still uploads in background)
+  uploadingCount = Math.max(0, uploadingCount - 1);
+  if (uploadingCount <= 0) hideProgress();
+});
+
 function sendFile(file) {
   if (!file || !file.size || !myRoom) return null;
   if (file.size > MAX_FILE_BYTES) {
     notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB }));
     return "too_big";
   }
-  const reader = new FileReader();
   const type = pickMediaType(file);
+  const localId = ++localIdCounter;
+  uploadingCount++;
+
+  const reader = new FileReader();
+  reader.onprogress = (e) => {
+    if (e.lengthComputable) showProgress(file, (e.loaded / e.total) * 100);
+  };
   reader.onload = () => {
-    const localId = ++localIdCounter;
-    // Оптимистичный рендер, чтобы обратная связь пришла мгновенно — на 75 MB base64 чтение
-    // занимает пару сотен мс, лента не должна «зависать». Сервер всё равно может отклонить
-    // payload (file-rejected) — тогда у пузыря просто останется pending-иконка часика; клиент
-    // можно дополнить на пользовательский таймаут.
+    uploadingCount = Math.max(0, uploadingCount - 1);
+    if (uploadingCount <= 0) hideProgress();
     const optimistic = {
       localId, id: null, fromLogin: profile.login, name: myName, ts: Date.now(),
       type, media: reader.result, mediaName: file.name, mediaSize: file.size,
@@ -1705,7 +1724,11 @@ function sendFile(file) {
     renderMessage(optimistic, true, false);
     socket.emit("message", { type, media: reader.result, mediaName: file.name, localId });
   };
-  reader.onerror = () => notify("File read error");
+  reader.onerror = () => {
+    uploadingCount = Math.max(0, uploadingCount - 1);
+    if (uploadingCount <= 0) hideProgress();
+    notify("File read error");
+  };
   reader.readAsDataURL(file);
   return null;
 }
@@ -1724,34 +1747,21 @@ $("fileInput").addEventListener("change", (e) => {
 });
 
 // ---------- Drag & drop файлов в чат ----------
-// Цель — повесить drop-зону на .chat (пейн чата) так, чтобы:
-//   1. квази-стандартный preventDefault стоял в dragover/drop (иначе браузер ОТКРЫВАЕТ файл);
-//   2. принимались только file MIME (текст/URL drops — оставляем браузеру);
-//   3. работало на мобильных (нет drag-events, только unified dataTransfer.files в drop);
-//   4. дроп в чат БЕЗ myRoom показывал notify «откройте чат» вместо тишины;
-//   5. пыль в лишних событиях на dragenter/dragleave/drop не вызывала мигание оверлея.
-// dropzone живёт на #chatPane — здесь максимум «open area» и нет коллизий с панелями
-// (info-panel, emoji picker), у которых свой z-index.
-// Кольцевой счётчик dragenter/dragleave: браузер повторно стреляет по дочерним элементам,
-// наивный toggleClass сразу флипает visible/hidden. counter > 0 → показываем оверлей.
 let _dragCounter = 0;
 function isFileDrag(e) {
   const dt = e.dataTransfer;
   if (!dt) return false;
-  // types[i] может быть "Files" на dragenter/dragover. kinds[] — для FileSystem objects
-  // (ChromeOS File System Provider), но мы их не принимаем в принципе.
-  if (dt.types && Array.from(dt.types).includes("Files")) return true;
-  if (dt.files && dt.files.length) return true;
+  if (dt.types && Array.from(dt.types).some(t => t === "Files")) return true;
+  if (dt.files && dt.files.length > 0) return true;
   return false;
 }
 function showDropOverlay() {
-  const cp = $("chatPane"); if (!cp) return;
-  cp.classList.add("dragover");
-  cp.querySelector(".drop-overlay-label");
+  const cp = $("chatPane");
+  if (cp) cp.classList.add("dragover");
 }
 function hideDropOverlay() {
-  const cp = $("chatPane"); if (!cp) return;
-  cp.classList.remove("dragover");
+  const cp = $("chatPane");
+  if (cp) cp.classList.remove("dragover");
 }
 function handleDragEnter(e) {
   if (!isFileDrag(e)) return;
@@ -1767,7 +1777,6 @@ function handleDragLeave(e) {
 }
 function handleDragOver(e) {
   if (!isFileDrag(e)) return;
-  // preventDefault — обязательно; без него drop не сработает.
   e.preventDefault();
   if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
 }
@@ -1791,9 +1800,6 @@ function wireDragAndDrop() {
   cp.addEventListener("dragleave", handleDragLeave);
   cp.addEventListener("dragover", handleDragOver);
   cp.addEventListener("drop", handleDrop);
-  // Глобальный preventDefault на window — иначе Firefox ОТКРЫВАЕТ файл при drop'е мимо зоны.
-  // Игнорируем эту защиту только для input[type=file] change (там своя логика), но drag-events
-  // на других элементах всё равно могут «протечь».
   window.addEventListener("dragover", (e) => { if (isFileDrag(e)) e.preventDefault(); });
   window.addEventListener("drop", (e) => { if (isFileDrag(e) && !e.defaultPrevented) e.preventDefault(); });
 }
@@ -2604,6 +2610,32 @@ $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value)
 
 // ---------- Старт ----------
 loadSavedTheme(); loadFlashbangEff(); syncFlashbangEffToggle(); initLang(); setIcons(); checkSession();
+
+// ---------- PWA Install ----------
+let deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = $("installBtn");
+  if (btn) btn.classList.remove("hidden");
+});
+$("installBtn")?.addEventListener?.("click", async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const result = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  if (result.outcome === "accepted" || result.outcome === "dismissed") {
+    $("installBtn")?.classList?.add("hidden");
+  }
+});
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  $("installBtn")?.classList?.add("hidden");
+});
+// Already in standalone mode? Hide install button
+if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+  $("installBtn")?.classList?.add("hidden");
+}
 
 // Wire up custom-theme modal + + Custom button
 (function () {
