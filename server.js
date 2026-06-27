@@ -44,6 +44,12 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HISTORY_LIMIT = 100;
+// Max file attachment size — must match the client composer cap and the JSON/Socket.IO HTTP limits
+// above. Increasing here without bumping the buffer limits silently drops messages with socket.io's
+// PayloadTooLarge error; bumping everything in lockstep is required. Value is shared so the push
+// preview and the client-side alert stay in sync.
+const MAX_FILE_SIZE_MB = 75;
+const MAX_FILE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // ---------- Web Push ----------
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC || "";
@@ -67,7 +73,10 @@ async function sendPush(login, payload) {
 // ---------- Express ----------
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "30mb" }));
+// 75 MB matches the client-side upload cap — base64 inflates raw bytes by ~4/3, so the JSON
+// envelope itself needs to fit a 75 MB encoded payload in a single POST. Keep this in sync with
+// MAX_FILE_SIZE_MB below AND with `maxHttpBufferSize` on the Socket.IO server.
+app.use(express.json({ limit: "75mb" }));
 
 const keyPath = join(__dirname, "certs", "key.pem");
 const certPath = join(__dirname, "certs", "cert.pem");
@@ -76,7 +85,7 @@ const httpServer = useHttps
   ? createHttps({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, app)
   : createHttp(app);
 
-const io = new Server(httpServer, { maxHttpBufferSize: 30e6 });
+const io = new Server(httpServer, { maxHttpBufferSize: 75e6 });
 
 // Digital Asset Links для TWA (express.static не отдаёт dotfiles по умолчанию)
 app.get("/.well-known/assetlinks.json", (req, res) =>
@@ -676,9 +685,28 @@ io.on("connection", (socket) => {
         return;
       }
     }
+    // Defense-in-depth: если клиент всё-таки послал media > 75 MB (по base64-строке; raw bytes ≈
+    // ¾ от длины), аккуратно отказываем: текст сохраняем, файл просто не сохраняем, и кинем
+    // отправителю локализованный toast через emit. Остальные участники ничего не увидят — без
+    // шума в ленте "что это было". Заодно это страхует от случайного бампa `maxHttpBufferSize`
+    // в одной из сред.
+    let media = msg.media || null;
+    let mediaName = (msg.mediaName || "").slice(0, 255);
+    if (media) {
+      // base64 упаковывает 3 байта → 4 символа. Точный raw ≈ length * 3 / 4. Используем тот же
+      // лимит что и у клиента (75 MB), чтобы отправитель не получил false negative из-за недос-
+      // татка в формуле.
+      const approxRawBytes = Math.floor(media.length * 3 / 4);
+      if (approxRawBytes > MAX_FILE_BYTES) {
+        socket.emit("file-rejected", { reason: "file_too_big", maxMb: MAX_FILE_SIZE_MB });
+        media = null; mediaName = "";
+      }
+    }
     const payload = {
       from: socket.id, fromLogin: userLogin, name: userName, ts: Date.now(),
-      type: msg.type, text: (msg.text || "").slice(0, 4000), media: msg.media || null, mediaName: (msg.mediaName || "").slice(0, 255),
+      type: media ? (msg.type || "file") : "text",
+      text: media ? "" : (msg.text || "").slice(0, 4000),
+      media, mediaName,
       localId: msg.localId || null,
     };
     try { payload.id = await saveMessage({ room: currentRoom, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
@@ -692,7 +720,9 @@ io.on("connection", (socket) => {
     else if (currentRoom.startsWith("@grp:")) { try { recips = await getGroupMembers(currentRoom.slice(5)); } catch {} }
     const preview = payload.type === "text" ? payload.text.slice(0, 120)
       : payload.type === "image" || payload.type === "gif" ? "🖼 Photo"
-      : payload.type === "video" ? "🎬 Video" : payload.type === "audio" ? "🎤 Voice" : "Media";
+      : payload.type === "video" ? "🎬 Video"
+      : payload.type === "audio" ? "🎤 Voice"
+      : "📎 " + (payload.mediaName || "File");
     for (const login of recips) {
       if (login === userLogin) continue;
       notifyUser(login, "dm-ping", { room: currentRoom, fromLogin: userLogin, fromName: userName });

@@ -935,6 +935,62 @@ a:focus-visible {
 }
 .bubble.audio audio { height: 36px; max-width: 240px; }
 
+/* File attachment bubble (zf, pdf, exe, …): кликабельная вся, не только имя — download attribute
+   на <a> сохраняет файл локально под оригинальным именем, не открывая dataURL в новой вкладке. */
+.bubble.file {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; min-width: 240px; max-width: 360px;
+  text-decoration: none;
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  border: 1px solid var(--border-1);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.bubble.file:hover {
+  border-color: var(--accent-400);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(var(--primary-rgb), 0.18);
+}
+.bubble.file:active { transform: translateY(0); }
+.bubble.file .file-icon {
+  flex-shrink: 0;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  font-size: 18px;
+}
+.bubble.file .file-meta {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.bubble.file .file-name {
+  font-weight: 600;
+  color: var(--accent-100);
+  font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bubble.file .file-size {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+}
+.bubble.file .file-dl {
+  flex-shrink: 0;
+  font-size: 18px;
+  color: var(--accent-300);
+  transition: transform var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.bubble.file:hover .file-dl { color: var(--accent-100); transform: translateY(2px); }
+.msg.me .bubble.file {
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.16), rgba(var(--primary-rgb), 0.08));
+  border-color: var(--accent-400);
+}
+
 .msg .time {
   font-size: 10px; color: var(--text-dim); padding: 0 6px;
   display: inline-flex; align-items: center; gap: 4px;
@@ -2162,6 +2218,50 @@ a:focus-visible {
 @keyframes scanBeam { to { left: 130%; } }
 
 .desktop-only { display: inline-flex; } .mobile-only { display: none; }
+
+/* === Drag & drop overlay === */
+/* Полноэкранный dimmed layer над сообщениями/композером когда пользователь тащит файл в
+   активный чат. Показывается через .chat.dragover (из JS handleDragEnter / Counter). */
+.drop-overlay {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  background: rgba(0, 4, 0, 0.62);
+  border: 2px dashed var(--accent-400);
+  border-radius: var(--r-3);
+  z-index: 15;
+  pointer-events: none;
+  backdrop-filter: blur(4px) saturate(140%);
+  animation: dropOverlayIn 0.18s var(--ease-out);
+}
+@keyframes dropOverlayIn { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+.chat.dragover .drop-overlay { display: flex; }
+.drop-overlay-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 22px 28px;
+  background: linear-gradient(180deg, rgba(0, 14, 6, 0.85), rgba(0, 7, 0, 0.92));
+  border: 1px solid var(--accent-400);
+  border-radius: var(--r-3);
+  box-shadow: 0 0 28px rgba(var(--primary-rgb), 0.4);
+  animation: dropPulse 1.4s var(--ease) infinite;
+}
+@keyframes dropPulse {
+  0%, 100% { box-shadow: 0 0 28px rgba(var(--primary-rgb), 0.4); }
+  50% { box-shadow: 0 0 44px rgba(var(--primary-rgb), 0.7); }
+}
+.drop-overlay-icon {
+  font-size: 38px;
+  color: var(--accent-300);
+  text-shadow: 0 0 12px var(--accent-glow);
+}
+.drop-overlay-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent-100);
+  text-shadow: 0 0 8px rgba(var(--primary-rgb), 0.45);
+}
 
 /* Sticky day separator */
 .day-sep {

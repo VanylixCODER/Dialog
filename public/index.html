@@ -122,12 +122,21 @@
       </div>
 
       <div id="messages" class="messages hidden"></div>
+      <div class="drop-overlay" aria-hidden="true">
+        <div class="drop-overlay-card">
+          <div class="drop-overlay-icon">📎</div>
+          <div class="drop-overlay-label" data-i18n="drop_hint">Drop to send</div>
+        </div>
+      </div>
       <div class="composer hidden" id="composer">
         <button class="icon-btn" id="emojiBtn" data-i18n-title="t_emoji">😊</button>
         <button class="icon-btn" id="gifBtn" title="GIF">GIF</button>
         <button class="icon-btn" id="attachBtn" data-i18n-title="t_attach">📎</button>
         <button class="icon-btn" id="voiceBtn" data-i18n-title="t_voice">🎤</button>
-        <input id="fileInput" type="file" accept="image/*,video/*,.gif" hidden />
+        <input id="fileInput" type="file" hidden />
+        <!-- Drop-зона живёт прямо внутри #chatPane через .drop-overlay; css .chat.dragover делает
+             оверлей видимым поверх сообщений. Self-contained — JS включает класс только когда
+             dragenter реально принёс файлы. -->
         <div class="input-wrap"><textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea></div>
         <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
       </div>

@@ -566,6 +566,7 @@ function preview(m) {
   if (m.type === "image" || m.type === "gif") return "🖼 " + t("pv_photo");
   if (m.type === "video") return "🎬 " + t("pv_video");
   if (m.type === "audio") return "🎤 " + t("pv_voice");
+  if (m.type === "file") return "📎 " + (m.mediaName || t("pv_file"));
   return "media";
 }
 
@@ -1508,6 +1509,24 @@ function renderMessage(m, scroll = true, ping = false) {
   else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt=""></div>`;
   else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
   else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
+  else if (m.type === "file") {
+    // File bubble: «📎 + filename + size», всё кликабельное для скачивания (download attribute).
+    // do-download на dataURL работает во всех браузерах: вместо открытия картинки в новой
+    // вкладке браузер сохранит файл под исходным именем. href=dataURL дублируется download
+    // чтобы современные браузеры не пытались сделать navigate на data: URL (Chromium/Safari
+    // иногда игнорируют download без явного href).
+    const safeName = escapeHtml(m.mediaName || t("file_untitled"));
+    // sizeBytes: предпочитаем m.mediaSize (есть только для собственных оптимистичных
+    // рендеров). На входящих сообщениях mediaSize отсутствует — реконструируем из длины
+    // base64-строки (3 байта → 4 символа, точность ±2 байта на padding).
+    const sizeBytes = m.mediaSize || mediaBytesFromDataUrl(m.media);
+    const sizeStr = sizeBytes ? formatFileSize(sizeBytes) : "";
+    inner += `<a class="bubble file" href="${m.media}" download="${escapeHtml(m.mediaName || "file")}" title="${safeName}">` +
+      `<span class="file-icon">📎</span>` +
+      `<span class="file-meta"><span class="file-name">${safeName}</span>` +
+      (sizeStr ? `<span class="file-size">${sizeStr}</span>` : "") +
+      `</span><span class="file-dl" aria-hidden="true">⬇</span></a>`;
+  }
   // Для исходящих — статус-иконка (pending / sent / delivered / read)
   const statusSpan = mine ? `<span class="msg-status" data-status="pending" title="${t("status_pending")}">${window.ICON.clock}</span>` : "";
   inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${statusSpan}</div>`;
@@ -1627,14 +1646,162 @@ $("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto";
 const typingUsers = new Set();
 socket.on("typing", ({ name, isTyping }) => { if (isTyping) typingUsers.add(name); else typingUsers.delete(name); const arr = [...typingUsers]; $("typingIndicator").textContent = arr.length ? (arr.length === 1 ? t("typing_one", { name: arr[0] }) : t("typing_many", { names: arr.join(", ") })) : ""; });
 
-// ---------- Медиа ----------
-$("attachBtn").onclick = () => $("fileInput").click();
+// ---------- Медиа / файлы ----------
+// Caps & defaults kept in lockstep with server.js MAX_FILE_SIZE_MB. Базовый HTML не имеет
+// accept="..." — мы хотим слать ЛЮБЫЕ файлы (zip, pdf, …) до 75 MB.
+const MAX_FILE_SIZE_MB = 75;
+const MAX_FILE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+// Helper: превратить сырые байты в локализованную «2.3 MB» строку — в чат-пузыре и списке чатов.
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return t("file_size_b", { n: bytes });
+  if (bytes < 1024 * 1024) return t("file_size_kb", { n: (bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0) });
+  if (bytes < 1024 * 1024 * 1024) return t("file_size_mb", { n: (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 2 : 1) });
+  return t("file_size_gb", { n: (bytes / (1024 * 1024 * 1024)).toFixed(2) });
+}
+// Восстанавливаем примерный raw-размер dataURL: 3 байта → 4 base64-символа, trailing '=' пады
+// округляются вниз на 0–2 байта. Достаточно для UI; точные байты знает только отправитель —
+// мы их храним локально (m.mediaSize) и используем, пока сообщение ещё «своё».
+function mediaBytesFromDataUrl(url) {
+  if (!url || typeof url !== "string") return 0;
+  const i = url.indexOf(",");
+  const b64 = i >= 0 ? url.slice(i + 1) : url;
+  return Math.floor(b64.length * 3 / 4);
+}
+// Чистое определение типа для индикации «картинка / видео / голос / файл». Голос (.webm из диктофона)
+// маркируется audio MIME — оставляем audio branch чтобы он рендерился через <audio>.
+function pickMediaType(file) {
+  if (!file) return "file";
+  if (file.type) {
+    if (file.type === "image/gif") return "gif";
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("audio/")) return "audio";
+  }
+  // Без MIME (zip, exe, rar, …) — честный file bubble; lightbox / <video> тут не сработают.
+  return "file";
+}
+// Отправка ОДНОГО файла. Раньше логика была inline в обработчике #fileInput.change — DRY-вынос
+// позволил переиспользовать тот же путь из drag-and-drop и (в будущем) clipboard paste.
+function sendFile(file) {
+  if (!file || !file.size || !myRoom) return null;
+  if (file.size > MAX_FILE_BYTES) {
+    notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB }));
+    return "too_big";
+  }
+  const reader = new FileReader();
+  const type = pickMediaType(file);
+  reader.onload = () => {
+    const localId = ++localIdCounter;
+    // Оптимистичный рендер, чтобы обратная связь пришла мгновенно — на 75 MB base64 чтение
+    // занимает пару сотен мс, лента не должна «зависать». Сервер всё равно может отклонить
+    // payload (file-rejected) — тогда у пузыря просто останется pending-иконка часика; клиент
+    // можно дополнить на пользовательский таймаут.
+    const optimistic = {
+      localId, id: null, fromLogin: profile.login, name: myName, ts: Date.now(),
+      type, media: reader.result, mediaName: file.name, mediaSize: file.size,
+      room: myRoom, _optimistic: true,
+    };
+    renderMessage(optimistic, true, false);
+    socket.emit("message", { type, media: reader.result, mediaName: file.name, localId });
+  };
+  reader.onerror = () => notify("File read error");
+  reader.readAsDataURL(file);
+  return null;
+}
+$("attachBtn").onclick = () => {
+  // Без accept="image/*,..." теперь можно прикреплять ВСЁ; click() в chrome срабатывает
+  // даже после programmatic reset value="".
+  const fi = $("fileInput"); if (!fi) return;
+  fi.value = "";
+  fi.click();
+};
 $("fileInput").addEventListener("change", (e) => {
-  const file = e.target.files[0]; if (!file || !myRoom) return;
-  if (file.size > 20 * 1024 * 1024) { alert(t("file_too_big")); return; }
-  const r = new FileReader();
-  r.onload = () => { let type = "file"; if (file.type.startsWith("image/")) type = file.type === "image/gif" ? "gif" : "image"; else if (file.type.startsWith("video/")) type = "video"; socket.emit("message", { type, media: r.result, mediaName: file.name }); };
-  r.readAsDataURL(file); e.target.value = "";
+  const files = Array.from(e.target.files || []); if (!files.length) return;
+  if (!myRoom) return; // без активного чата — молча игнорируем (file picker закрывается)
+  files.forEach(sendFile);
+  e.target.value = "";
+});
+
+// ---------- Drag & drop файлов в чат ----------
+// Цель — повесить drop-зону на .chat (пейн чата) так, чтобы:
+//   1. квази-стандартный preventDefault стоял в dragover/drop (иначе браузер ОТКРЫВАЕТ файл);
+//   2. принимались только file MIME (текст/URL drops — оставляем браузеру);
+//   3. работало на мобильных (нет drag-events, только unified dataTransfer.files в drop);
+//   4. дроп в чат БЕЗ myRoom показывал notify «откройте чат» вместо тишины;
+//   5. пыль в лишних событиях на dragenter/dragleave/drop не вызывала мигание оверлея.
+// dropzone живёт на #chatPane — здесь максимум «open area» и нет коллизий с панелями
+// (info-panel, emoji picker), у которых свой z-index.
+// Кольцевой счётчик dragenter/dragleave: браузер повторно стреляет по дочерним элементам,
+// наивный toggleClass сразу флипает visible/hidden. counter > 0 → показываем оверлей.
+let _dragCounter = 0;
+function isFileDrag(e) {
+  const dt = e.dataTransfer;
+  if (!dt) return false;
+  // types[i] может быть "Files" на dragenter/dragover. kinds[] — для FileSystem objects
+  // (ChromeOS File System Provider), но мы их не принимаем в принципе.
+  if (dt.types && Array.from(dt.types).includes("Files")) return true;
+  if (dt.files && dt.files.length) return true;
+  return false;
+}
+function showDropOverlay() {
+  const cp = $("chatPane"); if (!cp) return;
+  cp.classList.add("dragover");
+  cp.querySelector(".drop-overlay-label");
+}
+function hideDropOverlay() {
+  const cp = $("chatPane"); if (!cp) return;
+  cp.classList.remove("dragover");
+}
+function handleDragEnter(e) {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  _dragCounter++;
+  if (_dragCounter === 1) showDropOverlay();
+}
+function handleDragLeave(e) {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  _dragCounter = Math.max(0, _dragCounter - 1);
+  if (_dragCounter === 0) hideDropOverlay();
+}
+function handleDragOver(e) {
+  if (!isFileDrag(e)) return;
+  // preventDefault — обязательно; без него drop не сработает.
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+}
+function handleDrop(e) {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  _dragCounter = 0; hideDropOverlay();
+  if (!myRoom) { notify(t("drop_no_room")); return; }
+  const files = Array.from(e.dataTransfer.files || []);
+  if (!files.length) return;
+  let rejected = 0;
+  for (const f of files) {
+    if (f.size > MAX_FILE_BYTES) { rejected++; continue; }
+    sendFile(f);
+  }
+  if (rejected) notify(t("drop_some_too_big", { n: rejected, mb: MAX_FILE_SIZE_MB }));
+}
+function wireDragAndDrop() {
+  const cp = $("chatPane"); if (!cp) return;
+  cp.addEventListener("dragenter", handleDragEnter);
+  cp.addEventListener("dragleave", handleDragLeave);
+  cp.addEventListener("dragover", handleDragOver);
+  cp.addEventListener("drop", handleDrop);
+  // Глобальный preventDefault на window — иначе Firefox ОТКРЫВАЕТ файл при drop'е мимо зоны.
+  // Игнорируем эту защиту только для input[type=file] change (там своя логика), но drag-events
+  // на других элементах всё равно могут «протечь».
+  window.addEventListener("dragover", (e) => { if (isFileDrag(e)) e.preventDefault(); });
+  window.addEventListener("drop", (e) => { if (isFileDrag(e) && !e.defaultPrevented) e.preventDefault(); });
+}
+wireDragAndDrop();
+// Сервер отклонил медиа по лимиту — показываем тост только отправившему (он и так уже
+// увидит серый файл или отсутствие; здесь — понятная формулировка).
+socket.on("file-rejected", ({ maxMb } = {}) => {
+  notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
 });
 let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0;
 $("voiceBtn").onclick = async () => {
