@@ -37,6 +37,8 @@ function pushState() {
 function onPopState() {
   const { lang, login, groupId } = parsePath();
   if (lang && window.setLang) window.setLang(lang);
+  if (!login && !groupId) return;
+  if (!profile) return;
   if (login && window.openDM) {
     const key = "@dm:" + [profile.login, login].sort().join("~");
     const existing = chats.get(key);
