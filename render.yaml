@@ -1,11 +1,26 @@
-# Render Blueprint. Секреты (DB_*, METERED_API_KEY, GIPHY_KEY, VAPID_*) задаются
-# вручную в дашборде Render → Environment (sync: false).
+# =============================================================================
+# Render Blueprint — Dialog (Free plan: TiDB Cloud + in-memory cache fallback)
+# =============================================================================
+# Deploy shape:
+#   - type: web, plan: free, region: frankfurt
+#   - container built via the project Dockerfile (node:22-alpine, `npm ci --omit=dev`)
+#   - 15-min idle → ~30 s cold start on next request; fine for desktop / small-group
+#   - state (sessions, messages, groups, ...) lives in TiDB Cloud (DB_SSL=true)
+#   - REDIS_URL is INTENTIONALLY OMITTED — cache.js silently falls back to an
+#     in-process Map when REDIS_URL is unset, so hot-path queries fall through
+#     to MySQL. If you later move to a paid plan and provision Render Redis,
+#     just add `REDIS_URL` here and the same code lights it up.
+# Secrets below marked `sync: false` are never committed — set them in
+# Render Dashboard → Service → Environment (and never check them into git).
+# =============================================================================
+
 services:
   - type: web
     name: dialog
     runtime: docker
     plan: free
     region: frankfurt
+    # Health-check probes /api/push/key (no auth, always 200 unless DB is down).
     healthCheckPath: /api/push/key
     envVars:
       - key: DB_HOST
@@ -36,3 +51,5 @@ services:
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      # NOTE: REDIS_URL deliberately not declared. Free Render has no managed
+      # Redis. cache.js falls back to in-memory when the env var is missing.

@@ -7,20 +7,12 @@
     "email": "vanylixcoder@users.noreply.github.com"
   },
   "type": "module",
-  "main": "electron/main.cjs",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "electron": "electron .",
-    "build": "electron-builder --publish never",
-    "build:win": "electron-builder --win --publish never",
-    "build:mac": "electron-builder --mac --publish never",
-    "build:linux": "electron-builder --linux --publish never",
-    "build:all": "electron-builder -wml --publish never",
-    "release": "electron-builder -wml --publish always",
     "perf": "npm run perf:lh && npm run perf:leak",
     "perf:lh": "lhci autorun --config=./lighthouserc.json",
     "perf:leak": "node scripts/perf-leak.mjs",
@@ -34,71 +26,12 @@
     "livekit-server-sdk": "^2.15.5",
     "mysql2": "^3.22.5",
     "socket.io": "^4.7.5",
-    "web-push": "^3.6.7",
-    "electron-updater": "^6.8.9"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@lhci/cli": "0.14.0",
-    "electron": "^42.5.0",
-    "electron-builder": "^26.15.3",
     "playwright": "^1.48.0",
     "socket.io-client": "^4.7.5",
     "wait-on": "^8.0.0"
-  },
-  "build": {
-    "appId": "app.dialog.desktop",
-    "productName": "Dialog",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      "server.js",
-      "db.js",
-      "cache.js",
-      "auth.js",
-      "public/**/*",
-      "build/tray-icon.png",
-      "package.json",
-      ".env.example"
-    ],
-    "extraResources": [],
-    "asar": true,
-    "asarUnpack": [
-      "server.js",
-      "db.js",
-      "cache.js",
-      "auth.js",
-      "node_modules/**/*.node"
-    ],
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Network"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.social-networking"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "VanylixCODER",
-      "repo": "Dialog"
-    }
   }
 }
