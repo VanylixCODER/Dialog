@@ -388,6 +388,18 @@
     </div>
   </div>
 
+  <!-- Delete chat confirm dialog — "Delete for me" or "Delete for everyone" -->
+  <div id="deleteChatModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card" style="width:320px">
+      <button class="hub-close" id="deleteChatClose" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="delete_chat_title">Delete chat?</div>
+      <div class="modal-actions" style="flex-direction:column;gap:6px;margin-top:8px">
+        <button id="deleteChatMe" class="btn-ghost" data-i18n="delete_for_me" style="width:100%">Delete for me</button>
+        <button id="deleteChatEveryone" class="btn-primary btn-danger" data-i18n="delete_for_everyone" style="width:100%">Delete for everyone</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Flashbang confirm dialog — fires before applying the Flashbang theme.
        Intercept at the swatch click level (selectTheme), not in applyTheme(), so the
        init path (loadSavedTheme) keeps restoring saved themes silently. -->
