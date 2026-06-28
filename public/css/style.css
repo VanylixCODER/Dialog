@@ -1665,9 +1665,10 @@ a:focus-visible {
   isolation: isolate;
 }
 .call-stage.fullscreen {
-  position: fixed; inset: 0; z-index: 200; max-height: none;
+  position: relative; max-height: none;
   background: var(--bg-1);
 }
+.chat.has-call.fullscreen-call { --call-w: 66%; --call-h: 78%; }
 .call-stage::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
@@ -1780,7 +1781,7 @@ a:focus-visible {
 .video-grid .tile { width: 100%; }
 .call-stage.fullscreen .video-grid { flex-direction: column; align-content: stretch; justify-content: flex-start; padding: 8px; gap: 6px; }
 .call-stage.fullscreen .video-grid .tile { width: 100%; }
-.call-stage.fullscreen .video-grid .tile.screen { flex: 1 1 auto; width: 100% !important; min-height: 0; max-height: none; }
+.call-stage.fullscreen .video-grid .tile.screen { max-height: 55vh; }
 .call-stage.fullscreen .video-grid .tile.screen:only-child { min-height: 0; }
 .call-stage.fullscreen .call-btn { width: 42px; height: 42px; font-size: 16px; }
 .call-stage.fullscreen .call-btn svg { width: 18px; height: 18px; }
