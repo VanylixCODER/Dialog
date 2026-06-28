@@ -1887,12 +1887,13 @@ function buildEmoji() {
   show(cats[0]);
 }
 function insertEmoji(em) { const i = $("msgInput"); const s = i.selectionStart || i.value.length; i.value = i.value.slice(0, s) + em + i.value.slice(i.selectionEnd || s); i.focus(); }
-$("emojiBtn").onclick = (e) => { e.stopPropagation(); $("gifPanel").classList.add("hidden"); if (!picker.dataset.built) { buildEmoji(); picker.dataset.built = "1"; } picker.classList.toggle("hidden"); };
-document.addEventListener("click", (e) => { if (!picker.contains(e.target) && e.target !== $("emojiBtn")) picker.classList.add("hidden"); });
+function toggleEmoji(e) { e.stopPropagation(); $("gifPanel").classList.add("hidden"); if (!picker.dataset.built) { buildEmoji(); picker.dataset.built = "1"; } picker.classList.toggle("hidden"); }
+$("emojiBtn").onclick = toggleEmoji;
+document.addEventListener("click", (e) => { if (!picker.contains(e.target) && e.target !== $("emojiBtn") && !e.target.closest("#composerMore")) picker.classList.add("hidden"); });
 
-// ---------- GIF (GIPHY) ----------
 const gifPanel = $("gifPanel"); let gifTimer;
-$("gifBtn").onclick = (e) => { e.stopPropagation(); picker.classList.add("hidden"); const show = gifPanel.classList.contains("hidden"); gifPanel.classList.toggle("hidden"); if (show) { loadGifs(""); $("gifSearch").focus(); } };
+function toggleGif(e) { e.stopPropagation(); picker.classList.add("hidden"); const show = gifPanel.classList.contains("hidden"); gifPanel.classList.toggle("hidden"); if (show) { loadGifs(""); $("gifSearch").focus(); } }
+$("gifBtn").onclick = toggleGif;
 $("gifSearch").addEventListener("input", (e) => { clearTimeout(gifTimer); gifTimer = setTimeout(() => loadGifs(e.target.value.trim()), 400); });
 async function loadGifs(q) {
   const grid = $("gifGrid");
@@ -1900,7 +1901,25 @@ async function loadGifs(q) {
   const d = await res.json(); $("gifNote").classList.toggle("hidden", !d.nokey); grid.innerHTML = "";
   (d.results || []).forEach((g) => { const img = new Image(); img.src = g.preview; img.className = "gif-item"; img.loading = "lazy"; img.onclick = () => { if (myRoom) socket.emit("message", { type: "gif", media: g.url, mediaName: "gif" }); gifPanel.classList.add("hidden"); }; grid.appendChild(img); });
 }
-document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn")) gifPanel.classList.add("hidden"); });
+document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn") && !e.target.closest("#composerMore")) gifPanel.classList.add("hidden"); });
+
+// Mobile composer more dropdown
+const moreBtn = $("moreBtn");
+const moreDropdown = $("composerMore");
+if (moreBtn && moreDropdown) {
+  moreBtn.onclick = (e) => { e.stopPropagation(); moreDropdown.classList.toggle("hidden"); };
+  moreDropdown.querySelectorAll(".cm-item").forEach((item) => {
+    item.onclick = () => {
+      moreDropdown.classList.add("hidden");
+      const action = item.dataset.action;
+      if (action === "emoji") $("emojiBtn").click();
+      else if (action === "gif") $("gifBtn").click();
+      else if (action === "attach") $("fileInput").click();
+      else if (action === "voice") $("voiceBtn").click();
+    };
+  });
+  document.addEventListener("click", (e) => { if (!moreDropdown.contains(e.target) && e.target !== moreBtn) moreDropdown.classList.add("hidden"); });
+}
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
 const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, fullscreen: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
@@ -2650,6 +2669,7 @@ document.addEventListener("keydown", (e) => {
   if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
   if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
   if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
+  if (!$("composerMore").classList.contains("hidden")) { $("composerMore").classList.add("hidden"); return; }
   if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
 });
 
