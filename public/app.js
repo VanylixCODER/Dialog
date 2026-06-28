@@ -683,6 +683,7 @@ function deleteChat(c) {
 function openChat(c) {
   c = upsertChat(c);
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
+  dismissNotif(c.key);
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
@@ -881,7 +882,7 @@ async function populateGroupSettingsPane() {
   return { ok: true };
 }
 $("gsAvaBtn").onclick = () => $("gsAvaFile").click();
-$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 2 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
+$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 5 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
 $("gsSave").onclick = async () => {
   if (!gsOwner) return;
   const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
@@ -1147,7 +1148,7 @@ $("createGroupModal")?.addEventListener?.("click", (e) => { if (e.target === $("
 $("cgAvaBtn")?.addEventListener?.("click", () => $("cgAvaFile")?.click());
 $("cgAvaFile")?.addEventListener?.("change", (e) => {
   const f = e.target.files[0]; if (!f) return;
-  if (f.size > 2 * 1024 * 1024) { $("cgError").textContent = t("err_avatar_too_big"); return; }
+  if (f.size > 5 * 1024 * 1024) { $("cgError").textContent = t("err_avatar_too_big"); return; }
   const r = new FileReader();
   r.onload = () => {
     cgAvatar = r.result;
@@ -1233,7 +1234,7 @@ let pendingAvatar = null;
 $("avaUploadBtn") && ($("avaUploadBtn").onclick = () => $("avaFile").click());
 $("avaFile") && ($("avaFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
-  if (f.size > 2 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
+  if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
   const r = new FileReader();
   r.onload = () => { pendingAvatar = r.result; const img = $("profileAvaImg"); img.src = r.result; img.style.display = "block"; $("profileAvaInit").style.display = "none"; };
   r.readAsDataURL(f);
@@ -1503,7 +1504,7 @@ socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
-  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80); notify(t("dm_ping", { name: fromName })); } }
+  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80);     notify(t("dm_ping", { name: fromName }), room); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", () => notify(t("dm_need_friend")));
@@ -1930,7 +1931,7 @@ if (moreBtn && moreDropdown) {
 }
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, fullscreen: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
 const audioEls = new Map(); // identity -> <audio> (звук участника)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
 const isMobile = () => matchMedia("(max-width:720px)").matches;
@@ -2069,11 +2070,10 @@ function syncCallUI() {
   const stage = $("callStage"), vb = $("voiceBar"), pane = $("chatPane");
   if (!call.active) { stage.classList.add("hidden"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); pane.classList.remove("has-call"); return; }
   const here = myRoom === call.roomKey;
-  const fs = stage.classList.contains("fullscreen");
   const showStage = here && !(isMobile() && call.minimized);
   stage.classList.toggle("hidden", !showStage);
-  if (!here) stage.classList.remove("fullscreen");
-  pane.classList.toggle("has-call", showStage && !fs && !isMobile()); // ПК: звонок — колонка/полоса чата
+  if (!here) { stage.classList.remove("fullscreen"); pane.classList.remove("fullscreen-call"); }
+  pane.classList.toggle("has-call", showStage && !isMobile()); // ПК: звонок — колонка/полоса чата
   applyDock();
   vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
@@ -2152,6 +2152,7 @@ async function joinCall() {
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
   populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
   $("toggleDeafen").classList.remove("off"); $("toggleDeafen").innerHTML = window.ICON.headphones;
+  dismissNotif(myRoom);
   socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
 }
 function endCall() {
@@ -2163,16 +2164,15 @@ function endCall() {
   vGrid.innerHTML = "";
   $("expandBtn").classList.remove("active");
   $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
-  $("chatPane").classList.remove("has-call"); // убрать grid-колонку звонка — без неё была чёрная зона
+  $("chatPane").classList.remove("has-call", "fullscreen-call"); // убрать grid-колонку звонка — без неё была чёрная зона
   $("startCallBtn").classList.remove("in-call");
-  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false, fullscreen: false });
+  Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
   krispNode = null; stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive(); updateCallButton();
   if (wasActive) sfx.end();
   stopPing();
-  restoreFullscreen();
 }
 $("hangUp").onclick = endCall;
 
@@ -2182,14 +2182,14 @@ socket.on("call-ring", (p) => {
   ensureAudioCtx();
   if (!isMuted(p.room) && !isDnd()) {
     sfx.call();
-    notify(t("call_in", { title: p.title }));
+    notify(t("call_in", { title: p.title }), p.room);
     if (_customRingtone) setTimeout(playCustomRingtone, 110);
   }
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 socket.on("call-auto-end", () => { if (call.active) endCall(); });
-socket.on("call-replaced", () => { if (call.active) endCall(); });
+socket.on("call-replaced", () => { if (call.active) { dismissNotif(call.roomKey || myRoom); endCall(); } });
 
 // Контролы
 async function setMic(on) {
@@ -2250,44 +2250,8 @@ $("expandBtn").onclick = () => {
   const stage = $("callStage");
   const fs = stage.classList.toggle("fullscreen");
   $("expandBtn").classList.toggle("active", fs);
-  $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile());
-  if (fs) arrangeFullscreen();
-  else restoreFullscreen();
+  $("chatPane").classList.toggle("fullscreen-call", fs);
 };
-let participantsWrap = null;
-function arrangeFullscreen() {
-  const vg = $("videoGrid");
-  if (participantsWrap || !vg) return;
-  const screenTile = vg.querySelector(".tile.screen");
-  if (!screenTile) return;
-  participantsWrap = document.createElement("div");
-  participantsWrap.className = "participants-wrap";
-  const tiles = [...vg.querySelectorAll(".tile:not(.screen)")];
-  tiles.forEach((t) => participantsWrap.appendChild(t));
-  screenTile.after(participantsWrap);
-  const hideBtn = document.createElement("button");
-  hideBtn.className = "hide-tiles-btn";
-  hideBtn.textContent = "▼";
-  hideBtn.dataset.labelHide = "▼";
-  hideBtn.dataset.labelShow = "▲";
-  hideBtn.onclick = () => {
-    const hidden = participantsWrap.classList.toggle("hidden-tiles");
-    hideBtn.textContent = hidden ? hideBtn.dataset.labelShow : hideBtn.dataset.labelHide;
-  };
-  participantsWrap.after(hideBtn);
-}
-function restoreFullscreen() {
-  if (!participantsWrap) return;
-  const vg = $("videoGrid");
-  if (vg) {
-    const tiles = [...participantsWrap.querySelectorAll(".tile")];
-    tiles.forEach((t) => vg.appendChild(t));
-    participantsWrap.remove();
-  }
-  const btn = vg?.querySelector(".hide-tiles-btn");
-  if (btn) btn.remove();
-  participantsWrap = null;
-}
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
@@ -2565,7 +2529,16 @@ function dayLabel(dayStr) {
 }
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
-function notify(text) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
+function notify(text, room) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.dataset.room = room || ""; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
+function dismissNotif(room) {
+  const el = $("notifyToast");
+  if (el && el.dataset.room === room) { el.classList.remove("show"); clearTimeout(el._t); }
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.getNotifications().then((ns) => { ns.filter((n) => n.tag === "call:" + room || n.tag === "msg:" + room).forEach((n) => n.close()); })
+    );
+  }
+}
 
 // ---------- Settings overlay (Discord-style, ~80vw × 80vh), status pill, ESC/click-outside ----------
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.

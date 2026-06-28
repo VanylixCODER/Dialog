@@ -116,7 +116,7 @@ app.post("/api/profile", async (req, res) => {
     const { name, avatar, description, status } = req.body || {};
     const patch = {};
     if (typeof name === "string" && name.trim()) patch.name = name.trim().slice(0, 64);
-    if (typeof avatar === "string") patch.avatar = avatar.slice(0, 3_000_000);
+    if (typeof avatar === "string") patch.avatar = avatar.slice(0, 5_000_000);
     if (typeof description === "string") patch.description = description.slice(0, 280);
     if (["online", "dnd", "invisible"].includes(status)) patch.status = status;
     await updateProfile(me.login, patch);
@@ -203,7 +203,7 @@ app.post("/api/groups", async (req, res) => {
     const memberList = [...new Set(String(req.body?.members || "").split(",").map((s) => s.trim().toLowerCase()).filter((l) => l && l !== me.login))];
     const id = await createGroup(cleanName, me.login, memberList);
     // Опциональный аватар: если передали — ставим отдельным UPDATE (не в createGroup, тот его не принимает). Лимит 3 MB как в rename/avatar верху.
-    if (typeof req.body?.avatar === "string" && req.body.avatar) await setGroupAvatar(id, req.body.avatar.slice(0, 3_000_000));
+    if (typeof req.body?.avatar === "string" && req.body.avatar) await setGroupAvatar(id, req.body.avatar.slice(0, 5_000_000));
     // Рассылаем group-updated всем новым участникам (включая овнера), чтобы их клиенты показали группу в списке чатов без ручного refetch.
     try { for (const l of await getGroupMembers(id)) notifyUser(l, "group-updated", { id }); } catch {}
     res.json({ ok: true, id, name: cleanName });
@@ -252,7 +252,7 @@ app.post("/api/groups/:id", async (req, res) => {
   if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
   const { name, avatar } = req.body || {};
   if (typeof name === "string" && name.trim()) await renameGroup(id, name.trim().slice(0, 64));
-  if (typeof avatar === "string") await setGroupAvatar(id, avatar.slice(0, 3_000_000));
+  if (typeof avatar === "string") await setGroupAvatar(id, avatar.slice(0, 5_000_000));
   await notifyGroup(id, "group-updated", { id }); res.json({ ok: true });
 });
 app.post("/api/groups/:id/members", async (req, res) => {
