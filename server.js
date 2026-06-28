@@ -87,9 +87,6 @@ const httpServer = useHttps
 
 const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
 
-// Digital Asset Links для TWA (express.static не отдаёт dotfiles по умолчанию)
-app.get("/.well-known/assetlinks.json", (req, res) =>
-  res.sendFile(join(__dirname, "public", ".well-known", "assetlinks.json"), (e) => { if (e) res.status(404).json([]); }));
 app.use(express.static(join(__dirname, "public")));
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -138,14 +135,14 @@ app.get("/api/profile/:login", async (req, res) => {
 // у клиентов с большим списком чатов (каждый видимый собеседник без аватара иначе логирует ERR).
 const TRANSPARENT_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 const sendTransparent = (res) => { res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=60"); res.send(TRANSPARENT_PNG); };
-// Default PFP fallback chain: pfp.svg (when user drops the file) > LIL_DIALOG.svg (mini-logo) > 1×1 transparent.
+// Default PFP fallback chain: pfp.svg (when user drops the file) > lil_dialog.webp (mini-logo) > 1×1 transparent.
 // Served as image/svg+xml so <img> in the browser renders it directly without a data-URL round-trip.
 const PFP_DEFAULT_PATH  = join(__dirname, "public", "src", "pfp.svg");
-const PFP_FALLBACK_PATH = join(__dirname, "public", "src", "LIL_DIALOG.svg");
+const PFP_FALLBACK_PATH = join(__dirname, "public", "src", "lil_dialog.webp");
 const sendPfpDefault = (res) => {
   res.set("Cache-Control", "public, max-age=60");
   if (existsSync(PFP_DEFAULT_PATH))  return res.type("image/svg+xml").sendFile(PFP_DEFAULT_PATH);
-  if (existsSync(PFP_FALLBACK_PATH)) return res.type("image/svg+xml").sendFile(PFP_FALLBACK_PATH);
+  if (existsSync(PFP_FALLBACK_PATH)) return res.type("image/webp").sendFile(PFP_FALLBACK_PATH);
   sendTransparent(res);
 };
 app.get("/api/avatar/:login", async (req, res) => {

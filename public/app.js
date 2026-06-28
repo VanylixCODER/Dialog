@@ -338,8 +338,6 @@ function applyTheme(key) {
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
-  // Easter egg hook — fires only on explicit user selection (NOT on init restore, see loadSavedTheme()).
-  if (key === "flashbang") maybeFlashbangEgg();
 }
 // Restore theme from localStorage on init WITHOUT triggering the flashbang easter egg.
 // Reads the saved key and stamps body[data-theme] directly. Invalid/missing keys leave
@@ -356,19 +354,25 @@ function applyTheme(key) {
     }
     applyTheme(key);
   }
-  // Show the centered flashbang confirm dialog. onConfirm runs only if the user clicks Yes.
-  // Closes on: Yes, Cancel, ✕, backdrop click, Escape. Idempotent — re-opening while
-  // already visible is a no-op (guard via the .hidden class, matching the codebase convention).
+  // Show the centered flashbang confirm dialog with a "Don't show again" checkbox.
+  // Skips the dialog entirely if the user previously checked the box.
+  // Closes on: Yes, Cancel, ✕, backdrop click, Escape. Idempotent.
   // Auto-focuses the Yes button so Enter confirms without tabbing.
+  const FLASHBANG_CONFIRM_KEY = "dialog_fb_confirm";
+  function flashbangConfirmSkipped() {
+    try { return localStorage.getItem(FLASHBANG_CONFIRM_KEY) === "1"; } catch { return false; }
+  }
   function openFlashbangConfirm(onConfirm) {
+    if (flashbangConfirmSkipped()) { if (onConfirm) onConfirm(); return; }
     const m = $("flashbangConfirmModal");
     if (!m) return;
     if (!m.classList.contains("hidden")) return;
     const yesBtn   = $("flashbangConfirmYes");
     const noBtn    = $("flashbangConfirmNo");
     const closeBtn = $("flashbangConfirmClose");
-    const onYes  = () => { m.classList.add("hidden");    cleanup(); if (onConfirm) onConfirm(); };
-    const onNo   = () => { m.classList.add("hidden");    cleanup(); };
+    const cb       = $("flashbangDontShow");
+    const onYes  = () => { m.classList.add("hidden"); cleanup(); if (cb && cb.checked) try { localStorage.setItem(FLASHBANG_CONFIRM_KEY, "1"); } catch {} if (onConfirm) onConfirm(); };
+    const onNo   = () => { m.classList.add("hidden"); cleanup(); };
     const onKey  = (e) => { if (e.key === "Escape") onNo(); };
     const onBack = (e) => { if (e.target === m) onNo(); };
     function cleanup() {
@@ -393,66 +397,7 @@ function applyTheme(key) {
   } catch {}
 }
 
-// ---- Flashbang easter egg + effect toggle ----
-// Every explicit user-driven selection of the Flashbang swatch (in Settings → Themes)
-// triggers a 2-second-delayed full-screen #fff overlay; click (or Enter/Space) plays
-// overlay (visual flash only) and dismisses. The effect can be turned off via the
-// toggle in Settings → Themes (persisted in localStorage).
-//   _flashbangEggPending: prevents the 2s timer from stacking on spam-clicks.
-//   _flashbangEffEnabled: read once on init + on toggle change; consulted in maybeFlashbangEgg().
-// triggerFlashbangEgg() also guards against the user switching OFF Flashbang during the wait
-// (we don't want a white overlay dropping over Matrix/Midnight/etc).
-const FLASHBANG_EFF_KEY = "dialog_flashbang_eff";   // "1" = enabled (default), "0" = disabled
-let _flashbangEggPending = false;
-let _flashbangEffEnabled = true;                    // default ON; users opt out via the toggle
-function loadFlashbangEff() {
-  try {
-    const v = localStorage.getItem(FLASHBANG_EFF_KEY);
-    // Explicit "0" disables; anything else (missing, "1", unknown) keeps it on.
-    _flashbangEffEnabled = v !== "0";
-  } catch { _flashbangEffEnabled = true; }
-}
-function syncFlashbangEffToggle() {
-  const el = $("flashbangEffToggle");
-  if (!el) return;
-  el.classList.toggle("on", _flashbangEffEnabled);
-  el.setAttribute("aria-checked", _flashbangEffEnabled ? "true" : "false");
-  el.title = t(_flashbangEffEnabled ? "flashbang_effect_on" : "flashbang_effect_off");
-}
-// Toggle the persisted flag + UI on click. Setting it OFF makes maybeFlashbangEgg() a no-op
-// without touching the pending-flag logic (so a queued timer already in-flight still bails
-// cleanly via the dataset.theme guard inside triggerFlashbangEgg).
-$("flashbangEffToggle")?.addEventListener?.("click", () => {
-  _flashbangEffEnabled = !_flashbangEffEnabled;
-  try { localStorage.setItem(FLASHBANG_EFF_KEY, _flashbangEffEnabled ? "1" : "0"); } catch {}
-  syncFlashbangEffToggle();
-});
-function maybeFlashbangEgg() {
-  if (_flashbangEggPending) return;
-  // Honors _flashbangEffEnabled (Settings → Themes toggle). When false, no overlay / no sound.
-  if (!_flashbangEffEnabled) return;
-  _flashbangEggPending = true;
-  setTimeout(triggerFlashbangEgg, 2000);
-}
-function triggerFlashbangEgg() {
-  _flashbangEggPending = false;
-  if (document.body.dataset.theme !== "flashbang") return;
-  // Re-check the toggle: user may have turned the effect OFF during the 2s wait.
-  if (!_flashbangEffEnabled) return;
-  const overlay = document.createElement("div");
-  overlay.className = "flashbang-egg";
-  overlay.setAttribute("role", "button");
-  overlay.setAttribute("aria-label", "flashbang");
-  overlay.tabIndex = 0;
-  const dismiss = () => {
-    // Click / keydown is the user-gesture window for Audio.play() — required by autoplay policies.
-    overlay.remove();
-  };
-  overlay.onclick = dismiss;
-  overlay.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); dismiss(); } };
-  document.body.appendChild(overlay);
-  overlay.focus(); // so Enter/Space work without a prior click
-}
+
 
 function renderThemes() {
   const grid = $("themeGrid");
@@ -486,9 +431,6 @@ function initLang() {
 window.addEventListener("langchange", () => {
   [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang()));
   renderChatList($("searchInput").value);
-  // Re-translate the flashbang effect toggle's On/Off tooltip + the disclaimer text below
-  // the theme grid (toggle title is set directly here; disclaimer goes through applyI18n).
-  syncFlashbangEffToggle();
   applyI18n(document.querySelector('[data-pane="themes"]'));
 });
 
@@ -661,8 +603,8 @@ function renderChatList(filter = "") {
       ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
-      <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span><span class="ci-actions"><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</span></div></div>`;
+      <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
     // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
     // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
@@ -2483,13 +2425,6 @@ function switchTab(tab) {
   // Регидрация данных пейна при переключении вручную (иначе кликом по табу после открытия оверлея
   // демонстрируется placeholder / устаревший контент до явного повторного openSettings).
   hydratePane(tab);
-  // The flashbang-banner sits at the top of the settings card and is only
-  // relevant to the Themes tab; hide it on every other tab so it doesn't
-  // add unrelated noise to Profile / Contacts / Group. Uses the codebase's
-  // existing .hidden utility (display:none !important) for consistency with
-  // every other toggled-visibility element (modals, menus, etc.).
-  const banner = $("flashbangDisclaimer");
-  if (banner) banner.classList.toggle("hidden", tab !== "themes");
 }
 // Объявлен ДО hydratePane, чтобы не упасть в TDZ при первом вызове из openSettings().
 // { id: gsId, ts: Date.now() } — если уже фетчили эту группу в текущей открытой сессии оверлея, повторно не лупим /api/groups/:id.
@@ -2652,7 +2587,7 @@ $("chatFilters").addEventListener("click", (e) => {
 });
 
 // ---------- Старт ----------
-loadSavedTheme(); loadFlashbangEff(); syncFlashbangEffToggle(); initLang(); setIcons(); checkSession();
+loadSavedTheme(); initLang(); setIcons(); checkSession();
 
 // ---------- PWA Install ----------
 let deferredPrompt = null;

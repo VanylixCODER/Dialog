@@ -73,7 +73,7 @@
       </div>
     </aside>
 
-    <main class="chat" id="chatPane">        <div id="emptyState" class="empty-state"><div class="es-logo"><img src="/src/dialoglogo.svg" alt="Dialog" /></div><div data-i18n="pick_chat">Select a chat</div></div>
+    <main class="chat" id="chatPane">        <div id="emptyState" class="empty-state"><div class="es-logo"><img src="/src/dialoglogo.webp" alt="Dialog" /></div><div data-i18n="pick_chat">Select a chat</div></div>
       <header class="chat-head hidden" id="chatHead">
         <button id="backBtnMobile" class="back-btn mobile-only" title="Back">‹</button>
         <div class="avatar ch-ava" id="chatAva" tabindex="0" role="button" aria-label="Open chat info">?</div>
@@ -171,7 +171,6 @@
   <!-- Settings overlay — единый оверлей настроек (Discord-style, 80% экрана). 4 вкладки: Profile / Contacts / Themes / Group. -->
   <div id="settingsOverlay" class="settings-overlay hidden" role="dialog" aria-modal="true">
     <div class="settings-card" role="document">
-      <div class="flashbang-banner" id="flashbangDisclaimer" role="note" data-i18n="flashbang_disclaimer">⚠️ Flashbang plays a CS:GO flashbang sound and flashes the screen. Leave the room or lower your volume before applying. You can disable the effect in the Themes tab.</div>
       <div class="settings-head">
         <h2 id="settingsTitle" data-i18n="settings">Settings</h2>
         <button id="settingsClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
@@ -235,12 +234,6 @@
         <section class="settings-pane" data-pane="themes" role="tabpanel">
           <h3 data-i18n="theme_choose">Choose theme</h3>
           <div class="theme-grid" id="themeGrid"></div>
-          <div class="flashbang-effect-row">
-            <span class="flashbang-effect-label" data-i18n="flashbang_effect_label">Flashbang effect</span>
-            <!-- Title is owned by syncFlashbangEffToggle() (state-aware: "flashbang_effect_on" / "_off").
-                 Don't add data-i18n-title here — applyI18n() would overwrite the state-aware title on langchange. -->
-            <button id="flashbangEffToggle" type="button" role="switch" class="dd-toggle on" aria-checked="true" title="On"></button>
-          </div>
           <div class="bg-section">
             <h4 data-i18n="bg_section_title">Background image</h4>
             <p class="bg-status" id="bgGlobalStatus" data-i18n="bg_status_none">No custom background — using theme defaults</p>
@@ -385,6 +378,7 @@
       <button class="hub-close" id="flashbangConfirmClose" data-i18n-title="close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title" id="flashbangConfirmTitle" data-i18n="flashbang_confirm_title">Apply Flashbang?</div>
       <p class="fb-confirm-body" data-i18n="flashbang_confirm_body">Do you really want to be blinded? This will flash a bright white screen and play a loud sound.</p>
+      <label class="fb-dont-show"><input type="checkbox" id="flashbangDontShow"> <span data-i18n="flashbang_dont_show">Don't show again</span></label>
       <div class="modal-actions">
         <button id="flashbangConfirmNo"  class="btn-ghost"            data-i18n="flashbang_confirm_no">Cancel</button>
         <button id="flashbangConfirmYes" class="btn-primary btn-danger" data-i18n="flashbang_confirm_yes">Yes, blind me</button>
