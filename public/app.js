@@ -2103,7 +2103,7 @@ async function joinCall() {
   const LK = window.LivekitClient;
   if (!LK) { alert(t("call_disabled")); return; }
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix();
+  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start();
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   try {
@@ -2144,6 +2144,7 @@ function endCall() {
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive(); updateCallButton();
   if (wasActive) sfx.end();
+  stopPing();
 }
 $("hangUp").onclick = endCall;
 
@@ -2432,42 +2433,42 @@ let connEl;
 socket.on("disconnect", () => { if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
 socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); if (token) refreshPresence(); });
 
-// ---------- Ping meter ----------
+// ---------- Ping meter (only during calls) ----------
 let serverRegion = "";
 socket.on("server-info", (info) => { serverRegion = info.region || ""; });
 const pingEl = $("pingMeter");
-const pingVal = $("pingValue");
 function updatePing(ms) {
-  if (!pingEl || !pingVal) return;
-  pingVal.textContent = ms;
+  if (!pingEl) return;
   const region = serverRegion ? serverRegion.toUpperCase() : "";
   pingEl.textContent = "";
   const dot = document.createElement("span");
   dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;background:currentColor;flex-shrink:0";
   pingEl.appendChild(dot);
   if (region) { const r = document.createElement("span"); r.textContent = region + " "; pingEl.appendChild(r); }
-  const v = document.createElement("span"); v.id = "pingValue"; v.textContent = ms; pingEl.appendChild(v);
-  const u = document.createElement("span"); u.id = "pingUnit"; u.textContent = "ms"; pingEl.appendChild(u);
+  const v = document.createElement("span"); v.textContent = ms; pingEl.appendChild(v);
+  const u = document.createElement("span"); u.textContent = "ms"; pingEl.appendChild(u);
   pingEl.className = "ping-" + (ms < 50 ? "green" : ms < 100 ? "orange" : "red");
 }
 let pingInterval = null;
+function stopPing() {
+  clearInterval(pingInterval);
+  pingInterval = null;
+  if (pingEl) { pingEl.className = ""; pingEl.textContent = ""; pingEl.style.display = "none"; }
+}
 function startPing() {
   if (pingInterval) clearInterval(pingInterval);
-  pingInterval = setInterval(() => {
+  if (pingEl) pingEl.style.display = "";
+  const tick = () => {
     const start = performance.now();
     socket.emit("latency", () => {
+      if (!call.active) { stopPing(); return; }
       const rtt = Math.round(performance.now() - start);
       updatePing(rtt);
     });
-  }, 2000);
-  // immediate first measure
-  const start = performance.now();
-  socket.emit("latency", () => {
-    const rtt = Math.round(performance.now() - start);
-    updatePing(rtt);
-  });
+  };
+  tick();
+  pingInterval = setInterval(tick, 2000);
 }
-socket.on("connect", startPing);
 
 // ---------- Утилиты ----------
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
