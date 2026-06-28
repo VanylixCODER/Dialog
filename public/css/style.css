@@ -657,6 +657,7 @@ a:focus-visible {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
   color: var(--text-dim);
 }
+.empty-state .back-btn { position: absolute; top: 8px; left: 8px; }
 .es-logo {
   font-size: 64px;
   color: var(--accent-300);
@@ -1220,6 +1221,16 @@ a:focus-visible {
   background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
   opacity: 0.4;
 }
+.block-notice {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 24px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-2);
+  color: var(--text-dim); font-size: 13px; letter-spacing: 0.3px;
+  text-align: center;
+}
+.chat.has-call > .block-notice { grid-area: comp; }
 .icon-btn {
   width: 40px; height: 40px;
   display: grid; place-items: center;
