@@ -559,6 +559,7 @@ const userSockets = new Map();  // login -> Set(socketId)
 const socketRoom = new Map();   // socketId -> room
 const userStatus = new Map();   // login -> 'online'|'dnd'|'invisible'
 const callRooms = new Map();    // room -> Map(socketId -> {name, login}) — кто СЕЙЧАС в звонке
+const callMeta = new Map();    // room -> { startTs, initiatorLogin, initiatorName, answered, ringTimer }
 const getCall = (room) => { if (!callRooms.has(room)) callRooms.set(room, new Map()); return callRooms.get(room); };
 function callStatePayload(room) {
   const c = callRooms.get(room);
@@ -566,6 +567,20 @@ function callStatePayload(room) {
   return { room, count: logins.length, logins };
 }
 function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
+function fmtDuration(ms) {
+  const sec = Math.floor(ms / 1000);
+  const min = Math.floor(sec / 60);
+  return min > 0 ? `${min}m ${sec % 60}s` : `${sec}s`;
+}
+async function saveSystemMessage(room, fromLogin, name, type, text) {
+  const ts = Date.now();
+  const payload = { room, fromLogin, name, ts, type, text: text || "", media: null, mediaName: null, localId: null };
+  try {
+    payload.id = await saveMessage({ ...payload });
+  } catch (e) { console.error("saveSystemMessage", e.message); return; }
+  if (!payload.id) return;
+  io.to(room).emit("message", payload);
+}
 
 const getPeers = (room) => { if (!rooms.has(room)) rooms.set(room, new Map()); return rooms.get(room); };
 function addUserSocket(login, id) { if (!userSockets.has(login)) userSockets.set(login, new Set()); userSockets.get(login).add(id); }
@@ -648,6 +663,7 @@ io.on("connection", (socket) => {
   function doLeave() {
     if (!currentRoom) return;
     callLeave();
+    saveSystemMessage(currentRoom, userLogin, userName, "leave", "");
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
     socket.leave(currentRoom);
@@ -687,6 +703,7 @@ io.on("connection", (socket) => {
       socket.emit("watermark", { room: currentRoom, updates: Object.entries(snap).map(([login, w]) => ({ login, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 })) });
     } catch {}
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
+    saveSystemMessage(currentRoom, userLogin, userName, "join", "");
     broadcastPresence(userLogin);
   });
 
@@ -801,24 +818,76 @@ io.on("connection", (socket) => {
   });
 
   // ----- Звонок: только ringing (медиа — через LiveKit SFU) -----
-  function callLeave() { if (!currentRoom) return; const room = currentRoom; const c = callRooms.get(room); if (c) { c.delete(socket.id); if (!c.size) callRooms.delete(room); broadcastCallState(room); } }
+  function callLeave() {
+    if (!currentRoom) return;
+    const room = currentRoom;
+    const c = callRooms.get(room);
+    if (c) {
+      c.delete(socket.id);
+      if (!c.size) {
+        callRooms.delete(room);
+        const meta = callMeta.get(room);
+        if (meta) {
+          clearTimeout(meta.ringTimer);
+          const dur = Date.now() - meta.startTs;
+          if (meta.answered && dur > 2000) {
+            saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_ended", fmtDuration(dur));
+          } else {
+            saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
+          }
+          callMeta.delete(room);
+        }
+      }
+      broadcastCallState(room);
+    }
+  }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
     const wasEmpty = c.size === 0;
     c.set(socket.id, { name: userName, login: userLogin });
     broadcastCallState(currentRoom);
-    if (!wasEmpty) return; // звонок уже идёт — звонить не нужно
-    const payload = { from: socket.id, name: userName, room: currentRoom, title: title || currentRoom };
+    if (!wasEmpty) {
+      // Другой участник присоединился — звонок отвечен
+      const meta = callMeta.get(currentRoom);
+      if (meta && !meta.answered) {
+        meta.answered = true;
+        clearTimeout(meta.ringTimer);
+        meta.ringTimer = null;
+      }
+      return;
+    }
+    // Первый участник — начинаем звонок и звоним остальным
+    const room = currentRoom;
+    callMeta.set(room, {
+      startTs: Date.now(),
+      initiatorLogin: userLogin,
+      initiatorName: userName,
+      answered: false,
+      ringTimer: setTimeout(() => {
+        const c2 = callRooms.get(room);
+        const meta2 = callMeta.get(room);
+        if (c2 && c2.size < 2 && meta2 && !meta2.answered) {
+          io.to(room).emit("call-auto-end", { reason: "no_answer" });
+          saveSystemMessage(room, meta2.initiatorLogin, meta2.initiatorName, "call_missed", fmtDuration(60000));
+          c2.clear();
+          callRooms.delete(room);
+          callMeta.delete(room);
+          broadcastCallState(room);
+        }
+      }, 60000)
+    });
+    saveSystemMessage(room, userLogin, userName, "call_started", "");
+    const payload = { from: socket.id, name: userName, room, title: title || room };
     let recips = [];
     try {
-      if (currentRoom.startsWith("@grp:")) recips = await getGroupMembers(currentRoom.slice(5));
-      else if (currentRoom.startsWith("@dm:")) recips = currentRoom.slice(4).split("~");
+      if (room.startsWith("@grp:")) recips = await getGroupMembers(room.slice(5));
+      else if (room.startsWith("@dm:")) recips = room.slice(4).split("~");
     } catch {}
     for (const login of recips) {
       if (login === userLogin) continue;
       notifyUser(login, "call-ring", payload);
-      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room: currentRoom });
+      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room });
     }
   });
   socket.on("call-leave", () => callLeave());
