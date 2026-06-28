@@ -2189,6 +2189,7 @@ socket.on("call-ring", (p) => {
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 socket.on("call-auto-end", () => { if (call.active) endCall(); });
+socket.on("call-replaced", () => { if (call.active) endCall(); });
 
 // Контролы
 async function setMic(on) {
@@ -2291,12 +2292,13 @@ function restoreFullscreen() {
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
 // и если звонок был активен — выйти из него. Идемпотентно: повторный вызов видит call.active=false.
-function _onPipClosed() { const wasActive = call.active; returnGridHome(); pipWin = null; if (wasActive) endCall(); }
+function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; if (pipDocking) { pipDocking = false; return; } if (call.active) endCall(); }
 // ⧉ Поп-аут звонка: Document PiP (Chrome, поверх всех) или обычное окно window.open (Firefox и пр.)
-let pipWin = null, pipPoll = 0;
+let pipWin = null, pipPoll = 0, pipDocking = false;
 function mountGridIn(win) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
-  win.document.body.style.cssText = "margin:0;background:#000700;overflow:hidden;display:flex;flex-direction:column;height:100vh";
+  win.document.body.dataset.theme = document.body.dataset.theme || "matrix";
+  win.document.body.style.cssText = "margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh";
   win.document.body.appendChild(vGrid);
   // прокси-кнопки управления в окне (проксируют клики на основные контролы)
   const bar = win.document.createElement("div"); bar.className = "call-bar";
@@ -2306,9 +2308,15 @@ function mountGridIn(win) {
   });
   bar.appendChild(actions); win.document.body.appendChild(bar);
 }
+function showPipNotice(show) {
+  const el = $("pipNotice");
+  if (el) el.classList.toggle("hidden", !show);
+}
+$("pipDockBtn").onclick = () => { if (pipWin) { pipDocking = true; try { pipWin.close(); } catch {} } };
 $("popoutBtn").onclick = async () => {
   if (!call.active) return;
   if (pipWin) { try { pipWin.close(); } catch {} return; }
+  showPipNotice(true);
   try {
     if ("documentPictureInPicture" in window) {
       pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });

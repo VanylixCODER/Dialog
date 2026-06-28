@@ -861,6 +861,13 @@ io.on("connection", (socket) => {
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
+    // Выкинуть старые сокеты того же пользователя (другая вкладка / устройство)
+    for (const [sid, info] of c) {
+      if (info.login === userLogin && sid !== socket.id) {
+        io.to(sid).emit("call-replaced");
+        c.delete(sid);
+      }
+    }
     const wasEmpty = c.size === 0;
     c.set(socket.id, { name: userName, login: userLogin });
     broadcastCallState(currentRoom);
@@ -868,12 +875,18 @@ io.on("connection", (socket) => {
       // Другой участник присоединился — звонок отвечен
       const meta = callMeta.get(currentRoom);
       if (meta && !meta.answered) {
-        meta.answered = true;
-        clearTimeout(meta.ringTimer);
-        meta.ringTimer = null;
+        const others = new Set([...c.values()].map((v) => v.login));
+        others.delete(userLogin);
+        if (others.size > 0) {
+          meta.answered = true;
+          clearTimeout(meta.ringTimer);
+          meta.ringTimer = null;
+        }
       }
       return;
     }
+    // Если выкинули свой же старый сокет — не пересоздаём meta (таймер звонка уже идёт)
+    if (callMeta.has(currentRoom)) return;
     // Первый участник — начинаем звонок и звоним остальным
     const room = currentRoom;
     callMeta.set(room, {
