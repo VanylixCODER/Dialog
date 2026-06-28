@@ -164,6 +164,13 @@ app.get("/api/group-avatar/:id", async (req, res) => {
     res.send(Buffer.from(m[2], "base64"));
   } catch { sendPfpDefault(res); }
 });
+app.get("/api/user/:login", async (req, res) => {
+  try {
+    const u = await getUser(req.params.login.toLowerCase());
+    if (!u) return res.status(404).json({ error: "not found" });
+    res.json({ ok: true, login: u.login, name: u.name });
+  } catch (e) { console.error("user get", e.message); res.status(500).json({ error: "server error" }); }
+});
 // Основные CRUD для групп: list / create / leave.
 // ВАЖНО: эти маршруты идут ПЕРВЫМИ — Express сопоставляет по порядку объявления. Если поставить их после , GET /api/groups уйдёт в POST с :id='', а POST /api/groups/:id/leave может перепутаться.
 // Клиент (app.js) вызывает вот эти три маршрута, но раньше сервер возвращал 404 — отсюда жалобы «группы сломались».
