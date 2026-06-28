@@ -31,7 +31,7 @@ import webpush from "web-push";
 import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
-  initSchema, waitForDb, saveMessage, recentMessages, deleteMessage, editMessage, toggleReaction,
+  initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, toggleReaction,
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
@@ -43,7 +43,7 @@ import {
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const HISTORY_LIMIT = 100;
+const HISTORY_LIMIT = 50;
 // Max file attachment size — must match the client composer cap and the JSON/Socket.IO HTTP limits
 // above. Increasing here without bumping the buffer limits silently drops messages with socket.io's
 // PayloadTooLarge error; bumping everything in lockstep is required. Value is shared so the push
@@ -680,6 +680,14 @@ io.on("connection", (socket) => {
 
   socket.on("leave", () => doLeave());
 
+  socket.on("load-more", async ({ before }) => {
+    if (!currentRoom || !userLogin) return;
+    try {
+      const msgs = await messagesBefore(currentRoom, before, 50);
+      socket.emit("more-messages", { msgs, before });
+    } catch (e) { console.error("load-more", e.message); }
+  });
+
   socket.on("message", async (msg) => {
     if (!currentRoom || !userLogin) return;
     const dmTo = dmPartner(currentRoom, userLogin);
@@ -805,6 +813,11 @@ io.on("connection", (socket) => {
     doLeave();
     if (userLogin) { removeUserSocket(userLogin, socket.id); if (!userSockets.has(userLogin)) broadcastPresence(userLogin); }
   });
+});
+
+// SPA fallback — serve index.html for all non-API paths (needed for /en/@user, /ru/group/1, etc.)
+app.get(/^\/(?!api\/|src\/|js\/|css\/|socket\.io\/)/, (req, res) => {
+  res.sendFile(join(__dirname, "public", "index.html"));
 });
 
 // ---------- Старт ----------
