@@ -1537,7 +1537,7 @@ function ytId(url) { const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|
 function addLinkExtras(wrap, text) {
   const url = firstUrl(text); if (!url) return;
   const yid = ytId(url);
-  if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>`; wrap.appendChild(d); scrollDown(); return; }
+  if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`; wrap.appendChild(d); scrollDown(); return; }
   fetch("/api/link-preview?url=" + encodeURIComponent(url), { headers: { Authorization: "Bearer " + token } })
     .then((r) => r.json()).then((d) => {
       if (!d || (!d.title && !d.image)) return;
@@ -2158,7 +2158,7 @@ async function joinCall() {
       pubs && pubs.forEach((pub) => { if (pub.track) attachTrack(pub.track, pub, p); });
       if (!p.isMicrophoneEnabled) setMicIndicator(lkTile(p.identity), true);
     });
-  } catch (e) { console.error("livekit connect", e); alert(t("err_media") + (e.message || "")); endCall(); return; }
+  } catch (e) { console.error("livekit connect", e); if (call.active) { alert(t("err_media") + (e.message || "")); endCall(); } return; }
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
