@@ -554,6 +554,23 @@ a:focus-visible {
 }
 .chat-item:hover .ci-del { opacity: 0.7; }
 .ci-del:hover { color: var(--danger); background: rgba(255, 82, 82, 0.12); opacity: 1; }
+.ci-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.ci-pin { cursor: pointer; padding: 2px; opacity: 0; display: flex; align-items: center; border-radius: var(--r-1); transition: opacity var(--t-base) var(--ease), background var(--t-base) var(--ease); }
+.chat-item:hover .ci-pin { opacity: 0.6; }
+.chat-item.pinned .ci-pin { opacity: 1; }
+.ci-pin:hover { opacity: 1; background: rgba(var(--primary-rgb), 0.1); }
+.chat-item.pinned .ci-del { opacity: 0.3; }
+
+/* ===== Filter tabs ===== */
+.cl-filters { display: flex; gap: 4px; padding: 0 12px 6px; }
+.clf-btn {
+  flex: 1; font-size: 12px; font-weight: 700; padding: 5px 0;
+  border: none; border-radius: var(--r-1); cursor: pointer;
+  background: transparent; color: var(--text-dim);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.clf-btn:hover { background: var(--surface-1); color: var(--text-strong); }
+.clf-btn.active { background: var(--surface-2); color: var(--accent-100); }
 
 /* pulse для новых сообщений в списке */
 .chat-item.flash { animation: rowFlash 1.4s var(--ease-out); }

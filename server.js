@@ -177,6 +177,16 @@ app.get("/api/groups", async (req, res) => {
     res.json({ groups: await getUserGroups(me.login) });
   } catch (e) { console.error("group list", e.message); res.status(500).json({ error: "server error" }); }
 });
+app.get("/api/groups/:id", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
+    const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
+    const members = await getGroupMembersDetailed(id);
+    res.json({ ok: true, id: g.id, name: g.name, owner: g.owner, members });
+  } catch (e) { console.error("group get", e.message); res.status(500).json({ error: "server error" }); }
+});
 app.post("/api/groups", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });

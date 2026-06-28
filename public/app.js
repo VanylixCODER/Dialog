@@ -27,7 +27,8 @@ let profile = null, myName = "";
 let myRoom = "", curKind = "dm", curTitle = "", activeKey = "";
 let avaVer = Date.now();
 let myStatus = "online", myDesc = "";
-const chats = new Map();             // key -> {key,type,name,login,id,last,ts,unread}
+const chats = new Map();             // key -> {key,type,name,login,id,last,ts,unread,pinned}
+let chatTypeFilter = "all";          // "all" | "dm" | "group"
 const peers = new Map();             // socketId -> {name, login}
 const presence = new Map();          // login -> 'online'|'dnd'|'offline'
 const relations = { friends: [], blocked: [], sent: [], incoming: [] };
@@ -529,7 +530,7 @@ function enterApp() {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   socket.emit("identify", { token });
-  loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
+  loadStoredChats(); loadPins(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush();
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
@@ -550,11 +551,14 @@ const lsSet = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 function dmKey(login) { return "@dm:" + [profile.login, login].sort().join("~"); }
 function loadStoredChats() { lsGet("dialog_dms").forEach((c) => chats.set(c.key, c)); }
 function persistDMs() { lsSet("dialog_dms", [...chats.values()].filter((c) => c.type === "dm").slice(0, 50)); }
+function savePins() { lsSet("dialog_pins", [...chats.values()].filter((c) => c.pinned).map((c) => c.key)); }
+function loadPins() { const pinned = new Set(lsGet("dialog_pins")); for (const c of chats.values()) c.pinned = pinned.has(c.key); }
 function upsertChat(c) { const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
 async function loadGroups() {
   const { ok, data } = await api("/api/groups", null, "GET");
   if (!ok) return;
-  data.groups.forEach((g) => { const key = "@grp:" + g.id; if (!chats.has(key)) chats.set(key, { key, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0 }); });
+  data.groups.forEach((g) => { const key = "@grp:" + g.id; if (!chats.has(key)) chats.set(key, { key, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0, pinned: false }); });
+  loadPins();
   renderChatList($("searchInput").value);
 }
 function isMuted(room) { return lsGet("dialog_muted").includes(room); }
@@ -639,13 +643,18 @@ function markDeliveredSeenUpToLast() {
 }
 function renderChatList(filter = "") {
   const ul = $("chatList"); ul.innerHTML = ""; filter = filter.toLowerCase();
-  const list = [...chats.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const list = [...chats.values()].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return (b.ts || 0) - (a.ts || 0);
+  });
   let shown = 0;
   for (const c of list) {
     if (filter && !(c.name || "").toLowerCase().includes(filter)) continue;
+    if (chatTypeFilter !== "all" && c.type !== chatTypeFilter) continue;
     shown++;
     const li = document.createElement("li");
-    li.className = "chat-item" + (c.key === activeKey ? " active" : "");
+    li.className = "chat-item" + (c.key === activeKey ? " active" : "") + (c.pinned ? " pinned" : "");
     li._chatKey = c.key; // метка для быстрого in-place обновления точек (см. updateDots)
     const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
     const avaInner = c.type === "group"
@@ -653,7 +662,7 @@ function renderChatList(filter = "") {
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span><span class="ci-actions"><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</span></div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
     // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
     // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
@@ -672,14 +681,23 @@ function renderChatList(filter = "") {
         deleteChat(c);
       }
     };
-    li.onclick = (e) => { if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; } openChat(c); };
+    li.onclick = (e) => {
+      if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; }
+      if (e.target.closest(".ci-pin")) { e.stopPropagation(); togglePin(c); return; }
+      openChat(c);
+    };
     ul.appendChild(li);
   }
   $("chatsEmpty").classList.toggle("hidden", shown > 0);
 }
+function togglePin(c) {
+  c.pinned = !c.pinned;
+  savePins();
+  renderChatList($("searchInput").value);
+}
 function deleteChat(c) {
   if (c.type === "group") { if (!confirm(t("leave_group"))) return; api("/api/groups/" + c.id + "/leave"); }
-  chats.delete(c.key); persistDMs();
+  chats.delete(c.key); persistDMs(); savePins();
   if (c.key === activeKey) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); applyWallpaper(); /* no room → drop wallpaper class */ }
   renderChatList($("searchInput").value);
 }
@@ -1194,7 +1212,7 @@ async function submitCreateGroup() {
   }
   closeCreateGroup();
   const key = "@grp:" + data.id;
-  chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0 });
+  chats.set(key, { key, type: "group", id: data.id, name: data.name, last: "", ts: Date.now(), unread: 0, pinned: false });
   renderChatList($("searchInput").value);
   openChat(chats.get(key));
   notify(t("group_created_toast", { name }));
@@ -1228,7 +1246,7 @@ async function openDM(login) {
   if (!login || !profile || login === profile.login) return;
   const { ok, data } = await api("/api/user/" + login, null, "GET");
   if (!ok) return notify(t("err_user_not_found"));
-  openChat({ key: dmKey(login), type: "dm", login, name: data.name || login, last: "", ts: Date.now(), unread: 0 });
+  openChat({ key: dmKey(login), type: "dm", login, name: data.name || login, last: "", ts: Date.now(), unread: 0, pinned: false });
   persistDMs();
 }
 
@@ -2624,6 +2642,14 @@ function setIcons() {
   if (toastClose) { toastClose.innerHTML = window.ICON.phoneOff + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
 }
 $("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
+$("chatFilters").addEventListener("click", (e) => {
+  const btn = e.target.closest(".clf-btn");
+  if (!btn) return;
+  $("chatFilters").querySelectorAll(".clf-btn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  chatTypeFilter = btn.dataset.filter;
+  renderChatList($("searchInput").value);
+});
 
 // ---------- Старт ----------
 loadSavedTheme(); loadFlashbangEff(); syncFlashbangEffToggle(); initLang(); setIcons(); checkSession();
