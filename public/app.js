@@ -432,6 +432,7 @@ window.addEventListener("langchange", () => {
   [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang()));
   renderChatList($("searchInput").value);
   applyI18n(document.querySelector('[data-pane="themes"]'));
+  pushState();
 });
 
 // ---------- API ----------
@@ -478,6 +479,7 @@ function enterApp() {
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
   redeemStoredInvite();
+  setTimeout(() => { onPopState(); }, 100);
 }
 socket.on("connect", () => {
   if (!token) return;
@@ -683,6 +685,7 @@ function openChat(c) {
   if (call.active && c.key === call.roomKey) call.minimized = false; // вернулись в чат звонка
   syncCallUI(); updateCallButton();
   applyWallpaper();  // per-chat→global wallpaper resolution, вызывается при каждой смене чата
+  pushState();
 }
 $("backBtnMobile").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
@@ -1393,15 +1396,43 @@ socket.on("peer-left", (p) => { peers.delete(p.id); if (!$("infoPanel").classLis
 
 // ---------- Сообщения ----------
 const messagesEl = $("messages");
+let _moreLoading = false;
+let _moreHas = true;
+let _moreOldest = null;
 socket.on("history", (list) => {
   messagesEl.innerHTML = "";
+  _moreLoading = false;
+  _moreHas = list.length >= 50;
+  _moreOldest = list.length ? list[0].id : null;
   if (list.length) { const sep = document.createElement("div"); sep.className = "system-msg"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
   list.forEach((m) => renderMessage(m, false, isPingForMe(m)));
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   scrollDown();
-  // Курсоры доставки/просмотра: на открытии чата пометим всё видимое партнёру как «доставлено» + «просмотрено».
   setTimeout(markDeliveredSeenUpToLast, 50);
+});
+socket.on("more-messages", ({ msgs, before }) => {
+  if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; return; }
+  const prev = messagesEl.scrollHeight;
+  const beforeCount = messagesEl.children.length;
+  for (const m of msgs) renderMessage(m, false, isPingForMe(m));
+  for (let i = messagesEl.children.length - 1; i >= beforeCount; i--)
+    messagesEl.insertBefore(messagesEl.children[i], messagesEl.firstChild);
+  messagesEl.scrollTop = messagesEl.scrollHeight - prev;
+  _moreOldest = msgs[0].id;
+  _moreHas = msgs.length >= 50;
+  _moreLoading = false;
+});
+// Debounced scroll-to-top → load older messages
+let _moreScrollTimer = null;
+messagesEl.addEventListener("scroll", () => {
+  if (_moreScrollTimer) clearTimeout(_moreScrollTimer);
+  _moreScrollTimer = setTimeout(() => {
+    if (_moreLoading || !_moreHas || !_moreOldest) return;
+    if (messagesEl.scrollTop > 300) return;
+    _moreLoading = true;
+    socket.emit("load-more", { before: _moreOldest });
+  }, 200);
 });
 socket.on("message", (m) => {
   const ping = isPingForMe(m);
@@ -2588,6 +2619,7 @@ $("chatFilters").addEventListener("click", (e) => {
 
 // ---------- Старт ----------
 loadSavedTheme(); initLang(); setIcons(); checkSession();
+window.addEventListener("popstate", onPopState);
 
 // ---------- PWA Install ----------
 let deferredPrompt = null;

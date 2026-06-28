@@ -195,6 +195,16 @@ export async function recentMessages(room, limit = 100) {
   if (json.length < HIST_MAX_CACHE) await cacheSet("hist:" + room, json, HIST_TTL);
   return rows;
 }
+export async function messagesBefore(room, beforeId, limit = 50) {
+  const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 50));
+  const rows = await query(
+    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited
+     FROM messages WHERE room=? AND id<? ORDER BY id DESC LIMIT ${lim}`, [room, beforeId]
+  );
+  rows.reverse();
+  rows.forEach((r) => { try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; } r.edited = !!r.edited; });
+  return rows;
+}
 export async function deleteMessage(id, login) {
   const r = await query("SELECT room FROM messages WHERE id=? AND from_login=?", [id, login]);
   if (!r.length) return null;
