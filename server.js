@@ -718,7 +718,10 @@ io.on("connection", (socket) => {
       // base64 упаковывает 3 байта → 4 символа. Точный raw ≈ length * 3 / 4. Используем тот же
       // лимит что и у клиента (75 MB), чтобы отправитель не получил false negative из-за недос-
       // татка в формуле.
-      const approxRawBytes = Math.floor(media.length * 3 / 4);
+      // Важно: data:…;base64, префикс не считается — его длина вычитается из media.length.
+      const comma = media.indexOf(",");
+      const b64len = comma >= 0 ? media.length - comma - 1 : media.length;
+      const approxRawBytes = Math.floor(b64len * 3 / 4);
       if (approxRawBytes > MAX_FILE_BYTES) {
         socket.emit("file-rejected", { reason: "file_too_big", maxMb: MAX_FILE_SIZE_MB });
         media = null; mediaName = "";
@@ -732,9 +735,15 @@ io.on("connection", (socket) => {
       localId: msg.localId || null,
     };
     try { payload.id = await saveMessage({ room: currentRoom, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
+    // Сообщаем только после успешного сохранения: если БД не приняла медиа (max_allowed_packet),
+    // не шлём ни broadcast, ни ACK, и отправляем отправителю ошибку.
+    if (!payload.id) {
+      socket.emit("file-rejected", { reason: "save_failed" });
+      return;
+    }
     io.to(currentRoom).emit("message", payload);
     // Возвращаем автору ACK с id, чтобы клиент снял статус «отправляется».
-    if (payload.id) socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
+    socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
 
     // ЛС-пинг + push (тем, кто не в этой комнате)
     let recips = [];
