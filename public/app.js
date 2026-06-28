@@ -464,6 +464,10 @@ $("registerForm").onsubmit = async (e) => {
 };
 function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
 async function checkSession() {
+  // Save the current URL route before any auth redirect — so after login we can
+  // jump straight to the intended DM/group instead of staring at the empty app.
+  const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
+  if (route.login || route.groupId) sessionStorage.setItem("dialog_route", JSON.stringify(route));
   if (!token) return;
   const { ok, data } = await api("/api/me", null, "GET");
   if (ok) { profile = data.profile; enterApp(); } else localStorage.removeItem("dialog_token");
@@ -482,7 +486,12 @@ function enterApp() {
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
   redeemStoredInvite();
   // Initial URL route (DM/group from path) — runs after chats/groups are loaded.
-  const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
+  // Prefer a previously saved route (set before auth redirect) over the current URL,
+  // so a reload while logged out still opens the right chat after login.
+  let route;
+  try { route = JSON.parse(sessionStorage.getItem("dialog_route")); } catch {}
+  if (!route || (!route.login && !route.groupId)) route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
+  sessionStorage.removeItem("dialog_route");
   if (route.lang && window.setLang) window.setLang(route.lang);
   if (route.login && window.openDM) {
     const key = "@dm:" + [profile.login, route.login].sort().join("~");
