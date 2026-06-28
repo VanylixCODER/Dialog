@@ -117,6 +117,7 @@ const I18N = {
     filter_all: "All", filter_dm: "DMs", filter_online: "Online", filter_pinned: "Pinned", filter_group: "Groups",
     call_started: "Call started", call_ended: "Call ended", call_missed: "Missed call",
     joined_chat: "joined the chat", left_chat: "left the chat",
+    popout_active: "Pop out mode activated", popout_dock: "Dock",
  
   },
   ru: {
@@ -237,6 +238,7 @@ const I18N = {
     filter_all: "Все", filter_dm: "ЛС", filter_online: "В сети", filter_pinned: "Закреплённые", filter_group: "Группы",
     call_started: "Звонок начат", call_ended: "Звонок завершён", call_missed: "Пропущенный звонок",
     joined_chat: "вошёл(а) в чат", left_chat: "вышел(ла) из чата",
+    popout_active: "Режим всплывающего окна", popout_dock: "Вернуть",
  
   },
 };
