@@ -33,6 +33,9 @@ const peers = new Map();             // socketId -> {name, login}
 const presence = new Map();          // login -> 'online'|'dnd'|'offline'
 const relations = { friends: [], blocked: [], sent: [], incoming: [] };
 const blocked = new Set();
+const clearedChats = new Map(); // room -> timestamp (ms)
+try { const c = JSON.parse(localStorage.getItem("clearedChats") || "{}"); for (const [k, v] of Object.entries(c)) clearedChats.set(k, v); } catch {}
+function persistCleared() { localStorage.setItem("clearedChats", JSON.stringify(Object.fromEntries(clearedChats))); }
 const isDnd = () => myStatus === "dnd";
 
 // ---------- Звуки (WebAudio) ----------
@@ -677,8 +680,10 @@ function deleteChat(c) {
   const modal = $("deleteChatModal");
   const doDelete = (everyone) => {
     modal.classList.add("hidden");
+    clearedChats.set(c.key, Date.now()); persistCleared();
     if (everyone) api("/api/room/" + encodeURIComponent(c.key) + "/delete", null, "POST");
-    chats.delete(c.key); persistDMs(); savePins();
+    chats.delete(c.key);
+    persistDMs(); savePins();
     if (c.key === activeKey) resetToEmpty();
     renderChatList($("searchInput").value);
   };
@@ -1073,7 +1078,7 @@ socket.on("pending-resolved", (p) => {
   refreshGsLists(p.id);
 });
 socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) resetToEmpty(); if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
-socket.on("room-cleared", ({ room }) => { if (chats.has(room)) { chats.delete(room); persistDMs(); if (myRoom === room) resetToEmpty(); renderChatList($("searchInput").value); } });
+socket.on("room-cleared", ({ room }) => { clearedChats.set(room, Date.now()); persistCleared(); if (chats.has(room)) { chats.delete(room); persistDMs(); if (myRoom === room) resetToEmpty(); renderChatList($("searchInput").value); } });
 
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
@@ -1449,6 +1454,8 @@ let _moreOldest = null;
 socket.on("history", (list) => {
   messagesEl.innerHTML = "";
   _moreLoading = false;
+  const cleared = clearedChats.get(myRoom);
+  if (cleared) list = list.filter((m) => m.ts > cleared);
   _moreHas = list.length >= 50;
   _moreOldest = list.length ? list[0].id : null;
   if (list.length) { const sep = document.createElement("div"); sep.className = "system-msg"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
@@ -1460,6 +1467,9 @@ socket.on("history", (list) => {
 });
 socket.on("more-messages", ({ msgs, before }) => {
   if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; return; }
+  const cleared = clearedChats.get(myRoom);
+  if (cleared) msgs = msgs.filter((m) => m.ts > cleared);
+  if (!msgs.length) { _moreHas = false; _moreLoading = false; return; }
   const prev = messagesEl.scrollHeight;
   const beforeCount = messagesEl.children.length;
   for (const m of msgs) renderMessage(m, false, isPingForMe(m));
