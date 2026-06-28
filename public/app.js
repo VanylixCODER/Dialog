@@ -463,7 +463,10 @@ $("registerForm").onsubmit = async (e) => {
   onAuth(data);
 };
 function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
-function showLogin() { $("login").classList.remove("hidden"); }
+function showLogin() {
+  $("loginLoading").classList.add("hidden");
+  $("loginAuth").classList.remove("hidden");
+}
 async function checkSession() {
   // Save the current URL route before any auth redirect — so after login we can
   // jump straight to the intended DM/group instead of staring at the empty app.
