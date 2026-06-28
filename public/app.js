@@ -1828,8 +1828,9 @@ function wireDragAndDrop() {
 wireDragAndDrop();
 // Сервер отклонил медиа по лимиту — показываем тост только отправившему (он и так уже
 // увидит серый файл или отсутствие; здесь — понятная формулировка).
-socket.on("file-rejected", ({ maxMb } = {}) => {
-  notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
+socket.on("file-rejected", ({ reason, maxMb } = {}) => {
+  if (reason === "save_failed") notify(t("file_rejected_size", { mb: MAX_FILE_SIZE_MB }));
+  else notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
 });
 let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0;
 $("voiceBtn").onclick = async () => {
