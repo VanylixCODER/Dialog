@@ -1237,6 +1237,29 @@ a:focus-visible {
   50% { box-shadow: 0 0 0 8px rgba(255, 82, 82, 0); }
 }
 
+/* Mobile composer dropdown */
+.composer-more {
+  position: absolute; bottom: 100%; left: 14px; z-index: 50;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-3);
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow-md);
+  min-width: 160px;
+}
+.cm-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: transparent; border: none; border-radius: var(--r-2);
+  color: var(--text); font-family: inherit; font-size: 14px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+.cm-item:hover { background: var(--surface-2); }
+.cm-item:active { background: var(--surface-3); }
+.cm-gif-label { font-weight: 700; letter-spacing: 1px; font-size: 13px; }
+
 .input-wrap { flex: 1; min-width: 0; }
 #msgInput {
   width: 100%; resize: none;
@@ -2241,13 +2264,13 @@ a:focus-visible {
 
 /* Ping meter */
 #pingMeter {
-  position: fixed; bottom: 12px; right: 12px; z-index: 200;
+  position: absolute; top: 8px; right: 8px; z-index: 10;
   font-family: var(--font-ui);
   font-size: 11px; font-weight: 700;
   letter-spacing: 0.5px;
   padding: 4px 10px;
   border-radius: var(--r-pill);
-  background: var(--bg-1);
+  background: rgba(0,0,0,0.6);
   border: 1px solid var(--border-1);
   backdrop-filter: blur(4px);
   display: flex; align-items: center; gap: 4px;
