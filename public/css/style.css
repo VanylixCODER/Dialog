@@ -340,6 +340,26 @@ a:focus-visible {
 /* (вращающаяся conic-рамка убрана — отвлекала и портила вид логина; тонкая подсветка через .login-card box-shadow остаётся) */
 .login-card > * { position: relative; z-index: 1; }
 
+/* Loading dots inside the login card — shown while we check the stored session */
+.login-loading {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 30px 0;
+}
+.lds-dot { display: flex; gap: 8px; }
+.lds-dot span {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--primary);
+  animation: ldsDot 1.2s ease-in-out infinite;
+}
+.lds-dot span:nth-child(2) { animation-delay: 0.16s; }
+.lds-dot span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes ldsDot {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); }
+  40% { opacity: 1; transform: scale(1); }
+}
+.login-loading p { color: var(--text-2); font-size: 14px; margin: 0; }
+.login-auth { display: flex; flex-direction: column; gap: 14px; }
+
 .brand {
   display: flex; align-items: center; gap: 14px; justify-content: center;
   margin-bottom: 2px;

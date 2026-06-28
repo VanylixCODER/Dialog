@@ -17,28 +17,37 @@
 </head>
 <body>
   <!-- ВХОД -->
-  <div id="login" class="login hidden">
+  <div id="login" class="login">
     <div class="login-card">
-      <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>        <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
-      <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
-        <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
+      <!-- Loading state — visible on page load until we know the auth status -->
+      <div id="loginLoading" class="login-loading">
+        <div class="lds-dot"><span></span><span></span><span></span></div>
+        <p data-i18n="connecting">Connecting…</p>
       </div>
-      <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
-        <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
-        <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
-        <div class="form-error" id="loginError"></div>
-        <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
-      </form>
-      <form id="registerForm" class="auth-form hidden" method="POST" onsubmit="return false">
-        <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
-        <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
-        <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
-        <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" />
-        <div class="form-error" id="registerError"></div>
-        <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
-      </form>
+      <!-- Auth forms — shown only when we need the user to sign in -->
+      <div id="loginAuth" class="login-auth hidden">
+        <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
+        <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
+        <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
+          <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
+        </div>
+        <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
+          <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
+          <div class="form-error" id="loginError"></div>
+          <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
+        </form>
+        <form id="registerForm" class="auth-form hidden" method="POST" onsubmit="return false">
+          <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
+          <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
+          <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
+          <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" />
+          <div class="form-error" id="registerError"></div>
+          <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -418,6 +427,6 @@
   <script src="/js/matrix.js"></script>
   <script src="/js/emoji.js"></script>
   <script src="/js/router.js"></script>
-  <script src="app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
