@@ -73,10 +73,10 @@ async function sendPush(login, payload) {
 // ---------- Express ----------
 const app = express();
 app.set("trust proxy", 1);
-// 75 MB matches the client-side upload cap — base64 inflates raw bytes by ~4/3, so the JSON
-// envelope itself needs to fit a 75 MB encoded payload in a single POST. Keep this in sync with
-// MAX_FILE_SIZE_MB below AND with `maxHttpBufferSize` on the Socket.IO server.
-app.use(express.json({ limit: "75mb" }));
+// Client cap is MAX_FILE_SIZE_MB raw bytes, but base64 inflates by ~4/3;
+// the JSON/Socket.IO buffer must fit the encoded payload. Compute from the raw limit.
+const B64_BUFFER_MB = Math.ceil(MAX_FILE_BYTES * 4 / 3 / (1024 * 1024)) + 8; // +8 MB slack for JSON envelope
+app.use(express.json({ limit: B64_BUFFER_MB + "mb" }));
 
 const keyPath = join(__dirname, "certs", "key.pem");
 const certPath = join(__dirname, "certs", "cert.pem");
@@ -85,7 +85,7 @@ const httpServer = useHttps
   ? createHttps({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, app)
   : createHttp(app);
 
-const io = new Server(httpServer, { maxHttpBufferSize: 75e6 });
+const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
 
 // Digital Asset Links для TWA (express.static не отдаёт dotfiles по умолчанию)
 app.get("/.well-known/assetlinks.json", (req, res) =>

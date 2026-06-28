@@ -1689,7 +1689,7 @@ function showProgress(file, pct) {
   }
 }
 function hideProgress() {
-  const bar = $("uploadProgress"); if (!bar) bar.classList.add("hidden");
+  const bar = $("uploadProgress"); if (bar) bar.classList.add("hidden");
   const fill = $("upFill"); if (fill) fill.style.width = "0%";
   const txt = $("upText"); if (txt) txt.textContent = "0%";
 }
