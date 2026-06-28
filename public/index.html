@@ -25,13 +25,13 @@
         <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
         <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
       </div>
-      <form id="loginForm" class="auth-form">
+      <form id="loginForm" class="auth-form" method="POST" action="/api/login">
         <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
         <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
         <div class="form-error" id="loginError"></div>
         <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
       </form>
-      <form id="registerForm" class="auth-form hidden">
+      <form id="registerForm" class="auth-form hidden" method="POST" action="/api/register">
         <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
         <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
         <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
