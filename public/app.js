@@ -483,6 +483,7 @@ function enterApp() {
   redeemStoredInvite();
   // Initial URL route (DM/group from path) — runs after chats/groups are loaded.
   const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
+  if (route.lang && window.setLang) window.setLang(route.lang);
   if (route.login && window.openDM) {
     const key = "@dm:" + [profile.login, route.login].sort().join("~");
     const existing = chats.get(key);
