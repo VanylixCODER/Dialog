@@ -651,7 +651,7 @@ function renderChatList(filter = "") {
     const avaInner = c.type === "group"
       ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
-    li.innerHTML = `<div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}${dot}</div>
+    li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
       <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
@@ -695,10 +695,20 @@ function openChat(c) {
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
   $("messages").innerHTML = "";
   $("chatTitle").textContent = c.name;
-  $("chatSub").textContent = c.type === "group" ? t("room_sub_group") : t("room_sub_dm");
+  if (c.type === "group") {
+    $("chatSub").textContent = t("room_sub_group");
+  } else {
+    const st = presence.get(c.login);
+    $("chatSub").textContent = st ? t("status_" + st) : t("room_sub_dm");
+  }
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
-  $("chatAva").innerHTML = c.type === "group" ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">` : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+  if (c.type === "group") {
+    $("chatAva").innerHTML = `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
+  } else {
+    const st = presence.get(c.login);
+    $("chatAva").innerHTML = `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}<span class="st-dot ch-status st-${statusClass(st)}"></span>`;
+  }
   // Title для чат-аватара: DM → open_profile (мини-профиль собеседника), группа → settings overlay
   // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
   // по факту смены чата, а не через data-i18n-title.
@@ -1271,15 +1281,15 @@ async function loadRelations() {
 function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
   row.innerHTML = `<div class="avatar" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div><span class="c-name">${escapeHtml(login)}</span>`;
-  buttons.forEach(([label, fn, danger]) => { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.onclick = fn; row.appendChild(b); });
-  row.querySelector(".c-name").onclick = () => openMiniProfile(login);
+  row.onclick = (e) => { if (e.target.closest("button")) return; openDM(login); };
+  buttons.forEach(([label, fn, danger]) => { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.onclick = (e) => { e.stopPropagation(); fn(); }; row.appendChild(b); });
   return row;
 }
 function renderContacts() {
   const reqList = $("reqList"); if (!reqList) return;
   reqList.innerHTML = ""; const fL = $("friendsListEl"); if (fL) fL.innerHTML = ""; const sL = $("sentList"); if (sL) sL.innerHTML = "";
   const reqEmpty = $("reqEmpty"); if (reqEmpty) reqEmpty.classList.toggle("hidden", relations.incoming.length > 0);
-  relations.incoming.forEach((l) => reqList.appendChild(contactRow(l, [["✓", () => friend(l, "accept")], ["✕", () => friend(l, "decline"), true]])));
+  relations.incoming.forEach((l) => reqList.appendChild(contactRow(l, [["✓", async () => { await friend(l, "accept"); await refreshPresence(); openDM(l); }], ["✕", () => friend(l, "decline"), true]])));
   relations.friends.forEach((l) => fL.appendChild(contactRow(l, [[t("dm_open"), () => { openDM(l); }], [t("remove_friend"), () => friend(l, "remove"), true]])));
   relations.sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
 }
@@ -1344,7 +1354,14 @@ function updateDots() {
     }
   }
 }
-socket.on("presence", ({ login, status }) => { presence.set(login, status); updateDots(); });
+socket.on("presence", ({ login, status }) => {
+  presence.set(login, status); updateDots();
+  if (curKind === "dm" && myRoom && login === myRoom.slice(4).split("~").find((l) => l !== profile.login)) {
+    $("chatSub").textContent = t("status_" + status);
+    const dot = $("chatAva")?.querySelector(".ch-status");
+    if (dot) dot.className = "st-dot ch-status st-" + statusClass(status);
+  }
+});
 socket.on("relations-changed", () => loadRelations());
 
 // ---------- Участники (инфо-панель) ----------
