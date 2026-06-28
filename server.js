@@ -220,8 +220,12 @@ app.post("/api/groups/:id/leave", async (req, res) => {
     // Если уходит овнер — группа становится «безхозной». Мы не передаём владение автоматом (это большой UX-шок) — вместо этого: если овнер в группе один, автоматически удаляем группу; иначе просто выводим из group_members.
     const wasOwner = g.owner === me.login;
     const membersBefore = await getGroupMembers(id);
+    const willDelete = wasOwner && membersBefore.length === 1;
+    if (!willDelete) {
+      saveSystemMessage("@grp:" + id, me.login, me.name, "leave", "");
+    }
     await leaveGroup(id, me.login);
-    if (wasOwner && membersBefore.length === 1) {
+    if (willDelete) {
       // Одинокий участник — он же овнер; после leaveGroup() группа пуста, а сообщения в нёй орфаны. Проще всё удалить целиком.
       await deleteGroup(id);
       notifyUser(me.login, "group-deleted", { id });
@@ -255,9 +259,22 @@ app.post("/api/groups/:id/members", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const id = req.params.id;
   if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
+  const room = "@grp:" + id;
   const before = await getGroupMembers(id);
-  if (Array.isArray(req.body.add)) await addGroupMembers(id, req.body.add.map((l) => String(l).toLowerCase()));
-  if (req.body.remove) await removeGroupMember(id, String(req.body.remove).toLowerCase());
+  if (Array.isArray(req.body.add)) {
+    const logins = req.body.add.map((l) => String(l).toLowerCase());
+    await addGroupMembers(id, logins);
+    for (const login of logins) {
+      const u = await getUser(login);
+      if (u) saveSystemMessage(room, login, u.name, "join", "");
+    }
+  }
+  if (req.body.remove) {
+    const login = String(req.body.remove).toLowerCase();
+    const u = await getUser(login);
+    await removeGroupMember(id, login);
+    if (u) saveSystemMessage(room, login, u.name, "leave", "");
+  }
   const after = await getGroupMembers(id);
   for (const l of new Set([...before, ...after])) notifyUser(l, "group-updated", { id });
   res.json({ ok: true });
@@ -400,6 +417,8 @@ app.post("/api/groups/:id/pending/:pid", async (req, res) => {
     const gid = parseInt(id, 10);
     if (action === "approve") {
       await addGroupMembers(id, [pending.login]);
+      const u = await getUser(pending.login);
+      if (u) saveSystemMessage("@grp:" + id, pending.login, u.name, "join", "");
       // group-updated рассылается notifyGroup/include через addGroupMembers; pending-resolved уходит
       // целевому юзеру только. Ид — просто id (не дублируем как group, клиент использует p.id).
       notifyUser(pending.login, "pending-resolved", { id: gid, action: "approve" });
@@ -663,7 +682,6 @@ io.on("connection", (socket) => {
   function doLeave() {
     if (!currentRoom) return;
     callLeave();
-    saveSystemMessage(currentRoom, userLogin, userName, "leave", "");
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
     socket.leave(currentRoom);
@@ -703,7 +721,6 @@ io.on("connection", (socket) => {
       socket.emit("watermark", { room: currentRoom, updates: Object.entries(snap).map(([login, w]) => ({ login, delivered: Number(w.delivered) || 0, seen: Number(w.seen) || 0 })) });
     } catch {}
     socket.to(currentRoom).emit("peer-joined", { id: socket.id, name: userName, login: userLogin });
-    saveSystemMessage(currentRoom, userLogin, userName, "join", "");
     broadcastPresence(userLogin);
   });
 
