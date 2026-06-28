@@ -673,11 +673,22 @@ function togglePin(c) {
   renderChatList($("searchInput").value);
 }
 function deleteChat(c) {
-  if (c.type === "group") { if (!confirm(t("leave_group"))) return; api("/api/groups/" + c.id + "/leave"); }
-  chats.delete(c.key); persistDMs(); savePins();
-  if (c.key === activeKey) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); applyWallpaper(); /* no room → drop wallpaper class */ }
-  renderChatList($("searchInput").value);
+  if (c.type === "group") { if (!confirm(t("leave_group"))) return; api("/api/groups/" + c.id + "/leave"); chats.delete(c.key); persistDMs(); savePins(); if (c.key === activeKey) resetToEmpty(); renderChatList($("searchInput").value); return; }
+  const modal = $("deleteChatModal");
+  const doDelete = (everyone) => {
+    modal.classList.add("hidden");
+    if (everyone) api("/api/room/" + encodeURIComponent(c.key) + "/delete", null, "POST");
+    chats.delete(c.key); persistDMs(); savePins();
+    if (c.key === activeKey) resetToEmpty();
+    renderChatList($("searchInput").value);
+  };
+  modal.querySelector("#deleteChatMe").onclick = () => doDelete(false);
+  modal.querySelector("#deleteChatEveryone").onclick = () => doDelete(true);
+  modal.querySelector("#deleteChatClose").onclick = () => modal.classList.add("hidden");
+  modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
+  modal.classList.remove("hidden");
 }
+function resetToEmpty() { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); applyWallpaper(); }
 
 // ---------- Открытие чата ----------
 function openChat(c) {
@@ -1061,7 +1072,8 @@ socket.on("pending-resolved", (p) => {
   }
   refreshGsLists(p.id);
 });
-socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); } if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
+socket.on("group-deleted", ({ id }) => { const key = "@grp:" + id; chats.delete(key); if (myRoom === key) resetToEmpty(); if (settingsOpen) closeSettings(); renderChatList($("searchInput").value); });
+socket.on("room-cleared", ({ room }) => { if (chats.has(room)) { chats.delete(room); persistDMs(); if (myRoom === room) resetToEmpty(); renderChatList($("searchInput").value); } });
 
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }

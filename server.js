@@ -572,6 +572,21 @@ app.post("/api/push/subscribe", async (req, res) => {
   } catch (e) { console.error("push sub", e.message); res.status(500).json({ error: "server error" }); }
 });
 
+// ---------- REST: Delete room messages (DM "delete for everyone") ----------
+app.post("/api/room/:room/delete", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = req.params.room;
+    if (!room.startsWith("@dm:")) return res.status(400).json({ error: "only DMs supported" });
+    const parts = room.slice(4).split("~");
+    if (!parts.includes(me.login)) return res.status(403).json({ error: "not a participant" });
+    await deleteRoomMessages(room);
+    const other = parts.find((l) => l !== me.login);
+    if (other) notifyUser(other, "room-cleared", { room });
+    res.json({ ok: true });
+  } catch (e) { console.error("room delete", e.message); res.status(500).json({ error: "server error" }); }
+});
+
 // ====================== Socket.IO ======================
 const rooms = new Map();        // room -> Map(socketId -> {name, login})
 const userSockets = new Map();  // login -> Set(socketId)

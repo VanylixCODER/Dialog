@@ -212,6 +212,10 @@ export async function deleteMessage(id, login) {
   await cacheDel("hist:" + r[0].room);
   return r[0].room;
 }
+export async function deleteRoomMessages(room) {
+  await execute("DELETE FROM messages WHERE room=?", [room]);
+  await cacheDel("hist:" + room);
+}
 export async function editMessage(id, login, text) {
   const r = await query("SELECT room FROM messages WHERE id=? AND from_login=? AND type='text'", [id, login]);
   if (!r.length) return null;
