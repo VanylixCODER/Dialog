@@ -73,7 +73,7 @@
         <button class="vb-btn end" id="vbHang" title="Leave"></button>
       </div>
       <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
-      <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
+      <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="online" data-i18n="filter_online">Online</button><button class="clf-btn" data-filter="pinned" data-i18n="filter_pinned">Pinned</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
       <ul id="chatList" class="chats"></ul>
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
@@ -123,7 +123,7 @@
               </div>
             </div>
             <button class="call-btn" id="toggleCam" data-i18n-title="t_cam"></button>
-            <button class="call-btn" id="shareScreen" data-i18n-title="t_screen"></button>
+            <button class="call-btn desktop-only" id="shareScreen" data-i18n-title="t_screen"></button>
             <button class="call-btn" id="toggleDeafen" data-i18n-title="t_deafen"></button>
             <button class="call-btn desktop-only" id="popoutBtn" data-i18n-title="popout" title="Pop out">⧉</button>
             <button class="call-btn desktop-only" id="expandBtn" data-i18n-title="fullscreen" title="Fullscreen">⛶</button>

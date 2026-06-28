@@ -114,7 +114,7 @@ const I18N = {
     drop_no_room: "Open a chat to drop files",
     file_rejected_size: "Server rejected: file over {mb} MB",
     install_app: "Install app",
-    filter_all: "All", filter_dm: "DMs", filter_group: "Groups",
+    filter_all: "All", filter_dm: "DMs", filter_online: "Online", filter_pinned: "Pinned", filter_group: "Groups",
  
   },
   ru: {
@@ -232,7 +232,7 @@ const I18N = {
     drop_no_room: "Откройте чат, чтобы перетащить файлы",
     file_rejected_size: "Сервер отклонил: файл больше {mb} МБ",
     install_app: "Установить приложение",
-    filter_all: "Все", filter_dm: "ЛС", filter_group: "Группы",
+    filter_all: "Все", filter_dm: "ЛС", filter_online: "В сети", filter_pinned: "Закреплённые", filter_group: "Группы",
  
   },
 };

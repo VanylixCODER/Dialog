@@ -622,7 +622,13 @@ function renderChatList(filter = "") {
   let shown = 0;
   for (const c of list) {
     if (filter && !(c.name || "").toLowerCase().includes(filter)) continue;
-    if (chatTypeFilter !== "all" && c.type !== chatTypeFilter) continue;
+    if (chatTypeFilter === "pinned") {
+      if (!c.pinned) continue;
+    } else if (chatTypeFilter === "online") {
+      if (c.type === "group") { /* always show groups */ }
+      else if (c.type === "dm" && presence.get(c.login) !== "online" && presence.get(c.login) !== "dnd") continue;
+      else if (c.type !== "dm") continue;
+    } else if (chatTypeFilter !== "all" && c.type !== chatTypeFilter) continue;
     shown++;
     const li = document.createElement("li");
     li.className = "chat-item" + (c.key === activeKey ? " active" : "") + (c.pinned ? " pinned" : "");
@@ -2164,6 +2170,7 @@ function endCall() {
   stopKeepAlive(); updateCallButton();
   if (wasActive) sfx.end();
   stopPing();
+  restoreFullscreen();
 }
 $("hangUp").onclick = endCall;
 
@@ -2235,7 +2242,48 @@ $("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; i
 $("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
 
 // ⛶ Фуллскрин стейджа звонка (ПК)
-$("expandBtn").onclick = () => { const fs = $("callStage").classList.toggle("fullscreen"); $("expandBtn").classList.toggle("active", fs); $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile()); };
+$("expandBtn").onclick = () => {
+  const stage = $("callStage");
+  const fs = stage.classList.toggle("fullscreen");
+  $("expandBtn").classList.toggle("active", fs);
+  $("chatPane").classList.toggle("has-call", !fs && myRoom === call.roomKey && !isMobile());
+  if (fs) arrangeFullscreen();
+  else restoreFullscreen();
+};
+let participantsWrap = null;
+function arrangeFullscreen() {
+  const vg = $("videoGrid");
+  if (participantsWrap || !vg) return;
+  const screenTile = vg.querySelector(".tile.screen");
+  if (!screenTile) return;
+  participantsWrap = document.createElement("div");
+  participantsWrap.className = "participants-wrap";
+  const tiles = [...vg.querySelectorAll(".tile:not(.screen)")];
+  tiles.forEach((t) => participantsWrap.appendChild(t));
+  screenTile.after(participantsWrap);
+  const hideBtn = document.createElement("button");
+  hideBtn.className = "hide-tiles-btn";
+  hideBtn.textContent = "▼";
+  hideBtn.dataset.labelHide = "▼";
+  hideBtn.dataset.labelShow = "▲";
+  hideBtn.onclick = () => {
+    const hidden = participantsWrap.classList.toggle("hidden-tiles");
+    hideBtn.textContent = hidden ? hideBtn.dataset.labelShow : hideBtn.dataset.labelHide;
+  };
+  participantsWrap.after(hideBtn);
+}
+function restoreFullscreen() {
+  if (!participantsWrap) return;
+  const vg = $("videoGrid");
+  if (vg) {
+    const tiles = [...participantsWrap.querySelectorAll(".tile")];
+    tiles.forEach((t) => vg.appendChild(t));
+    participantsWrap.remove();
+  }
+  const btn = vg?.querySelector(".hide-tiles-btn");
+  if (btn) btn.remove();
+  participantsWrap = null;
+}
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
 function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
