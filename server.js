@@ -629,8 +629,13 @@ async function applyWatermarkBump(room, logins, { delivered, seen } = {}) {
   }) });
 }
 
+const SERVER_REGION = process.env.SERVER_REGION || "local";
+
 io.on("connection", (socket) => {
   let currentRoom = null, userLogin = null, userName = null;
+  socket.emit("server-info", { region: SERVER_REGION });
+
+  socket.on("latency", (cb) => { if (typeof cb === "function") cb(Date.now()); });
 
   socket.on("identify", async ({ token }) => {
     const p = await auth.userByToken(token); if (!p) return;

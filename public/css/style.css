@@ -2239,6 +2239,27 @@ a:focus-visible {
 .conn-status.show { transform: translate(-50%, 0); }
 .conn-status::before { content: "◈ "; color: var(--danger); }
 
+/* Ping meter */
+#pingMeter {
+  position: fixed; bottom: 12px; right: 12px; z-index: 200;
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--bg-1);
+  border: 1px solid var(--border-1);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; gap: 4px;
+  opacity: 0.75;
+  transition: color var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+  pointer-events: none;
+  user-select: none;
+}
+#pingMeter.ping-green { color: var(--accent-300); border-color: rgba(61, 245, 138, 0.35); }
+#pingMeter.ping-orange { color: var(--warn); border-color: rgba(255, 184, 77, 0.35); }
+#pingMeter.ping-red { color: var(--danger); border-color: rgba(255, 82, 82, 0.35); }
+
 /* HUD-эффекты */
 .chat::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
