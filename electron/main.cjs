@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, session, dialog, Tray, Menu, nativeImage } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 const http = require("http");
 const { autoUpdater } = require("electron-updater");
 
@@ -11,36 +12,123 @@ let isQuitting = false;
 const PORT = process.env.PORT || 3000;
 const SERVER_URL = `http://localhost:${PORT}`;
 
+// Locate server.js and its working directory.
+// In a packaged build the app can either be packed into app.asar (with selected files
+// unpacked to app.asar.unpacked) or unpacked entirely (asar:false). Both layouts must work.
+// Critically, when asar is in use, Electron's Node hooks transparently read .js files
+// from inside the asar — but ONLY when the spawned child runs as Node, not as Electron's
+// GUI main process. Hence ELECTRON_RUN_AS_NODE=1 below.
+//
+// asarUnpack for server.js put the real file at app.asar.unpacked/server.js next to
+// app.asar. For relative imports (./db.js, ./cache.js, ./auth.js) and dotenv's lookup
+// of .env by CWD, the spawn must use the unpacked directory as both script dir and
+// cwd — otherwise Node tries to require() through the asar fs hook which works for
+// pure JS but NOT for native modules (.node binaries) that live only in the unpacked
+// tree.
+function resolveServerPaths() {
+  if (!app.isPackaged) {
+    return {
+      script: path.join(__dirname, "..", "server.js"),
+      cwd: path.join(__dirname, ".."),
+    };
+  }
+  const appPath = app.getAppPath();
+  const isAsar = appPath.endsWith(".asar") || appPath.endsWith(".asar/");
+  const realDir = isAsar ? appPath.replace(/\.asar\/?$/, ".asar.unpacked") : appPath;
+  return {
+    script: path.join(realDir, "server.js"),
+    cwd: realDir,
+  };
+}
+
 /* ── Server lifecycle ────────────────────────────────────────────── */
 function startServer() {
   return new Promise((resolve, reject) => {
-    const serverScript = path.join(__dirname, "..", "server.js");
-    serverProcess = spawn(process.execPath, [serverScript], {
-      cwd: path.join(__dirname, ".."),
-      env: { ...process.env, PORT: String(PORT) },
+    let settled = false;
+    const settleResolve = () => { if (!settled) { settled = true; resolve(); } };
+    const settleReject = (e) => { if (!settled) { settled = true; reject(e); } };
+
+    const { script, cwd } = resolveServerPaths();
+    // Sanity-check the script exists so we fail fast with a useful error instead of a
+    // cryptic spawn ENOENT (e.g. user is on a fresh checkout without built artifacts).
+    if (!fs.existsSync(script)) {
+      return settleReject(new Error(
+        `server.js not found at ${script}. Run \`npm run build\` for packaged, or \`npm start\` for dev.`
+      ));
+    }
+
+    // CRITICAL: ELECTRON_RUN_AS_NODE=1 makes the spawned binary act as plain Node.
+    // Without it, the spawn launches a SECOND Electron GUI instance whose main entry
+    // is package.json's "main" (= server.js). That GUI child loads server.js → db.js,
+    // which throws on missing DB_HOST, killing the child before any HTTP listener binds.
+    // Symptoms: AppImage/.deb appear to do nothing on launch; the same applies to the
+    // .exe on Windows when run from a non-interactive shell.
+
+    // Resolve the .env path to pass to server.js via DOTENV_CONFIG_PATH so db.js's
+    // `if (!process.env.DB_HOST)` check sees user-supplied config from the location
+    // they actually drop a .env file (next to the binary they double-clicked).
+    //
+    // Why APPIMAGE for AppImage: process.execPath there points inside the read-only
+    // squashfs mount temp dir (e.g. /tmp/.mount_xxx/AppRun) — useless for finding
+    // `.env` on the user's filesystem. APPIMAGE env (set by the AppImage runtime at
+    // launch) is the actual file path the user clicked (e.g. /home/me/Downloads/...),
+    // so .env sitting next to it gets picked up.
+    //
+    // Skipped in dev because server's cwd there IS the project root and dotenv's
+    // default cwd lookup already finds .env. Skipped when the user already set
+    // DOTENV_CONFIG_PATH in their shell — don't clobber an explicit override.
+    const dotEnvPath = (process.env.DOTENV_CONFIG_PATH || !app.isPackaged)
+      ? null
+      : path.join(
+          process.env.APPIMAGE ? path.dirname(process.env.APPIMAGE) : path.dirname(process.execPath),
+          ".env"
+        );
+
+    serverProcess = spawn(process.execPath, [script], {
+      cwd,
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        ELECTRON_RUN_AS_NODE: "1",
+        ...(dotEnvPath ? { DOTENV_CONFIG_PATH: dotEnvPath } : {}),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    // Forward both streams so errors appear in the system terminal / Chromium logs.
+    serverProcess.stdout.on("data", (d) => process.stdout.write(d));
     serverProcess.stderr.on("data", (d) => process.stderr.write(d));
-    serverProcess.on("error", reject);
+    serverProcess.on("error", (err) => settleReject(err));
     serverProcess.on("exit", (code) => {
-      reject(new Error(`Server exited with code ${code}`));
+      if (settled) {
+        // Crashed AFTER becoming ready — surface but don't tear down the window.
+        console.error(`Dialog server exited unexpectedly with code ${code}. Reload the window to restart it.`);
+        return;
+      }
+      settleReject(new Error(
+        `server.js exited with code ${code} before becoming ready. ` +
+        `Common cause: missing DB_HOST / DB_PORT / DB_USER / DB_PASS / DB_NAME env vars in .env. ` +
+        `See server.js header for setup.`
+      ));
     });
 
     // Poll the server with HTTP requests until it responds
     const maxAttempts = 60;
     let attempt = 0;
     const poll = () => {
+      if (settled) return;
       if (attempt++ > maxAttempts) {
-        reject(new Error("Server failed to start within timeout"));
-        return;
+        return settleReject(new Error("Server failed to start within timeout (30s)."));
       }
       const req = http.get(SERVER_URL, (res) => {
+        if (settled) return;
         res.resume();
-        resolve();
+        settleResolve();
       });
-      req.on("error", () => setTimeout(poll, 500));
-      req.setTimeout(2000, () => { req.destroy(); setTimeout(poll, 500); });
+      req.on("error", () => { if (!settled) setTimeout(poll, 500); });
+      req.setTimeout(2000, () => {
+        if (!settled) { req.destroy(); setTimeout(poll, 500); }
+      });
     };
     // Give the server a moment to bind
     setTimeout(poll, 1000);
@@ -211,6 +299,15 @@ app.whenReady().then(async () => {
     await startServer();
   } catch (err) {
     console.error("Failed to start server:", err.message);
+    // Surface the failure to the user instead of silently exiting — otherwise AppImage
+    // and .deb installs look like they "didn't open", and Windows users see only a
+    // vanishing splash. The detail gives them the exact .env variable to set.
+    dialog.showErrorBox(
+      "Dialog could not start",
+      `The bundled server failed to start.\n\n${err.message}\n\n` +
+      `If this is a fresh install, copy .env.example to .env (in the same folder as the app) ` +
+      `and fill in your DB_* values, then relaunch.`
+    );
     app.quit();
     return;
   }

@@ -1,5 +1,14 @@
 import mysql from "mysql2/promise";
 import { cacheGet, cacheSet, cacheDel } from "./cache.js";
+import { config as dotenvConfig } from "dotenv";
+
+// Load .env BEFORE any env-var checks below. In packaged Electron builds,
+// electron/main.cjs sets DOTENV_CONFIG_PATH to point at .env next to the
+// user's binary (APPIMAGE file path via process.env.APPIMAGE for AppImage;
+// path.dirname(process.execPath) for .deb and Dialog.exe installs). In dev,
+// DOTENV_CONFIG_PATH is unset and dotenv's default cwd lookup finds .env at
+// the project root. Idempotent with server.js's `import "dotenv/config"`.
+dotenvConfig(process.env.DOTENV_CONFIG_PATH ? { path: process.env.DOTENV_CONFIG_PATH } : undefined);
 
 const HIST_TTL = 60;                // история комнаты живёт в кэше до 60с
 const HIST_MAX_CACHE = 256 * 1024;  // не кэшируем тяжёлые (медиа) комнаты
