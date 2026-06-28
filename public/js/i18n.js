@@ -111,6 +111,12 @@ const I18N = {
     call_started: "Call started", call_ended: "Call ended", call_missed: "Missed call",
     joined_chat: "joined the chat", left_chat: "left the chat",
     popout_active: "Pop out mode activated", popout_dock: "Dock",
+    back: "Back", minimize: "Minimize",
+    err_read: "Read error", err_add_members: "Couldn't add members",
+    err_generic: "Error", err_remove_member: "Couldn't remove member",
+    err_save_status: "Status change failed", err_save_profile: "Failed to save profile",
+    ping_ms: "ms", language: "Language",
+    err_unknown: "Error: {reason}",
   },
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
@@ -223,6 +229,12 @@ const I18N = {
     call_started: "Звонок начат", call_ended: "Звонок завершён", call_missed: "Пропущенный звонок",
     joined_chat: "вошёл(а) в чат", left_chat: "вышел(ла) из чата",
     popout_active: "Режим всплывающего окна", popout_dock: "Вернуть",
+    back: "Назад", minimize: "Свернуть",
+    err_read: "Ошибка чтения", err_add_members: "Не удалось добавить участников",
+    err_generic: "Ошибка", err_remove_member: "Не удалось убрать участника",
+    err_save_status: "Не удалось сменить статус", err_save_profile: "Не удалось сохранить профиль",
+    ping_ms: "мс", language: "Язык",
+    err_unknown: "Ошибка: {reason}",
   },
 };
 let lang = localStorage.getItem("dialog_lang") || "en";

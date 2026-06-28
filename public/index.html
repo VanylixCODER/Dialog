@@ -68,9 +68,9 @@
       </div>
       <div id="voiceBar" class="voice-bar hidden">
         <div class="vb-info" id="vbInfo"><span class="vb-dot"></span><span class="vb-label"></span></div>
-        <button class="vb-btn" id="vbMic" title="Mic"></button>
-        <button class="vb-btn" id="vbDeafen" title="Deafen"></button>
-        <button class="vb-btn end" id="vbHang" title="Leave"></button>
+        <button class="vb-btn" id="vbMic" data-i18n-title="t_mic" title="Mic"></button>
+        <button class="vb-btn" id="vbDeafen" data-i18n-title="t_deafen" title="Deafen"></button>
+        <button class="vb-btn end" id="vbHang" data-i18n-title="t_hangup" title="Leave"></button>
       </div>
       <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
       <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="online" data-i18n="filter_online">Online</button><button class="clf-btn" data-filter="pinned" data-i18n="filter_pinned">Pinned</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
@@ -84,7 +84,7 @@
 
     <main class="chat" id="chatPane">        <div id="emptyState" class="empty-state"><button id="esBackBtn" class="back-btn mobile-only">‹</button><div class="es-logo"><img src="/src/dialoglogo.webp" alt="Dialog" /></div><div data-i18n="pick_chat">Select a chat</div></div>
       <header class="chat-head hidden" id="chatHead">
-        <button id="backBtnMobile" class="back-btn mobile-only" title="Back">‹</button>
+        <button id="backBtnMobile" class="back-btn mobile-only" data-i18n-title="back" title="Back">‹</button>
         <div class="avatar ch-ava" id="chatAva" tabindex="0" role="button" aria-label="Open chat info">?</div>
         <div class="ch-info">
           <div class="chat-title" id="chatTitle">—</div>
@@ -95,7 +95,7 @@
         <button class="hicon-btn call-go" id="startCallBtn" data-i18n-title="t_call" title="Call">📞</button>
         <button class="hicon-btn" id="infoBtn" data-i18n-title="info" title="Info">ⓘ</button>
         <div class="chat-menu-wrap">
-          <button class="hicon-btn" id="chatMenuBtn" title="More">⋮</button>
+          <button class="hicon-btn" id="chatMenuBtn" data-i18n-title="t_more" title="More">⋮</button>
           <div id="chatMenu" class="chat-menu hidden"></div>
         </div>
       </header>
@@ -106,14 +106,14 @@
         <div class="call-grip" id="callGrip" title="Drag to dock left / right / top"><span></span><span></span></div>
         <div id="callResizer" class="call-resizer"></div>
         <div id="videoGrid" class="video-grid"></div>
-        <div id="pingMeter"><span id="pingValue">--</span><span id="pingUnit">ms</span></div>
+        <div id="pingMeter"><span id="pingValue">--</span><span id="pingUnit" data-i18n="ping_ms">ms</span></div>
         <div id="pipNotice" class="pip-notice hidden"><span>⧉ <span data-i18n="popout_active"></span></span><button id="pipDockBtn" data-i18n="popout_dock"></button></div>
         <div class="call-bar">
           <div class="call-meta"><span id="callStatus" class="call-status"></span><span class="call-count" id="callCount">1</span></div>
           <div class="call-actions">
             <div class="call-btn-group">
               <button class="call-btn" id="toggleMic" data-i18n-title="t_mic"></button>
-              <button class="call-drop" id="micDrop" title="Settings">▾</button>
+              <button class="call-drop" id="micDrop" data-i18n-title="settings" title="Settings">▾</button>
               <div class="call-dropdown" id="micDropdown">
                 <div class="dd-label" data-i18n="mic_device">Microphone</div>
                 <select class="dd-select" id="micSelect"></select>
@@ -128,7 +128,7 @@
             <button class="call-btn" id="toggleDeafen" data-i18n-title="t_deafen"></button>
             <button class="call-btn desktop-only" id="popoutBtn" data-i18n-title="popout" title="Pop out">⧉</button>
             <button class="call-btn desktop-only" id="expandBtn" data-i18n-title="fullscreen" title="Fullscreen">⛶</button>
-            <button class="call-btn mobile-only" id="minBtn" title="Minimize">▾</button>
+            <button class="call-btn mobile-only" id="minBtn" data-i18n-title="minimize" title="Minimize">▾</button>
             <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup"></button>
           </div>
         </div>
@@ -162,7 +162,7 @@
         <div id="uploadProgress" class="upload-progress hidden">
           <div class="up-bar"><div class="up-fill" id="upFill"></div></div>
           <span class="up-text" id="upText">0%</span>
-          <button class="up-cancel" id="upCancel" title="Cancel">✕</button>
+          <button class="up-cancel" id="upCancel" data-i18n-title="cancel" title="Cancel">✕</button>
         </div>
       </div>
       <div id="emojiPicker" class="emoji-picker hidden"><div class="emoji-tabs" id="emojiTabs"></div><div class="emoji-grid" id="emojiGrid"></div></div>
