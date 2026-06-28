@@ -481,7 +481,18 @@ function enterApp() {
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
   redeemStoredInvite();
-  setTimeout(() => { onPopState(); }, 100);
+  // Initial URL route (DM/group from path) — runs after chats/groups are loaded.
+  const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
+  if (route.login && window.openDM) {
+    const key = "@dm:" + [profile.login, route.login].sort().join("~");
+    const existing = chats.get(key);
+    if (existing) openChat(existing);
+    else openDM(route.login);
+  } else if (route.groupId) {
+    const key = "@grp:" + route.groupId;
+    const existing = chats.get(key);
+    if (existing) openChat(existing);
+  }
 }
 socket.on("connect", () => {
   if (!token) return;
