@@ -2430,7 +2430,44 @@ window.addEventListener("load", () => { const p = new URLSearchParams(location.s
 // ---------- Соединение ----------
 let connEl;
 socket.on("disconnect", () => { if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
-socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); if (token) refreshPresence(); }); // после reconnect снимок присутствия мог устареть — догоняем одним вызовом вместо poll.
+socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); if (token) refreshPresence(); });
+
+// ---------- Ping meter ----------
+let serverRegion = "";
+socket.on("server-info", (info) => { serverRegion = info.region || ""; });
+const pingEl = $("pingMeter");
+const pingVal = $("pingValue");
+function updatePing(ms) {
+  if (!pingEl || !pingVal) return;
+  pingVal.textContent = ms;
+  const region = serverRegion ? serverRegion.toUpperCase() : "";
+  pingEl.textContent = "";
+  const dot = document.createElement("span");
+  dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;background:currentColor;flex-shrink:0";
+  pingEl.appendChild(dot);
+  if (region) { const r = document.createElement("span"); r.textContent = region + " "; pingEl.appendChild(r); }
+  const v = document.createElement("span"); v.id = "pingValue"; v.textContent = ms; pingEl.appendChild(v);
+  const u = document.createElement("span"); u.id = "pingUnit"; u.textContent = "ms"; pingEl.appendChild(u);
+  pingEl.className = "ping-" + (ms < 50 ? "green" : ms < 100 ? "orange" : "red");
+}
+let pingInterval = null;
+function startPing() {
+  if (pingInterval) clearInterval(pingInterval);
+  pingInterval = setInterval(() => {
+    const start = performance.now();
+    socket.emit("latency", () => {
+      const rtt = Math.round(performance.now() - start);
+      updatePing(rtt);
+    });
+  }, 2000);
+  // immediate first measure
+  const start = performance.now();
+  socket.emit("latency", () => {
+    const rtt = Math.round(performance.now() - start);
+    updatePing(rtt);
+  });
+}
+socket.on("connect", startPing);
 
 // ---------- Утилиты ----------
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
