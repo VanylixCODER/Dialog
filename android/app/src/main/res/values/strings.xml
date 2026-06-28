@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="appName">Dialog</string>
-    <string name="launchUrl">https://dialog-byw8.onrender.com/</string>
-    <string name="hostName">dialog-byw8.onrender.com</string>
-    <string name="assetStatements">[{ \"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://dialog-byw8.onrender.com\" }}]</string>
-</resources>
