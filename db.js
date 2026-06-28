@@ -32,11 +32,6 @@ config = {
 config.charset = "utf8mb4";
 config.connectionLimit = Number(process.env.DB_POOL || 10);
 config.waitForConnections = true;
-// Allow up to ~100 MB packets so that base64-encoded file attachments
-// (max 75 MB raw → ~100 MB b64 + data‑URL prefix) don't get silently
-// truncated by the client‑side packet limiter. The MySQL server must
-// also have max_allowed_packet set high enough (>100 MB) on its side.
-config.maxAllowedPacket = 110 * 1024 * 1024;
 // Managed MySQL/TiDB требует TLS — включается через DB_SSL=true.
 if (process.env.DB_SSL === "true") config.ssl = { minVersion: "TLSv1.2", rejectUnauthorized: false };
 
