@@ -463,14 +463,15 @@ $("registerForm").onsubmit = async (e) => {
   onAuth(data);
 };
 function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
+function showLogin() { $("login").classList.remove("hidden"); }
 async function checkSession() {
   // Save the current URL route before any auth redirect — so after login we can
   // jump straight to the intended DM/group instead of staring at the empty app.
   const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
   if (route.login || route.groupId) sessionStorage.setItem("dialog_route", JSON.stringify(route));
-  if (!token) return;
+  if (!token) { showLogin(); return; }
   const { ok, data } = await api("/api/me", null, "GET");
-  if (ok) { profile = data.profile; enterApp(); } else localStorage.removeItem("dialog_token");
+  if (ok) { profile = data.profile; enterApp(); } else { localStorage.removeItem("dialog_token"); showLogin(); }
 }
 
 function enterApp() {
