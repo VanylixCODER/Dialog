@@ -188,11 +188,13 @@ function setChatBg(chatKey, dataUrl) {
   return setBgPerChatMap(map);
 }
 function resolveBgForChat(chatKey) {
-  // Per-chat override > global fallback > null.
   const per = getChatBg(chatKey);
   if (per && per.startsWith("data:")) return per;
   const glob = getGlobalBg();
-  return glob && glob.startsWith("data:") ? glob : null;
+  if (glob && glob.startsWith("data:")) return glob;
+  const theme = document.body.dataset.theme;
+  if (theme && theme !== "matrix") return "/src/DefaultBG.png";
+  return null;
 }
 // Применяем wallpaper на уровне .chat (= #chatPane): при активном чате достаём URL
 // из resolveBg, кладём в CSS custom property + добавляем .has-wallpaper. При отсутствии
