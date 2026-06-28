@@ -32,7 +32,7 @@ let chatTypeFilter = "all";          // "all" | "dm" | "group"
 const peers = new Map();             // socketId -> {name, login}
 const presence = new Map();          // login -> 'online'|'dnd'|'offline'
 const relations = { friends: [], blocked: [], sent: [], incoming: [] };
-const blocked = new Set();
+const blocked = new Set(), blockedBy = new Set();
 const clearedChats = new Map(); // room -> timestamp (ms)
 try { const c = JSON.parse(localStorage.getItem("clearedChats") || "{}"); for (const [k, v] of Object.entries(c)) clearedChats.set(k, v); } catch {}
 function persistCleared() { localStorage.setItem("clearedChats", JSON.stringify(Object.fromEntries(clearedChats))); }
@@ -693,7 +693,7 @@ function deleteChat(c) {
   modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
   modal.classList.remove("hidden");
 }
-function resetToEmpty() { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); applyWallpaper(); }
+function resetToEmpty() { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); const bn = document.getElementById("blockNotice"); if (bn) bn.remove(); applyWallpaper(); }
 
 // ---------- Открытие чата ----------
 function openChat(c) {
@@ -726,6 +726,7 @@ function openChat(c) {
   // по факту смены чата, а не через data-i18n-title.
   $("chatAva").title = t(c.type === "group" ? "group_settings" : "open_profile");
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
+  syncBlockComposer();
   $("app").classList.add("in-chat");
   // боковая панель участников для групп (на десктопе)
   groupMembers = [];
@@ -738,7 +739,23 @@ function openChat(c) {
   applyWallpaper();  // per-chat→global wallpaper resolution, вызывается при каждой смене чата
   pushState();
 }
-$("backBtnMobile").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
+function syncBlockComposer() {
+  if (!myRoom || !myRoom.startsWith("@dm:")) return;
+  const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
+  const isBlocked = partner && blocked.has(partner);
+  const isBlockedBy = partner && blockedBy.has(partner);
+  const blockedMsg = isBlockedBy ? t("blocked_by_user") : isBlocked ? t("blocked_msg_send") : "";
+  if (blockedMsg) {
+    $("composer").classList.add("hidden");
+    let bn = document.getElementById("blockNotice");
+    if (!bn) { bn = document.createElement("div"); bn.id = "blockNotice"; bn.className = "block-notice"; $("messages").after(bn); }
+    bn.textContent = blockedMsg;
+  } else {
+    $("composer").classList.remove("hidden");
+    const bn = document.getElementById("blockNotice"); if (bn) bn.remove();
+  }
+}
+$("backBtnMobile").onclick = $("esBackBtn").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
@@ -1287,8 +1304,8 @@ $("reqSendBtn").onclick = async () => {
 async function loadRelations() {
   const { ok, data } = await api("/api/relations", null, "GET");
   if (!ok) return;
-  Object.assign(relations, data); blocked.clear(); (data.blocked || []).forEach((l) => blocked.add(l));
-  renderContacts(); renderChatList($("searchInput").value);
+  Object.assign(relations, data); blocked.clear(); blockedBy.clear(); (data.blocked || []).forEach((l) => blocked.add(l)); (data.blockedBy || []).forEach((l) => blockedBy.add(l));
+  renderContacts(); renderChatList($("searchInput").value); syncBlockComposer();
 }
 function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
@@ -1529,7 +1546,7 @@ socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80);     notify(t("dm_ping", { name: fromName }), room); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
-socket.on("dm-blocked", () => notify(t("dm_need_friend")));
+socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
 function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const me = profile && (name.toLowerCase() === profile.login.toLowerCase() || name.toLowerCase() === (profile.name || "").toLowerCase()); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки

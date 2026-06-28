@@ -336,11 +336,13 @@ export async function removeRelation(login, target, type) { await execute("DELET
 export async function getRelationsFull(login) {
   const out = await query("SELECT target, type FROM relations WHERE login=?", [login]);
   const inc = await query("SELECT login AS src FROM relations WHERE target=? AND type='request'", [login]);
+  const blockedBy = await query("SELECT login FROM relations WHERE target=? AND type='block'", [login]);
   return {
     friends: out.filter((r) => r.type === "friend").map((r) => r.target),
     blocked: out.filter((r) => r.type === "block").map((r) => r.target),
     sent: out.filter((r) => r.type === "request").map((r) => r.target),
     incoming: inc.map((r) => r.src),
+    blockedBy: blockedBy.map((r) => r.login),
   };
 }
 export async function getFriendLogins(login) {

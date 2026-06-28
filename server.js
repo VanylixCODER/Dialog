@@ -439,9 +439,10 @@ app.post("/api/relations", async (req, res) => {
   const target = String(req.body.target || "").toLowerCase();
   const action = req.body.action;
   if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
-  if (action === "block") { await setRelation(me.login, target, "block"); await removeFriend(me.login, target); }
+  if (action === "block") { await setRelation(me.login, target, "block"); await removeFriend(me.login, target); notifyUser(target, "relations-changed", {}); }
   else if (action === "unblock") await removeRelation(me.login, target, "block");
   else return res.status(400).json({ error: "bad action" });
+  notifyUser(me.login, "relations-changed", {});
   res.json({ ok: true });
 });
 app.post("/api/friend", async (req, res) => {
@@ -753,6 +754,8 @@ io.on("connection", (socket) => {
     if (!currentRoom || !userLogin) return;
     const dmTo = dmPartner(currentRoom, userLogin);
     if (dmTo) { // гейтинг ЛС
+      if (await isBlockedBy(userLogin, dmTo)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_by_recipient" }); return; }
+      if (await isBlockedBy(dmTo, userLogin)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_sender" }); return; }
       const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo));
       if (!allowed) {
         const status = await sendFriendRequest(userLogin, dmTo);
