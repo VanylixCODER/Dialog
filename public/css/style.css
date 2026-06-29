@@ -1694,16 +1694,6 @@ a:focus-visible {
   z-index: 2;
   isolation: isolate;
 }
-/* Big-screen mode: a true full-viewport overlay (not just a bigger dock slice),
-   so it covers the entire page on desktop the same way it does on mobile. */
-.call-stage.fullscreen {
-  position: fixed; inset: 0; z-index: 300;
-  max-height: none; width: 100vw; height: 100vh;
-  background: var(--bg-1);
-  border: none;
-}
-.call-stage.fullscreen::after { display: none; }
-.call-stage.fullscreen .call-resizer { display: none; } /* нет дока в полноэкранном overlay */
 .call-stage::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
@@ -1795,7 +1785,6 @@ a:focus-visible {
 }
 .call-grip:hover span { background: var(--accent-400); }
 .call-grip:active { cursor: grabbing; }
-.call-stage.fullscreen .call-grip { display: none; }
 
 .call-resizer {
   position: absolute; z-index: 4; display: none;
@@ -1820,45 +1809,32 @@ a:focus-visible {
    publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
 .video-grid:has(.tile:not(.show-avatar)) .tile:not(.screen) { aspect-ratio: 16 / 9; }
 
-/* ── Screen-share spotlight — "big screen" (fullscreen) & pop-out window ──
-   Discord-style layout: the shared screen dominates the upper area while
+/* ── Big-screen window (.pip-grid) ──────────────────────────────────────
+   The call now opens in a separate window that goes fullscreen; the grid
+   inside it carries .pip-grid. Sizing is viewport-relative (vh / %), so it
+   looks right whether the window is fullscreen or just maximised. */
+.video-grid.pip-grid { align-content: center; padding: 16px; gap: 12px; }
+
+/* Screen-share spotlight: the shared screen dominates the upper area and
    participant faces sit in a centred row beneath it. The flex-wrap trick
    keeps the screen on its own full-width line (order:-1) and lets the faces
-   flow into the row below — no DOM wrapper needed. .pip-grid is toggled on
-   the grid when it moves into the pop-out window. */
-.call-stage.fullscreen .video-grid:has(.tile.screen),
+   flow into the row below — no DOM wrapper needed. */
 .video-grid.pip-grid:has(.tile.screen) {
   display: flex; flex-wrap: wrap;
   align-content: center; justify-content: center;
   gap: 14px; padding: 18px;
 }
-/* The shared screen: dominant, centred, capped width with breathing room. */
-.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen,
 .video-grid.pip-grid:has(.tile.screen) .tile.screen {
   order: -1; flex: 1 1 100%;
   width: 100%; max-width: 1500px; margin: 0 auto;
   aspect-ratio: auto; max-height: none; min-height: 0;
+  height: 62vh;
 }
-.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen { height: 62vh; }
-.video-grid.pip-grid:has(.tile.screen) .tile.screen { height: 60%; }
-/* Faces row beneath: a couple of people read large; more shrink to share it. */
-.call-stage.fullscreen .video-grid:has(.tile.screen) .tile:not(.screen),
 .video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) {
   flex: 0 1 auto; aspect-ratio: 16 / 9; max-height: none; height: 20vh; width: auto;
 }
-.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) { aspect-ratio: 1 / 1; height: 23%; }
 /* Prominent name pill on the shared screen (matches the reference). */
-.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen .tile-name { font-size: 15px; padding: 5px 14px; }
-
-/* Default fullscreen grid (no screen share): centred participant tiles. */
-.call-stage.fullscreen .video-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 12px; gap: 10px; align-content: center; }
-.call-stage.fullscreen .video-grid:has(> .tile:only-child) { align-content: center; }
-.call-stage.fullscreen .video-grid:has(> .tile:only-child) .tile { max-width: 640px; justify-self: center; }
-.call-stage.fullscreen .video-grid .tile { width: 100%; }
-.call-stage.fullscreen .call-bar { --cbtn: 42px; --cgap: 6px; padding: 8px 12px; gap: 6px; }
-.call-stage.fullscreen .call-meta { font-size: 10px; }
-.call-stage.fullscreen .participants-wrap .tile { width: 140px; height: 80px; }
-.call-stage.fullscreen .participants-wrap { padding: 4px 0; gap: 6px; }
+.video-grid.pip-grid:has(.tile.screen) .tile.screen .tile-name { font-size: 15px; padding: 5px 14px; }
 .chat.has-call.dock-top .video-grid { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; justify-content: center; }
 .chat.has-call.dock-top .video-grid .tile { width: auto; height: 100%; min-width: 160px; max-width: 280px; }
 
