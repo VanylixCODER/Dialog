@@ -488,6 +488,7 @@ a:focus-visible {
   box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.22);
 }
 .hicon-btn {
+  position: relative;
   width: 36px; height: 36px;
   display: grid; place-items: center;
   background: transparent; border: 1px solid transparent;
@@ -495,6 +496,18 @@ a:focus-visible {
   font-size: 16px; flex-shrink: 0;
   transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
+/* Счётчик входящих заявок в друзья — красная точка с числом поверх кнопки контактов. */
+.req-badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px; box-sizing: border-box;
+  display: none; align-items: center; justify-content: center;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  border-radius: 9px; border: 2px solid var(--bg-1);
+  pointer-events: none;
+}
+.req-badge.show { display: flex; }
 .hicon-btn:hover {
   color: var(--accent-300);
   background: var(--accent-faint);
@@ -2030,20 +2043,24 @@ a:focus-visible {
 }
 .call-btn.end:hover { background: linear-gradient(180deg, #ff7070, #dd4040); transform: translateY(-2px) scale(1.04); box-shadow: 0 10px 28px rgba(255, 82, 82, 0.45); }
 
-.call-btn-group { position: relative; display: flex; align-items: center; }
-.call-btn-group .call-btn { border-radius: 24px 0 0 24px; border-right: none; }
+/* Группа «микрофон + выбор устройства». Микрофон — полноценный круг, как и все
+   остальные кнопки (иконка строго по центру). Стрелка настроек — маленький кружок
+   в нижне-правом углу, не сдвигает иконку микрофона и не ломает ряд. */
+.call-btn-group { position: relative; display: inline-flex; transition: transform var(--t-fast) var(--ease); }
+.call-btn-group:hover { transform: translateY(-2px); }
+.call-btn-group .call-btn:hover { transform: none; }
 .call-drop {
-  width: 26px; height: 50px;
-  border: 1px solid var(--border-1);
-  border-radius: 0 24px 24px 0;
+  position: absolute; bottom: -2px; right: -3px; z-index: 4;
+  width: 18px; height: 18px;
+  border: 2px solid var(--bg-1);
+  border-radius: 50%;
   cursor: pointer;
-  background: var(--surface-2);
-  color: var(--text-dim); font-size: 10px;
+  background: var(--surface-3);
+  color: var(--accent-200); font-size: 8px; line-height: 1;
   display: grid; place-items: center;
-  border-left: 1px solid rgba(var(--primary-rgb), 0.12);
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
-.call-drop:hover { background: var(--surface-3); color: var(--accent-300); }
+.call-drop:hover { background: var(--accent-soft); color: var(--accent-100); transform: scale(1.12); }
 .call-dropdown {
   position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
   background: rgba(2, 10, 4, 0.94);
@@ -2496,9 +2513,6 @@ a:focus-visible {
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
   .call-btn { width: 48px; height: 48px; }
-  /* keep the mic dropdown strip the same height as the shrunk .call-btn, otherwise
-     it stays 50px and sticks out 1px above/below, breaking the mic pill alignment. */
-  .call-drop { height: 48px; }
   .call-btn.end { width: 56px; }
   .call-btn.mobile-only { display: grid; }
   .call-grip, .call-resizer { display: none !important; }

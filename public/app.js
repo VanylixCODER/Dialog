@@ -1315,7 +1315,19 @@ function contactRow(login, buttons) {
   buttons.forEach(([label, fn, danger]) => { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.onclick = (e) => { e.stopPropagation(); fn(); }; row.appendChild(b); });
   return row;
 }
+// Бейдж со счётчиком входящих заявок на кнопке «Контакты» в шапке списка чатов.
+// setIcons() выставляет innerHTML кнопки один раз на старте, после чего бейдж живёт как
+// дочерний элемент — поэтому ищем/создаём его лениво и просто обновляем текст/видимость.
+function updateReqBadge() {
+  const btn = $("contactsBtn"); if (!btn) return;
+  let badge = btn.querySelector(".req-badge");
+  if (!badge) { badge = document.createElement("span"); badge.className = "req-badge"; btn.appendChild(badge); }
+  const n = (relations.incoming || []).length;
+  badge.textContent = n > 99 ? "99+" : String(n);
+  badge.classList.toggle("show", n > 0);
+}
 function renderContacts() {
+  updateReqBadge();
   const reqList = $("reqList"); if (!reqList) return;
   reqList.innerHTML = ""; const fL = $("friendsListEl"); if (fL) fL.innerHTML = ""; const sL = $("sentList"); if (sL) sL.innerHTML = "";
   const reqEmpty = $("reqEmpty"); if (reqEmpty) reqEmpty.classList.toggle("hidden", relations.incoming.length > 0);
