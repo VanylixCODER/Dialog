@@ -2369,59 +2369,54 @@ $("settingsSpkSelect").onchange = () => { call.audioOutId = $("settingsSpkSelect
 $("settingsCamSelect").onchange = async () => { call.camId = $("settingsCamSelect").value; if (call.room) { try { await call.room.switchActiveDevice("videoinput", call.camId); } catch {} } saveDevicePrefs(); };
 $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseToggle").classList.toggle("on", call.ns); const nt = $("noiseToggle"); if (nt) nt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
 
-// ⛶ Фуллскрин стейджа звонка (ПК)
+// ⛶ Большой экран: звонок открывается в отдельном окне и разворачивается на весь экран.
+// Это заменяет и старый in-page фуллскрин, и кнопку поп-аута — теперь одна кнопка.
 $("expandBtn").onclick = () => {
-  const stage = $("callStage");
-  const fs = stage.classList.toggle("fullscreen");
-  $("expandBtn").classList.toggle("active", fs);
-  $("chatPane").classList.toggle("fullscreen-call", fs);
+  if (!call.active) return;
+  if (pipWin) { try { pipWin.close(); } catch {} return; } // повторный клик — закрыть окно
+  showPipNotice(true);
+  const w = screen.availWidth || 1280, h = screen.availHeight || 800;
+  pipWin = window.open("", "dialogBigScreen", `width=${w},height=${h},top=0,left=0,menubar=no,toolbar=no,location=no`);
+  if (!pipWin) { showPipNotice(false); alert(t("pip_unsupported")); return; }
+  pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
+  mountGridIn(pipWin);
+  $("expandBtn").classList.add("active");
+  // попытка авто-фуллскрина; если браузер требует жест внутри окна — в окне есть кнопка ⛶
+  const tryFs = () => { try { const de = pipWin.document.documentElement; (de.requestFullscreen || de.webkitRequestFullscreen || (() => {})).call(de); } catch {} };
+  pipWin.addEventListener("load", tryFs); setTimeout(tryFs, 250);
+  clearInterval(pipPoll);
+  pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
 };
-// Вернуть сетку тайлов обратно в стейдж (после поп-аута)
+// Вернуть сетку тайлов обратно в док-стейдж (после закрытия окна большого экрана)
 function returnGridHome() { vGrid.classList.remove("pip-grid"); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
-// Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
-// и если звонок был активен — выйти из него. Идемпотентно: повторный вызов видит call.active=false.
-function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; if (pipDocking) { pipDocking = false; return; } if (call.active) endCall(); }
-// ⧉ Поп-аут звонка: Document PiP (Chrome, поверх всех) или обычное окно window.open (Firefox и пр.)
-let pipWin = null, pipPoll = 0, pipDocking = false;
+// Окно большого экрана закрыто → вернуть сетку в док и продолжить звонок (звонок НЕ завершаем).
+function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; $("expandBtn").classList.remove("active"); if (call.active) syncCallUI(); }
+let pipWin = null, pipPoll = 0;
 function mountGridIn(win) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
   win.document.body.dataset.theme = document.body.dataset.theme || "matrix";
-  win.document.body.style.cssText = "margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh";
-  vGrid.classList.add("pip-grid"); // включает spotlight-раскладку демонстрации экрана в окне поп-аута
+  win.document.body.style.cssText = "margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh;background:var(--bg-1)";
+  vGrid.classList.add("pip-grid"); // spotlight-раскладка демонстрации экрана в окне
   win.document.body.appendChild(vGrid);
-  // прокси-кнопки управления в окне (проксируют клики на основные контролы)
+  // прокси-кнопки управления в окне (проксируют клики на основные контролы основной вкладки)
   const bar = win.document.createElement("div"); bar.className = "call-bar";
   const actions = win.document.createElement("div"); actions.className = "call-actions";
-  [["toggleMic", "mic"], ["toggleCam", "camera"], ["shareScreen", "monitor"], ["toggleDeafen", "headphones"], ["hangUp", "phoneOff", "end"]].forEach(([id, icon, cls]) => {
-    const b = win.document.createElement("button"); b.className = "call-btn" + (cls ? " " + cls : ""); b.innerHTML = window.ICON[icon]; const src = $(id); if (src) b.setAttribute("data-tip", src.getAttribute("data-tip") || ""); b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
+  [["toggleMic", "mic"], ["toggleCam", "camera"], ["shareScreen", "monitor"], ["toggleDeafen", "headphones"]].forEach(([id, icon]) => {
+    const b = win.document.createElement("button"); b.className = "call-btn"; b.innerHTML = window.ICON[icon]; const src = $(id); if (src) b.setAttribute("data-tip", src.getAttribute("data-tip") || ""); b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
   });
+  // переключатель фуллскрина самого окна — надёжно, т.к. это жест внутри окна
+  const fsBtn = win.document.createElement("button"); fsBtn.className = "call-btn"; fsBtn.innerHTML = "⛶"; fsBtn.setAttribute("data-tip", t("fullscreen"));
+  fsBtn.onclick = () => { const d = win.document; if (d.fullscreenElement) d.exitFullscreen().catch(() => {}); else (d.documentElement.requestFullscreen || (() => {})).call(d.documentElement).catch(() => {}); };
+  actions.appendChild(fsBtn);
+  // «Завершить» — последней кнопкой
+  const hb = win.document.createElement("button"); hb.className = "call-btn end"; hb.innerHTML = window.ICON.phoneOff; hb.setAttribute("data-tip", $("hangUp").getAttribute("data-tip") || ""); hb.onclick = () => $("hangUp").click(); actions.appendChild(hb);
   bar.appendChild(actions); win.document.body.appendChild(bar);
 }
 function showPipNotice(show) {
   const el = $("pipNotice");
   if (el) el.classList.toggle("hidden", !show);
 }
-$("pipDockBtn").onclick = () => { if (pipWin) { pipDocking = true; try { pipWin.close(); } catch {} } };
-$("popoutBtn").onclick = async () => {
-  if (!call.active) return;
-  if (pipWin) { try { pipWin.close(); } catch {} return; }
-  showPipNotice(true);
-  try {
-    if ("documentPictureInPicture" in window) {
-      pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 480 });
-      mountGridIn(pipWin);
-      pipWin.addEventListener("pagehide", _onPipClosed);
-    } else {
-      // Firefox / без Document PiP — обычное окно
-      pipWin = window.open("", "dialogCall", "width=380,height=520,menubar=no,toolbar=no");
-      if (!pipWin) { alert(t("pip_unsupported")); return; }
-      pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
-      mountGridIn(pipWin);
-      clearInterval(pipPoll);
-      pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
-    }
-  } catch (e) { console.log("pip", e.message); pipWin = null; }
-};
+$("pipDockBtn").onclick = () => { if (pipWin) { try { pipWin.close(); } catch {} } };
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
@@ -2851,7 +2846,7 @@ function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
   const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", popoutBtn: "popout", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
