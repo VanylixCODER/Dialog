@@ -1694,11 +1694,16 @@ a:focus-visible {
   z-index: 2;
   isolation: isolate;
 }
+/* Big-screen mode: a true full-viewport overlay (not just a bigger dock slice),
+   so it covers the entire page on desktop the same way it does on mobile. */
 .call-stage.fullscreen {
-  position: relative; max-height: none;
+  position: fixed; inset: 0; z-index: 300;
+  max-height: none; width: 100vw; height: 100vh;
   background: var(--bg-1);
+  border: none;
 }
-.chat.has-call.fullscreen-call { --call-w: 66%; --call-h: 78%; }
+.call-stage.fullscreen::after { display: none; }
+.call-stage.fullscreen .call-resizer { display: none; } /* нет дока в полноэкранном overlay */
 .call-stage::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
