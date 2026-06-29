@@ -2496,6 +2496,9 @@ a:focus-visible {
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
   .call-btn { width: 48px; height: 48px; }
+  /* keep the mic dropdown strip the same height as the shrunk .call-btn, otherwise
+     it stays 50px and sticks out 1px above/below, breaking the mic pill alignment. */
+  .call-drop { height: 48px; }
   .call-btn.end { width: 56px; }
   .call-btn.mobile-only { display: grid; }
   .call-grip, .call-resizer { display: none !important; }
