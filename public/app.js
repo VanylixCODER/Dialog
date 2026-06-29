@@ -1576,6 +1576,12 @@ socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
   const el = messagesEl.querySelector(`.msg.me[data-localid="${localId}"]`);
   if (el) { el.dataset.id = id != null ? id : (el.dataset.id || ""); el.dataset.acked = "1"; statusOf(el); }
 });
+// Сервер отклонил сообщение как спам (флуд/дубль). Обычно клиент режет раньше и сюда
+// не доходит, но это бэкстоп: убираем оптимистичный пузырь и показываем подсказку.
+socket.on("rate-limited", ({ reason, localId } = {}) => {
+  if (localId != null) { const el = messagesEl.querySelector(`.msg.me[data-localid="${localId}"]`); if (el) el.remove(); }
+  notify(t(reason === "duplicate" ? "spam_duplicate" : "spam_flood"));
+});
 // Снимок курсоров для всей комнаты (приходит на join и при каждом обновлении).
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
@@ -1745,9 +1751,27 @@ function applyWatermarkUpdates(updates) {
   // Тяжёлая операция только если хотя бы один курсор реально сдвинулся вперёд.
   if (advanced) refreshOutgoingStatuses();
 }
+// Анти-спам на клиенте (зеркалит серверные лимиты — мгновенная реакция без round-trip;
+// авторитетная проверка всё равно на сервере). Флуд: SPAM.max за SPAM.windowMs. Дубли:
+// одинаковый текст подряд ≥ SPAM.dupMax за SPAM.dupWindowMs.
+const SPAM = { windowMs: 5000, max: 8, dupWindowMs: 12000, dupMax: 4 };
+let _spamTimes = [], _spamLast = "", _spamLastTs = 0, _spamDup = 1;
+function spamBlock(text, isMedia) {
+  const now = Date.now();
+  _spamTimes = _spamTimes.filter((ts) => now - ts < SPAM.windowMs);
+  if (_spamTimes.length >= SPAM.max) return "flood";
+  const t = isMedia ? "" : (text || "").trim();
+  if (t && t === _spamLast && now - _spamLastTs < SPAM.dupWindowMs && _spamDup + 1 >= SPAM.dupMax) return "duplicate";
+  _spamTimes.push(now);
+  if (t) { _spamDup = (t === _spamLast && now - _spamLastTs < SPAM.dupWindowMs) ? _spamDup + 1 : 1; _spamLast = t; _spamLastTs = now; }
+  return null;
+}
+function spamNotify(reason) { notify(t(reason === "duplicate" ? "spam_duplicate" : "spam_flood")); }
 function sendText() {
   const input = $("msgInput"); const text = input.value.trim();
   if (!text || !myRoom) return;
+  const blocked = spamBlock(text, false);
+  if (blocked) { spamNotify(blocked); return; } // не рендерим и не шлём — текст остаётся в поле
   const localId = ++localIdCounter;
   // Оптимистичный локальный рендер — мгновенная обратная связь, не ждём round-trip.
   const m = {
@@ -1821,6 +1845,8 @@ $("upCancel")?.addEventListener?.("click", () => {
 
 function sendFile(file) {
   if (!file || !file.size || !myRoom) return null;
+  const blocked = spamBlock("", true); // файлы — только анти-флуд, без проверки дублей
+  if (blocked) { spamNotify(blocked); return "spam"; }
   if (file.size > MAX_FILE_BYTES) {
     notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB }));
     return "too_big";

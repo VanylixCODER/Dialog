@@ -728,6 +728,28 @@ async function applyWatermarkBump(room, logins, { delivered, seen } = {}) {
 
 const SERVER_REGION = process.env.SERVER_REGION || "local";
 
+// Анти-спам (авторитетно на сервере; клиент дублирует для мгновенного UX).
+// Флуд: не более SPAM_MAX сообщений за SPAM_WINDOW_MS. Дубли: одинаковый текст
+// подряд более SPAM_DUP_MAX раз за SPAM_DUP_WINDOW_MS — блокируем. Состояние держим
+// на самом сокете (чистится при дисконнекте автоматически).
+const SPAM_WINDOW_MS = 5000, SPAM_MAX = 8;
+const SPAM_DUP_WINDOW_MS = 12000, SPAM_DUP_MAX = 4;
+// true → сообщение пропустить молча; иначе вернёт причину ("flood" | "duplicate").
+function spamReason(socket, text, isMedia) {
+  const now = Date.now();
+  socket._spamTimes = (socket._spamTimes || []).filter((ts) => now - ts < SPAM_WINDOW_MS);
+  if (socket._spamTimes.length >= SPAM_MAX) return "flood";
+  const t = isMedia ? "" : (text || "").trim();
+  if (t && t === socket._spamLast && now - (socket._spamLastTs || 0) < SPAM_DUP_WINDOW_MS && (socket._spamDup || 1) + 1 >= SPAM_DUP_MAX) return "duplicate";
+  // пропускаем → фиксируем состояние
+  socket._spamTimes.push(now);
+  if (t) {
+    socket._spamDup = (t === socket._spamLast && now - (socket._spamLastTs || 0) < SPAM_DUP_WINDOW_MS) ? (socket._spamDup || 1) + 1 : 1;
+    socket._spamLast = t; socket._spamLastTs = now;
+  }
+  return null;
+}
+
 io.on("connection", (socket) => {
   let currentRoom = null, userLogin = null, userName = null;
   socket.emit("server-info", { region: SERVER_REGION });
@@ -799,6 +821,9 @@ io.on("connection", (socket) => {
 
   socket.on("message", async (msg) => {
     if (!currentRoom || !userLogin) return;
+    // Анти-спам: дёшево отсекаем флуд/дубли до любой работы с БД и рассылки.
+    const spam = spamReason(socket, msg.text, !!msg.media);
+    if (spam) { socket.emit("rate-limited", { reason: spam, localId: msg.localId || null }); return; }
     const dmTo = dmPartner(currentRoom, userLogin);
     if (dmTo) { // гейтинг ЛС
       if (await isBlockedBy(userLogin, dmTo)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_by_recipient" }); return; }
