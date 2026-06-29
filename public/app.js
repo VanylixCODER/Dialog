@@ -489,7 +489,7 @@ function enterApp() {
   loadDevicePrefs();
   loadStoredChats(); loadPins(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
-  initPush();
+  initPush(); requestMediaPermissions();
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
   redeemStoredInvite();
@@ -2556,6 +2556,14 @@ function urlB64ToUint8(b) { const pad = "=".repeat((4 - (b.length % 4)) % 4); co
 async function subscribePush() {
   if (!swReg || !token) return;
   try { const { key } = await (await fetch("/api/push/key")).json(); if (!key) return; let sub = await swReg.pushManager.getSubscription(); if (!sub) sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) }); await api("/api/push/subscribe", sub); } catch (e) { console.log("push", e.message); }
+}
+async function requestMediaPermissions() {
+  if (localStorage.getItem("media_perms_done") === "1") return;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    s.getTracks().forEach((t) => t.stop());
+  } catch {}
+  localStorage.setItem("media_perms_done", "1");
 }
 function openRoomByKey(room, title) {
   if (!room || !profile) return;
