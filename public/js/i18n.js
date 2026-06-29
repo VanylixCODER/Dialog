@@ -263,7 +263,12 @@ function applyI18n(root) {
   root = root || document;
   root.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
   root.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
-  root.querySelectorAll("[data-i18n-title]").forEach((el) => (el.title = t(el.dataset.i18nTitle)));
+  root.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    // .call-btn elements show their label via the CSS [data-tip]::before tooltip,
+    // so we must NOT also set a native `title` or the same text renders twice on hover.
+    if (el.classList.contains("call-btn")) { el.removeAttribute("title"); return; }
+    el.title = t(el.dataset.i18nTitle);
+  });
   document.documentElement.lang = lang;
 }
 function setLang(l) { lang = l; localStorage.setItem("dialog_lang", l); applyI18n(); window.dispatchEvent(new Event("langchange")); }
