@@ -14,6 +14,8 @@ scripts/
 .DS_Store
 .env
 Dialog.apk
+ssh-key-*.key
+ssh-key-*.key.pub
 # Electron build artifacts
 build/
 dist/
