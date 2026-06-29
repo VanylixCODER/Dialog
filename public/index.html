@@ -372,6 +372,28 @@
     </div>
   </div>
 
+  <!-- Демонстрация экрана (Discord-стиль): выбор качества. Сам выбор окна/экрана делает
+       браузер своим нативным диалогом ПОСЛЕ нажатия «Поделиться». -->
+  <div id="screenModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card ss-card">
+      <button id="ssCancel" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="screen_share_title">Share your screen</div>
+      <div class="modal-sep" data-i18n="screen_quality">Quality</div>
+      <div class="ss-quality" id="ssQuality">
+        <button class="ss-opt" data-w="1280" data-h="720" data-fps="30">720p · 30fps</button>
+        <button class="ss-opt active" data-w="1920" data-h="1080" data-fps="30">1080p · 30fps</button>
+        <button class="ss-opt" data-w="1920" data-h="1080" data-fps="60">1080p · 60fps</button>
+        <button class="ss-opt" data-w="2560" data-h="1440" data-fps="60">1440p · 60fps</button>
+      </div>
+      <div class="ss-hint" data-i18n="screen_pick_hint">You'll choose the screen or window next.</div>
+      <div class="form-error" id="ssError"></div>
+      <div class="modal-actions">
+        <button id="ssCancelBtn" class="btn-ghost" data-i18n="cancel">Cancel</button>
+        <button id="ssConfirm" class="btn-primary" data-i18n="screen_share_go">Share screen</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Create group — отдельный flow (НЕ внутри #settingsOverlay). Открывается из двух точек:
        + в хедере чатлиста (#newGroupBtn) и CTA empty-state (#emptyNewGroup). Здесь же — аватар
        (опциональный), поиск по друзьям, мультивыбор и primary-кнопка Create. POST /api/groups

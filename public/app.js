@@ -2116,7 +2116,12 @@ function addScreenTile(id, name, mediaTrack) {
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
     vGrid.appendChild(tile);
     // В доке: кнопка «Смотреть стрим» открывает большой экран (отдельное окно).
-    tile.querySelector(".watch-btn").onclick = (e) => { e.stopPropagation(); $("expandBtn").click(); };
+    tile.querySelector(".watch-btn").onclick = (e) => {
+      e.stopPropagation();
+      // ПК: отдельное окно большого экрана. Мобильный: фокус прямо в полноэкранной сетке.
+      if (isMobile()) { vGrid.classList.add("pip-grid"); focusTile(tile); }
+      else $("expandBtn").click();
+    };
     // В окне большого экрана: одиночный клик фокусирует стрим (spotlight) и обратно,
     // двойной — разворачивает демонстрацию во весь экран. Одиночный откладываем,
     // чтобы он не срабатывал перед двойным.
@@ -2243,6 +2248,11 @@ function syncCallUI() {
   if (!here) { stage.classList.remove("fullscreen"); pane.classList.remove("fullscreen-call"); }
   pane.classList.toggle("has-call", showStage && !isMobile()); // ПК: звонок — колонка/полоса чата
   applyDock();
+  // Мобильный «большой экран»: отдельных окон нет (телефоны их не поддерживают) —
+  // показываем ту же красивую сетку .pip-grid прямо в полноэкранном стейдже, тап по
+  // стриму разворачивает его (focusTile). На ПК в доке — обычная сетка. Не трогаем,
+  // когда сетка вынесена в окно поп-аута (там pip-grid ставит mountGridIn).
+  if (vGrid.parentElement === stage) vGrid.classList.toggle("pip-grid", isMobile() && showStage);
   vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
 }
@@ -2330,12 +2340,13 @@ function endCall() {
   if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; clearInterval(pipPoll); returnGridHome(); }
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
-  vGrid.innerHTML = "";
+  vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
   $("expandBtn").classList.remove("active");
   $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("chatPane").classList.remove("has-call", "fullscreen-call"); // убрать grid-колонку звонка — без неё была чёрная зона
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
+  screenTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
   krispNode = null; stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
@@ -2410,7 +2421,67 @@ $("toggleCam").onclick = async () => {
     setTileAvatar("me", true);
   }
 };
-$("shareScreen").onclick = async () => { if (!call.room) return; if (!call.sharing && !canStartStream()) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
+// ── Демонстрация экрана (Discord-стиль): сначала выбор качества, потом нативный
+// выбор окна/экрана браузером. Захват делаем сами через getDisplayMedia в нужном
+// окне (в окне большого экрана, если открыто — иначе запрос прав появлялся бы в
+// основной вкладке, и из большого экрана его нельзя было дать), затем публикуем
+// дорожку в комнату LiveKit. Аудио пока не шарим (по согласованию).
+let screenTrack = null;
+let screenQuality = { w: 1920, h: 1080, fps: 30 };
+function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; m.classList.remove("hidden"); }
+function closeScreenModal() { const m = $("screenModal"); if (m) m.classList.add("hidden"); }
+function setShareActive(on) { call.sharing = on; $("shareScreen").classList.toggle("active", on); }
+async function startScreenShare() {
+  const LK = window.LivekitClient;
+  if (!call.room || !LK) return;
+  const q = screenQuality;
+  const win = (pipWin && !pipWin.closed) ? pipWin : window; // где показать запрос прав
+  let stream;
+  try {
+    stream = await win.navigator.mediaDevices.getDisplayMedia({
+      video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
+      audio: false,
+    });
+  } catch { closeScreenModal(); setShareActive(false); return; } // пользователь отменил выбор окна
+  const mst = stream.getVideoTracks()[0];
+  if (!mst) { closeScreenModal(); setShareActive(false); return; }
+  try {
+    const lkTrack = new LK.LocalVideoTrack(mst);
+    await call.room.localParticipant.publishTrack(lkTrack, {
+      source: LK.Track.Source.ScreenShare,
+      videoEncoding: { maxBitrate: q.h >= 1440 ? 6000000 : q.h >= 1080 ? 3000000 : 1500000, maxFramerate: q.fps },
+      simulcast: false,
+    });
+    screenTrack = lkTrack;
+    setShareActive(true);
+    mst.addEventListener("ended", () => stopScreenShare()); // браузерная кнопка «Stop sharing»
+    closeScreenModal();
+  } catch {
+    $("ssError").textContent = t("screen_share_failed");
+    try { mst.stop(); } catch {}
+    setShareActive(false);
+  }
+}
+async function stopScreenShare() {
+  if (screenTrack && call.room) { try { await call.room.localParticipant.unpublishTrack(screenTrack, true); } catch {} }
+  screenTrack = null; setShareActive(false);
+}
+$("shareScreen").onclick = () => {
+  if (!call.room) return;
+  if (call.sharing) { stopScreenShare(); return; }
+  if (!canStartStream()) return;
+  openScreenModal();
+};
+$("ssQuality").addEventListener("click", (e) => {
+  const b = e.target.closest(".ss-opt"); if (!b) return;
+  $("ssQuality").querySelectorAll(".ss-opt").forEach((o) => o.classList.remove("active"));
+  b.classList.add("active");
+  screenQuality = { w: +b.dataset.w, h: +b.dataset.h, fps: +b.dataset.fps };
+});
+$("ssConfirm").onclick = startScreenShare;
+$("ssCancel").onclick = closeScreenModal;
+$("ssCancelBtn").onclick = closeScreenModal;
+$("screenModal").addEventListener("click", (e) => { if (e.target === $("screenModal")) closeScreenModal(); });
 
 // Дропдаун микрофона + устройства
 $("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
