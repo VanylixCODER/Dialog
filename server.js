@@ -604,8 +604,9 @@ app.post("/webhook", (req, res) => {
   if (event !== "push") return res.json({ ok: true });
   res.status(202).json({ ok: true, status: "deploying" });
   const repo = process.env.HOST_REPO_PATH || "/repo";
+  const gitSSH = `ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null`;
   exec(`git config --global --add safe.directory ${repo} && cd ${repo} && git pull 2>&1 && docker compose -f docker-compose.prod.yml up -d --build 2>&1`,
-    { timeout: 180000, env: { ...process.env, HOME: "/root" } },
+    { timeout: 180000, env: { ...process.env, HOME: "/root", GIT_SSH_COMMAND: gitSSH } },
     (err, stdout) => {
       if (err) console.error("deploy:", stdout.slice(-400), err.message);
       else console.log("deploy ok:", stdout.slice(-300));
