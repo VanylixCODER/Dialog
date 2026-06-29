@@ -1,0 +1,58 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from secrets
+        run: |
+          cat > .env << 'EOF'
+          DB_HOST=mysql
+          DB_PORT=3306
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASS=${{ secrets.DB_PASS }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          REDIS_URL=redis://redis:6379
+          METERED_API_KEY=${{ secrets.METERED_API_KEY }}
+          VAPID_PUBLIC=${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE=${{ secrets.VAPID_PRIVATE }}
+          VAPID_SUBJECT=${{ secrets.VAPID_SUBJECT }}
+          LIVEKIT_URL=${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }}
+          PORT=3000
+          SERVER_REGION=${{ secrets.SERVER_REGION }}
+          EOF
+
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: ".,!node_modules,!Dialog.apk,!session-*.md"
+          target: /home/ubuntu/dialog
+          strip_components: 0
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/dialog
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d --build
+            docker image prune -f
