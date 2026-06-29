@@ -1791,7 +1791,7 @@ a:focus-visible {
 }
 .chat.has-call.dock-left > #callStage > .call-resizer { display: block; top: 0; bottom: 0; right: -3px; width: 7px; cursor: col-resize; }
 .chat.has-call.dock-right > #callStage > .call-resizer { display: block; top: 0; bottom: 0; left: -3px; width: 7px; cursor: col-resize; }
-.chat.has-call.dock-top > #callStage > .call-resizer { display: block; left: 0; right: 0; bottom: -3px; height: 7px; cursor: row-resize; }
+.chat.has-call.dock-top > #callStage > .call-resizer { display: none; } /* верхний док — фиксированный, без ресайза */
 .call-resizer { background: transparent; transition: background var(--t-fast) var(--ease); }
 .call-resizer:hover { background: rgba(var(--primary-rgb), 0.45); }
 
@@ -1857,7 +1857,7 @@ a:focus-visible {
 /* Top dock: uniform five-per-row strip (the screen tile is one of the five —
    you open it big via Watch stream). */
 .chat.has-call.dock-top .video-grid .tile,
-.chat.has-call.dock-top .video-grid .tile.screen { width: calc(20% - 7px); }
+.chat.has-call.dock-top .video-grid .tile.screen { width: calc(20% - 7px); aspect-ratio: 16 / 9; }
 
 .dock-hint {
   position: absolute; z-index: 150;
