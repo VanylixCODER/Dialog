@@ -198,6 +198,7 @@
         <button class="settings-tab"        data-tab="contacts"   data-i18n="tab_contacts"   role="tab">Contacts</button>
         <button class="settings-tab"        data-tab="themes"     data-i18n="tab_themes"     role="tab">Themes</button>
         <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
+        <button class="settings-tab"        data-tab="devices"    data-i18n="tab_devices"    role="tab">Voice & Video</button>
       </nav>
       <div class="settings-panes" id="settingsPanes">
         <!-- Profile -->
@@ -307,8 +308,27 @@
             <div id="gsPendingEmpty" class="contacts-empty gs-owner hidden" data-i18n="pending_empty">No pending requests</div>
           </div>
         </section>
-        <!-- (Старый New-chat пейн удалён. Создание группы переехало в #createGroupModal — отдельный
-             флоу из хедера чатлиста (#newGroupBtn) и empty-state (#emptyNewGroup).) -->
+        <!-- Voice & Video -->
+        <section class="settings-pane" data-pane="devices" role="tabpanel">
+          <h3 data-i18n="tab_devices">Voice & Video</h3>
+          <div class="settings-device-row">
+            <div class="dd-label" data-i18n="mic_device">Microphone</div>
+            <select class="dd-select" id="settingsMicSelect"></select>
+          </div>
+          <div class="settings-device-row">
+            <div class="dd-label" data-i18n="spk_device">Speaker</div>
+            <select class="dd-select" id="settingsSpkSelect"></select>
+          </div>
+          <div class="settings-device-row">
+            <div class="dd-label" data-i18n="cam_device">Camera</div>
+            <select class="dd-select" id="settingsCamSelect"></select>
+          </div>
+          <div class="modal-sep"></div>
+          <div class="settings-device-row" id="settingsNoiseRow">
+            <span data-i18n="noise_suppression">Noise suppression</span>
+            <span class="dd-toggle on" id="settingsNoiseToggle"></span>
+          </div>
+        </section>
       </div>
     </div>
   </div>

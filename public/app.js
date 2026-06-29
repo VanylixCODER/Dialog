@@ -486,6 +486,7 @@ function enterApp() {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   socket.emit("identify", { token });
+  loadDevicePrefs();
   loadStoredChats(); loadPins(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush();
@@ -1993,7 +1994,7 @@ if (moreBtn && moreDropdown) {
 }
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null };
 const audioEls = new Map(); // identity -> <audio> (звук участника)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
 const isMobile = () => matchMedia("(max-width:720px)").matches;
@@ -2271,13 +2272,13 @@ $("toggleDeafen").onclick = () => {
   if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false); }
   else if (call.micWasOn) setMic(true);
 };
-$("toggleCam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; try { await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); if (call.camOn && call.audioInId) {} } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
+$("toggleCam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; try { if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId); await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
 $("shareScreen").onclick = async () => { if (!call.room) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
 
 // Дропдаун микрофона + устройства
 $("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
-$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); applyNoiseFilter(call.ns); };
+$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); const snt = $("settingsNoiseToggle"); if (snt) snt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
 // Усиленный шумодав Krisp (LiveKit Cloud). Грузим по требованию; при неудаче остаётся браузерный NS.
 let krispMod = null, krispNode = null;
 async function applyNoiseFilter(on) {
@@ -2304,8 +2305,40 @@ async function populateDevices() {
     if (!("setSinkId" in HTMLMediaElement.prototype)) { spk.style.display = "none"; if (spk.previousElementSibling) spk.previousElementSibling.style.display = "none"; }
   } catch {}
 }
-$("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } };
-$("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); };
+$("micSelect").onchange = async () => { call.audioInId = $("micSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } saveDevicePrefs(); };
+$("spkSelect").onchange = () => { call.audioOutId = $("spkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); saveDevicePrefs(); };
+
+// Устройства — сохранение и загрузка из localStorage
+const DEVICE_KEY = "dialog_devices";
+function loadDevicePrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_KEY));
+    if (saved) {
+      if (saved.audioInId) call.audioInId = saved.audioInId;
+      if (saved.audioOutId) call.audioOutId = saved.audioOutId;
+      if (saved.camId) call.camId = saved.camId;
+      if (saved.ns !== undefined) call.ns = saved.ns;
+    }
+  } catch {}
+}
+function saveDevicePrefs() {
+  try { localStorage.setItem(DEVICE_KEY, JSON.stringify({ audioInId: call.audioInId, audioOutId: call.audioOutId, camId: call.camId, ns: call.ns })); } catch {}
+}
+async function populateDeviceSettings() {
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const fill = (sel, kind, cur, label) => { sel.innerHTML = ""; devs.filter((d) => d.kind === kind).forEach((d, i) => { const o = document.createElement("option"); o.value = d.deviceId; o.textContent = d.label || label + " " + (i + 1); if (d.deviceId === cur) o.selected = true; sel.appendChild(o); }); };
+    fill($("settingsMicSelect"), "audioinput", call.audioInId, "Mic");
+    const spk = $("settingsSpkSelect"); fill(spk, "audiooutput", call.audioOutId, "Speaker");
+    if (!("setSinkId" in HTMLMediaElement.prototype)) spk.style.display = "none";
+    fill($("settingsCamSelect"), "videoinput", call.camId, "Camera");
+    const snt = $("settingsNoiseToggle"); if (snt) snt.classList.toggle("on", call.ns);
+  } catch {}
+}
+$("settingsMicSelect").onchange = async () => { call.audioInId = $("settingsMicSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } saveDevicePrefs(); };
+$("settingsSpkSelect").onchange = () => { call.audioOutId = $("settingsSpkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); saveDevicePrefs(); };
+$("settingsCamSelect").onchange = async () => { call.camId = $("settingsCamSelect").value; if (call.room) { try { await call.room.switchActiveDevice("videoinput", call.camId); } catch {} } saveDevicePrefs(); };
+$("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseToggle").classList.toggle("on", call.ns); const nt = $("noiseToggle"); if (nt) nt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
 
 // ⛶ Фуллскрин стейджа звонка (ПК)
 $("expandBtn").onclick = () => {
@@ -2606,7 +2639,7 @@ function dismissNotif(room) {
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "contacts", "themes", "groups"];
+const SETTINGS_TABS = ["profile", "contacts", "themes", "groups", "devices"];
 function openSettings(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
@@ -2620,6 +2653,7 @@ function openSettings(tab) {
   if (tab === "contacts") loadRelations();
   if (tab === "profile") refreshProfilePane();
   if (tab === "groups") populateGroupSettingsPane();
+  if (tab === "devices") populateDeviceSettings();
   // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
   renderChatList($("searchInput").value);
 }
@@ -2657,6 +2691,7 @@ function hydratePane(tab) {
       .finally(() => { gsFetching = false; });
     return;
   }
+  else if (tab === "devices") populateDeviceSettings();
   // themes: один раз через renderThemes() + _themesRendered guard
 }
 function refreshProfilePane() {
