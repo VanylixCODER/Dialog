@@ -2219,6 +2219,7 @@ async function joinCall() {
   socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
 }
 function endCall() {
+  hideToast(); stopRingtone();
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
   if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; clearInterval(pipPoll); returnGridHome(); }
