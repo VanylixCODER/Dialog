@@ -1709,7 +1709,7 @@ a:focus-visible {
   grid-template-rows: clamp(140px, var(--call-h), 75%) auto 1fr auto;
   grid-template-areas: "call" "head" "msgs" "comp";
 }
-.chat.has-call > #callStage { grid-area: call; max-height: none; height: 100%; border-bottom: none; }
+.chat.has-call > #callStage { grid-area: call; max-height: none; height: 100%; border-bottom: none; min-height: 180px; }
 .chat.has-call.dock-left > #callStage { border-right: 1px solid var(--border-2); }
 .chat.has-call.dock-right > #callStage { border-left: 1px solid var(--border-2); }
 .chat.has-call.dock-top > #callStage { border-bottom: 1px solid var(--border-2); }
@@ -1791,12 +1791,16 @@ a:focus-visible {
 .video-grid {
   position: relative; z-index: 1;
   flex: 1 1 auto; min-height: 0;
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 12px;
-  overflow-y: auto;
+  display: grid; gap: 8px; padding: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  overflow-y: auto; align-content: start;
 }
+.video-grid:has(> .tile:only-child) { align-content: center; }
+.video-grid:has(> .tile:only-child) .tile { max-width: 420px; justify-self: center; }
 .video-grid .tile { width: 100%; }
-.call-stage.fullscreen .video-grid { flex-direction: column; align-content: stretch; justify-content: flex-start; padding: 8px; gap: 6px; }
+.call-stage.fullscreen .video-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 8px; gap: 6px; }
+.call-stage.fullscreen .video-grid:has(> .tile:only-child) { align-content: center; }
+.call-stage.fullscreen .video-grid:has(> .tile:only-child) .tile { max-width: 640px; justify-self: center; }
 .call-stage.fullscreen .video-grid .tile { width: 100%; }
 .call-stage.fullscreen .video-grid .tile.screen { max-height: 55vh; }
 .call-stage.fullscreen .video-grid .tile.screen:only-child { min-height: 0; }
@@ -1808,8 +1812,8 @@ a:focus-visible {
 .call-stage.fullscreen .call-meta { font-size: 10px; }
 .call-stage.fullscreen .participants-wrap .tile { width: 140px; height: 80px; }
 .call-stage.fullscreen .participants-wrap { padding: 4px 0; gap: 6px; }
-.chat.has-call.dock-top .video-grid { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; justify-content: center; }
-.chat.has-call.dock-top .video-grid .tile { width: auto; height: 100%; aspect-ratio: 16/9; }
+.chat.has-call.dock-top .video-grid { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; justify-content: center; }
+.chat.has-call.dock-top .video-grid .tile { width: auto; height: 100%; min-width: 160px; max-width: 280px; }
 
 .dock-hint {
   position: absolute; z-index: 150;
@@ -1828,6 +1832,7 @@ a:focus-visible {
   border: 2px solid var(--border-1);
   border-radius: var(--r-3);
   aspect-ratio: 16/9;
+  max-height: 30vh;
   flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center;
   transition: border-color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), transform var(--t-base) var(--ease-out);

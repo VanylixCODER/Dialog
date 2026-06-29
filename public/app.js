@@ -2363,7 +2363,7 @@ function mountGridIn(win) {
   const bar = win.document.createElement("div"); bar.className = "call-bar";
   const actions = win.document.createElement("div"); actions.className = "call-actions";
   [["toggleMic", "mic"], ["toggleCam", "camera"], ["shareScreen", "monitor"], ["toggleDeafen", "headphones"], ["hangUp", "phoneOff", "end"]].forEach(([id, icon, cls]) => {
-    const b = win.document.createElement("button"); b.className = "call-btn" + (cls ? " " + cls : ""); b.innerHTML = window.ICON[icon]; b.title = id; b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
+    const b = win.document.createElement("button"); b.className = "call-btn" + (cls ? " " + cls : ""); b.innerHTML = window.ICON[icon]; const src = $(id); if (src) b.setAttribute("data-tip", src.getAttribute("data-tip") || ""); b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
   });
   bar.appendChild(actions); win.document.body.appendChild(bar);
 }
