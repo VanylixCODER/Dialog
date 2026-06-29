@@ -437,6 +437,7 @@ window.addEventListener("langchange", () => {
   [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang()));
   renderChatList($("searchInput").value);
   applyI18n(document.querySelector('[data-pane="themes"]'));
+  updateCallButton(); // вернуть корректный заголовок кнопки звонка (DM vs группа) после смены языка
   pushState();
 });
 
@@ -2136,7 +2137,9 @@ function updateCallButton() {
   const ongoing = !inThis && activeCalls.has(myRoom);
   btn.classList.toggle("in-call", inThis);
   btn.classList.toggle("join-call", ongoing);
-  btn.title = inThis ? t("t_hangup") : ongoing ? t("join_call") : t("t_call");
+  // «Групповой звонок» только в группах; в DM участников всего двое — просто «Звонок».
+  const startLabel = curKind === "group" ? t("t_call") : t("call_dm");
+  btn.title = inThis ? t("t_hangup") : ongoing ? t("join_call") : startLabel;
   btn.innerHTML = inThis ? window.ICON.phoneOff : window.ICON.phone;
 }
 // Показ/сворачивание оверлея звонка в зависимости от просматриваемого чата и флага minimized
@@ -2285,8 +2288,21 @@ $("toggleDeafen").onclick = () => {
   if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false); }
   else if (call.micWasOn) setMic(true);
 };
-$("toggleCam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; try { if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId); await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
-$("shareScreen").onclick = async () => { if (!call.room) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
+// Лимит одновременных видеопотоков в групповом звонке (камеры + демонстрации экрана).
+// В DM участников максимум двое, поэтому ограничение касается только групп.
+const STREAM_LIMIT = 3;
+const isGroupCall = () => (call.roomKey || "").startsWith("@grp:");
+function videoStreamCount() {
+  return vGrid.querySelectorAll(".tile.screen").length
+       + vGrid.querySelectorAll(".tile:not(.screen):not(.show-avatar)").length;
+}
+// true → можно включать свой поток; false → достигнут лимит (показываем уведомление)
+function canStartStream() {
+  if (isGroupCall() && videoStreamCount() >= STREAM_LIMIT) { notify(t("stream_limit", { n: STREAM_LIMIT })); return false; }
+  return true;
+}
+$("toggleCam").onclick = async () => { if (!call.room) return; if (!call.camOn && !canStartStream()) return; call.camOn = !call.camOn; try { if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId); await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
+$("shareScreen").onclick = async () => { if (!call.room) return; if (!call.sharing && !canStartStream()) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
 
 // Дропдаун микрофона + устройства
 $("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
@@ -2361,7 +2377,7 @@ $("expandBtn").onclick = () => {
   $("chatPane").classList.toggle("fullscreen-call", fs);
 };
 // Вернуть сетку тайлов обратно в стейдж (после поп-аута)
-function returnGridHome() { const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
+function returnGridHome() { vGrid.classList.remove("pip-grid"); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Единый финал поп-аута (Document PiP pagehide / Firefox pipPoll): вернуть сетку, обнулить pipWin,
 // и если звонок был активен — выйти из него. Идемпотентно: повторный вызов видит call.active=false.
 function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; if (pipDocking) { pipDocking = false; return; } if (call.active) endCall(); }
@@ -2371,6 +2387,7 @@ function mountGridIn(win) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
   win.document.body.dataset.theme = document.body.dataset.theme || "matrix";
   win.document.body.style.cssText = "margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh";
+  vGrid.classList.add("pip-grid"); // включает spotlight-раскладку демонстрации экрана в окне поп-аута
   win.document.body.appendChild(vGrid);
   // прокси-кнопки управления в окне (проксируют клики на основные контролы)
   const bar = win.document.createElement("div"); bar.className = "call-bar";
