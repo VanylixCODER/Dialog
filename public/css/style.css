@@ -2094,6 +2094,13 @@ a:focus-visible {
 }
 .dd-toggle.on::after { transform: translateX(16px); }
 
+.settings-device-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.settings-device-row .dd-label { padding: 0; flex-shrink: 0; }
+.settings-device-row .dd-select { width: 200px; margin: 0; flex-shrink: 0; }
+#settingsNoiseRow { padding: 6px 0; font-size: 13px; color: var(--text); }
+
 .tile-mic {
   position: absolute; top: 8px; right: 8px;
   z-index: 4;
