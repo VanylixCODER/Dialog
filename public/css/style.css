@@ -1789,8 +1789,8 @@ a:focus-visible {
 .call-resizer {
   position: absolute; z-index: 4; display: none;
 }
-.chat.has-call.dock-left > #callStage > .call-resizer { display: block; top: 0; bottom: 0; right: -3px; width: 7px; cursor: col-resize; }
-.chat.has-call.dock-right > #callStage > .call-resizer { display: block; top: 0; bottom: 0; left: -3px; width: 7px; cursor: col-resize; }
+.chat.has-call.dock-left > #callStage > .call-resizer,
+.chat.has-call.dock-right > #callStage > .call-resizer { display: none; } /* боковой док — фиксированный, без ресайза */
 .chat.has-call.dock-top > #callStage > .call-resizer { display: none; } /* верхний док — фиксированный, без ресайза */
 .call-resizer { background: transparent; transition: background var(--t-fast) var(--ease); }
 .call-resizer:hover { background: rgba(var(--primary-rgb), 0.45); }
@@ -1851,9 +1851,9 @@ a:focus-visible {
 }
 /* Prominent name pill on a focused stream. */
 .video-grid.pip-grid.has-focus .tile.focused .tile-name { font-size: 15px; padding: 5px 14px; }
-/* Side docks (left/right): one tile per row (full width). */
+/* Side docks (left/right): one rectangular (16:9) tile per row. */
 .chat.has-call.dock-left .video-grid .tile,
-.chat.has-call.dock-right .video-grid .tile { width: 100%; }
+.chat.has-call.dock-right .video-grid .tile { width: 100%; aspect-ratio: 16 / 9; }
 /* Top dock: uniform five-per-row strip (the screen tile is one of the five —
    you open it big via Watch stream). */
 .chat.has-call.dock-top .video-grid .tile,
