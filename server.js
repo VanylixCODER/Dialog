@@ -121,6 +121,15 @@ app.post("/api/profile", async (req, res) => {
     if (["online", "dnd", "invisible"].includes(status)) patch.status = status;
     await updateProfile(me.login, patch);
     if (patch.status) { userStatus.set(me.login, patch.status); broadcastPresence(me.login); }
+    // Broadcast name/avatar changes to friends and own devices in realtime
+    if (patch.name || patch.avatar) {
+      try {
+        const friends = await getFriendLogins(me.login);
+        const payload = { login: me.login, name: patch.name || me.name, avatarChanged: !!patch.avatar };
+        for (const f of friends) notifyUser(f, "profile-updated", payload);
+        notifyUser(me.login, "profile-updated", payload);
+      } catch (e) { console.error("profile broadcast", e.message); }
+    }
     for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
     const card = await getProfileCard(me.login);
     res.json({ profile: { ...me, ...patch, ...card } });
