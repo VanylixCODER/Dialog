@@ -1833,10 +1833,13 @@ a:focus-visible {
   flex: 1 1 calc(33.333% - 14px); max-width: calc(33.333% - 14px); min-width: 200px;
 }
 
-/* SPOTLIGHT — a stream was clicked: it dominates, the rest become thumbs. */
+/* SPOTLIGHT — a stream was clicked: it dominates the top, the rest become a
+   thumbnail row UNDER it. The focused tile takes a full-width flex line
+   (flex-basis 100%, no max-width) so nothing can squeeze beside it; the video
+   inside is letter-boxed (object-fit: contain) and centred. */
 .video-grid.pip-grid.has-focus .tile.focused {
   order: -1; flex: 1 1 100%;
-  width: 100%; max-width: 1500px; margin: 0 auto;
+  width: 100%;
   aspect-ratio: auto; max-height: none; height: 62vh; cursor: zoom-out;
 }
 .video-grid.pip-grid.has-focus .tile:not(.focused) {
@@ -2465,6 +2468,20 @@ a:focus-visible {
   color: var(--accent-100);
   text-shadow: 0 0 8px rgba(var(--primary-rgb), 0.45);
 }
+
+/* Clipboard preview modal */
+.clip-preview-img {
+  width: 100%; max-height: 200px; overflow: hidden;
+  border-radius: var(--r-2); background: var(--bg-1);
+  display: grid; place-items: center;
+}
+.clip-preview-img img { max-width: 100%; max-height: 200px; object-fit: contain; }
+.clip-info {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 12px;
+  font-size: 13px; padding: 4px 0;
+}
+.clip-label { color: var(--text-dim); white-space: nowrap; }
+.clip-val { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
 
 /* Sticky day separator */
 .day-sep {
