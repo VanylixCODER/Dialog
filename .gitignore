@@ -20,3 +20,7 @@ ssh-key-*.key.pub
 build/
 dist/
 build.sh
+# Session logs
+session-*.md
+# VNC / local junk
+*.vnc

@@ -25,6 +25,7 @@ import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
+import { exec } from "child_process";
 import { networkInterfaces } from "os";
 import crypto from "crypto";
 import webpush from "web-push";
@@ -595,6 +596,21 @@ app.post("/api/room/:room/delete", async (req, res) => {
     if (other) notifyUser(other, "room-cleared", { room });
     res.json({ ok: true });
   } catch (e) { console.error("room delete", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- GitHub webhook (auto-deploy) ----------
+app.post("/webhook", (req, res) => {
+  const event = req.headers["x-github-event"];
+  if (event !== "push") return res.json({ ok: true });
+  res.status(202).json({ ok: true, status: "deploying" });
+  const repo = process.env.HOST_REPO_PATH || "/repo";
+  exec(`cd ${repo} && git pull 2>&1 && docker compose -f docker-compose.prod.yml up -d --build 2>&1`,
+    { timeout: 120000, env: { ...process.env, HOME: "/root" } },
+    (err, stdout) => {
+      if (err) console.error("deploy:", stdout.slice(-400), err.message);
+      else console.log("deploy ok:", stdout.slice(-300));
+    }
+  );
 });
 
 // ====================== Socket.IO ======================

@@ -4,6 +4,12 @@ services:
     container_name: dialog-app
     restart: unless-stopped
     env_file: .env
+    environment:
+      - HOST_REPO_PATH=/repo
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ubuntu/.ssh:/root/.ssh:ro
+      - /home/ubuntu/dialog:/repo
     depends_on:
       mysql:
         condition: service_healthy
