@@ -1,0 +1,3 @@
+dialogmsg.xyz, www.dialogmsg.xyz {
+    reverse_proxy app:3000
+}
