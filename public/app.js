@@ -2051,12 +2051,19 @@ function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
   if (!tile) {
     tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen";
-    tile.innerHTML = `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video><div class="tile-name">🖥 ${escapeHtml(name)}</div><button class="tile-expand" title="${t("fullscreen")}">⛶</button>`;
+    // Discord-стиль: тайл демонстрации показывает превью + кнопку «Смотреть стрим».
+    // Клик открывает большой экран (отдельное окно). В самом окне оверлей скрыт (CSS).
+    tile.innerHTML =
+      `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
+      `<div class="stream-overlay">` +
+        `<div class="stream-title">🖥 ${t("stream_of", { name: escapeHtml(name) })}</div>` +
+        `<button class="watch-btn">${t("watch_stream")}</button>` +
+        `<div class="stream-desc">${t("watch_stream_hint")}</div>` +
+      `</div>` +
+      `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
     vGrid.appendChild(tile);
-    // увеличение демонстрации — клик или кнопка → полноэкранное видео
-    const enlarge = () => { const vv = tile.querySelector("video"); (vv.requestFullscreen || vv.webkitRequestFullscreen || (() => {})).call(vv); };
-    tile.querySelector(".tile-expand").onclick = (e) => { e.stopPropagation(); enlarge(); };
-    tile.querySelector("video").onclick = enlarge;
+    const watch = () => $("expandBtn").click(); // открыть стрим на большом экране
+    tile.querySelector(".watch-btn").onclick = (e) => { e.stopPropagation(); watch(); };
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
