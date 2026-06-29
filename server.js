@@ -612,7 +612,7 @@ app.post("/webhook", (req, res) => {
   res.status(202).json({ ok: true, status: "deploying" });
   const repo = process.env.HOST_REPO_PATH || "/repo";
   const gitSSH = `ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null`;
-  exec(`git config --global --add safe.directory ${repo} && cd ${repo} && git pull 2>&1`,
+  exec(`git config --global --add safe.directory ${repo} && cd ${repo} && git stash 2>&1 && git pull 2>&1`,
     { timeout: 60000, env: { ...process.env, HOME: "/root", GIT_SSH_COMMAND: gitSSH } },
     (err, stdout) => {
       if (err) { console.error("deploy pull:", stdout.slice(-400), err.message); return; }
