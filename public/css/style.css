@@ -1810,31 +1810,40 @@ a:focus-visible {
 .video-grid:has(.tile:not(.show-avatar)) .tile:not(.screen) { aspect-ratio: 16 / 9; }
 
 /* ── Big-screen window (.pip-grid) ──────────────────────────────────────
-   The call now opens in a separate window that goes fullscreen; the grid
-   inside it carries .pip-grid. Sizing is viewport-relative (vh / %), so it
-   looks right whether the window is fullscreen or just maximised. */
-.video-grid.pip-grid { align-content: center; padding: 16px; gap: 12px; }
-
-/* Screen-share spotlight: the shared screen dominates the upper area and
-   participant faces sit in a centred row beneath it. The flex-wrap trick
-   keeps the screen on its own full-width line (order:-1) and lets the faces
-   flow into the row below — no DOM wrapper needed. */
-.video-grid.pip-grid:has(.tile.screen) {
+   Opens in a separate window. Two modes:
+   • GRID (default): every tile is a centred 16:9 rectangle. Streams sit on
+     top (order:-1) at most two per row; faces fill the rows below. Width is
+     percentage-based so it reflows identically at any window size.
+   • SPOTLIGHT (.has-focus): a clicked stream fills the upper area and the
+     rest shrink to a thumbnail row beneath it. */
+.video-grid.pip-grid {
   display: flex; flex-wrap: wrap;
   align-content: center; justify-content: center;
   gap: 14px; padding: 18px;
+  overflow: auto;
 }
-.video-grid.pip-grid:has(.tile.screen) .tile.screen {
+.video-grid.pip-grid .tile { aspect-ratio: 16 / 9; max-height: none; width: auto; min-height: 0; }
+/* streams on top, capped at two per row (≈half width each) */
+.video-grid.pip-grid:not(.has-focus) .tile.screen {
+  order: -1; flex: 1 1 calc(50% - 14px); max-width: calc(50% - 14px); cursor: pointer;
+}
+/* faces: rectangles that share the rows below — three per row when wide,
+   fewer (never narrower than 200px) as the window shrinks. */
+.video-grid.pip-grid:not(.has-focus) .tile:not(.screen) {
+  flex: 1 1 calc(33.333% - 14px); max-width: calc(33.333% - 14px); min-width: 200px;
+}
+
+/* SPOTLIGHT — a stream was clicked: it dominates, the rest become thumbs. */
+.video-grid.pip-grid.has-focus .tile.focused {
   order: -1; flex: 1 1 100%;
   width: 100%; max-width: 1500px; margin: 0 auto;
-  aspect-ratio: auto; max-height: none; min-height: 0;
-  height: 62vh;
+  aspect-ratio: auto; max-height: none; height: 62vh; cursor: zoom-out;
 }
-.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) {
-  flex: 0 1 auto; aspect-ratio: 16 / 9; max-height: none; height: 20vh; width: auto;
+.video-grid.pip-grid.has-focus .tile:not(.focused) {
+  flex: 0 1 auto; aspect-ratio: 16 / 9; height: 18vh; width: auto; cursor: pointer;
 }
-/* Prominent name pill on the shared screen (matches the reference). */
-.video-grid.pip-grid:has(.tile.screen) .tile.screen .tile-name { font-size: 15px; padding: 5px 14px; }
+/* Prominent name pill on a focused stream. */
+.video-grid.pip-grid.has-focus .tile.focused .tile-name { font-size: 15px; padding: 5px 14px; }
 /* Docked on a side (left/right): narrow column → one tile per row. */
 .chat.has-call.dock-left .video-grid,
 .chat.has-call.dock-right .video-grid { grid-template-columns: 1fr; }
