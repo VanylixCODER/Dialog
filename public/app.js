@@ -2045,7 +2045,7 @@ function removeParticipant(identity) {
   const a = audioEls.get(identity); if (a) { a.srcObject = null; a.remove(); audioEls.delete(identity); }
   updateCallCount();
 }
-function removeTile(id) { const t = $("tile-" + id); if (t) t.remove(); }
+function removeTile(id) { const t = $("tile-" + id); if (t) { if (t.classList.contains("focused")) vGrid.classList.remove("has-focus"); t.remove(); } }
 function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
 function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
@@ -2062,10 +2062,23 @@ function addScreenTile(id, name, mediaTrack) {
       `</div>` +
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
     vGrid.appendChild(tile);
-    const watch = () => $("expandBtn").click(); // открыть стрим на большом экране
-    tile.querySelector(".watch-btn").onclick = (e) => { e.stopPropagation(); watch(); };
+    // В доке: кнопка «Смотреть стрим» открывает большой экран (отдельное окно).
+    tile.querySelector(".watch-btn").onclick = (e) => { e.stopPropagation(); $("expandBtn").click(); };
+    // В окне большого экрана клик по тайлу стрима фокусирует его (spotlight) и обратно.
+    tile.addEventListener("click", (e) => {
+      if (!vGrid.classList.contains("pip-grid")) return; // в доке — не фокусим
+      if (e.target.closest(".watch-btn")) return;
+      focusTile(tile.classList.contains("focused") ? null : tile);
+    });
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
+}
+// Spotlight в окне большого экрана: показать выбранный стрим крупно, остальные — миниатюрами.
+// focusTile(null) — снять фокус (вернуться в сетку).
+function focusTile(tile) {
+  vGrid.querySelectorAll(".tile.focused").forEach((t) => t.classList.remove("focused"));
+  if (tile) { tile.classList.add("focused"); vGrid.classList.add("has-focus"); }
+  else { vGrid.classList.remove("has-focus"); }
 }
 function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; }
 function updateCallStatus() {
@@ -2395,7 +2408,7 @@ $("expandBtn").onclick = () => {
   pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
 };
 // Вернуть сетку тайлов обратно в док-стейдж (после закрытия окна большого экрана)
-function returnGridHome() { vGrid.classList.remove("pip-grid"); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
+function returnGridHome() { vGrid.classList.remove("pip-grid", "has-focus"); vGrid.querySelectorAll(".tile.focused").forEach((t) => t.classList.remove("focused")); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Окно большого экрана закрыто → вернуть сетку в док и продолжить звонок (звонок НЕ завершаем).
 function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; $("expandBtn").classList.remove("active"); if (call.active) syncCallUI(); }
 let pipWin = null, pipPoll = 0;
