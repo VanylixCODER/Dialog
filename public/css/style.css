@@ -1811,17 +1811,36 @@ a:focus-visible {
 .video-grid:has(> .tile:only-child) { align-content: center; }
 .video-grid:has(> .tile:only-child) .tile { max-width: 420px; justify-self: center; }
 .video-grid .tile { width: 100%; }
+/* Square voice grid until someone turns on a stream: once any participant
+   publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
+.video-grid:has(.tile:not(.show-avatar)) .tile:not(.screen) { aspect-ratio: 16 / 9; }
+
+/* Screen-share spotlight (big-picture / pop-out): the shared screen dominates
+   and faces shrink to a thumbnail strip. Scoped to fullscreen + the pop-out
+   window (.pip-grid is toggled on the grid when it moves into the PiP window). */
+.call-stage.fullscreen .video-grid:has(.tile.screen),
+.video-grid.pip-grid:has(.tile.screen) {
+  display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
+}
+.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen,
+.video-grid.pip-grid:has(.tile.screen) .tile.screen {
+  order: -1; flex: 1 1 100%; width: 100%;
+  aspect-ratio: auto; max-height: none;
+}
+.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen { height: clamp(320px, 66vh, 76vh); }
+.video-grid.pip-grid:has(.tile.screen) .tile.screen { height: 66%; min-height: 0; }
+.call-stage.fullscreen .video-grid:has(.tile.screen) .tile:not(.screen),
+.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) {
+  flex: 0 0 auto; aspect-ratio: 1 / 1; max-height: none; width: 128px; height: 128px;
+}
+.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) { width: 92px; height: 92px; }
 .call-stage.fullscreen .video-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 8px; gap: 6px; }
 .call-stage.fullscreen .video-grid:has(> .tile:only-child) { align-content: center; }
 .call-stage.fullscreen .video-grid:has(> .tile:only-child) .tile { max-width: 640px; justify-self: center; }
 .call-stage.fullscreen .video-grid .tile { width: 100%; }
 .call-stage.fullscreen .video-grid .tile.screen { max-height: 55vh; }
 .call-stage.fullscreen .video-grid .tile.screen:only-child { min-height: 0; }
-.call-stage.fullscreen .call-btn { width: 42px; height: 42px; font-size: 16px; }
-.call-stage.fullscreen .call-btn svg { width: 18px; height: 18px; }
-.call-stage.fullscreen .call-btn.end { width: 50px; border-radius: 24px; }
-.call-stage.fullscreen .call-bar { padding: 6px 12px; gap: 4px; }
-.call-stage.fullscreen .call-actions { gap: 5px; }
+.call-stage.fullscreen .call-bar { --cbtn: 42px; --cgap: 6px; padding: 8px 12px; gap: 6px; }
 .call-stage.fullscreen .call-meta { font-size: 10px; }
 .call-stage.fullscreen .participants-wrap .tile { width: 140px; height: 80px; }
 .call-stage.fullscreen .participants-wrap { padding: 4px 0; gap: 6px; }
@@ -1844,8 +1863,8 @@ a:focus-visible {
   background: linear-gradient(160deg, var(--bg-4), var(--bg-3));
   border: 2px solid var(--border-1);
   border-radius: var(--r-3);
-  aspect-ratio: 16/9;
-  max-height: 30vh;
+  aspect-ratio: 1 / 1;          /* square by default (voice grid, avatars only) */
+  max-height: 38vh;
   flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center;
   transition: border-color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), transform var(--t-base) var(--ease-out);
@@ -1978,11 +1997,20 @@ a:focus-visible {
 .tctrl-mute.muted { color: var(--danger); }
 .tctrl-vol { width: 64px; accent-color: var(--accent-400); cursor: pointer; }
 
+/* ====================================================================
+   Call control bar — rebuilt. Single source of truth for button size is
+   --cbtn; every control derives from it, so the row is always uniform and
+   centred. State styling (off / active / end) is unified below. All ids &
+   class hooks are preserved for the existing call logic, fullscreen
+   overrides and the PiP pop-out (which rebuilds .call-bar > .call-actions).
+   ==================================================================== */
 .call-bar {
+  --cbtn: 50px;         /* button diameter */
+  --cgap: 10px;         /* gap between controls */
   position: relative; z-index: 3;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 10px 12px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(0, 8, 2, 0.86), rgba(0, 4, 0, 0.94));
   border-top: 1px solid var(--border-1);
   backdrop-filter: blur(10px);
@@ -1991,61 +2019,81 @@ a:focus-visible {
   display: flex; align-items: center; gap: 8px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.5px;
 }
-.call-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+/* The controls sit in a soft floating dock so the row reads as one unit. */
+.call-actions {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: var(--cgap);
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-1);
+  /* radius = half a single button row, so the dock is a perfect pill on one
+     row and a tidy rounded rectangle (not an ellipse) when controls wrap. */
+  border-radius: calc((var(--cbtn) + 14px) / 2);
+}
 
 .call-btn {
   position: relative;
-  width: 50px; height: 50px;
+  width: var(--cbtn); height: var(--cbtn);
+  flex: 0 0 auto;
   border-radius: 50%;
   border: 1px solid var(--border-1);
   background: var(--surface-2);
   color: var(--accent-200);
-  font-size: 20px; cursor: pointer;
+  font-size: 19px; cursor: pointer;   /* for glyph buttons (popout ⧉ / fullscreen ⛶ / minimize ▾) */
   display: grid; place-items: center;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+              transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+              box-shadow var(--t-base) var(--ease);
 }
-.call-btn svg { width: 22px; height: 22px; }
+.call-btn svg { width: 45%; height: 45%; display: block; }
+.call-btn:hover { background: var(--surface-3); transform: translateY(-2px); border-color: var(--accent-400); box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.22); }
+.call-btn:active { transform: translateY(0) scale(0.94); }
+.call-btn:focus-visible { outline: none; }
+
+/* Tooltip (single source — the native title is stripped in i18n.js). */
 .call-btn::before {
   content: attr(data-tip);
-  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translate(-50%, 4px);
-  background: rgba(2, 10, 4, 0.94);
+  position: absolute; bottom: calc(100% + 9px); left: 50%;
+  transform: translate(-50%, 4px);
+  background: rgba(2, 10, 4, 0.96);
   border: 1px solid var(--border-2);
   color: var(--accent-100);
   font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
-  padding: 4px 8px; border-radius: 4px;
+  padding: 4px 8px; border-radius: 5px;
   white-space: nowrap;
   opacity: 0; pointer-events: none;
   transition: opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
   z-index: 6;
 }
 .call-btn:hover::before { opacity: 1; transform: translate(-50%, 0); }
-.call-btn:hover { background: var(--surface-3); transform: translateY(-2px) scale(1.05); border-color: var(--accent-400); box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.2); }
-.call-btn:active { transform: translateY(0) scale(0.96); }
-.call-btn.off {
-  background: rgba(255, 82, 82, 0.18);
+
+/* States ----------------------------------------------------------- */
+.call-btn.off {                         /* muted mic / cam off */
+  background: rgba(255, 82, 82, 0.16);
   color: var(--danger);
-  border-color: rgba(255, 82, 82, 0.4);
+  border-color: rgba(255, 82, 82, 0.42);
 }
-.call-btn.off:hover { background: rgba(255, 82, 82, 0.28); box-shadow: 0 6px 18px rgba(255, 82, 82, 0.25); }
-.call-btn.active {
+.call-btn.off:hover { background: rgba(255, 82, 82, 0.26); border-color: rgba(255, 82, 82, 0.6); box-shadow: 0 6px 18px rgba(255, 82, 82, 0.25); }
+.call-btn.active {                      /* screen-share / fullscreen on */
   background: var(--accent-soft);
   color: var(--accent-100);
   border-color: var(--accent-400);
   box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.35);
 }
-.call-btn.end {
+.call-btn.end {                         /* leave call — wider pill */
+  width: calc(var(--cbtn) * 1.32);
+  border-radius: 999px;
   background: linear-gradient(180deg, #ff5252, #cc2a2a);
   color: #fff;
-  width: 60px;
-  border-radius: 26px;
   border-color: rgba(255, 82, 82, 0.7);
   box-shadow: 0 6px 20px rgba(255, 82, 82, 0.35);
 }
-.call-btn.end:hover { background: linear-gradient(180deg, #ff7070, #dd4040); transform: translateY(-2px) scale(1.04); box-shadow: 0 10px 28px rgba(255, 82, 82, 0.45); }
+.call-btn.end:hover { background: linear-gradient(180deg, #ff7070, #dd4040); border-color: rgba(255, 120, 120, 0.9); box-shadow: 0 10px 28px rgba(255, 82, 82, 0.45); }
 
-/* Группа «микрофон + выбор устройства». Микрофон — полноценный круг, как и все
-   остальные кнопки (иконка строго по центру). Стрелка настроек — маленький кружок
-   в нижне-правом углу, не сдвигает иконку микрофона и не ломает ряд. */
+/* Mic + device-picker group: the mic is a full circle like every other
+   control; the settings caret is a small badge in the corner so it never
+   pushes the mic icon off-centre or breaks the row. */
 .call-btn-group { position: relative; display: inline-flex; transition: transform var(--t-fast) var(--ease); }
 .call-btn-group:hover { transform: translateY(-2px); }
 .call-btn-group .call-btn:hover { transform: none; }
@@ -2512,8 +2560,7 @@ a:focus-visible {
   .call-stage:not(.hidden) { position: fixed; inset: 0; z-index: 200; max-height: none; border-radius: 0; background: var(--bg-1); }
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
-  .call-btn { width: 48px; height: 48px; }
-  .call-btn.end { width: 56px; }
+  .call-bar { --cbtn: 48px; }
   .call-btn.mobile-only { display: grid; }
   .call-grip, .call-resizer { display: none !important; }
   .lang-select { top: 10px; right: 10px; }
