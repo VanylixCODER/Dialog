@@ -455,6 +455,27 @@
     </div>
   </div>
 
+  <!-- Clipboard preview modal -->
+  <div id="clipPreview" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card" style="width: min(380px, 92vw);">
+      <button class="hub-close" id="clipClose">✕</button>
+      <div class="modal-title" data-i18n="clip_title">Clipboard image</div>
+      <div class="clip-preview-img"><img id="clipImg" alt=""></div>
+      <div class="clip-info">
+        <span class="clip-label" data-i18n="clip_name">Name</span>
+        <span class="clip-val" id="clipName"></span>
+        <span class="clip-label" data-i18n="clip_type">Type</span>
+        <span class="clip-val" id="clipType"></span>
+        <span class="clip-label" data-i18n="clip_size">Size</span>
+        <span class="clip-val" id="clipSize"></span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" id="clipSend" data-i18n="t_send">Send</button>
+        <button class="btn-ghost" id="clipCancel" data-i18n="cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Лайтбокс -->
   <div id="lightbox" class="lightbox hidden">
     <img id="lightboxImg" alt="" draggable="false" />

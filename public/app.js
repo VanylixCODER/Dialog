@@ -1852,6 +1852,51 @@ function sendFile(file) {
   reader.readAsDataURL(file);
   return null;
 }
+// ---------- Clipboard paste preview ----------
+let _clipFile = null;
+function showClipPreview(file) {
+  const modal = $("clipPreview"); if (!modal) return;
+  const img = $("clipImg"); if (img) { img.src = URL.createObjectURL(file); }
+  const name = $("clipName"); if (name) name.textContent = file.name || t("file_untitled");
+  const type = $("clipType"); if (type) type.textContent = file.type || "—";
+  const size = $("clipSize"); if (size) size.textContent = formatFileSize(file.size);
+  _clipFile = file;
+  modal.classList.remove("hidden");
+}
+function hideClipPreview() {
+  const modal = $("clipPreview"); if (!modal) return;
+  modal.classList.add("hidden");
+  const img = $("clipImg"); if (img && img.src) { URL.revokeObjectURL(img.src); img.src = ""; }
+  _clipFile = null;
+}
+function mimeToExt(mime) {
+  const map = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/bmp": "bmp", "image/svg+xml": "svg" };
+  return map[mime] || "bin";
+}
+$("msgInput").addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) break;
+      if (!file.name) Object.defineProperty(file, "name", { value: "clipboard." + mimeToExt(file.type), writable: true });
+      if (file.size > MAX_FILE_BYTES) { notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB })); break; }
+      showClipPreview(file);
+      return;
+    }
+  }
+});
+$("clipSend")?.addEventListener("click", () => {
+  if (_clipFile && myRoom) sendFile(_clipFile);
+  hideClipPreview();
+});
+$("clipCancel")?.addEventListener("click", hideClipPreview);
+$("clipClose")?.addEventListener("click", hideClipPreview);
+$("clipPreview")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) hideClipPreview(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("clipPreview")?.classList.contains("hidden")) hideClipPreview(); });
+
 $("attachBtn").onclick = () => {
   // Без accept="image/*,..." теперь можно прикреплять ВСЁ; click() в chrome срабатывает
   // даже после programmatic reset value="".
@@ -2047,6 +2092,14 @@ function removeParticipant(identity) {
 }
 function removeTile(id) { const t = $("tile-" + id); if (t) { if (t.classList.contains("focused")) vGrid.classList.remove("has-focus"); t.remove(); } }
 function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
+// Свой self-view: всегда чистим <video>.srcObject перед attach, иначе на повторном
+// включении камеры остаётся "мёртвая" дорожка и локально превью не видно (см. detach выше).
+function attachLocalCamera(track) {
+  const tile = ensureTile(profile.login, myName, true);
+  const v = tile.querySelector("video");
+  if (v) { v.srcObject = null; try { track.attach(v); } catch {} }
+  setTileAvatar("me", false);
+}
 function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
   if (!tile) {
@@ -2064,11 +2117,22 @@ function addScreenTile(id, name, mediaTrack) {
     vGrid.appendChild(tile);
     // В доке: кнопка «Смотреть стрим» открывает большой экран (отдельное окно).
     tile.querySelector(".watch-btn").onclick = (e) => { e.stopPropagation(); $("expandBtn").click(); };
-    // В окне большого экрана клик по тайлу стрима фокусирует его (spotlight) и обратно.
+    // В окне большого экрана: одиночный клик фокусирует стрим (spotlight) и обратно,
+    // двойной — разворачивает демонстрацию во весь экран. Одиночный откладываем,
+    // чтобы он не срабатывал перед двойным.
+    let clickTimer = null;
     tile.addEventListener("click", (e) => {
       if (!vGrid.classList.contains("pip-grid")) return; // в доке — не фокусим
       if (e.target.closest(".watch-btn")) return;
-      focusTile(tile.classList.contains("focused") ? null : tile);
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => focusTile(tile.classList.contains("focused") ? null : tile), 220);
+    });
+    tile.addEventListener("dblclick", (e) => {
+      if (!vGrid.classList.contains("pip-grid")) return;
+      e.preventDefault(); clearTimeout(clickTimer);
+      const v = tile.querySelector("video"), d = v.ownerDocument;
+      if (d.fullscreenElement) (d.exitFullscreen || (() => {})).call(d);
+      else (v.requestFullscreen || v.webkitRequestFullscreen || (() => {})).call(v);
     });
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
@@ -2119,12 +2183,18 @@ function wireRoom(room, LK) {
   room.on(E.LocalTrackPublished, (pub) => {
     if (pub.track.kind === "video") {
       if (pub.source === "screen_share") addScreenTile("me", myName + " " + t("you_suffix"), pub.track);
-      else { const tile = ensureTile(profile.login, myName, true); pub.track.attach(tile.querySelector("video")); setTileAvatar("me", false); }
+      else attachLocalCamera(pub.track);
     }
   });
   room.on(E.LocalTrackUnpublished, (pub) => {
     if (pub.source === "screen_share") removeTile("screen-me");
-    else if (pub.track && pub.track.kind === "video") setTileAvatar("me", true);
+    else if (pub.track && pub.track.kind === "video") {
+      // ВАЖНО: отцепляем дорожку от своего <video>, иначе на нём остаётся "мёртвый"
+      // srcObject — и при повторном включении камеры локальный self-view не появляется
+      // (приватность: другие видят камеру, а ты — нет). Удалёнными так и делается (detachTrack).
+      try { pub.track.detach(); } catch {}
+      setTileAvatar("me", true);
+    }
   });
   // Индикатор «микрофон выключен» у участников
   room.on(E.TrackMuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), true); });
@@ -2321,7 +2391,25 @@ function canStartStream() {
   if (isGroupCall() && videoStreamCount() >= STREAM_LIMIT) { notify(t("stream_limit", { n: STREAM_LIMIT })); return false; }
   return true;
 }
-$("toggleCam").onclick = async () => { if (!call.room) return; if (!call.camOn && !canStartStream()) return; call.camOn = !call.camOn; try { if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId); await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } }); } catch { call.camOn = false; } $("toggleCam").classList.toggle("off", !call.camOn); $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"]; if (!call.camOn) setTileAvatar("me", true); };
+$("toggleCam").onclick = async () => {
+  if (!call.room) return;
+  if (!call.camOn && !canStartStream()) return;
+  call.camOn = !call.camOn;
+  try {
+    if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId);
+    await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } });
+  } catch { call.camOn = false; }
+  $("toggleCam").classList.toggle("off", !call.camOn);
+  $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
+  if (call.camOn) {
+    // self-view сразу, не дожидаясь LocalTrackPublished (подстраховка от приватного бага)
+    const Src = window.LivekitClient && window.LivekitClient.Track.Source.Camera;
+    const pub = Src && call.room.localParticipant.getTrackPublication ? call.room.localParticipant.getTrackPublication(Src) : null;
+    if (pub && pub.track) attachLocalCamera(pub.track); else setTileAvatar("me", false);
+  } else {
+    setTileAvatar("me", true);
+  }
+};
 $("shareScreen").onclick = async () => { if (!call.room) return; if (!call.sharing && !canStartStream()) return; call.sharing = !call.sharing; try { await call.room.localParticipant.setScreenShareEnabled(call.sharing); } catch { call.sharing = false; } $("shareScreen").classList.toggle("active", call.sharing); };
 
 // Дропдаун микрофона + устройства
