@@ -1392,6 +1392,29 @@ socket.on("presence", ({ login, status }) => {
   }
 });
 socket.on("relations-changed", () => loadRelations());
+socket.on("profile-updated", ({ login, name, avatarChanged }) => {
+  if (!login) return;
+  if (profile && login === profile.login) {
+    if (name && name !== myName) { myName = name; profile.name = name; const pn = $("profileName"); if (pn) pn.value = name; if (settingsOpen) renderChatList($("searchInput").value); }
+    if (avatarChanged) avaVer = Date.now();
+    return;
+  }
+  let changed = false;
+  for (const [, c] of chats) {
+    if (c.type === "dm" && c.login === login) {
+      if (name) c.name = name;
+      changed = true;
+    }
+  }
+  if (name) {
+    for (const [, p] of peers) { if (p.login === login) p.name = name; }
+    for (const m of groupMembers) { if (m.login === login) m.name = name; }
+    if (curKind === "dm" && chats.get(myRoom)?.login === login) $("chatTitle").textContent = name;
+    if (!$("infoPanel").classList.contains("hidden")) renderMembers();
+  }
+  if (avatarChanged) avaVer = Date.now();
+  if (changed) { persistDMs(); renderChatList($("searchInput").value); }
+});
 
 // ---------- Участники (инфо-панель) ----------
 let groupMembers = []; // [{login,name}] текущей группы (для боковой панели)
