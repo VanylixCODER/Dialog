@@ -1815,31 +1815,41 @@ a:focus-visible {
    publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
 .video-grid:has(.tile:not(.show-avatar)) .tile:not(.screen) { aspect-ratio: 16 / 9; }
 
-/* Screen-share spotlight (big-picture / pop-out): the shared screen dominates
-   and faces shrink to a thumbnail strip. Scoped to fullscreen + the pop-out
-   window (.pip-grid is toggled on the grid when it moves into the PiP window). */
+/* ── Screen-share spotlight — "big screen" (fullscreen) & pop-out window ──
+   Discord-style layout: the shared screen dominates the upper area while
+   participant faces sit in a centred row beneath it. The flex-wrap trick
+   keeps the screen on its own full-width line (order:-1) and lets the faces
+   flow into the row below — no DOM wrapper needed. .pip-grid is toggled on
+   the grid when it moves into the pop-out window. */
 .call-stage.fullscreen .video-grid:has(.tile.screen),
 .video-grid.pip-grid:has(.tile.screen) {
-  display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
+  display: flex; flex-wrap: wrap;
+  align-content: center; justify-content: center;
+  gap: 14px; padding: 18px;
 }
+/* The shared screen: dominant, centred, capped width with breathing room. */
 .call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen,
 .video-grid.pip-grid:has(.tile.screen) .tile.screen {
-  order: -1; flex: 1 1 100%; width: 100%;
-  aspect-ratio: auto; max-height: none;
+  order: -1; flex: 1 1 100%;
+  width: 100%; max-width: 1500px; margin: 0 auto;
+  aspect-ratio: auto; max-height: none; min-height: 0;
 }
-.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen { height: clamp(320px, 66vh, 76vh); }
-.video-grid.pip-grid:has(.tile.screen) .tile.screen { height: 66%; min-height: 0; }
+.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen { height: 62vh; }
+.video-grid.pip-grid:has(.tile.screen) .tile.screen { height: 60%; }
+/* Faces row beneath: a couple of people read large; more shrink to share it. */
 .call-stage.fullscreen .video-grid:has(.tile.screen) .tile:not(.screen),
 .video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) {
-  flex: 0 0 auto; aspect-ratio: 1 / 1; max-height: none; width: 128px; height: 128px;
+  flex: 0 1 auto; aspect-ratio: 16 / 9; max-height: none; height: 20vh; width: auto;
 }
-.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) { width: 92px; height: 92px; }
-.call-stage.fullscreen .video-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 8px; gap: 6px; }
+.video-grid.pip-grid:has(.tile.screen) .tile:not(.screen) { aspect-ratio: 1 / 1; height: 23%; }
+/* Prominent name pill on the shared screen (matches the reference). */
+.call-stage.fullscreen .video-grid:has(.tile.screen) .tile.screen .tile-name { font-size: 15px; padding: 5px 14px; }
+
+/* Default fullscreen grid (no screen share): centred participant tiles. */
+.call-stage.fullscreen .video-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 12px; gap: 10px; align-content: center; }
 .call-stage.fullscreen .video-grid:has(> .tile:only-child) { align-content: center; }
 .call-stage.fullscreen .video-grid:has(> .tile:only-child) .tile { max-width: 640px; justify-self: center; }
 .call-stage.fullscreen .video-grid .tile { width: 100%; }
-.call-stage.fullscreen .video-grid .tile.screen { max-height: 55vh; }
-.call-stage.fullscreen .video-grid .tile.screen:only-child { min-height: 0; }
 .call-stage.fullscreen .call-bar { --cbtn: 42px; --cgap: 6px; padding: 8px 12px; gap: 6px; }
 .call-stage.fullscreen .call-meta { font-size: 10px; }
 .call-stage.fullscreen .participants-wrap .tile { width: 140px; height: 80px; }
