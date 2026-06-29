@@ -24,12 +24,16 @@ jobs:
           MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
           REDIS_URL=redis://redis:6379
           METERED_API_KEY=${{ secrets.METERED_API_KEY }}
+          TURN_URL=${{ secrets.TURN_URL }}
+          TURN_USER=${{ secrets.TURN_USER }}
+          TURN_PASS=${{ secrets.TURN_PASS }}
           VAPID_PUBLIC=${{ secrets.VAPID_PUBLIC }}
           VAPID_PRIVATE=${{ secrets.VAPID_PRIVATE }}
           VAPID_SUBJECT=${{ secrets.VAPID_SUBJECT }}
           LIVEKIT_URL=${{ secrets.LIVEKIT_URL }}
           LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }}
+          GIPHY_KEY=${{ secrets.GIPHY_KEY }}
           PORT=3000
           SERVER_REGION=${{ secrets.SERVER_REGION }}
           EOF
