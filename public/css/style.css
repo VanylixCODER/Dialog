@@ -652,6 +652,12 @@ a:focus-visible {
   background: var(--bg-1);
   isolation: isolate;
 }
+.chat.has-wallpaper {
+  background: var(--chat-wallpaper-url) center / cover no-repeat, var(--bg-1);
+}
+.chat.has-wallpaper .messages {
+  background: rgba(0, 0, 0, 0.35);
+}
 .empty-state {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
@@ -2770,6 +2776,7 @@ body[data-theme="flashbang"] .ci-bot .badge { box-shadow: 0 1px 4px rgba(var(--p
 body[data-theme="flashbang"] .chatlist { background: var(--bg-1); }
 body[data-theme="flashbang"] .chat-head { background: #ffffff; border-bottom-color: var(--border-1); }
 body[data-theme="flashbang"] .composer { background: #ffffff; border-top-color: var(--border-1); }
+body[data-theme="flashbang"] .chat.has-wallpaper .messages { background: rgba(255, 255, 255, 0.75); }
 body[data-theme="flashbang"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); }
 /* Кнопки — flat hover без прозрачных overlays. */
 body[data-theme="flashbang"] .icon-btn:hover { background: var(--surface-2); }
@@ -2924,6 +2931,7 @@ body[data-theme="mono-light"] .emoji-picker,
 body[data-theme="mono-light"] .gif-panel { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-md); color: var(--text); }
 body[data-theme="mono-light"] .chat-head { background: var(--bg-1); border-bottom-color: var(--border-1); color: var(--text-strong); }
 body[data-theme="mono-light"] .composer { background: var(--bg-1); border-top-color: var(--border-1); color: var(--text); }
+body[data-theme="mono-light"] .chat.has-wallpaper .messages { background: rgba(255, 255, 255, 0.75); }
 body[data-theme="mono-light"] .info-panel { background: var(--bg-1); border-left-color: var(--border-1); color: var(--text); }
 body[data-theme="mono-light"] .bubble { background: var(--bg-3); color: var(--text); border-color: var(--border-1); box-shadow: var(--shadow-sm); }
 body[data-theme="mono-light"] .msg.me .bubble { background: #000000; color: #ffffff; border-color: #000000; box-shadow: var(--shadow-md); }
