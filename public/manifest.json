@@ -2,7 +2,7 @@
   "name": "Dialog",
   "short_name": "Dialog",
   "description": "Chat · Group calls · Screen share",
-  "start_url": "/",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
