@@ -3,7 +3,7 @@
 // hosted as GitHub Releases on the public Dialog repo, so links hit GitHub's
 // CDN directly.
 (function () {
-  const VERSION = "1.0.1";
+  const VERSION = "1.0.2";
   const BASE =
     "https://github.com/VanylixCODER/Dialog/releases/download/v" +
     VERSION +
@@ -35,8 +35,7 @@
       installers: [
         { kind: "AppImage (universal)", file: "Dialog-" + VERSION + ".AppImage", primary: true },
         { kind: "Debian / Ubuntu (.deb)", file: "dialog-desktop_" + VERSION + "_amd64.deb" },
-        { kind: "Arch (.pacman)", file: "dialog-desktop-" + VERSION + ".pacman" },
-        { kind: "Flatpak bundle", file: "Dialog-" + VERSION + "-x86_64.flatpak" }
+        { kind: "Arch (.pacman)", file: "dialog-desktop-" + VERSION + ".pacman" }
       ]
     },
     android: {
