@@ -24,18 +24,17 @@ separate-locales: false
 finish-args:
   - --share=ipc
   - --share=network
-  # Display
-  - --socket=x11
+  # Display (fallback-x11 + wayland is the Flathub-approved combination)
+  - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
   # Audio (calls + voice messages)
   - --socket=pulseaudio
   # Camera + screen capture devices
   - --device=all
-  # Native notifications + tray
+  # Native notifications + tray (XDG Portal busnames are allowed by default)
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.freedesktop.portal.Desktop
   # Save attachments to the user's Downloads
   - --filesystem=xdg-download
 
