@@ -1,0 +1,74 @@
+# Flathub manifest for Dialog.
+#
+# Flathub builds in a NETWORK-ISOLATED sandbox, so we cannot run `npm install`
+# here. Instead we package the prebuilt Electron app produced by
+# `electron-builder --linux dir` (tarred up and attached to a GitHub Release),
+# extract it into /app, and launch it through zypak (provided by the Electron
+# BaseApp) so Chromium's sandbox works inside Flatpak.
+#
+# Before submitting:
+#   1. Build the app dir:   npm run dist -- --linux dir
+#   2. Tar it:              tar czf dialog-desktop-1.0.0-linux-x64.tar.gz \
+#                              -C dist/linux-unpacked .
+#   3. Upload that tarball to the v1.0.0 GitHub Release.
+#   4. Put its sha256 below (sha256sum dialog-desktop-1.0.0-linux-x64.tar.gz).
+app-id: xyz.dialogmsg.app
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: dialog
+separate-locales: false
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  # Display (fallback-x11 + wayland is the Flathub-approved combination)
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Audio (calls + voice messages)
+  - --socket=pulseaudio
+  # Camera + screen capture devices
+  - --device=all
+  # Native notifications + tray (XDG Portal busnames are allowed by default)
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Save attachments to the user's Downloads
+  - --filesystem=xdg-download
+
+modules:
+  - name: dialog
+    buildsystem: simple
+    build-commands:
+      # App payload
+      - mkdir -p /app/dialog
+      - cp -a linux-unpacked/. /app/dialog/
+      # Launch wrapper (zypak enables the Chromium sandbox under Flatpak)
+      - install -Dm755 dialog.sh /app/bin/dialog
+      # Desktop integration
+      - install -Dm644 xyz.dialogmsg.app.desktop -t /app/share/applications/
+      - install -Dm644 xyz.dialogmsg.app.metainfo.xml -t /app/share/metainfo/
+      - install -Dm644 icon_512.png /app/share/icons/hicolor/512x512/apps/xyz.dialogmsg.app.png
+      - install -Dm644 icon_256.png /app/share/icons/hicolor/256x256/apps/xyz.dialogmsg.app.png
+      - install -Dm644 icon_128.png /app/share/icons/hicolor/128x128/apps/xyz.dialogmsg.app.png
+    sources:
+      - type: archive
+        url: https://dialogmsg.xyz/dl/dialog-desktop-1.0.1-linux-x64.tar.gz
+        sha256: 5f88f724ade7d312dfa775f544c9c59557c0064cd81d98ff4765de76c7a10349
+        dest: linux-unpacked
+      - type: script
+        dest-filename: dialog.sh
+        commands:
+          - exec zypak-wrapper /app/dialog/dialog-desktop "$@"
+      - type: file
+        path: xyz.dialogmsg.app.desktop
+      - type: file
+        path: xyz.dialogmsg.app.metainfo.xml
+      - type: file
+        path: icon_512.png
+      - type: file
+        path: icon_256.png
+      - type: file
+        path: icon_128.png

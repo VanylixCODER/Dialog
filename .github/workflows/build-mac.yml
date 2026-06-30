@@ -1,0 +1,61 @@
+name: Build macOS (.dmg)
+
+# Builds the macOS .dmg + .zip on a real macOS runner (electron-builder needs
+# macOS for hdiutil/dmg-license) and uploads them to a GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload the artifacts to"
+        required: true
+        default: "v1.0.1"
+  push:
+    tags:
+      - "v*"
+      - "mac-*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm install
+
+      - name: "Build .dmg + .zip (universal arm64 + x64)"
+        working-directory: desktop
+        env:
+          # Unsigned build — skip signing so it runs without Apple certs.
+          # (Users see a one-time Gatekeeper prompt; add certs later for notarization.)
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac --universal --publish never
+
+      - name: Upload as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialog-macos
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/latest-mac.yml
+
+      - name: Attach to the GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Dialog $TAG" --notes "macOS build"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            desktop/dist/*.dmg desktop/dist/*.zip desktop/dist/latest-mac.yml
