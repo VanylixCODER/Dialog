@@ -26,7 +26,6 @@
       </div>
       <!-- Auth forms — shown only when we need the user to sign in -->
       <div id="loginAuth" class="login-auth hidden">
-        <select id="langSelect" class="lang-select" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
         <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
         <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
         <div class="auth-tabs">
@@ -64,7 +63,6 @@
         <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
         <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
-        <select id="langSelect2" class="lang-select small" title="Language"><option value="en">EN</option><option value="ru">RU</option></select>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
         <div class="vb-info" id="vbInfo"><span class="vb-dot"></span><span class="vb-label"></span></div>
@@ -130,7 +128,7 @@
             <button class="call-btn end" id="hangUp" data-i18n-title="t_hangup"></button>
           </div>
           <!-- Big screen — bottom-right corner, separated from the main cluster (Discord-style). -->
-          <button class="call-btn call-fs desktop-only" id="expandBtn" data-i18n-title="fullscreen">⛶</button>
+          <button class="call-btn call-fs desktop-only" id="expandBtn" data-i18n-title="fullscreen"></button>
         </div>
       </div>
 
@@ -217,20 +215,11 @@
             <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
             <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
           </div>
-          <div class="ringtone-row">
-            <div class="ringtone-meta">
-              <span data-i18n="ringtone_label">Ringtone</span>
-              <strong id="ringtoneName" data-i18n="ringtone_none">Default sound only</strong>
-            </div>
-            <input id="ringtoneFile" type="file" accept="audio/*" hidden>
-            <div class="ringtone-actions">
-              <button type="button" id="ringtoneChoose" class="ringtone-btn" data-i18n="ringtone_choose">Choose audio</button>
-              <button type="button" id="ringtonePreview" class="ringtone-btn" data-i18n="ringtone_preview">Preview</button>
-              <button type="button" id="ringtoneRemove" class="ringtone-btn danger" data-i18n="ringtone_remove">Remove</button>
-            </div>
-            <div id="ringtoneError" class="form-error"></div>
-          </div>
           <div class="uppercase-tag" data-i18n="set_status">Set status</div>
+          <div class="lang-row">
+            <span data-i18n="language">Language</span>
+            <select id="settingsLang" class="lang-select"><option value="en">EN</option><option value="ru">RU</option></select>
+          </div>
           <div style="color:var(--text-dim);font-size:12px;line-height:1.4" data-i18n="esc_to_close">Esc / click outside to close</div>
         </section>
         <!-- Contacts -->

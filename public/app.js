@@ -60,98 +60,6 @@ const sfx = {
   unmute: () => beep(560, 0.07),
 };
 
-// ---- Custom ringtone (localStorage, ≤13s, ≤4MB) ----
-const RINGTONE_KEY = "dialog_ringtone";
-const RINGTONE_MAX_DURATION = 13;     // seconds
-const RINGTONE_MAX_BYTES = 4 * 1024 * 1024;
-let _customRingtone = null;            // {name, dataUrl, duration, mime}
-
-function loadRingtone() {
-  try {
-    const raw = localStorage.getItem(RINGTONE_KEY);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || !obj.dataUrl || !obj.duration) return null;
-    _customRingtone = obj;
-    return obj;
-  } catch { return null; }
-}
-function refreshRingtoneUI() {
-  const nameEl = $("ringtoneName");
-  if (!nameEl) return;
-  if (_customRingtone) {
-    nameEl.dataset.i18n = "";
-    nameEl.textContent = _customRingtone.name + " (" + Math.round(_customRingtone.duration * 10) / 10 + "s)";
-  } else {
-    nameEl.dataset.i18n = "ringtone_none";
-    nameEl.textContent = t("ringtone_none");
-  }
-}
-function saveRingtone(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) return reject(new Error("no file"));
-    if (file.size > RINGTONE_MAX_BYTES) return reject(new Error("ringtone_too_big"));
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    audio.preload = "metadata";
-    audio.src = url;
-    const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
-    audio.addEventListener("loadedmetadata", () => {
-      const dur = audio.duration;
-      if (!Number.isFinite(dur) || dur > RINGTONE_MAX_DURATION) { cleanup(); return reject(new Error("ringtone_too_long")); }
-      const reader = new FileReader();
-      reader.onload = () => {
-        cleanup();
-        _customRingtone = { name: file.name, dataUrl: reader.result, duration: dur, mime: file.type };
-        try { localStorage.setItem(RINGTONE_KEY, JSON.stringify(_customRingtone)); } catch {}
-        refreshRingtoneUI();
-        resolve(_customRingtone);
-      };
-      reader.onerror = () => { cleanup(); reject(new Error("read error")); };
-      reader.readAsDataURL(file);
-    });
-    audio.addEventListener("error", () => { cleanup(); reject(new Error("decode")); });
-  });
-}
-function removeRingtone() {
-  _customRingtone = null;
-  try { localStorage.removeItem(RINGTONE_KEY); } catch {}
-  refreshRingtoneUI();
-}
-function previewRingtone() {
-  if (!_customRingtone) { beep(440, 0.2); return; }
-  const a = new Audio(_customRingtone.dataUrl);
-  a.volume = 1;
-  a.play().catch(() => {});
-}
-function playCustomRingtone() {
-  if (!_customRingtone) return;
-  try { const a = new Audio(_customRingtone.dataUrl); a.volume = 1; a.play().catch(() => {}); } catch {}
-}
-// Wire ringtone UI (delegated, runs once)
-document.addEventListener("click", (e) => {
-  const chooseBtn = e.target.closest("#ringtoneChoose");
-  const previewBtn = e.target.closest("#ringtonePreview");
-  const removeBtn = e.target.closest("#ringtoneRemove");
-  if (chooseBtn) { $("ringtoneFile").click(); return; }
-  if (previewBtn) { previewRingtone(); return; }
-  if (removeBtn) { removeRingtone(); return; }
-});
-document.addEventListener("change", (e) => {
-  if (e.target && e.target.id === "ringtoneFile" && e.target.files && e.target.files[0]) {
-    const err = $("ringtoneError");
-    if (err) err.textContent = "";
-    saveRingtone(e.target.files[0]).catch((reason) => {
-      if (err) err.textContent = reason === "ringtone_too_long" ? t("ringtone_too_long")
-                          : reason === "ringtone_too_big" ? t("ringtone_too_big")
-                          : "Error: " + reason;
-    });
-    e.target.value = "";
-  }
-});
-loadRingtone();
-
-
 // Per-theme msg SFX hook (currently uniform for all built-in themes).
 function msgSfxForTheme() { return sfx.msg; }
 document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
@@ -430,14 +338,16 @@ function renderThemes() {
 // ---------- Язык ----------
 function initLang() {
   const v = window.getLang();
-  [$("langSelect"), $("langSelect2")].forEach((sel) => { if (sel) { sel.value = v; sel.onchange = () => window.setLang(sel.value); } });
+  const sel = $("settingsLang");
+  if (sel) { sel.value = v; sel.onchange = () => window.setLang(sel.value); }
   applyI18n();
 }
 window.addEventListener("langchange", () => {
-  [$("langSelect"), $("langSelect2")].forEach((s) => s && (s.value = window.getLang()));
+  const sel = $("settingsLang");
+  if (sel) sel.value = window.getLang();
   renderChatList($("searchInput").value);
   applyI18n(document.querySelector('[data-pane="themes"]'));
-  updateCallButton(); // вернуть корректный заголовок кнопки звонка (DM vs группа) после смены языка
+  updateCallButton();
   pushState();
 });
 
@@ -488,7 +398,7 @@ function enterApp() {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   socket.emit("identify", { token });
   loadDevicePrefs();
-  loadStoredChats(); loadPins(); loadGroups(); loadRelations(); renderChatList();
+  loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush(); requestMediaPermissions();
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
@@ -521,15 +431,34 @@ socket.on("connect", () => {
 });
 socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
 
-// ---------- Хранилище чатов (ЛС в localStorage, группы с сервера) ----------
+// ---------- Хранилище чатов (ЛС на сервере + localStorage fallback) ----------
 const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
 const lsSet = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 function dmKey(login) { return "@dm:" + [profile.login, login].sort().join("~"); }
-function loadStoredChats() { lsGet("dialog_dms").forEach((c) => chats.set(c.key, c)); }
-function persistDMs() { lsSet("dialog_dms", [...chats.values()].filter((c) => c.type === "dm").slice(0, 50)); }
+let _dmsSynced = false;
+function loadStoredChats() {
+  lsGet("dialog_dms").forEach((c) => chats.set(c.key, c));
+  loadPins();
+  if (!_dmsSynced) { _dmsSynced = true; syncDMsFromServer(); }
+}
 function savePins() { lsSet("dialog_pins", [...chats.values()].filter((c) => c.pinned).map((c) => c.key)); }
 function loadPins() { const pinned = new Set(lsGet("dialog_pins")); for (const c of chats.values()) c.pinned = pinned.has(c.key); }
 function upsertChat(c) { const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
+async function syncDMsFromServer() {
+  const { ok, data } = await api("/api/dms", null, "GET");
+  if (!ok || !Array.isArray(data)) return;
+  const localKeys = new Set([...chats.values()].filter((c) => c.type === "dm").map((c) => c.key));
+  for (const d of data) {
+    if (!localKeys.has(d.key)) chats.set(d.key, d);
+  }
+  _dmsSynced = true;
+  renderChatList($("searchInput").value);
+}
+async function persistDMs() {
+  const dms = [...chats.values()].filter((c) => c.type === "dm").slice(0, 50);
+  lsSet("dialog_dms", dms);
+  await api("/api/dms", { dms });
+}
 async function loadGroups() {
   const { ok, data } = await api("/api/groups", null, "GET");
   if (!ok) return;
@@ -1566,7 +1495,7 @@ socket.on("message", (m) => {
     }
   }
   const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
-  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80); }
+  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
   // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
   // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
@@ -1586,7 +1515,7 @@ socket.on("rate-limited", ({ reason, localId } = {}) => {
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
 socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
   const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
-  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); if (_customRingtone) setTimeout(playCustomRingtone, 80);     notify(t("dm_ping", { name: fromName }), room); } }
+  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); notify(t("dm_ping", { name: fromName }), room); } }
   persistDMs(); renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
@@ -2389,7 +2318,6 @@ socket.on("call-ring", (p) => {
   if (!isMuted(p.room) && !isDnd()) {
     sfx.call();
     notify(t("call_in", { title: p.title }), p.room);
-    if (_customRingtone) setTimeout(playCustomRingtone, 110);
   }
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
@@ -2576,19 +2504,40 @@ $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseT
 
 // ⛶ Большой экран: звонок открывается в отдельном окне и разворачивается на весь экран.
 // Это заменяет и старый in-page фуллскрин, и кнопку поп-аута — теперь одна кнопка.
+// Cleaner call-control icons: the bundled "monitor" glyph looked like a
+// magnifier, and the big-screen button used a font character (⛶) that renders
+// inconsistently across OSes. Override with proper Ant Design SVGs.
+window.ICON.monitor = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h312v60H304c-8.8 0-16 7.2-16 16v36c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-36c0-8.8-7.2-16-16-16H616v-60h312c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z\"></path></svg>";
+window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M290 236.4l43.9-43.9a8.01 8.01 0 00-4.7-13.6L169 160c-5.1-.6-9.5 3.7-8.9 8.9L179 329.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L370 423.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L290 236.4zm352.7 187.3c3.1 3.1 8.2 3.1 11.3 0l133.7-133.6 43.7 43.7a8.01 8.01 0 0013.6-4.7L829.9 169c.6-5.1-3.7-9.5-8.9-8.9L660.7 179c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L566.3 370a8.03 8.03 0 000 11.3l42.4 42.4zM830 730.9l-43.7 43.7-133.6-133.7a8.03 8.03 0 00-11.3 0l-42.4 42.3c-3.1 3.1-3.1 8.2 0 11.3L732.6 770l-43.9 43.9a8.01 8.01 0 004.7 13.6L854 856c5.1.6 9.5-3.7 8.9-8.9L843.9 686c-.8-6.6-8.9-9.4-13.9-4.7zM370 600.3a8.03 8.03 0 00-11.3 0L225 733.9l-43.7-43.7a8.01 8.01 0 00-13.6 4.7L148.1 855c-.6 5.1 3.7 9.5 8.9 8.9L317.3 845c6.6-.8 9.4-8.9 4.7-13.6L278 787.6l133.6-133.7c3.1-3.1 3.1-8.2 0-11.3L370 600.3z\"></path></svg>";
+{ const _eb = $("expandBtn"); if (_eb) _eb.innerHTML = window.ICON.expand; }
+
 $("expandBtn").onclick = () => {
   if (!call.active) return;
   if (pipWin) { try { pipWin.close(); } catch {} return; } // повторный клик — закрыть окно
   showPipNotice(true);
   const w = screen.availWidth || 1280, h = screen.availHeight || 800;
-  pipWin = window.open("", "dialogBigScreen", `width=${w},height=${h},top=0,left=0,menubar=no,toolbar=no,location=no`);
+  // Open a SAME-ORIGIN blank page (pip.html), NOT about:blank. The desktop app
+  // (Electron) blocks about:blank popups but allows same-origin ones, so the
+  // big screen now works in the desktop app as well as the browser.
+  pipWin = window.open("pip.html", "dialogBigScreen", `width=${w},height=${h},top=0,left=0,menubar=no,toolbar=no,location=no`);
   if (!pipWin) { showPipNotice(false); alert(t("pip_unsupported")); return; }
-  pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
-  mountGridIn(pipWin);
   $("expandBtn").classList.add("active");
-  // попытка авто-фуллскрина; если браузер требует жест внутри окна — в окне есть кнопка ⛶
   const tryFs = () => { try { const de = pipWin.document.documentElement; (de.requestFullscreen || de.webkitRequestFullscreen || (() => {})).call(de); } catch {} };
-  pipWin.addEventListener("load", tryFs); setTimeout(tryFs, 250);
+  // pip.html loads async — mount the call grid once its document is ready.
+  const init = () => {
+    if (!pipWin || pipWin.closed) return;
+    try {
+      pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
+      mountGridIn(pipWin);
+      tryFs(); setTimeout(tryFs, 250);
+    } catch (e) {}
+  };
+  const waitReady = () => {
+    if (!pipWin || pipWin.closed) return;
+    if (pipWin.document && pipWin.document.readyState === "complete") init();
+    else setTimeout(waitReady, 40);
+  };
+  waitReady();
   clearInterval(pipPoll);
   pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
 };
@@ -2610,7 +2559,7 @@ function mountGridIn(win) {
     const b = win.document.createElement("button"); b.className = "call-btn"; b.innerHTML = window.ICON[icon]; const src = $(id); if (src) b.setAttribute("data-tip", src.getAttribute("data-tip") || ""); b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
   });
   // переключатель фуллскрина самого окна — надёжно, т.к. это жест внутри окна
-  const fsBtn = win.document.createElement("button"); fsBtn.className = "call-btn"; fsBtn.innerHTML = "⛶"; fsBtn.setAttribute("data-tip", t("fullscreen"));
+  const fsBtn = win.document.createElement("button"); fsBtn.className = "call-btn"; fsBtn.innerHTML = window.ICON.expand; fsBtn.setAttribute("data-tip", t("fullscreen"));
   fsBtn.onclick = () => { const d = win.document; if (d.fullscreenElement) d.exitFullscreen().catch(() => {}); else (d.documentElement.requestFullscreen || (() => {})).call(d.documentElement).catch(() => {}); };
   actions.appendChild(fsBtn);
   // «Завершить» — последней кнопкой
