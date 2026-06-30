@@ -88,6 +88,22 @@ const httpServer = useHttps
 
 const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
 
+// The native apps (Electron desktop / Android WebView) must never see the
+// marketing landing or downloads pages — they should stay in the chat. They
+// send a recognizable User-Agent, so we bounce any such request to /login.
+// This runs BEFORE express.static so it also catches /landing.html etc.
+const isNativeApp = (req) =>
+  /\b(Electron|DialogApp)\b/i.test(req.headers["user-agent"] || "");
+const MARKETING_PATHS = new Set([
+  "/", "/landing.html", "/download", "/downloads", "/download.html"
+]);
+app.use((req, res, next) => {
+  if (isNativeApp(req) && MARKETING_PATHS.has(req.path)) {
+    return res.redirect(302, "/login");
+  }
+  next();
+});
+
 // index:false so "/" is not auto-served as the SPA — the marketing landing
 // page owns "/", the messenger SPA lives at /login and /{lang}/... routes.
 app.use(express.static(join(__dirname, "public"), { index: false }));

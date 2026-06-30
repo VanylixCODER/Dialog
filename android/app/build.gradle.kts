@@ -14,8 +14,9 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        // The hosted web app the WebView loads. Override per build if needed.
-        buildConfigField("String", "APP_URL", "\"https://dialogmsg.xyz\"")
+        // The hosted web app the WebView loads — straight into the messenger
+        // (/login), never the marketing landing page.
+        buildConfigField("String", "APP_URL", "\"https://dialogmsg.xyz/login\"")
     }
 
     // Release signing — keystore details come from the environment (set by CI).

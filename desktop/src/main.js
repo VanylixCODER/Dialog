@@ -116,6 +116,12 @@ function createMainWindow() {
 
   const wc = mainWin.webContents;
 
+  // Mark the User-Agent so the server can recognise the desktop app and keep
+  // it out of the marketing landing/downloads pages.
+  try {
+    wc.setUserAgent(wc.getUserAgent() + " DialogApp/1.0.0");
+  } catch (_) {}
+
   wc.on("did-start-loading", () => {
     appReady = false;
     if (lastStatus !== "offline") setStatus("connecting");
@@ -154,8 +160,24 @@ function createMainWindow() {
     try {
       const u = new URL(url);
       if (u.origin !== config.APP_ORIGIN) {
+        // External origin → open in the system browser.
         e.preventDefault();
         shell.openExternal(url);
+      } else if (config.MARKETING_PATHS.includes(u.pathname)) {
+        // Same-origin marketing page → keep the app in the chat.
+        e.preventDefault();
+        wc.loadURL(config.APP_ORIGIN + config.LOGIN_PATH);
+      }
+    } catch (_) {}
+  });
+
+  // Belt-and-suspenders: if anything (redirect, in-page nav) lands the window
+  // on a marketing page, bounce back to /login.
+  wc.on("did-navigate", (_e, url) => {
+    try {
+      const u = new URL(url);
+      if (u.origin === config.APP_ORIGIN && config.MARKETING_PATHS.includes(u.pathname)) {
+        wc.loadURL(config.APP_ORIGIN + config.LOGIN_PATH);
       }
     } catch (_) {}
   });
