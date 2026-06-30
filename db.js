@@ -142,6 +142,16 @@ export async function initSchema() {
     UNIQUE KEY idx_pending_group_login (group_id, login),
     KEY idx_pending_group (group_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_dms (
+    login VARCHAR(24) NOT NULL,
+    chat_key VARCHAR(64) NOT NULL,
+    target_login VARCHAR(24) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    ts BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (login, chat_key),
+    KEY idx_dms_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -402,6 +412,18 @@ export async function getPushSubs(login) {
   return r.map((x) => { try { return JSON.parse(x.sub); } catch { return null; } }).filter(Boolean);
 }
 export async function deletePushSub(endpoint) { await execute("DELETE FROM push_subs WHERE endpoint=?", [endpoint.slice(0, 512)]); }
+
+// ---------- DM список (серверная синхронизация) ----------
+export async function getUserDMs(login) {
+  const r = await query("SELECT chat_key, target_login, name, ts FROM user_dms WHERE login=? ORDER BY ts DESC", [login]);
+  return r.map((x) => ({ key: x.chat_key, type: "dm", login: x.target_login, name: x.name, ts: Number(x.ts), last: "", unread: 0, pinned: false }));
+}
+export async function saveUserDMs(login, dms) {
+  await execute("DELETE FROM user_dms WHERE login=?", [login]);
+  if (!dms || !dms.length) return;
+  const vals = dms.map((d) => [login, d.key, d.login, d.name || "", d.ts || 0]);
+  await execute("INSERT INTO user_dms (login, chat_key, target_login, name, ts) VALUES ?", [vals]);
+}
 
 // ---------- Курсоры доставки / просмотра (per-user, per-room) ----------
 // Возвращает {login: {delivered, seen}} для всех членов комнаты (или [] если пусто).

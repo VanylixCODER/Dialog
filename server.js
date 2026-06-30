@@ -39,6 +39,7 @@ import {
   updateProfile, getAvatar, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend,
+  getUserDMs, saveUserDMs,
   savePushSub, getPushSubs, deletePushSub,
   getRoomWatermarks, bumpWatermarks,
 } from "./db.js";
@@ -495,6 +496,18 @@ app.post("/api/friend", async (req, res) => {
   else if (action === "remove") await removeFriend(me.login, target);
   else return res.status(400).json({ error: "bad action" });
   notifyUser(target, "relations-changed", {}); notifyUser(me.login, "relations-changed", {});
+  res.json({ ok: true });
+});
+
+// ---------- REST: DM синхронизация ----------
+app.get("/api/dms", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json(await getUserDMs(me.login));
+});
+app.post("/api/dms", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const list = Array.isArray(req.body.dms) ? req.body.dms.slice(0, 50) : [];
+  await saveUserDMs(me.login, list);
   res.json({ ok: true });
 });
 
