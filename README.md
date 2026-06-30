@@ -66,3 +66,12 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 - `REDIS_URL` — необязательная строка подключения к Redis для кэша сессий и истории
   (напр. `redis://localhost:6379` или `rediss://...` для managed). Не задан — кэш выключен,
   работает чистый MySQL.
+
+## License
+
+Dialog is licensed under the **GNU Affero General Public License v3.0 or later**
+(AGPL-3.0-or-later) — see [LICENSE](LICENSE).
+
+In short: you're free to use, study, modify and self-host it, but if you run a
+modified version as a network service, you must make your modified source
+available to its users under the same license.
