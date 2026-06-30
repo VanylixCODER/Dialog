@@ -97,6 +97,7 @@
         "zip"
       ],
       "icon": "assets/icon.icns",
+      "artifactName": "${productName}-${version}-mac.${ext}",
       "category": "public.app-category.social-networking",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Dialog needs the microphone for voice and video calls.",
@@ -105,7 +106,8 @@
       }
     },
     "dmg": {
-      "title": "Dialog"
+      "title": "Dialog",
+      "artifactName": "${productName}-${version}.${ext}"
     }
   },
   "allowScripts": {
