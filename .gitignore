@@ -24,3 +24,4 @@ build.sh
 session-*.md
 # VNC / local junk
 *.vnc
+desktop/dialog-desktop-1.0.1-linux-x64.tar.gz
