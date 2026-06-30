@@ -110,7 +110,7 @@ if (window.loaderBridge) {
       // finish the bar and fade out
       barFill.style.width = "100%";
       line("interface ready — welcome to Dialog", "ok");
-      setTimeout(() => document.body.classList.add("done"), 250);
+      setTimeout(() => document.body.classList.add("done"), 5000);
     }
     if (state === "offline") {
       barFill.style.width = Math.max(progress, 8) + "%";
