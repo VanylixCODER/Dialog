@@ -12,6 +12,7 @@ on:
   push:
     tags:
       - "v*"
+      - "mac-*"
 
 permissions:
   contents: write
@@ -49,6 +50,7 @@ jobs:
             desktop/dist/latest-mac.yml
 
       - name: Attach to the GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
