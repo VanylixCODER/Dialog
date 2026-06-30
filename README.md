@@ -1,77 +1,87 @@
+<div align="center">
+
+<img src="./public/src/lil_dialog.webp" width="110" alt="Dialog" />
+
 # Dialog
 
-Простой мессенджер с групповыми видеозвонками, демонстрацией экрана, обменом медиа и эмодзи-пикером.
+**A fast, secure messenger — chat, group voice & video calls, and screen sharing.**
+In your browser, on your desktop, and on Android.
 
-## Возможности
+[![Website](https://img.shields.io/badge/website-dialogmsg.xyz-00ff5a?style=flat-square)](https://dialogmsg.xyz)
+[![Download](https://img.shields.io/badge/download-apps-00ff5a?style=flat-square)](https://dialogmsg.xyz/download)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-Web%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android-555?style=flat-square)
 
-- 💬 **Чат по комнатам** — список участников онлайн, индикатор «печатает…», история последних сообщений
-- 📹 **Групповые видеозвонки** — mesh WebRTC на несколько участников (perfect negotiation)
-- 🖥️ **Демонстрация экрана** — переключение камера ↔ экран во время звонка
-- 📎 **Медиа** — фото, видео и гифки прямо в ленте
-- 😊 **Эмодзи-пикер** — по категориям
-- 🔐 **Регистрация и вход** — пароли хранятся солёным scrypt-хешем, сессии по токену
+[**Open Dialog →**](https://dialogmsg.xyz/login) · [Download apps](https://dialogmsg.xyz/download) · [Privacy](https://dialogmsg.xyz/privacy)
 
-## Стек
+<img src="./public/src/preview.png" width="640" alt="Dialog" />
 
-- Бэкенд: Node.js, Express, Socket.IO
-- База данных: MySQL 8 (через `mysql2`) — пользователи и история сообщений
-- Фронтенд: чистый HTML/CSS/JS + WebRTC
-- Аутентификация: `crypto.scrypt`, токены сессий в памяти
+</div>
 
-## База данных
+---
 
-Нужен MySQL 8. Проще всего через Docker:
+## Features
+
+- **Instant messaging** — direct & group chats with reactions, edits, replies, voice notes, GIFs and file sharing.
+- **Group voice & video calls** — low-latency, powered by a [LiveKit](https://livekit.io) media server.
+- **Screen sharing** — share your screen in any call.
+- **Native desktop apps** — Windows, macOS & Linux, with a system tray, auto-update, and a frameless boot screen.
+- **Android app** — native WebView wrapper with native notifications.
+- **Presence & privacy** — online / do-not-disturb / invisible status, friend & block lists.
+- **Self-hostable** — bring your own server; you control the data.
+
+## Download
+
+Get the app for your platform at **[dialogmsg.xyz/download](https://dialogmsg.xyz/download)**, or grab them from
+[GitHub Releases](https://github.com/VanylixCODER/Dialog/releases). No install? Just use it in your
+browser at **[dialogmsg.xyz](https://dialogmsg.xyz/login)**.
+
+| Platform | Format |
+|---|---|
+| Windows | `.exe` installer |
+| macOS | `.dmg` / `.zip` (universal) |
+| Linux | AppImage · `.deb` · `.pacman` · Flatpak |
+| Android | `.apk` |
+
+## Tech stack
+
+Node.js · Express · Socket.IO · MySQL · Redis · LiveKit (calls) · Web Push ·
+Electron (desktop) · Android WebView (Kotlin). No build step for the frontend —
+it's plain ES modules.
+
+## Run it yourself
+
+Requirements: Docker (or Node 20+, MySQL 8, optional Redis).
 
 ```bash
-docker compose up -d        # поднимет MySQL на localhost:3306
+git clone https://github.com/VanylixCODER/Dialog.git
+cd Dialog
+docker compose up -d     # starts the app + MySQL + Redis
+# → http://localhost:3000
 ```
 
-Строка подключения по умолчанию — `mysql://dialog:dialog@localhost:3306/dialog`.
-Переопределяется переменной `DATABASE_URL`. Таблицы (`users`, `messages`) создаются
-автоматически при старте сервера.
+Or without Docker: `npm install && npm start` (point `DB_*` at your MySQL).
 
-## Запуск
+### Key environment variables
 
-```bash
-npm install
-docker compose up -d        # база данных
-npm start                   # сервер
-```
+| Var | Purpose |
+|---|---|
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_NAME` | MySQL connection (set `DB_PORT=3306` explicitly) |
+| `REDIS_URL` | Optional Redis cache (e.g. `redis://localhost:6379`) |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Group calls (LiveKit) |
+| `TURN_URL` / `TURN_USER` / `TURN_PASS` or `METERED_API_KEY` | TURN relay for calls |
+| `VAPID_PUBLIC` / `VAPID_PRIVATE` / `VAPID_SUBJECT` | Web Push notifications |
+| `GIPHY_KEY` | GIF search |
+| `PORT` | Server port (default `3000`) |
 
-Откройте `https://localhost:3000` (или `http://localhost:3000`, если нет сертификата).
+## Apps & releases
 
-### HTTPS для доступа по сети
-
-Камера, микрофон и демонстрация экрана доступны только на `localhost` или по HTTPS.
-Чтобы открывать с других устройств в локальной сети, сгенерируйте самоподписанный сертификат:
-
-```bash
-mkdir -p certs
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout certs/key.pem -out certs/cert.pem -days 365 -subj "/CN=Dialog Local"
-```
-
-Сервер сам поднимет HTTPS, если найдёт `certs/key.pem` и `certs/cert.pem`.
-
-## Замечания для продакшена
-
-- Самоподписанный сертификат не доверяется браузерами — для интернета нужен реальный домен и сертификат (например, Let's Encrypt).
-- Для звонков между пользователями за разными NAT одного STUN недостаточно — нужен **TURN**-сервер.
-- Сессии хранятся в памяти и сбрасываются при перезапуске.
-
-## Переменные окружения
-
-- `PORT` — порт сервера (по умолчанию `3000`).
-- `DATABASE_URL` — строка подключения к MySQL (по умолчанию `mysql://dialog:dialog@localhost:3306/dialog`).
-- `REDIS_URL` — необязательная строка подключения к Redis для кэша сессий и истории
-  (напр. `redis://localhost:6379` или `rediss://...` для managed). Не задан — кэш выключен,
-  работает чистый MySQL.
+- Desktop & Android shells live in [`desktop/`](desktop/) and [`android/`](android/).
+- Cutting a release is documented in [`RELEASE.md`](RELEASE.md).
 
 ## License
 
 Dialog is licensed under the **GNU Affero General Public License v3.0 or later**
-(AGPL-3.0-or-later) — see [LICENSE](LICENSE).
-
-In short: you're free to use, study, modify and self-host it, but if you run a
-modified version as a network service, you must make your modified source
-available to its users under the same license.
+([AGPL-3.0-or-later](LICENSE)). You're free to use, study, modify and self-host
+it — but if you run a modified version as a network service, you must offer your
+modified source to its users under the same license.

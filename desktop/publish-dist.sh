@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Publish built installers + electron-updater feed files to the public
-# Dialog-dist repo as a GitHub Release. This is what makes the download page
+# Dialog repo as a GitHub Release. This is what makes the download page
 # links work and lets installed apps auto-update.
 #
-# Prereqs: `gh auth login` (account with push access to Dialog-dist).
+# Prereqs: `gh auth login` (account with push access to the Dialog repo).
 # Usage:
 #   cd desktop && npm run dist        # build (also grab CI mac/android into dist/)
 #   ./publish-dist.sh                 # publishes a release tagged from package.json
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-REPO="${DIST_REPO:-VanylixCODER/Dialog-dist}"
+REPO="${DIST_REPO:-VanylixCODER/Dialog}"
 DIST="$(cd "$(dirname "$0")" && pwd)/dist"
 VERSION="$(node -p "require('$(cd "$(dirname "$0")" && pwd)/package.json').version")"
 TAG="v${VERSION}"

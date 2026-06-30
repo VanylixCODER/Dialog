@@ -1,16 +1,8 @@
 # Releasing Dialog apps
 
-Installers + auto-update are served from the **public** repo
-[`VanylixCODER/Dialog-dist`](https://github.com/VanylixCODER/Dialog-dist)
-(source stays private here). Download links on the site and `electron-updater`
-both read its GitHub Releases.
-
-## One-time setup
-```bash
-gh repo create VanylixCODER/Dialog-dist --public \
-  --description "Dialog installers & auto-update feed"
-```
-(Skip if it already exists.)
+Installers + auto-update are served from this **public** repo's GitHub
+Releases: [`VanylixCODER/Dialog`](https://github.com/VanylixCODER/Dialog).
+Download links on the site and `electron-updater` both read them.
 
 ---
 
@@ -46,7 +38,7 @@ Commit + push these to `main` (deploys the updated download page).
 ```bash
 cd desktop && ./publish-dist.sh
 ```
-Creates release `vX.Y.Z` on `Dialog-dist` and uploads every installer +
+Creates release `vX.Y.Z` on the public Dialog repo and uploads every installer +
 `latest-*.yml`. (Tag is derived from `desktop/package.json`.)
 
 ### 4. Verify
@@ -86,5 +78,5 @@ CSC_LINK="$PWD/dialog-selfsign.pfx" CSC_KEY_PASSWORD=dialog npm run dist:win
 - **Filenames**: GitHub turns spaces into dots, so the Windows installer is
   published as `Dialog.Setup.X.Y.Z.exe` (matches `downloads-data.js`).
 - **CI cross-repo**: the build workflows currently attach to the *private* repo
-  for storage; publishing to the public `Dialog-dist` is done by
+  for storage; publishing to the public the public Dialog repo is done by
   `publish-dist.sh` with your local `gh` auth (no PAT-in-CI needed).
