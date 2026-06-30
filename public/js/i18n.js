@@ -77,13 +77,7 @@ const I18N = {
     close: "Close", esc_to_close: "Esc / click outside — close",
     group_section: "Group management",
     today: "Today", yesterday: "Yesterday",
-    ringtone_label: "Ringtone",
-    ringtone_choose: "Choose audio",
-    ringtone_too_long: "Ringtone must not exceed 13 seconds.",
-    ringtone_too_big: "Ringtone file too large (max 4 MB).",
-    ringtone_preview: "Preview",
-    ringtone_remove: "Remove",
-    ringtone_none: "Standard sound only",
+
     gc_create_title: "Create group",
     gc_launch_hint: "Name, logo, and members — in the next step.",
     gc_create_btn: "Create",
@@ -209,13 +203,7 @@ const I18N = {
     close: "Закрыть", esc_to_close: "Esc / клик снаружи — закрыть",
     group_section: "Управление группами",
     today: "Сегодня", yesterday: "Вчера",
-    ringtone_label: "Рингтон",
-    ringtone_choose: "Выбрать аудио",
-    ringtone_too_long: "Рингтон должен быть не длиннее 13 секунд.",
-    ringtone_too_big: "Файл рингтона слишком большой (макс 4 МБ).",
-    ringtone_preview: "Прослушать",
-    ringtone_remove: "Удалить",
-    ringtone_none: "Только стандартный звук",
+
     gc_create_title: "Создать группу",
     gc_launch_hint: "Имя, логотип и участники — в следующем шаге.",
     gc_create_btn: "Создать",
@@ -265,7 +253,22 @@ const I18N = {
     err_unknown: "Ошибка: {reason}",
   },
 };
-let lang = localStorage.getItem("dialog_lang") || "en";
+function detectLang() {
+  const saved = localStorage.getItem("dialog_lang");
+  if (saved) return saved;
+  const ru = ["RU", "AM", "BY", "KZ", "KG", "MD", "UA", "GE", "AZ", "UZ", "TJ", "TM"];
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "https://ip-api.com/json/?fields=countryCode", false);
+    xhr.send();
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      if (ru.includes(data.countryCode)) return "ru";
+    }
+  } catch {}
+  return "en";
+}
+let lang = detectLang();
 function t(key, vars) { let s = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; if (vars) for (const k in vars) s = s.replaceAll("{" + k + "}", vars[k]); return s; }
 function applyI18n(root) {
   root = root || document;

@@ -418,14 +418,14 @@ a:focus-visible {
 .auth-form { display: flex; flex-direction: column; gap: 10px; }
 
 .lang-select {
-  position: absolute; top: 16px; right: 16px;
   background: rgba(0, 7, 0, 0.6); color: var(--text); border: 1px solid var(--border- scolor, var(--border-1));
-  font-size: 11px; padding: 4px 8px; border-radius: var(--r-2); cursor: pointer; z-index: 3;
+  font-size: 11px; padding: 4px 8px; border-radius: var(--r-2); cursor: pointer;
   outline: none; backdrop-filter: blur(6px);
   transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .lang-select:hover { border-color: var(--accent-400); color: var(--accent-300); }
-.lang-select.small { position: static; }
+.lang-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 4px 0; }
+.lang-row > span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
 
 /* ============ App grid (Telegram-style) ============ */
 .app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
@@ -2575,12 +2575,9 @@ a:focus-visible {
   }
   .settings-panes { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); }
   .settings-pane { gap: 11px; }
-  /* Profile pane: bigger touch targets, ringtone row stacks */
+  /* Profile pane: bigger touch targets */
   .profile-ava { width: 88px; height: 88px; font-size: 32px; }
   .field-wrap .toggle-eye, #profileName, #profileDesc { padding: 14px; font-size: 16px; } /* iOS no-zoom */
-  #ringtoneMeta { flex-direction: column; align-items: flex-start; }
-  .ringtone-actions { flex-wrap: wrap; }
-  .ringtone-btn { min-height: 44px; padding: 10px 14px; flex: 1 0 auto; }
   /* Theme grid: 2 columns instead of variable-fill so touch targets stay visible */
   .theme-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .theme-opt { padding: 10px; gap: 6px; }
@@ -3112,39 +3109,6 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
   background: var(--bg-1);
   color: var(--text);
   border: 1px solid var(--bg-3);
-
-/* ============ Custom-theme cards (edit/delete actions) + ringtone UI ============ */
-/* Custom-theme rows used to live in a single shared block with theme-opt-add and the
-   ringtone pane. Custom themes are gone; the action-button / theme-badge CSS went with
-   them. We still need .ringtone-* styles below because the profile pane's ringtone
-   picker (HTML + JS) is still wired up. */
-.ringtone-row {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 8px 10px;
-  background: var(--surface-1);
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-2);
-  margin-top: 6px;
-}
-.ringtone-row .ringtone-meta {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 12px; color: var(--text-dim);
-}
-.ringtone-row .ringtone-meta strong { color: var(--text-strong); }
-.ringtone-row .ringtone-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.ringtone-row .ringtone-btn {
-  flex: 1; min-width: 90px;
-  padding: 8px 10px;
-  background: transparent;
-  border: 1px solid var(--border-1);
-  color: var(--text);
-  border-radius: var(--r-2);
-  cursor: pointer; font-size: 12px;
-  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
-}
-.ringtone-row .ringtone-btn:hover { color: var(--accent-300); border-color: var(--accent-400); background: var(--accent-faint); }
-.ringtone-row .ringtone-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255, 82, 82, 0.12); }
-.ringtone-row audio { width: 100%; margin-top: 6px; }
 
 
 
