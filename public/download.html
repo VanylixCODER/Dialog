@@ -63,12 +63,6 @@
       document.getElementById("ver2").textContent = D.VERSION;
       document.getElementById("yr").textContent = new Date().getFullYear();
 
-      var OS_ICONS = {
-        windows: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5L10.5 4.5v7H3zM10.5 12.5v7L3 18.5v-6zM11.5 4.3L21 3v8.5h-9.5zM21 12.5V21l-9.5-1.3V12.5z"/></svg>',
-        apple: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.8c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.8-3.5.8s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1 2.8-2.1c.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.9zM14.3 6c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1 .1 2.1-.5 2.8-1.2z"/></svg>',
-        linux: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-2 0-3 1.8-3 4 0 1.3.3 2 .3 3-.6.8-2 2.2-2.6 3.6-.7 1.5-1.6 3-2.3 3.7-.5.5-.5 1.2 0 1.5.4.2 1 .2 1.3.6.3.4.2 1 .7 1.3.8.4 1.8-.3 2.7-.3.7 0 1.3.3 2 .3s1.3-.3 2-.3c.9 0 1.9.7 2.7.3.5-.3.4-.9.7-1.3.3-.4.9-.4 1.3-.6.5-.3.5-1 0-1.5-.7-.7-1.6-2.2-2.3-3.7-.6-1.4-2-2.8-2.6-3.6 0-1 .3-1.7.3-3 0-2.2-1-4-3-4zm-1.4 4.2c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg>',
-        android: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9v7a1.5 1.5 0 001.5 1.5H8V21a1 1 0 002 0v-3.5h4V21a1 1 0 002 0v-3.5h.5A1.5 1.5 0 0018 16V9zM4.5 9A1.5 1.5 0 003 10.5v4a1.5 1.5 0 003 0v-4A1.5 1.5 0 004.5 9zm15 0a1.5 1.5 0 00-1.5 1.5v4a1.5 1.5 0 003 0v-4A1.5 1.5 0 0019.5 9zM7 8h10c0-2.2-1.3-4-3.2-4.8l1-1.6a.4.4 0 10-.7-.4l-1.1 1.7A6 6 0 0012 2.4c-.7 0-1.4.1-2 .4L8.9 1.1a.4.4 0 10-.7.4l1 1.6C7.3 4 6 5.8 6 8zm2.5-2.2a.6.6 0 110-1.2.6.6 0 010 1.2zm5 0a.6.6 0 110-1.2.6.6 0 010 1.2z"/></svg>'
-      };
       var DLICON = '<svg class="dl-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>';
 
       var os = D.detectOS();
@@ -96,7 +90,7 @@
         card.className = "dl-card" + (recommended ? " recommended" : "");
         card.innerHTML =
           (recommended ? '<span class="reco-tag">RECOMMENDED FOR YOU</span>' : "") +
-          '<div class="os-ic">' + (OS_ICONS[p.icon] || "") + "</div>" +
+          '<div class="os-ic"><img src="/src/os/' + p.icon + '.png" alt="' + p.label + '" /></div>' +
           "<h3>" + p.label + "</h3>" +
           '<div class="note">' + p.note + "</div>" +
           '<div class="dl-list">' + items + "</div>";
