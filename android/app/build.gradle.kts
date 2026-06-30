@@ -18,6 +18,20 @@ android {
         buildConfigField("String", "APP_URL", "\"https://dialogmsg.xyz\"")
     }
 
+    // Release signing — keystore details come from the environment (set by CI).
+    // If no keystore is provided, assembleRelease produces an unsigned APK.
+    val ksPath = System.getenv("DIALOG_KEYSTORE")
+    signingConfigs {
+        if (ksPath != null) {
+            create("release") {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("DIALOG_KS_PASS")
+                keyAlias = System.getenv("DIALOG_KEY_ALIAS")
+                keyPassword = System.getenv("DIALOG_KEY_PASS")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -25,6 +39,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (ksPath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
