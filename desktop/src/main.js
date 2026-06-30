@@ -144,11 +144,29 @@ function createMainWindow() {
     scheduleReload();
   });
 
-  // Keep external links (http/https to other origins) in the system browser.
+  // Window-open policy:
+  //  • Blank popups (the in-app "big screen" / picture-in-picture call window,
+  //    opened via window.open("", ...)) open as a real child window so the page
+  //    can render into them.
+  //  • Same-origin URLs open as child windows too.
+  //  • Only real external http(s) origins are pushed to the system browser.
   wc.setWindowOpenHandler(({ url }) => {
+    if (!url || url === "about:blank") {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          backgroundColor: "#000700",
+          webPreferences: { contextIsolation: true, nodeIntegration: false }
+        }
+      };
+    }
     try {
       const u = new URL(url);
-      if (u.origin !== config.APP_ORIGIN) {
+      if (
+        (u.protocol === "http:" || u.protocol === "https:") &&
+        u.origin !== config.APP_ORIGIN
+      ) {
         shell.openExternal(url);
         return { action: "deny" };
       }
