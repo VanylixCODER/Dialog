@@ -82,7 +82,8 @@
         "nsis"
       ],
       "icon": "assets/icon.ico",
-      "publisherName": "Dialog Messanger App"
+      "publisherName": "Dialog Messanger App",
+      "sign": "scripts/win-sign.js"
     },
     "nsis": {
       "oneClick": false,
