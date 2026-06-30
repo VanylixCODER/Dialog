@@ -10,6 +10,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/ubuntu/.ssh:/root/.ssh:ro
       - /home/ubuntu/dialog:/repo
+      # App downloads (installers + electron-updater latest-*.yml) served live
+      # from the host, so they aren't baked into the image or committed to git.
+      - ./public/dl:/app/public/dl
     depends_on:
       mysql:
         condition: service_healthy
