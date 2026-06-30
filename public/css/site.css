@@ -137,7 +137,8 @@ section { padding: 70px 0; }
 .dl-card.recommended { border-color: var(--green); box-shadow: 0 0 40px rgba(0,255,90,.12); }
 .dl-card:hover { transform: translateY(-4px); }
 .dl-card .os-ic { width: 56px; height: 56px; color: var(--green); margin-bottom: 16px; }
-.dl-card .os-ic svg { width: 100%; height: 100%; }
+.dl-card .os-ic svg,
+.dl-card .os-ic img { width: 100%; height: 100%; object-fit: contain; }
 .dl-card h3 { color: #fff; font-size: 22px; margin-bottom: 4px; }
 .dl-card .note { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
 .dl-card .reco-tag {
