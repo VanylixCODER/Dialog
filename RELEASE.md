@@ -56,6 +56,25 @@ Creates release `vX.Y.Z` on `Dialog-dist` and uploads every installer +
 
 ---
 
+## Windows code signing
+Builds are signed when `CSC_LINK` (path to the `.pfx`) is set; otherwise they're
+unsigned. We use the **system** `osslsigncode` (electron-builder's bundled one is
+linked against OpenSSL 1.1 and crashes on modern distros) via `scripts/win-sign.js`.
+
+One-time:
+```bash
+sudo pacman -S osslsigncode            # Arch/EndeavourOS (Debian: apt install osslsigncode)
+cd desktop && ./scripts/gen-win-cert.sh   # self-signed cert -> dialog-selfsign.pfx
+```
+Build signed:
+```bash
+CSC_LINK="$PWD/dialog-selfsign.pfx" CSC_KEY_PASSWORD=dialog npm run dist:win
+```
+- **Self-signed signs the binary but is NOT trusted** — Windows SmartScreen still
+  shows "Unknown publisher". To remove the warning, replace the `.pfx` with a
+  CA-issued Authenticode cert (keep CN = `Dialog Messanger App` to match
+  `win.publisherName`). The `.pfx` is git-ignored — never commit it.
+
 ## Notes / gotchas
 - **Keep every platform at the same `X.Y.Z`** — the download links and updater
   feeds are version-pinned, so a missing platform build = 404 for that link.

@@ -9,3 +9,6 @@ flatpak/.flatpak-builder/
 flatpak/*.test.yml
 flatpak/*.test.metainfo.xml
 flatpak/dialog-payload.tar.gz
+
+# Windows code-signing cert (never commit private keys)
+*.pfx
