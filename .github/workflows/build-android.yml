@@ -53,22 +53,25 @@ jobs:
           ./gradlew --no-daemon assembleRelease
 
       - name: Stage APK
+        id: stage
         run: |
+          VER=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
           mkdir -p out
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          echo "Built: $APK"
-          cp "$APK" "out/Dialog-1.0.1.apk"
+          echo "Built: $APK (v$VER)"
+          cp "$APK" "out/Dialog-${VER}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: dialog-android
-          path: out/Dialog-1.0.1.apk
+          path: out/*.apk
 
       - name: Attach APK to the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.inputs.tag || 'v1.0.1' }}
+          TAG: ${{ github.event.inputs.tag || format('v{0}', steps.stage.outputs.version) }}
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Dialog $TAG" --notes "Release"
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber out/Dialog-1.0.1.apk
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber out/*.apk
