@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Dialog</title>
+  <meta name="description" content="How Dialog handles your data: accounts, messages, calls and more." />
+  <meta name="theme-color" content="#00ff5a" />
+  <link rel="icon" href="/src/lil_dialog.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <style>
+    .legal { width: min(820px, 92vw); margin: 0 auto; padding: 40px 0 80px; }
+    .legal h1 { color: #fff; font-size: clamp(30px, 5vw, 46px); margin-bottom: 8px; }
+    .legal .updated { color: var(--muted); font-size: 13px; margin-bottom: 36px; }
+    .legal h2 { color: var(--green); font-size: 20px; margin: 34px 0 10px; }
+    .legal p, .legal li { color: var(--text); font-size: 15px; line-height: 1.7; }
+    .legal ul { margin: 8px 0 8px 22px; }
+    .legal li { margin-bottom: 6px; }
+    .legal a { color: var(--green); border-bottom: 1px dashed var(--green-dim); }
+    .legal strong { color: #fff; }
+    .legal .note { border-left: 2px solid var(--green-dim); padding: 10px 16px; background: var(--card); border-radius: 6px; margin: 16px 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-grid"></div>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/download">Download</a>
+        <a class="nav-cta" href="/login">Open Dialog</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="legal">
+    <h1>Privacy Policy</h1>
+    <div class="updated">Last updated: 30 June 2026</div>
+
+    <p>Dialog ("Dialog", "we", "us") is a messenger for chat, group voice &amp; video
+      calls, and screen sharing, available in the browser and as desktop and Android
+      apps. This policy explains what data we collect, why, and your choices. By using
+      Dialog you agree to this policy.</p>
+
+    <div class="note">Dialog is open source (AGPL-3.0). Anyone can read the code,
+      verify how data is handled, or self-host their own instance — in which case the
+      operator of that instance, not us, is the data controller.</div>
+
+    <h2>1. Information we collect</h2>
+    <ul>
+      <li><strong>Account data</strong> — your username (login), display name, and
+        password. Passwords are stored only as a salted hash; we never store or see
+        your plaintext password.</li>
+      <li><strong>Profile</strong> — optional avatar, description, and status
+        (online / do not disturb / invisible).</li>
+      <li><strong>Messages &amp; media</strong> — the content of messages you send
+        (text, images, voice notes, GIFs, files, reactions, edits) and the chats/groups
+        they belong to. These are stored so your conversations sync across devices.</li>
+      <li><strong>Contacts &amp; groups</strong> — your friend relationships, blocks,
+        and group memberships.</li>
+      <li><strong>Technical data</strong> — connection metadata needed to operate the
+        service (e.g. delivery/read receipts, presence, and standard server logs such as
+        IP address and timestamps).</li>
+      <li><strong>Push subscriptions</strong> — if you enable notifications, the push
+        endpoint and keys your browser/device provides.</li>
+    </ul>
+
+    <h2>2. Local storage on your device</h2>
+    <p>We store a login token and some preferences in your browser's local storage to
+      keep you signed in. The desktop and Android apps are thin wrappers around the same
+      web app and store the same data locally on your device. We do not use third-party
+      advertising or tracking cookies.</p>
+
+    <h2>3. Calls &amp; screen sharing</h2>
+    <p>Voice/video calls and screen sharing use <a href="https://livekit.io" target="_blank" rel="noopener">LiveKit</a>
+      as the real-time media server, and TURN relay servers to connect peers behind
+      restrictive networks. Live audio/video/screen streams pass through these servers to
+      reach other call participants; <strong>call media is not recorded or stored by us.</strong></p>
+
+    <h2>4. Third-party services</h2>
+    <p>To provide certain features, limited data is shared with:</p>
+    <ul>
+      <li><strong>LiveKit</strong> &amp; <strong>TURN/relay providers</strong> — to route
+        call and screen-share media.</li>
+      <li><strong>Giphy</strong> — when you search for GIFs, your search query is sent to
+        Giphy to return results.</li>
+      <li><strong>Link previews</strong> — when a link is shared, our server may fetch that
+        URL to generate a preview (title/image).</li>
+      <li><strong>Web Push services</strong> — your browser/OS push provider (e.g. Mozilla,
+        Apple, Google) delivers notifications you've enabled.</li>
+    </ul>
+
+    <h2>5. How we use your data</h2>
+    <ul>
+      <li>To operate the messenger — deliver messages, sync chats, place calls, and show
+        presence.</li>
+      <li>To authenticate you and keep your account secure.</li>
+      <li>To send notifications you've opted into.</li>
+      <li>To maintain reliability and prevent abuse/spam.</li>
+    </ul>
+    <p>We do <strong>not</strong> sell your data or use your messages for advertising.</p>
+
+    <h2>6. Storage &amp; security</h2>
+    <p>Data is stored in a MySQL database with a Redis cache, on servers located in the
+      EU (Frankfurt region). Traffic is encrypted in transit (HTTPS/WSS). Passwords are
+      hashed. No method of storage or transmission is 100% secure, but we take reasonable
+      measures to protect your data.</p>
+
+    <h2>7. Data retention</h2>
+    <p>We keep your account and messages until you delete them or your account. Deleting a
+      message or leaving/clearing a chat removes it from our active database. Backups and
+      logs are retained only as long as needed to operate the service.</p>
+
+    <h2>8. Your rights</h2>
+    <p>You can view and edit your profile, delete individual messages, clear chats, and
+      request deletion of your account and associated data. Depending on your location
+      (e.g. the EU/GDPR), you may have rights to access, correct, export, or erase your
+      data. To exercise these, contact us below.</p>
+
+    <h2>9. Children</h2>
+    <p>Dialog is not directed to children under 13 (or the minimum age required in your
+      country). We do not knowingly collect data from children below that age.</p>
+
+    <h2>10. Changes to this policy</h2>
+    <p>We may update this policy from time to time. Material changes will be reflected by
+      updating the "Last updated" date above.</p>
+
+    <h2>11. Contact</h2>
+    <p>Questions or data requests: <a href="mailto:vanylix@proton.me">vanylix@proton.me</a>.</p>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>© <span id="yr"></span> Dialog Messanger App</span>
+      <div style="display:flex; gap:18px;">
+        <a href="/">Home</a>
+        <a href="/download">Download</a>
+        <a href="/login">Sign in</a>
+      </div>
+    </div>
+  </footer>
+  <script>document.getElementById("yr").textContent = new Date().getFullYear();</script>
+</body>
+</html>

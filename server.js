@@ -115,6 +115,9 @@ app.get("/", (_req, res) =>
 app.get(["/download", "/downloads"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "download.html"))
 );
+app.get(["/privacy", "/privacy-policy"], (_req, res) =>
+  res.sendFile(join(__dirname, "public", "privacy.html"))
+);
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 async function authUser(req) { return auth.userByToken(bearer(req)); }
