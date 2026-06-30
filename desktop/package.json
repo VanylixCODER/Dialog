@@ -8,7 +8,7 @@
     "name": "Dialog Messanger App",
     "email": "vanylix@proton.me"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
