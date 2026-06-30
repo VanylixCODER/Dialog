@@ -88,7 +88,17 @@ const httpServer = useHttps
 
 const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
 
-app.use(express.static(join(__dirname, "public")));
+// index:false so "/" is not auto-served as the SPA — the marketing landing
+// page owns "/", the messenger SPA lives at /login and /{lang}/... routes.
+app.use(express.static(join(__dirname, "public"), { index: false }));
+
+// Public marketing pages (must be registered before the SPA fallback below).
+app.get("/", (_req, res) =>
+  res.sendFile(join(__dirname, "public", "landing.html"))
+);
+app.get(["/download", "/downloads"], (_req, res) =>
+  res.sendFile(join(__dirname, "public", "download.html"))
+);
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 async function authUser(req) { return auth.userByToken(bearer(req)); }
