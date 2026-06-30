@@ -20,6 +20,7 @@
     "seed:register": "node scripts/seed-register.mjs"
   },
   "dependencies": {
+    "@ant-design/icons-svg": "^4.5.0",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "ioredis": "^5.11.1",

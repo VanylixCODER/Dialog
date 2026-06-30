@@ -42,8 +42,9 @@
     ],
     "publish": [
       {
-        "provider": "generic",
-        "url": "https://dialogmsg.xyz/dl"
+        "provider": "github",
+        "owner": "VanylixCODER",
+        "repo": "Dialog-dist"
       }
     ],
     "linux": {

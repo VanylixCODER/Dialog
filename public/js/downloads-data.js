@@ -1,9 +1,13 @@
 // Central catalogue of Dialog app downloads, shared by the landing + download
-// pages. Bump VERSION and the filenames here when you publish a new release.
-// Installers are served from /dl/ (drop the files in public/dl/ on the server).
+// pages. Bump VERSION here when you publish a new release. Installers are
+// hosted as GitHub Releases on the public VanylixCODER/Dialog-dist repo
+// (built from the private source repo), so links hit GitHub's CDN directly.
 (function () {
-  const VERSION = "1.0.1";
-  const BASE = "/dl/";
+  const VERSION = "1.0.2";
+  const BASE =
+    "https://github.com/VanylixCODER/Dialog-dist/releases/download/v" +
+    VERSION +
+    "/";
 
   // Each platform lists one or more downloadable installers.
   const PLATFORMS = {
