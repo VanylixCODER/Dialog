@@ -81,7 +81,7 @@ function buildMenu() {
       label: "Check for updates",
       click: () => {
         try {
-          require("./updater").checkNow();
+          require("./updater").checkNow({ getMainWindow: ctx.getMainWindow });
         } catch (_) {}
       }
     },
