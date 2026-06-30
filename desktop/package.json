@@ -1,7 +1,7 @@
 {
   "name": "dialog-desktop",
   "productName": "Dialog",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Dialog — cross-platform desktop client (Chat · Group calls · Screen share)",
   "homepage": "https://dialogmsg.xyz",
   "author": {
@@ -51,8 +51,7 @@
       "target": [
         "AppImage",
         "deb",
-        "pacman",
-        "flatpak"
+        "pacman"
       ],
       "category": "Network",
       "icon": "assets/icon.png",
