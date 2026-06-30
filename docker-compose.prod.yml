@@ -11,8 +11,9 @@ services:
       - /home/ubuntu/.ssh:/root/.ssh:ro
       - /home/ubuntu/dialog:/repo
       # App downloads (installers + electron-updater latest-*.yml) served live
-      # from the host, so they aren't baked into the image or committed to git.
-      - ./public/dl:/app/public/dl
+      # from an ubuntu-owned folder OUTSIDE the repo, so uploads need no sudo and
+      # git/deploy never touches them. Create it first: mkdir -p /home/ubuntu/dl
+      - /home/ubuntu/dl:/app/public/dl
     depends_on:
       mysql:
         condition: service_healthy

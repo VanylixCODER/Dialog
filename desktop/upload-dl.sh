@@ -14,7 +14,7 @@ set -euo pipefail
 
 SSH_KEY="${1:-${SSH_KEY:-$HOME/Desktop/ssh-key-2026-06-29.key}}"
 SERVER="${SERVER:-ubuntu@89.168.31.113}"
-REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/dialog/public/dl}"
+REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/dl}"
 DIST="$(cd "$(dirname "$0")" && pwd)/dist"
 
 if [ ! -d "$DIST" ]; then
