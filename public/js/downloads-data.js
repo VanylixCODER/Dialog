@@ -16,7 +16,7 @@
       icon: "windows",
       note: "Windows 10/11 · 64-bit",
       installers: [
-        { kind: "Installer (.exe)", file: "Dialog.Setup." + VERSION + ".exe", primary: true }
+        { kind: "Installer (.exe)", file: "Dialog-Setup-" + VERSION + ".exe", primary: true }
       ]
     },
     mac: {
