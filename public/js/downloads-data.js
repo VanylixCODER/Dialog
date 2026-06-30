@@ -1,11 +1,11 @@
 // Central catalogue of Dialog app downloads, shared by the landing + download
 // pages. Bump VERSION here when you publish a new release. Installers are
-// hosted as GitHub Releases on the public VanylixCODER/Dialog-dist repo
-// (built from the private source repo), so links hit GitHub's CDN directly.
+// hosted as GitHub Releases on the public Dialog repo, so links hit GitHub's
+// CDN directly.
 (function () {
-  const VERSION = "1.0.2";
+  const VERSION = "1.0.1";
   const BASE =
-    "https://github.com/VanylixCODER/Dialog-dist/releases/download/v" +
+    "https://github.com/VanylixCODER/Dialog/releases/download/v" +
     VERSION +
     "/";
 
