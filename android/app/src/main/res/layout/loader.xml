@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/loaderRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:foreground="@drawable/scanlines">
+
+    <!-- 3:4 framed boot panel, centered -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="320dp"
+        android:layout_height="0dp"
+        android:layout_gravity="center"
+        android:padding="20dp"
+        app:layout_constraintDimensionRatio="3:4">
+
+        <TextView
+            android:id="@+id/logo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DIALOG"
+            android:textColor="@color/green"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.3"
+            android:fontFamily="monospace"
+            android:shadowColor="@color/green"
+            android:shadowRadius="18"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="18dp" />
+
+        <TextView
+            android:id="@+id/sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SECURE SHELL"
+            android:textColor="@color/green_dim"
+            android:textSize="11sp"
+            android:letterSpacing="0.5"
+            android:fontFamily="monospace"
+            app:layout_constraintTop_toBottomOf="@id/logo"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="4dp" />
+
+        <!-- Status line under the logo -->
+        <LinearLayout
+            android:id="@+id/statusRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintTop_toBottomOf="@id/sub"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:id="@+id/statusDot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="●"
+                android:textColor="@color/amber"
+                android:textSize="12sp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CONNECTING…"
+                android:textColor="@color/amber"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Terminal console -->
+        <ScrollView
+            android:id="@+id/console"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="@drawable/console_bg"
+            android:padding="10dp"
+            android:scrollbars="none"
+            app:layout_constraintTop_toBottomOf="@id/statusRow"
+            app:layout_constraintBottom_toTopOf="@id/progress"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/green_dim"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingMultiplier="1.3" />
+
+                <TextView
+                    android:id="@+id/caret"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="root@dialog:~# █"
+                    android:textColor="@color/green"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+        </ScrollView>
+
+        <ProgressBar
+            android:id="@+id/progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="@color/green"
+            android:progressBackgroundTint="@color/green_track"
+            app:layout_constraintBottom_toBottomOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

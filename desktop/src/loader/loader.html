@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>Dialog</title>
+    <link rel="stylesheet" href="loader.css" />
+  </head>
+  <body>
+    <div class="crt">
+      <div class="scanlines"></div>
+      <div class="vignette"></div>
+
+      <div class="stage">
+        <div class="logo-wrap">
+          <div class="logo glitch" data-text="DIALOG">
+            <span class="logo-main">DIALOG</span>
+          </div>
+          <div class="sub">SECURE SHELL</div>
+        </div>
+
+        <!-- Live status line under the logo -->
+        <div id="status" class="status status--connecting">
+          <span class="dot"></span>
+          <span id="statusText">Booting…</span>
+        </div>
+
+        <div class="console">
+          <pre id="log" class="log"></pre>
+          <div class="cursorline"><span class="prompt">root@dialog:~#</span><span class="caret">█</span></div>
+        </div>
+
+        <div class="bar">
+          <div id="barFill" class="bar-fill"></div>
+        </div>
+      </div>
+    </div>
+    <script src="loader.js"></script>
+  </body>
+</html>
