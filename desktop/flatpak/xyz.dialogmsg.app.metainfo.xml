@@ -34,8 +34,8 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>The Dialog desktop client</caption>
-      <image>https://dialogmsg.xyz/src/screenshot-1.png</image>
+      <caption>Dialog secure boot screen</caption>
+      <image>https://github.com/VanylixCODER/Dialog/releases/download/v1.0.1/screenshot.png</image>
     </screenshot>
   </screenshots>
 
@@ -50,7 +50,7 @@
   </branding>
 
   <releases>
-    <release version="1.0.0" date="2026-06-30">
+    <release version="1.0.1" date="2026-06-30">
       <description>
         <p>First release of the Dialog desktop client.</p>
       </description>
