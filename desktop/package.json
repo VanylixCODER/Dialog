@@ -1,11 +1,12 @@
 {
   "name": "dialog-desktop",
   "productName": "Dialog",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Dialog — cross-platform desktop client (Chat · Group calls · Screen share)",
+  "homepage": "https://dialogmsg.xyz",
   "author": {
     "name": "Dialog",
-    "email": "aram.skalper@gmail.com"
+    "email": "vanylix@proton.me"
   },
   "license": "MIT",
   "main": "src/main.js",
@@ -14,6 +15,8 @@
     "dev": "electron . --dev",
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
+    "dist:arch": "electron-builder --linux pacman",
+    "dist:flatpak": "electron-builder --linux flatpak",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "publish": "electron-builder --publish always"
@@ -47,11 +50,33 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "pacman",
+        "flatpak"
       ],
       "category": "Network",
       "icon": "assets/icon.png",
-      "maintainer": "Dialog <aram.skalper@gmail.com>"
+      "maintainer": "Dialog <vanylix@proton.me>"
+    },
+    "flatpak": {
+      "runtime": "org.freedesktop.Platform",
+      "runtimeVersion": "24.08",
+      "sdk": "org.freedesktop.Sdk",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "24.08",
+      "finishArgs": [
+        "--share=ipc",
+        "--share=network",
+        "--socket=x11",
+        "--socket=wayland",
+        "--socket=pulseaudio",
+        "--device=dri",
+        "--device=all",
+        "--talk-name=org.freedesktop.Notifications",
+        "--talk-name=org.kde.StatusNotifierWatcher",
+        "--system-talk-name=org.freedesktop.login1",
+        "--filesystem=xdg-download"
+      ]
     },
     "win": {
       "target": [
