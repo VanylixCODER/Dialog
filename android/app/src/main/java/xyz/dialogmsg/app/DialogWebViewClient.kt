@@ -18,6 +18,11 @@ class DialogWebViewClient(
 
     private val appHost = "dialogmsg.xyz"
 
+    // Public marketing pages the app must never display.
+    private val MARKETING_PATHS = setOf(
+        "/", "/landing.html", "/download", "/downloads", "/download.html"
+    )
+
     override fun shouldOverrideUrlLoading(
         view: WebView,
         request: WebResourceRequest
@@ -25,7 +30,16 @@ class DialogWebViewClient(
         val host = request.url.host ?: return false
         // Same-origin (and its subdomains) load in the WebView; everything else
         // opens in the system browser.
-        if (host == appHost || host.endsWith(".$appHost")) return false
+        if (host == appHost || host.endsWith(".$appHost")) {
+            // Never let the app land on the marketing landing/downloads pages —
+            // bounce those back into the chat at /login.
+            val path = request.url.path ?: "/"
+            if (path in MARKETING_PATHS) {
+                view.loadUrl("https://$appHost/login")
+                return true
+            }
+            return false
+        }
         return try {
             val intent = android.content.Intent(
                 android.content.Intent.ACTION_VIEW, request.url
