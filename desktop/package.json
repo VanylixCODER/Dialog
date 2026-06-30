@@ -5,7 +5,7 @@
   "description": "Dialog — cross-platform desktop client (Chat · Group calls · Screen share)",
   "homepage": "https://dialogmsg.xyz",
   "author": {
-    "name": "Dialog",
+    "name": "Dialog Messanger App",
     "email": "vanylix@proton.me"
   },
   "license": "MIT",
@@ -31,7 +31,7 @@
   "build": {
     "appId": "xyz.dialogmsg.app",
     "productName": "Dialog",
-    "copyright": "Copyright © 2026 Dialog",
+    "copyright": "Copyright © 2026 Dialog Messanger App",
     "directories": {
       "output": "dist",
       "buildResources": "assets"
@@ -55,7 +55,7 @@
       ],
       "category": "Network",
       "icon": "assets/icon.png",
-      "maintainer": "Dialog <vanylix@proton.me>"
+      "maintainer": "Dialog Messanger App <vanylix@proton.me>"
     },
     "flatpak": {
       "runtime": "org.freedesktop.Platform",
@@ -81,7 +81,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "publisherName": "Dialog Messanger App"
     },
     "nsis": {
       "oneClick": false,
