@@ -658,7 +658,7 @@ app.post("/webhook", (req, res) => {
         -w ${hostRepoPath} \
         --name dialog-deployer \
         node:22-alpine \
-        sh -c "apk add --no-cache docker-cli docker-cli-compose >/dev/null 2>&1 && docker compose -f docker-compose.prod.yml up -d --build app && docker image prune -f"`,
+        sh -c "apk add --no-cache docker-cli docker-cli-compose >/dev/null 2>&1 && docker compose -f docker-compose.prod.yml up -d --no-deps --build app && docker image prune -f"`,
         { timeout: 180000 },
         (err2, stdout2) => {
           if (err2) console.error("deploy build:", stdout2.slice(-400), err2.message);
