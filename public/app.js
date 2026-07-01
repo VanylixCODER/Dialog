@@ -2065,22 +2065,14 @@ function addScreenTile(id, name, mediaTrack) {
       `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
     vGrid.appendChild(tile);
-    // Клик по стриму: открывает большой экран (отдельное окно), повторный — закрывает.
-    let clickTimer = null;
-    tile.addEventListener("click", (e) => {
-      if (vGrid.classList.contains("pip-grid")) {
-        clearTimeout(clickTimer);
-        clickTimer = setTimeout(() => focusTile(tile.classList.contains("focused") ? null : tile), 220);
-        return;
-      }
-      toggleBigScreen();
-    });
-    tile.addEventListener("dblclick", (e) => {
-      if (!vGrid.classList.contains("pip-grid")) return;
-      e.preventDefault(); clearTimeout(clickTimer);
+    // Клик по стриму: развернуть на весь экран, повторный — свернуть.
+    tile.addEventListener("click", () => {
       const v = tile.querySelector("video"), d = v.ownerDocument;
-      if (d.fullscreenElement) (d.exitFullscreen || (() => {})).call(d);
-      else (v.requestFullscreen || v.webkitRequestFullscreen || (() => {})).call(v);
+      if (d.fullscreenElement || d.webkitFullscreenElement) {
+        (d.exitFullscreen || d.webkitExitFullscreen || (() => {})).call(d);
+      } else {
+        (v.requestFullscreen || v.webkitRequestFullscreen || (() => {})).call(v);
+      }
     });
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
@@ -2193,8 +2185,7 @@ function syncCallUI() {
   applyDock();
   // Мобильный «большой экран»: отдельных окон нет (телефоны их не поддерживают) —
   // показываем ту же красивую сетку .pip-grid прямо в полноэкранном стейдже, тап по
-  // стриму разворачивает его (focusTile). На ПК в доке — обычная сетка. Не трогаем,
-  // когда сетка вынесена в окно поп-аута (там pip-grid ставит mountGridIn).
+  // стриму разворачивает его (focusTile). На ПК в доке — обычная сетка.
   if (vGrid.parentElement === stage) vGrid.classList.toggle("pip-grid", isMobile() && showStage);
   vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
@@ -2280,7 +2271,6 @@ function endCall() {
   hideToast(); stopRingtone();
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
-  if (pipWin) { try { pipWin.close(); } catch {} pipWin = null; clearInterval(pipPoll); returnGridHome(); }
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
@@ -2363,10 +2353,8 @@ $("toggleCam").onclick = async () => {
   }
 };
 // ── Демонстрация экрана (Discord-стиль): сначала выбор качества, потом нативный
-// выбор окна/экрана браузером. Захват делаем сами через getDisplayMedia в нужном
-// окне (в окне большого экрана, если открыто — иначе запрос прав появлялся бы в
-// основной вкладке, и из большого экрана его нельзя было дать), затем публикуем
-// дорожку в комнату LiveKit. Аудио пока не шарим (по согласованию).
+// выбор окна/экрана браузером. Захват делаем сами через getDisplayMedia,
+// затем публикуем дорожку в комнату LiveKit. Аудио пока не шарим (по согласованию).
 let screenTrack = null;
 let screenQuality = { w: 1920, h: 1080, fps: 30 };
 function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; m.classList.remove("hidden"); }
@@ -2376,10 +2364,9 @@ async function startScreenShare() {
   const LK = window.LivekitClient;
   if (!call.room || !LK) return;
   const q = screenQuality;
-  const win = (pipWin && !pipWin.closed) ? pipWin : window; // где показать запрос прав
   let stream;
   try {
-    stream = await win.navigator.mediaDevices.getDisplayMedia({
+    stream = await window.navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
       audio: false,
     });
@@ -2495,65 +2482,6 @@ $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseT
 // magnifier, and the big-screen button used a font character (⛶) that renders
 // inconsistently across OSes. Override with proper Ant Design SVGs.
 window.ICON.monitor = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h312v60H304c-8.8 0-16 7.2-16 16v36c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-36c0-8.8-7.2-16-16-16H616v-60h312c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z\"></path></svg>";
-window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M290 236.4l43.9-43.9a8.01 8.01 0 00-4.7-13.6L169 160c-5.1-.6-9.5 3.7-8.9 8.9L179 329.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L370 423.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L290 236.4zm352.7 187.3c3.1 3.1 8.2 3.1 11.3 0l133.7-133.6 43.7 43.7a8.01 8.01 0 0013.6-4.7L829.9 169c.6-5.1-3.7-9.5-8.9-8.9L660.7 179c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L566.3 370a8.03 8.03 0 000 11.3l42.4 42.4zM830 730.9l-43.7 43.7-133.6-133.7a8.03 8.03 0 00-11.3 0l-42.4 42.3c-3.1 3.1-3.1 8.2 0 11.3L732.6 770l-43.9 43.9a8.01 8.01 0 004.7 13.6L854 856c5.1.6 9.5-3.7 8.9-8.9L843.9 686c-.8-6.6-8.9-9.4-13.9-4.7zM370 600.3a8.03 8.03 0 00-11.3 0L225 733.9l-43.7-43.7a8.01 8.01 0 00-13.6 4.7L148.1 855c-.6 5.1 3.7 9.5 8.9 8.9L317.3 845c6.6-.8 9.4-8.9 4.7-13.6L278 787.6l133.6-133.7c3.1-3.1 3.1-8.2 0-11.3L370 600.3z\"></path></svg>";
-
-// Открыть / закрыть большой экран звонка (отдельное окно для ПК, pip-grid для мобильных).
-function toggleBigScreen() {
-  if (!call.active) return;
-  if (pipWin) { try { pipWin.close(); } catch {} return; }
-  if (isMobile()) { vGrid.classList.add("pip-grid"); focusTile(vGrid.querySelector(".tile.screen")); return; }
-  showPipNotice(true);
-  const w = screen.availWidth || 1280, h = screen.availHeight || 800;
-  pipWin = window.open("pip.html", "dialogBigScreen", `width=${w},height=${h},top=0,left=0,menubar=no,toolbar=no,location=no`);
-  if (!pipWin) { showPipNotice(false); alert(t("pip_unsupported")); return; }
-  const tryFs = () => { try { const de = pipWin.document.documentElement; (de.requestFullscreen || de.webkitRequestFullscreen || (() => {})).call(de); } catch {} };
-  const init = () => {
-    if (!pipWin || pipWin.closed) return;
-    try {
-      pipWin.document.title = "Dialog — " + (call.roomTitle || "call");
-      mountGridIn(pipWin);
-      tryFs(); setTimeout(tryFs, 250);
-    } catch (e) {}
-  };
-  const waitReady = () => {
-    if (!pipWin || pipWin.closed) return;
-    if (pipWin.document && pipWin.document.readyState === "complete") init();
-    else setTimeout(waitReady, 40);
-  };
-  waitReady();
-  clearInterval(pipPoll);
-  pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
-}
-// Вернуть сетку тайлов обратно в док-стейдж (после закрытия окна большого экрана)
-function returnGridHome() { vGrid.classList.remove("pip-grid", "has-focus"); vGrid.querySelectorAll(".tile.focused").forEach((t) => t.classList.remove("focused")); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
-// Окно большого экрана закрыто → вернуть сетку в док и продолжить звонок (звонок НЕ завершаем).
-function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; if (call.active) syncCallUI(); }
-let pipWin = null, pipPoll = 0;
-function mountGridIn(win) {
-  document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
-  win.document.body.dataset.theme = document.body.dataset.theme || "matrix";
-  win.document.body.style.cssText = "margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh;background:var(--bg-1)";
-  vGrid.classList.add("pip-grid"); // spotlight-раскладка демонстрации экрана в окне
-  win.document.body.appendChild(vGrid);
-  // прокси-кнопки управления в окне (проксируют клики на основные контролы основной вкладки)
-  const bar = win.document.createElement("div"); bar.className = "call-bar";
-  const actions = win.document.createElement("div"); actions.className = "call-actions";
-  [["toggleMic", "mic"], ["toggleCam", "camera"], ["shareScreen", "monitor"], ["toggleDeafen", "headphones"]].forEach(([id, icon]) => {
-    const b = win.document.createElement("button"); b.className = "call-btn"; b.innerHTML = window.ICON[icon]; const src = $(id); if (src) b.setAttribute("data-tip", src.getAttribute("data-tip") || ""); b.onclick = () => $(id) && $(id).click(); actions.appendChild(b);
-  });
-  // переключатель фуллскрина самого окна — надёжно, т.к. это жест внутри окна
-  const fsBtn = win.document.createElement("button"); fsBtn.className = "call-btn"; fsBtn.innerHTML = window.ICON.expand; fsBtn.setAttribute("data-tip", t("fullscreen"));
-  fsBtn.onclick = () => { const d = win.document; if (d.fullscreenElement) d.exitFullscreen().catch(() => {}); else (d.documentElement.requestFullscreen || (() => {})).call(d.documentElement).catch(() => {}); };
-  actions.appendChild(fsBtn);
-  // «Завершить» — последней кнопкой
-  const hb = win.document.createElement("button"); hb.className = "call-btn end"; hb.innerHTML = window.ICON.phoneOff; hb.setAttribute("data-tip", $("hangUp").getAttribute("data-tip") || ""); hb.onclick = () => $("hangUp").click(); actions.appendChild(hb);
-  bar.appendChild(actions); win.document.body.appendChild(bar);
-}
-function showPipNotice(show) {
-  const el = $("pipNotice");
-  if (el) el.classList.toggle("hidden", !show);
-}
-$("pipDockBtn").onclick = () => { if (pipWin) { try { pipWin.close(); } catch {} } };
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
