@@ -19,7 +19,7 @@ const I18N = {
     t_emoji: "Emoji", t_more: "More", t_attach: "Attach file", t_send: "Send", t_voice: "Voice message",
     t_mic: "Microphone", t_cam: "Camera", t_screen: "Share screen", t_hangup: "Leave call",
     t_call: "Group call", call_dm: "Call", stream_limit: "Stream limit reached — {n} max in a group call", t_window: "Window / fullscreen",
-    stream_of: "{name}'s stream", watch_stream: "Watch stream", watch_stream_hint: "Click watch stream to open it",
+
     screen_share_title: "Share your screen", screen_quality: "Quality", screen_pick_hint: "You'll choose the screen or window next.", screen_share_go: "Share screen", screen_share_failed: "Couldn't start screen share",
     spam_flood: "Slow down — you're sending too fast", spam_duplicate: "Stop spamming the same message",
     mute_user: "Mute", volume: "Volume", mute_room: "Mute room", unmute_room: "Unmute room",
@@ -145,7 +145,7 @@ const I18N = {
     t_emoji: "Эмодзи", t_more: "Ещё", t_attach: "Прикрепить файл", t_send: "Отправить", t_voice: "Голосовое сообщение",
     t_mic: "Микрофон", t_cam: "Камера", t_screen: "Демонстрация экрана", t_hangup: "Покинуть звонок",
     t_call: "Групповой звонок", call_dm: "Звонок", stream_limit: "Достигнут лимит трансляций — максимум {n} в групповом звонке", t_window: "Окно / весь экран",
-    stream_of: "Стрим {name}", watch_stream: "Смотреть стрим", watch_stream_hint: "Нажмите «Смотреть стрим», чтобы открыть",
+
     screen_share_title: "Демонстрация экрана", screen_quality: "Качество", screen_pick_hint: "Окно или экран выберете на следующем шаге.", screen_share_go: "Поделиться", screen_share_failed: "Не удалось начать демонстрацию",
     spam_flood: "Помедленнее — слишком часто", spam_duplicate: "Хватит спамить одним и тем же",
     mute_user: "Заглушить", volume: "Громкость", mute_room: "Заглушить чат", unmute_room: "Включить звук чата",
