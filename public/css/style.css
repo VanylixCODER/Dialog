@@ -1804,11 +1804,52 @@ a:focus-visible {
 .tile-expand:hover { background: rgba(0, 0, 0, 0.82); color: var(--accent-400); }
 .tile-expand svg { width: 18px; height: 18px; }
 
-/* Big screen: when the call view is fullscreened, let it fill the screen
-   (the docked stage is otherwise capped at 46vh). */
+/* ═══ Big screen: fullscreen call (Discord-style) ═══════════════════════════
+   The call stage fills the screen with the .pip-grid spotlight layout; the
+   controls float at the bottom and auto-hide (cursor hides with them). */
 #callStage:fullscreen, #callStage:-webkit-full-screen {
   max-height: none; height: 100vh; background: var(--bg-1);
+  cursor: none;
 }
+#callStage:fullscreen.controls-on, #callStage:-webkit-full-screen.controls-on { cursor: auto; }
+/* Docking chrome is irrelevant in fullscreen. */
+#callStage:fullscreen .call-grip,
+#callStage:fullscreen .call-resizer,
+#callStage:fullscreen #pingMeter { display: none; }
+
+/* Floating, auto-hiding control dock — fades + slides in on activity. */
+#callStage:fullscreen .call-bar {
+  position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 26px);
+  width: auto; max-width: 94vw; padding: 10px 14px;
+  background: rgba(0, 6, 2, 0.82); border: 1px solid var(--border-1);
+  border-top: 1px solid var(--border-1); border-radius: 22px;
+  backdrop-filter: blur(14px);
+  opacity: 0; pointer-events: none; z-index: 30;
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+}
+#callStage:fullscreen.controls-on .call-bar {
+  opacity: 1; transform: translate(-50%, 0); pointer-events: auto;
+}
+
+/* Spotlight fills most of the screen in true fullscreen. */
+#callStage:fullscreen .video-grid.pip-grid { padding: 22px; }
+#callStage:fullscreen .video-grid.pip-grid.has-focus .tile.focused { height: 78vh; }
+#callStage:fullscreen .video-grid.pip-grid.has-focus .tile:not(.focused) { height: 14vh; }
+
+/* Animations: tiles ease in, and spotlight/grid changes are smooth. */
+.video-grid.pip-grid .tile {
+  animation: tileIn 0.28s var(--ease) both;
+  transition: height 0.32s var(--ease), flex-basis 0.32s var(--ease),
+              max-width 0.32s var(--ease), width 0.32s var(--ease);
+}
+@keyframes tileIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .video-grid.pip-grid .tile { animation: none; transition: none; }
+  #callStage:fullscreen .call-bar { transition: opacity 0.2s linear; }
+}
+
+/* Square voice grid until someone turns on a stream: once any participant
+   publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
 
 /* Square voice grid until someone turns on a stream: once any participant
    publishes camera/screen video, all face tiles switch to 16:9 video tiles. */

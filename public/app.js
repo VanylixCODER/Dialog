@@ -2066,19 +2066,11 @@ function addScreenTile(id, name, mediaTrack) {
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>` +
       `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>`;
     vGrid.appendChild(tile);
-    // Развернуть стрим на весь экран (по клику на тайл или на кнопку «смотреть»),
-    // повторный вызов — свернуть. Нативный Fullscreen API — работает и в браузере,
-    // и в десктоп-приложении.
-    const toggleStreamFs = () => {
-      const v = tile.querySelector("video"), d = v.ownerDocument;
-      if (d.fullscreenElement || d.webkitFullscreenElement) {
-        (d.exitFullscreen || d.webkitExitFullscreen || (() => {})).call(d);
-      } else {
-        (v.requestFullscreen || v.webkitRequestFullscreen || (() => {})).call(v);
-      }
-    };
-    tile.addEventListener("click", toggleStreamFs);
-    tile.querySelector(".tile-expand").addEventListener("click", (e) => { e.stopPropagation(); toggleStreamFs(); });
+    // Клик по стриму (или по кнопке «смотреть») разворачивает его в большом
+    // экране крупным планом — как обычный стрим, а не в нативном видеоплеере.
+    const onWatch = (e) => { e.stopPropagation(); watchStream(tile); };
+    tile.addEventListener("click", onWatch);
+    tile.querySelector(".tile-expand").addEventListener("click", onWatch);
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
@@ -2535,25 +2527,59 @@ window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" 
 // ---- Big screen: fullscreen the whole call view in-place (robust, works in
 // the browser and the desktop app — no popup window). Toggle with the button
 // or Esc. Uses the native Fullscreen API, same as clicking a stream tile.
+// ── Big screen / fullscreen call (Discord-style) ──────────────────────────
+// Fullscreen the call stage; a clicked stream is spotlighted big (not opened
+// in the browser's native video player); the controls auto-hide.
+const callStageEl = () => $("callStage");
+function isCallFullscreen() { const st = callStageEl(); return !!st && (document.fullscreenElement === st || document.webkitFullscreenElement === st); }
+function enterCallFullscreen() { const st = callStageEl(); if (st) (st.requestFullscreen || st.webkitRequestFullscreen || (() => {})).call(st); }
+function exitCallFullscreen() { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
+// Click a stream (tile or the watch button): spotlight it. Enters fullscreen if
+// not already there; clicking the spotlighted stream again returns to the grid.
+function watchStream(tile) {
+  if (isCallFullscreen()) focusTile(tile.classList.contains("focused") ? null : tile);
+  else { focusTile(tile); enterCallFullscreen(); }
+}
+
+// Auto-hiding controls: cursor move (desktop) shows them; tap toggles (mobile);
+// they fade away after 5s of no interaction.
+let fsHideTimer = 0;
+function fsShowControls() { const st = callStageEl(); if (!st) return; st.classList.add("controls-on"); clearTimeout(fsHideTimer); fsHideTimer = setTimeout(() => st.classList.remove("controls-on"), 5000); }
+function fsHideControls() { clearTimeout(fsHideTimer); const st = callStageEl(); if (st) st.classList.remove("controls-on"); }
+function fsBackgroundTap(e) {
+  if (e.target.closest(".call-bar") || e.target.closest(".tile")) return; // controls / streams handle their own taps
+  const st = callStageEl(); if (!st) return;
+  if (st.classList.contains("controls-on")) fsHideControls(); else fsShowControls();
+}
 (function initBigScreen() {
   const btn = $("expandBtn");
-  if (!btn) return;
-  btn.innerHTML = window.ICON.expand;
-  const fsTarget = () => $("callStage");
-  btn.onclick = () => {
-    if (!call.active) return;
-    const el = fsTarget(); if (!el) return;
-    const d = document;
-    if (d.fullscreenElement || d.webkitFullscreenElement) {
-      (d.exitFullscreen || d.webkitExitFullscreen || (() => {})).call(d);
-    } else {
-      (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
-    }
-  };
+  if (btn) {
+    btn.innerHTML = window.ICON.expand;
+    btn.onclick = () => { if (!call.active) return; isCallFullscreen() ? exitCallFullscreen() : enterCallFullscreen(); };
+  }
   document.addEventListener("fullscreenchange", () => {
-    const on = document.fullscreenElement === fsTarget();
-    btn.classList.toggle("active", on);
-    const st = fsTarget(); if (st) st.classList.toggle("fs-call", on);
+    const st = callStageEl(); const on = isCallFullscreen();
+    if (btn) btn.classList.toggle("active", on);
+    if (!st) return;
+    st.classList.toggle("fs-call", on);
+    if (on) {
+      vGrid.classList.add("pip-grid");
+      // "stream on top if only one" → auto-spotlight a lone stream.
+      const screens = vGrid.querySelectorAll(".tile.screen");
+      if (screens.length === 1) focusTile(screens[0]);
+      fsShowControls();
+      st.addEventListener("mousemove", fsShowControls);
+      st.addEventListener("touchstart", fsBackgroundTap, { passive: true });
+      st.addEventListener("click", fsBackgroundTap);
+    } else {
+      // Restore the docked layout (mobile keeps .pip-grid when the stage shows).
+      vGrid.classList.toggle("pip-grid", isMobile() && !st.classList.contains("hidden"));
+      focusTile(null);
+      fsHideControls();
+      st.removeEventListener("mousemove", fsShowControls);
+      st.removeEventListener("touchstart", fsBackgroundTap);
+      st.removeEventListener("click", fsBackgroundTap);
+    }
   });
 })();
 
