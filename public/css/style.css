@@ -1929,28 +1929,6 @@ a:focus-visible {
 .tile.screen video { object-fit: cover; }
 .tile.screen .tile-name { color: var(--accent-200); border-color: var(--border-2); }
 
-/* "Watch stream" card (Discord-style): the screen tile shows a dimmed live
-   preview with a centred Watch-stream button, the streamer's name above it
-   and a hint below. Clicking it opens the big-screen window. */
-.tile.screen .stream-overlay {
-  position: absolute; inset: 0; z-index: 4;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  background: rgba(0, 6, 2, 0.5);
-  text-align: center; padding: 12px;
-}
-.tile.screen .stream-title { font-size: 13px; font-weight: 800; color: var(--accent-100); letter-spacing: 0.3px; }
-.tile.screen .watch-btn {
-  padding: 9px 22px; border-radius: var(--r-pill);
-  background: var(--accent-500); color: #02140a; font-weight: 800; font-size: 13px;
-  border: none; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(var(--primary-rgb), 0.4);
-  transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
-}
-.tile.screen .watch-btn:hover { transform: translateY(-2px); background: var(--accent-400); box-shadow: 0 6px 22px rgba(var(--primary-rgb), 0.55); }
-.tile.screen .stream-desc { font-size: 11px; color: var(--text-dim); }
-/* In the big-screen window the stream is already focused: drop the overlay,
-   show the live screen in full and surface the name pill instead. */
-.video-grid.pip-grid .tile.screen .stream-overlay { display: none; }
 .video-grid.pip-grid .tile.screen video { object-fit: contain; }
 .video-grid:not(.pip-grid) .tile.screen .tile-name { display: none; }
 .win-btn.active { border-color: var(--accent-400); color: var(--accent-300); box-shadow: var(--glow-sm); }
@@ -2055,17 +2033,6 @@ a:focus-visible {
 .call-meta {
   display: flex; align-items: center; gap: 8px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.5px;
-}
-/* Big-screen button parked in the bottom-right corner (Discord-style), clear of
-   the centred control dock. On a wide enough bar it floats in the corner; when
-   the panel is narrow it drops back into the flow under the dock so it never
-   collides with the wrapped controls. */
-.call-btn.call-fs { margin-top: 2px; }
-@container (min-width: 460px) {
-  .call-btn.call-fs {
-    position: absolute; right: 14px; bottom: calc(12px + env(safe-area-inset-bottom));
-    margin-top: 0; z-index: 4;
-  }
 }
 /* The controls sit in a soft floating dock so the row reads as one unit. */
 .call-actions {

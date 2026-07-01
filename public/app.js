@@ -2063,29 +2063,17 @@ function addScreenTile(id, name, mediaTrack) {
     // Клик открывает большой экран (отдельное окно). В самом окне оверлей скрыт (CSS).
     tile.innerHTML =
       `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
-      `<div class="stream-overlay">` +
-        `<div class="stream-title">🖥 ${t("stream_of", { name: escapeHtml(name) })}</div>` +
-        `<button class="watch-btn">${t("watch_stream")}</button>` +
-        `<div class="stream-desc">${t("watch_stream_hint")}</div>` +
-      `</div>` +
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
     vGrid.appendChild(tile);
-    // В доке: кнопка «Смотреть стрим» открывает большой экран (отдельное окно).
-    tile.querySelector(".watch-btn").onclick = (e) => {
-      e.stopPropagation();
-      // ПК: отдельное окно большого экрана. Мобильный: фокус прямо в полноэкранной сетке.
-      if (isMobile()) { vGrid.classList.add("pip-grid"); focusTile(tile); }
-      else $("expandBtn").click();
-    };
-    // В окне большого экрана: одиночный клик фокусирует стрим (spotlight) и обратно,
-    // двойной — разворачивает демонстрацию во весь экран. Одиночный откладываем,
-    // чтобы он не срабатывал перед двойным.
+    // Клик по стриму: открывает большой экран (отдельное окно), повторный — закрывает.
     let clickTimer = null;
     tile.addEventListener("click", (e) => {
-      if (!vGrid.classList.contains("pip-grid")) return; // в доке — не фокусим
-      if (e.target.closest(".watch-btn")) return;
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => focusTile(tile.classList.contains("focused") ? null : tile), 220);
+      if (vGrid.classList.contains("pip-grid")) {
+        clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => focusTile(tile.classList.contains("focused") ? null : tile), 220);
+        return;
+      }
+      toggleBigScreen();
     });
     tile.addEventListener("dblclick", (e) => {
       if (!vGrid.classList.contains("pip-grid")) return;
@@ -2296,7 +2284,6 @@ function endCall() {
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
-  $("expandBtn").classList.remove("active");
   $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("chatPane").classList.remove("has-call", "fullscreen-call"); // убрать grid-колонку звонка — без неё была чёрная зона
   $("startCallBtn").classList.remove("in-call");
@@ -2509,21 +2496,17 @@ $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseT
 // inconsistently across OSes. Override with proper Ant Design SVGs.
 window.ICON.monitor = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h312v60H304c-8.8 0-16 7.2-16 16v36c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-36c0-8.8-7.2-16-16-16H616v-60h312c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z\"></path></svg>";
 window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M290 236.4l43.9-43.9a8.01 8.01 0 00-4.7-13.6L169 160c-5.1-.6-9.5 3.7-8.9 8.9L179 329.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L370 423.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L290 236.4zm352.7 187.3c3.1 3.1 8.2 3.1 11.3 0l133.7-133.6 43.7 43.7a8.01 8.01 0 0013.6-4.7L829.9 169c.6-5.1-3.7-9.5-8.9-8.9L660.7 179c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L566.3 370a8.03 8.03 0 000 11.3l42.4 42.4zM830 730.9l-43.7 43.7-133.6-133.7a8.03 8.03 0 00-11.3 0l-42.4 42.3c-3.1 3.1-3.1 8.2 0 11.3L732.6 770l-43.9 43.9a8.01 8.01 0 004.7 13.6L854 856c5.1.6 9.5-3.7 8.9-8.9L843.9 686c-.8-6.6-8.9-9.4-13.9-4.7zM370 600.3a8.03 8.03 0 00-11.3 0L225 733.9l-43.7-43.7a8.01 8.01 0 00-13.6 4.7L148.1 855c-.6 5.1 3.7 9.5 8.9 8.9L317.3 845c6.6-.8 9.4-8.9 4.7-13.6L278 787.6l133.6-133.7c3.1-3.1 3.1-8.2 0-11.3L370 600.3z\"></path></svg>";
-{ const _eb = $("expandBtn"); if (_eb) _eb.innerHTML = window.ICON.expand; }
 
-$("expandBtn").onclick = () => {
+// Открыть / закрыть большой экран звонка (отдельное окно для ПК, pip-grid для мобильных).
+function toggleBigScreen() {
   if (!call.active) return;
-  if (pipWin) { try { pipWin.close(); } catch {} return; } // повторный клик — закрыть окно
+  if (pipWin) { try { pipWin.close(); } catch {} return; }
+  if (isMobile()) { vGrid.classList.add("pip-grid"); focusTile(vGrid.querySelector(".tile.screen")); return; }
   showPipNotice(true);
   const w = screen.availWidth || 1280, h = screen.availHeight || 800;
-  // Open a SAME-ORIGIN blank page (pip.html), NOT about:blank. The desktop app
-  // (Electron) blocks about:blank popups but allows same-origin ones, so the
-  // big screen now works in the desktop app as well as the browser.
   pipWin = window.open("pip.html", "dialogBigScreen", `width=${w},height=${h},top=0,left=0,menubar=no,toolbar=no,location=no`);
   if (!pipWin) { showPipNotice(false); alert(t("pip_unsupported")); return; }
-  $("expandBtn").classList.add("active");
   const tryFs = () => { try { const de = pipWin.document.documentElement; (de.requestFullscreen || de.webkitRequestFullscreen || (() => {})).call(de); } catch {} };
-  // pip.html loads async — mount the call grid once its document is ready.
   const init = () => {
     if (!pipWin || pipWin.closed) return;
     try {
@@ -2540,11 +2523,11 @@ $("expandBtn").onclick = () => {
   waitReady();
   clearInterval(pipPoll);
   pipPoll = setInterval(() => { if (!pipWin || pipWin.closed) { clearInterval(pipPoll); _onPipClosed(); } }, 700);
-};
+}
 // Вернуть сетку тайлов обратно в док-стейдж (после закрытия окна большого экрана)
 function returnGridHome() { vGrid.classList.remove("pip-grid", "has-focus"); vGrid.querySelectorAll(".tile.focused").forEach((t) => t.classList.remove("focused")); const stage = $("callStage"); if (vGrid.parentElement !== stage) stage.insertBefore(vGrid, stage.querySelector(".call-bar")); }
 // Окно большого экрана закрыто → вернуть сетку в док и продолжить звонок (звонок НЕ завершаем).
-function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; $("expandBtn").classList.remove("active"); if (call.active) syncCallUI(); }
+function _onPipClosed() { showPipNotice(false); returnGridHome(); pipWin = null; if (call.active) syncCallUI(); }
 let pipWin = null, pipPoll = 0;
 function mountGridIn(win) {
   document.querySelectorAll('link[rel="stylesheet"], style').forEach((s) => win.document.head.appendChild(s.cloneNode(true)));
@@ -3000,7 +2983,7 @@ function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
   const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", expandBtn: "fullscreen", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
