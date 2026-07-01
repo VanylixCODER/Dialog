@@ -2059,8 +2059,6 @@ function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
   if (!tile) {
     tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen";
-    // Discord-стиль: тайл демонстрации показывает превью + кнопку «Смотреть стрим».
-    // Клик открывает большой экран (отдельное окно). В самом окне оверлей скрыт (CSS).
     tile.innerHTML =
       `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
