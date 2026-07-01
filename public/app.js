@@ -2071,8 +2071,6 @@ function addScreenTile(id, name, mediaTrack) {
     const onWatch = (e) => { e.stopPropagation(); watchStream(tile); };
     tile.addEventListener("click", onWatch);
     tile.querySelector(".tile-expand").addEventListener("click", onWatch);
-    // Новый стрим во время полноэкранного режима — сразу выводим его крупно.
-    if (isCallFullscreen()) focusTile(tile);
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
@@ -2572,9 +2570,7 @@ function fsBackgroundTap(e) {
     st.classList.toggle("fs-call", on);
     if (on) {
       vGrid.classList.add("pip-grid");
-      // Spotlight a stream so participants sit UNDER it (Discord-style).
-      const screens = vGrid.querySelectorAll(".tile.screen");
-      if (screens.length) focusTile(screens[0]);
+      // Default to the balanced grid; the user spotlights a stream by clicking it.
       fsShowControls();
       st.addEventListener("mousemove", fsShowControls);
       st.addEventListener("touchstart", fsBackgroundTap, { passive: true });
