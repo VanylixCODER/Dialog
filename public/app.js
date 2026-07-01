@@ -2071,6 +2071,8 @@ function addScreenTile(id, name, mediaTrack) {
     const onWatch = (e) => { e.stopPropagation(); watchStream(tile); };
     tile.addEventListener("click", onWatch);
     tile.querySelector(".tile-expand").addEventListener("click", onWatch);
+    // Новый стрим во время полноэкранного режима — сразу выводим его крупно.
+    if (isCallFullscreen()) focusTile(tile);
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
@@ -2557,6 +2559,12 @@ function fsBackgroundTap(e) {
     btn.innerHTML = window.ICON.expand;
     btn.onclick = () => { if (!call.active) return; isCallFullscreen() ? exitCallFullscreen() : enterCallFullscreen(); };
   }
+  // Hide/show the participant strip under the spotlighted stream (animated).
+  const facesBtn = $("toggleFaces");
+  if (facesBtn) {
+    facesBtn.innerHTML = window.ICON.users;
+    facesBtn.onclick = () => { const hidden = vGrid.classList.toggle("faces-hidden"); facesBtn.classList.toggle("active", hidden); };
+  }
   document.addEventListener("fullscreenchange", () => {
     const st = callStageEl(); const on = isCallFullscreen();
     if (btn) btn.classList.toggle("active", on);
@@ -2564,9 +2572,9 @@ function fsBackgroundTap(e) {
     st.classList.toggle("fs-call", on);
     if (on) {
       vGrid.classList.add("pip-grid");
-      // "stream on top if only one" → auto-spotlight a lone stream.
+      // Spotlight a stream so participants sit UNDER it (Discord-style).
       const screens = vGrid.querySelectorAll(".tile.screen");
-      if (screens.length === 1) focusTile(screens[0]);
+      if (screens.length) focusTile(screens[0]);
       fsShowControls();
       st.addEventListener("mousemove", fsShowControls);
       st.addEventListener("touchstart", fsBackgroundTap, { passive: true });
@@ -2574,6 +2582,8 @@ function fsBackgroundTap(e) {
     } else {
       // Restore the docked layout (mobile keeps .pip-grid when the stage shows).
       vGrid.classList.toggle("pip-grid", isMobile() && !st.classList.contains("hidden"));
+      vGrid.classList.remove("faces-hidden");
+      if (facesBtn) facesBtn.classList.remove("active");
       focusTile(null);
       fsHideControls();
       st.removeEventListener("mousemove", fsShowControls);
