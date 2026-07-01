@@ -57,7 +57,7 @@ const I18N = {
     redeem_invalid: "Invite link is invalid or revoked.",
     leave_group_btn: "Leave group", delete_group: "Delete group", confirm_del_group: "Delete group for everyone?",
     settings: "Settings", remove: "Remove", owner: "owner",
-    fullscreen: "Big screen", popout: "Pop out", pip_unsupported: "Couldn't open the big-screen window — allow pop-ups for this site",
+
     status_pending: "Sending…", status_sent: "Sent", status_delivered: "Delivered", status_read: "Read",
     status_online: "Online", status_dnd: "Do Not Disturb", status_offline: "Offline", status_invisible: "Offline",
     status_label: "Status", set_status: "Set status",
@@ -107,7 +107,7 @@ const I18N = {
     delete_chat_title: "Delete chat?", delete_for_me: "Delete for me", delete_for_everyone: "Delete for everyone",
     call_started: "Call started", call_ended: "Call ended", call_missed: "Missed call",
     joined_chat: "joined the chat", left_chat: "left the chat",
-    popout_active: "Call opened on the big screen", popout_dock: "Return here",
+
     back: "Back", minimize: "Minimize",
     err_read: "Read error", err_add_members: "Couldn't add members",
     err_generic: "Error", err_remove_member: "Couldn't remove member",
@@ -183,7 +183,7 @@ const I18N = {
     redeem_invalid: "Ссылка-приглашение недействительна или отозвана.",
     leave_group_btn: "Выйти из группы", delete_group: "Удалить группу", confirm_del_group: "Удалить группу у всех?",
     settings: "Настройки", remove: "Убрать", owner: "владелец",
-    fullscreen: "Большой экран", popout: "Открепить в окно", pip_unsupported: "Не удалось открыть окно большого экрана — разрешите всплывающие окна для сайта",
+
     status_pending: "Отправляется…", status_sent: "Отправлено", status_delivered: "Доставлено", status_read: "Прочитано",
     status_online: "В сети", status_dnd: "Не беспокоить", status_offline: "Не в сети", status_invisible: "Не в сети",
     status_label: "Статус", set_status: "Сменить статус",
@@ -233,7 +233,7 @@ const I18N = {
     delete_chat_title: "Удалить чат?", delete_for_me: "Удалить у меня", delete_for_everyone: "Удалить у всех",
     call_started: "Звонок начат", call_ended: "Звонок завершён", call_missed: "Пропущенный звонок",
     joined_chat: "вошёл(а) в чат", left_chat: "вышел(ла) из чата",
-    popout_active: "Звонок открыт на большом экране", popout_dock: "Вернуть сюда",
+
     back: "Назад", minimize: "Свернуть",
     err_read: "Ошибка чтения", err_add_members: "Не удалось добавить участников",
     err_generic: "Ошибка", err_remove_member: "Не удалось убрать участника",
