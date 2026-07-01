@@ -2061,17 +2061,22 @@ function addScreenTile(id, name, mediaTrack) {
     tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen";
     tile.innerHTML =
       `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
-      `<div class="tile-name">🖥 ${escapeHtml(name)}</div>`;
+      `<div class="tile-name">🖥 ${escapeHtml(name)}</div>` +
+      `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>`;
     vGrid.appendChild(tile);
-    // Клик по стриму: развернуть на весь экран, повторный — свернуть.
-    tile.addEventListener("click", () => {
+    // Развернуть стрим на весь экран (по клику на тайл или на кнопку «смотреть»),
+    // повторный вызов — свернуть. Нативный Fullscreen API — работает и в браузере,
+    // и в десктоп-приложении.
+    const toggleStreamFs = () => {
       const v = tile.querySelector("video"), d = v.ownerDocument;
       if (d.fullscreenElement || d.webkitFullscreenElement) {
         (d.exitFullscreen || d.webkitExitFullscreen || (() => {})).call(d);
       } else {
         (v.requestFullscreen || v.webkitRequestFullscreen || (() => {})).call(v);
       }
-    });
+    };
+    tile.addEventListener("click", toggleStreamFs);
+    tile.querySelector(".tile-expand").addEventListener("click", (e) => { e.stopPropagation(); toggleStreamFs(); });
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
 }
@@ -2480,6 +2485,32 @@ $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseT
 // magnifier, and the big-screen button used a font character (⛶) that renders
 // inconsistently across OSes. Override with proper Ant Design SVGs.
 window.ICON.monitor = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h312v60H304c-8.8 0-16 7.2-16 16v36c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-36c0-8.8-7.2-16-16-16H616v-60h312c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z\"></path></svg>";
+window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M290 236.4l43.9-43.9a8.01 8.01 0 00-4.7-13.6L169 160c-5.1-.6-9.5 3.7-8.9 8.9L179 329.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L370 423.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L290 236.4zm352.7 187.3c3.1 3.1 8.2 3.1 11.3 0l133.7-133.6 43.7 43.7a8.01 8.01 0 0013.6-4.7L829.9 169c.6-5.1-3.7-9.5-8.9-8.9L660.7 179c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L566.3 370a8.03 8.03 0 000 11.3l42.4 42.4zM830 730.9l-43.7 43.7-133.6-133.7a8.03 8.03 0 00-11.3 0l-42.4 42.3c-3.1 3.1-3.1 8.2 0 11.3L732.6 770l-43.9 43.9a8.01 8.01 0 004.7 13.6L854 856c5.1.6 9.5-3.7 8.9-8.9L843.9 686c-.8-6.6-8.9-9.4-13.9-4.7zM370 600.3a8.03 8.03 0 00-11.3 0L225 733.9l-43.7-43.7a8.01 8.01 0 00-13.6 4.7L148.1 855c-.6 5.1 3.7 9.5 8.9 8.9L317.3 845c6.6-.8 9.4-8.9 4.7-13.6L278 787.6l133.6-133.7c3.1-3.1 3.1-8.2 0-11.3L370 600.3z\"></path></svg>";
+
+// ---- Big screen: fullscreen the whole call view in-place (robust, works in
+// the browser and the desktop app — no popup window). Toggle with the button
+// or Esc. Uses the native Fullscreen API, same as clicking a stream tile.
+(function initBigScreen() {
+  const btn = $("expandBtn");
+  if (!btn) return;
+  btn.innerHTML = window.ICON.expand;
+  const fsTarget = () => $("callStage");
+  btn.onclick = () => {
+    if (!call.active) return;
+    const el = fsTarget(); if (!el) return;
+    const d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen || (() => {})).call(d);
+    } else {
+      (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+    }
+  };
+  document.addEventListener("fullscreenchange", () => {
+    const on = document.fullscreenElement === fsTarget();
+    btn.classList.toggle("active", on);
+    const st = fsTarget(); if (st) st.classList.toggle("fs-call", on);
+  });
+})();
 
 // Keep-alive (не глушить звонок в фоне)
 let keepAlive = null, wakeLock = null;
