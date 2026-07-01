@@ -2008,7 +2008,8 @@ if (moreBtn && moreDropdown) {
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
 const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null };
-const audioEls = new Map(); // identity -> <audio> (звук участника)
+const audioEls = new Map(); // identity -> <audio> (голос участника / микрофон)
+const screenAudioEls = new Map(); // identity -> <audio> (звук демонстрации экрана, отдельно от микрофона)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
 const isMobile = () => matchMedia("(max-width:720px)").matches;
 const vGrid = $("videoGrid"); // кешируем — выживает при переносе в окно поп-аута
@@ -2043,6 +2044,7 @@ function wireTileControls(tile, identity) {
 function removeParticipant(identity) {
   const id = lkTile(identity); removeTile(id); removeTile("screen-" + id);
   const a = audioEls.get(identity); if (a) { a.srcObject = null; a.remove(); audioEls.delete(identity); }
+  const sa = screenAudioEls.get(identity); if (sa) { sa.srcObject = null; sa.remove(); screenAudioEls.delete(identity); }
   updateCallCount();
 }
 function removeTile(id) { const t = $("tile-" + id); if (t) { if (t.classList.contains("focused")) vGrid.classList.remove("has-focus"); t.remove(); } }
@@ -2103,15 +2105,26 @@ function attachTrack(track, pub, participant) {
     if (pub.source === "screen_share") { addScreenTile(lkTile(identity), name, track); }
     else { const tile = ensureTile(identity, name, false); track.attach(tile.querySelector("video")); setTileAvatar(lkTile(identity), false); }
   } else if (track.kind === "audio") {
-    let a = audioEls.get(identity); if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(identity, a); }
-    track.attach(a); applySinkId(a); a.muted = call.deaf;
-    setMicIndicator(lkTile(identity), pub.isMuted);
+    if (pub.source === "screen_share_audio") {
+      // Screen-share audio plays on its OWN element so it never overwrites the
+      // participant's microphone audio (both are kind:"audio").
+      let sa = screenAudioEls.get(identity);
+      if (!sa) { sa = document.createElement("audio"); sa.autoplay = true; document.body.appendChild(sa); screenAudioEls.set(identity, sa); }
+      track.attach(sa); applySinkId(sa); sa.muted = call.deaf;
+    } else {
+      let a = audioEls.get(identity); if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(identity, a); }
+      track.attach(a); applySinkId(a); a.muted = call.deaf;
+      setMicIndicator(lkTile(identity), pub.isMuted);
+    }
   }
 }
 function detachTrack(track, pub, participant) {
   const identity = participant.identity;
   if (track.kind === "video") { if (pub.source === "screen_share") removeTile("screen-" + lkTile(identity)); else { track.detach(); setTileAvatar(lkTile(identity), true); } }
-  else if (track.kind === "audio") { track.detach(); }
+  else if (track.kind === "audio") {
+    track.detach();
+    if (pub.source === "screen_share_audio") { const sa = screenAudioEls.get(identity); if (sa) { sa.srcObject = null; sa.remove(); screenAudioEls.delete(identity); } }
+  }
 }
 function wireRoom(room, LK) {
   const E = LK.RoomEvent;
@@ -2276,12 +2289,13 @@ function endCall() {
   if (call.active) socket.emit("call-leave");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
+  for (const a of screenAudioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } screenAudioEls.clear();
   vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
   $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("chatPane").classList.remove("has-call", "fullscreen-call"); // убрать grid-колонку звонка — без неё была чёрная зона
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
-  screenTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
+  screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
   krispNode = null; stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
@@ -2318,6 +2332,7 @@ $("toggleDeafen").onclick = () => {
   if (!call.room) return;
   call.deaf = !call.deaf;
   audioEls.forEach((a) => (a.muted = call.deaf));
+  screenAudioEls.forEach((a) => (a.muted = call.deaf));
   $("toggleDeafen").classList.toggle("off", call.deaf);
   $("toggleDeafen").innerHTML = window.ICON[call.deaf ? "headphonesOff" : "headphones"];
   if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false); }
@@ -2356,9 +2371,15 @@ $("toggleCam").onclick = async () => {
   }
 };
 // ── Демонстрация экрана (Discord-стиль): сначала выбор качества, потом нативный
-// выбор окна/экрана браузером. Захват делаем сами через getDisplayMedia,
-// затем публикуем дорожку в комнату LiveKit. Аудио пока не шарим (по согласованию).
-let screenTrack = null;
+// выбор окна/экрана. Захватываем ВИДЕО + ЗВУК через getDisplayMedia и публикуем
+// обе дорожки в комнату LiveKit (ScreenShare + ScreenShareAudio).
+//
+// Чтобы НЕ ловить эхо со звуком самого Dialog (голоса других участников):
+//   • selfBrowserSurface:"exclude" — вкладку dialogmsg.xyz нельзя выбрать как
+//     источник, поэтому её звук физически не попадёт в захват при шаринге вкладки;
+//   • suppressLocalAudioPlayback:true — захваченный звук не дублируется в наши же
+//     колонки, что разрывает петлю обратной связи.
+let screenTrack = null, screenAudioTrack = null;
 let screenQuality = { w: 1920, h: 1080, fps: 30 };
 function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; m.classList.remove("hidden"); }
 function closeScreenModal() { const m = $("screenModal"); if (m) m.classList.add("hidden"); }
@@ -2369,33 +2390,57 @@ async function startScreenShare() {
   const q = screenQuality;
   let stream;
   try {
-    stream = await window.navigator.mediaDevices.getDisplayMedia({
+    stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
-      audio: false,
+      audio: {
+        // capture the shared audio raw (music/game quality) — no voice processing
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        // don't replay captured audio through our own speakers → no feedback loop
+        suppressLocalAudioPlayback: true,
+      },
+      // don't offer the Dialog tab itself as a source (so its audio — other
+      // participants' voices — can never be captured/echoed back)
+      selfBrowserSurface: "exclude",
+      systemAudio: "include",
     });
-  } catch { closeScreenModal(); setShareActive(false); return; } // пользователь отменил выбор окна
-  const mst = stream.getVideoTracks()[0];
-  if (!mst) { closeScreenModal(); setShareActive(false); return; }
+  } catch { closeScreenModal(); setShareActive(false); return; } // пользователь отменил выбор
+  const vTrack = stream.getVideoTracks()[0];
+  if (!vTrack) { stream.getTracks().forEach((t) => { try { t.stop(); } catch {} }); closeScreenModal(); setShareActive(false); return; }
+  const aTrack = stream.getAudioTracks()[0] || null;
+  const lp = call.room.localParticipant;
   try {
-    const lkTrack = new LK.LocalVideoTrack(mst);
-    await call.room.localParticipant.publishTrack(lkTrack, {
+    const lkVideo = new LK.LocalVideoTrack(vTrack);
+    await lp.publishTrack(lkVideo, {
       source: LK.Track.Source.ScreenShare,
       videoEncoding: { maxBitrate: q.h >= 1440 ? 6000000 : q.h >= 1080 ? 3000000 : 1500000, maxFramerate: q.fps },
       simulcast: false,
     });
-    screenTrack = lkTrack;
+    screenTrack = lkVideo;
+    // Аудио — опционально: если пользователь не поделился звуком, просто нет дорожки.
+    if (aTrack) {
+      try {
+        const lkAudio = new LK.LocalAudioTrack(aTrack);
+        await lp.publishTrack(lkAudio, { source: LK.Track.Source.ScreenShareAudio, dtx: false, red: false, audioBitrate: 128000 });
+        screenAudioTrack = lkAudio;
+        aTrack.addEventListener("ended", () => { if (screenAudioTrack && call.room) { try { call.room.localParticipant.unpublishTrack(screenAudioTrack, true); } catch {} screenAudioTrack = null; } });
+      } catch { try { aTrack.stop(); } catch {} } // видео оставляем, даже если звук не опубликовался
+    }
     setShareActive(true);
-    mst.addEventListener("ended", () => stopScreenShare()); // браузерная кнопка «Stop sharing»
+    vTrack.addEventListener("ended", () => stopScreenShare()); // браузерная кнопка «Stop sharing»
     closeScreenModal();
   } catch {
     $("ssError").textContent = t("screen_share_failed");
-    try { mst.stop(); } catch {}
+    try { vTrack.stop(); } catch {} if (aTrack) { try { aTrack.stop(); } catch {} }
     setShareActive(false);
   }
 }
 async function stopScreenShare() {
-  if (screenTrack && call.room) { try { await call.room.localParticipant.unpublishTrack(screenTrack, true); } catch {} }
-  screenTrack = null; setShareActive(false);
+  const lp = call.room && call.room.localParticipant;
+  if (lp) {
+    if (screenTrack) { try { await lp.unpublishTrack(screenTrack, true); } catch {} }
+    if (screenAudioTrack) { try { await lp.unpublishTrack(screenAudioTrack, true); } catch {} }
+  }
+  screenTrack = null; screenAudioTrack = null; setShareActive(false);
 }
 $("shareScreen").onclick = () => {
   if (!call.room) return;
