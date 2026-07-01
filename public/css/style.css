@@ -1788,6 +1788,28 @@ a:focus-visible {
 .video-grid:has(> .tile:only-child) { align-content: center; }
 .video-grid:has(> .tile:only-child) .tile { max-width: 420px; }
 .video-grid .tile { flex: 0 0 auto; width: 100%; }
+
+/* Screen-share "watch / enlarge" button — top-right of a screen tile, shown on
+   hover (or when focused). Clicking it fullscreens that stream's video. */
+.tile.screen { position: relative; }
+.tile-expand {
+  position: absolute; top: 8px; right: 8px;
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 1px solid var(--border-1); border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55); color: var(--accent-200);
+  cursor: pointer; opacity: 0; z-index: 3;
+  transition: opacity var(--t-fast) var(--ease), background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tile.screen:hover .tile-expand, .tile-expand:focus-visible { opacity: 1; }
+.tile-expand:hover { background: rgba(0, 0, 0, 0.82); color: var(--accent-400); }
+.tile-expand svg { width: 18px; height: 18px; }
+
+/* Big screen: when the call view is fullscreened, let it fill the screen
+   (the docked stage is otherwise capped at 46vh). */
+#callStage:fullscreen, #callStage:-webkit-full-screen {
+  max-height: none; height: 100vh; background: var(--bg-1);
+}
+
 /* Square voice grid until someone turns on a stream: once any participant
    publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
 .video-grid:has(.tile:not(.show-avatar)) .tile:not(.screen) { aspect-ratio: 16 / 9; }
