@@ -1838,40 +1838,37 @@ a:focus-visible {
 #callStage:fullscreen .call-btn.fs-only { display: grid; }
 
 /* ── Fullscreen call grid (Discord-style) ──────────────────────────────────
-   Default: a balanced grid of equal 16:9 tiles (auto-fit → 1/2/3/4… per row).
-   These rules override the docked flex layout entirely. */
+   Tiles FILL the screen: a balanced grid (auto-fit → 1/2/3/4… per row) whose
+   rows share the full height. Overrides the docked flex layout entirely. */
 #callStage:fullscreen .video-grid {
-  display: grid; gap: 12px; padding: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(240px, 30vw, 520px), 1fr));
-  place-content: center; justify-items: center; align-items: center;
-  overflow: auto;
+  flex: 1 1 auto; min-height: 0; height: auto;
+  display: grid; gap: 10px; padding: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  place-items: stretch; align-content: stretch;
+  overflow: hidden;
 }
-#callStage:fullscreen .video-grid .tile {
-  width: 100%; height: auto; min-height: 0; margin: 0;
-  aspect-ratio: 16 / 9; max-height: 46vh; max-width: none;
+#callStage:fullscreen .video-grid > .tile {
+  width: 100%; height: 100%; min-width: 0; min-height: 0; margin: 0;
+  aspect-ratio: auto; max-height: none; max-width: none;
 }
-/* Spotlight (a stream was clicked): it spans the full width on top; the other
-   participants line up in a small strip UNDERNEATH. */
-#callStage:fullscreen .video-grid.has-focus {
-  grid-template-columns: repeat(auto-fit, minmax(clamp(130px, 13vw, 220px), 1fr));
-  grid-auto-rows: 15vh; align-content: start;
-}
-#callStage:fullscreen .video-grid.has-focus .tile.focused {
-  grid-column: 1 / -1; grid-row: 1; height: 78vh; max-height: 78vh; aspect-ratio: auto;
-}
-#callStage:fullscreen .video-grid.has-focus .tile:not(.focused) { height: 15vh; max-height: 15vh; aspect-ratio: 16 / 9; }
-/* Hide-participants toggle: drop the strip; the stream fills — animated. */
-#callStage:fullscreen .video-grid.has-focus.faces-hidden { grid-auto-rows: 0; }
-#callStage:fullscreen .video-grid.has-focus.faces-hidden .tile:not(.focused) { height: 0; opacity: 0; margin: 0; pointer-events: none; overflow: hidden; }
-#callStage:fullscreen .video-grid.has-focus.faces-hidden .tile.focused { height: 92vh; max-height: 92vh; }
+#callStage:fullscreen .video-grid > .tile video { width: 100%; height: 100%; }
 
-/* Animations: tiles ease in; spotlight/strip changes glide. */
-#callStage:fullscreen .video-grid .tile,
-.video-grid.pip-grid .tile {
-  animation: tileIn 0.28s var(--ease) both;
-  transition: height 0.34s var(--ease), max-height 0.34s var(--ease),
-              opacity 0.28s var(--ease), margin 0.28s var(--ease);
+/* Spotlight (a stream was clicked): it fills the top; everyone else sits in a
+   short strip UNDER it. */
+#callStage:fullscreen .video-grid.has-focus {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  grid-template-rows: 1fr 16vh; grid-auto-rows: 16vh;
+  transition: grid-template-rows 0.34s var(--ease);
 }
+#callStage:fullscreen .video-grid.has-focus > .tile.focused { grid-column: 1 / -1; grid-row: 1; }
+#callStage:fullscreen .video-grid.has-focus > .tile:not(.focused) { grid-row: 2; }
+/* Hide-participants toggle: collapse the strip; the stream fills — animated. */
+#callStage:fullscreen .video-grid.has-focus.faces-hidden { grid-template-rows: 1fr 0; }
+#callStage:fullscreen .video-grid.has-focus.faces-hidden > .tile:not(.focused) { opacity: 0; pointer-events: none; }
+
+/* Tiles ease in; the strip glides open/closed. */
+#callStage:fullscreen .video-grid > .tile { animation: tileIn 0.26s var(--ease) both; transition: opacity 0.28s var(--ease); }
 @keyframes tileIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .video-grid.pip-grid .tile { animation: none; transition: opacity 0.2s linear; }
