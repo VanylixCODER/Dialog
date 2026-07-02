@@ -1431,23 +1431,33 @@ socket.on("peer-left", (p) => { peers.delete(p.id); if (!$("infoPanel").classLis
 
 // ---------- Сообщения ----------
 const messagesEl = $("messages");
+const CHUNK = 25;            // messages per chunk (initial load + each scroll-up)
+const KEEP_CHUNKS = 3;       // max chunks kept in the DOM before older ones are unloaded
 let _moreLoading = false;
 let _moreHas = true;
 let _moreOldest = null;
+// Newest message id currently in the DOM — so "jump to newest" knows whether we
+// already have the latest chunk or must re-fetch it from the server.
+let _newestId = null;
+
+// Chunks load INSTANTLY (no per-message animation). Initial load = 25 messages.
 socket.on("history", (list) => {
   messagesEl.innerHTML = "";
   _moreLoading = false;
   const cleared = clearedChats.get(myRoom);
   if (cleared) list = list.filter((m) => m.ts > cleared);
-  _moreHas = list.length >= 50;
+  _moreHas = list.length >= CHUNK;
   _moreOldest = list.length ? list[0].id : null;
-  if (list.length) { const sep = document.createElement("div"); sep.className = "system-msg"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
-  list.forEach((m) => renderMessage(m, false, isPingForMe(m)));
+  _newestId = list.length ? list[list.length - 1].id : null;
+  if (list.length && _moreHas) { const sep = document.createElement("div"); sep.className = "system-msg"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
+  list.forEach((m) => renderMessage(m, false, isPingForMe(m), true));
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   scrollDown();
+  updateJumpBtn();
   setTimeout(markDeliveredSeenUpToLast, 50);
 });
+// Older chunk prepended on scroll-up — instant, scroll position preserved.
 socket.on("more-messages", ({ msgs, before }) => {
   if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; return; }
   const cleared = clearedChats.get(myRoom);
@@ -1455,25 +1465,48 @@ socket.on("more-messages", ({ msgs, before }) => {
   if (!msgs.length) { _moreHas = false; _moreLoading = false; return; }
   const prev = messagesEl.scrollHeight;
   const beforeCount = messagesEl.children.length;
-  for (const m of msgs) renderMessage(m, false, isPingForMe(m));
+  for (const m of msgs) renderMessage(m, false, isPingForMe(m), true);
   for (let i = messagesEl.children.length - 1; i >= beforeCount; i--)
     messagesEl.insertBefore(messagesEl.children[i], messagesEl.firstChild);
   messagesEl.scrollTop = messagesEl.scrollHeight - prev;
   _moreOldest = msgs[0].id;
-  _moreHas = msgs.length >= 50;
+  _moreHas = msgs.length >= CHUNK;
   _moreLoading = false;
+  updateJumpBtn();
 });
-// Debounced scroll-to-top → load older messages
+
+// Unload chunks above the newest KEEP_CHUNKS when we're back near the bottom, so
+// the DOM stays small after scrolling up through history.
+function pruneOldChunks() {
+  const keep = CHUNK * KEEP_CHUNKS;
+  const msgs = messagesEl.querySelectorAll(".msg");
+  if (msgs.length <= keep) return;
+  const firstKeep = msgs[msgs.length - keep];
+  while (messagesEl.firstChild && messagesEl.firstChild !== firstKeep) messagesEl.removeChild(messagesEl.firstChild);
+  const oid = Number(firstKeep.dataset.id);
+  if (oid) { _moreOldest = oid; _moreHas = true; }
+}
+
+const atBottom = () => messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
+function updateJumpBtn() { const b = $("jumpNewer"); if (b) b.classList.toggle("show", !atBottom()); }
+
+// "Jump to newest": the newest chunk is always in the DOM (pruning only drops
+// older/top chunks), so we unload the older chunks and scroll to the bottom.
+function jumpToNewest() { pruneOldChunks(); scrollDown(); updateJumpBtn(); }
+
 let _moreScrollTimer = null;
 messagesEl.addEventListener("scroll", () => {
+  updateJumpBtn();
+  if (atBottom()) pruneOldChunks();
   if (_moreScrollTimer) clearTimeout(_moreScrollTimer);
   _moreScrollTimer = setTimeout(() => {
     if (_moreLoading || !_moreHas || !_moreOldest) return;
     if (messagesEl.scrollTop > 300) return;
     _moreLoading = true;
     socket.emit("load-more", { before: _moreOldest });
-  }, 200);
+  }, 150);
 });
+{ const jb = $("jumpNewer"); if (jb) jb.onclick = jumpToNewest; }
 socket.on("message", (m) => {
   const ping = isPingForMe(m);
   const mine = profile && m.fromLogin === profile.login;
@@ -1547,11 +1580,13 @@ function addLinkExtras(wrap, text) {
     }).catch(() => {});
 }
 
-function renderMessage(m, scroll = true, ping = false) {
+function renderMessage(m, scroll = true, ping = false, instant = false) {
   const mine = profile && m.fromLogin === profile.login;
   const isB = !mine && m.fromLogin && blocked.has(m.fromLogin);
   const wrap = document.createElement("div");
-  wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isB ? " blocked" : "");
+  // `instant` (history / load-more chunks) skips the enter animation so a chunk
+  // appears immediately instead of animating in one by one.
+  wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isB ? " blocked" : "") + (instant ? " no-anim" : "");
   wrap.dataset.id = m.id != null ? m.id : "";
   if (m.localId != null) wrap.dataset.localid = String(m.localId);
   if (m._optimistic) wrap.dataset.acked = ""; // ещё не подтверждено сервером
