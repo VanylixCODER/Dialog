@@ -45,7 +45,7 @@ import {
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 25; // one chunk — initial load + each scroll-up page
 // Max file attachment size — must match the client composer cap and the JSON/Socket.IO HTTP limits
 // above. Increasing here without bumping the buffer limits silently drops messages with socket.io's
 // PayloadTooLarge error; bumping everything in lockstep is required. Value is shared so the push
@@ -861,7 +861,7 @@ io.on("connection", (socket) => {
   socket.on("load-more", async ({ before }) => {
     if (!currentRoom || !userLogin) return;
     try {
-      const msgs = await messagesBefore(currentRoom, before, 50);
+      const msgs = await messagesBefore(currentRoom, before, HISTORY_LIMIT);
       socket.emit("more-messages", { msgs, before });
     } catch (e) { console.error("load-more", e.message); }
   });
