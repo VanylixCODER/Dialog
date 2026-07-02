@@ -573,15 +573,17 @@ function renderChatList(filter = "") {
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${t("delete_chat")}">✕</span>`}</div></div>`;
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${c.type === "dm" ? t("close_dm") : t("delete_chat")}">✕</span>`}</div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
     // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
     // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
     li.tabIndex = 0; li.setAttribute("role", "button");
+    // The hover ✕ closes a DM (keeps history) or leaves/deletes a group.
+    const rowPrimary = (cc) => (cc.type === "dm" ? closeDm(cc) : deleteChat(cc));
     li.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        if (e.target.closest(".ci-del")) { deleteChat(c); return; }
+        if (e.target.closest(".ci-del")) { rowPrimary(c); return; }
         openChat(c);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -593,17 +595,85 @@ function renderChatList(filter = "") {
       }
     };
     li.onclick = (e) => {
-      if (e.target.closest(".ci-del")) { e.stopPropagation(); deleteChat(c); return; }
+      if (li._suppressClick) { li._suppressClick = false; return; } // long-press just opened the menu
+      if (e.target.closest(".ci-del")) { e.stopPropagation(); rowPrimary(c); return; }
       if (e.target.closest(".ci-pin")) { e.stopPropagation(); togglePin(c); return; }
       openChat(c);
     };
+    // Long-press (mobile) / right-click (desktop) → context menu.
+    li.oncontextmenu = (e) => { e.preventDefault(); openChatMenu(c, e.clientX, e.clientY); };
+    li.addEventListener("touchstart", (e) => {
+      clearTimeout(li._holdT);
+      const tp = e.touches && e.touches[0];
+      li._holdT = setTimeout(() => {
+        li._suppressClick = true;
+        setTimeout(() => { li._suppressClick = false; }, 600); // self-clear if no click follows
+        try { navigator.vibrate && navigator.vibrate(15); } catch {}
+        openChatMenu(c, tp ? tp.clientX : innerWidth / 2, tp ? tp.clientY : innerHeight / 2);
+      }, 480);
+    }, { passive: true });
+    const cancelHold = () => clearTimeout(li._holdT);
+    li.addEventListener("touchend", cancelHold);
+    li.addEventListener("touchmove", cancelHold, { passive: true });
+    li.addEventListener("touchcancel", cancelHold);
     ul.appendChild(li);
   }
-  $("chatsEmpty").classList.toggle("hidden", shown > 0);
+  renderChatSuggestions(filter, list);
+  $("chatsEmpty").classList.toggle("hidden", shown > 0 || !!filter);
+}
+// Context menu for a chat row (long-press on mobile, right-click on desktop):
+// Pin/Unpin, Close DM (DMs only) and Delete.
+function openChatMenu(c, x, y) {
+  let menu = $("rowMenu");
+  if (!menu) { menu = document.createElement("div"); menu.id = "rowMenu"; menu.className = "chat-menu row-menu"; document.body.appendChild(menu); }
+  menu.innerHTML = "";
+  const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
+  item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "close" : "check", () => togglePin(c));
+  if (c.type === "dm") item(t("close_dm"), "back", () => closeDm(c));
+  item(t("delete_chat"), "trash", () => deleteChat(c), true);
+  menu.classList.remove("hidden");
+  menu._openedAt = Date.now();
+  const mw = menu.offsetWidth || 180, mh = menu.offsetHeight || 140;
+  menu.style.left = Math.max(8, Math.min(x, innerWidth - mw - 8)) + "px";
+  menu.style.top = Math.max(8, Math.min(y, innerHeight - mh - 8)) + "px";
+}
+document.addEventListener("click", (e) => {
+  const m = $("rowMenu"); if (!m || m.classList.contains("hidden")) return;
+  if (Date.now() - (m._openedAt || 0) < 350) return; // ignore the same gesture that opened it
+  if (!e.target.closest("#rowMenu")) m.classList.add("hidden");
+});
+// Search suggestions: when filtering, offer friends who aren't in the list yet
+// so a closed DM (or a never-opened one) can be reopened straight from search.
+function renderChatSuggestions(filter, shownList) {
+  const ul = $("chatList");
+  if (!filter) return;
+  const inList = new Set(shownList.filter((c) => c.type === "dm").map((c) => c.login));
+  const matches = (relations.friends || [])
+    .filter((login) => login && login !== profile.login && !inList.has(login) && login.toLowerCase().includes(filter))
+    .slice(0, 8);
+  if (!matches.length) return;
+  const head = document.createElement("li"); head.className = "chat-suggest-head"; head.textContent = t("suggested_chats");
+  ul.appendChild(head);
+  for (const login of matches) {
+    const li = document.createElement("li"); li.className = "chat-item chat-suggest";
+    li.innerHTML = `<div class="ava-wrap"><div class="avatar" data-login="${login}"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div><span class="st-dot ci-status st-${statusClass(presence.get(login))}"></span></div>
+      <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(login)}</span></div>
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(t("dm_open"))}</span></div></div>`;
+    li.onclick = () => { $("searchInput").value = ""; openDM(login); };
+    ul.appendChild(li);
+  }
 }
 function togglePin(c) {
   c.pinned = !c.pinned;
   savePins();
+  renderChatList($("searchInput").value);
+}
+// Close a DM: drop it from the list WITHOUT clearing history — reopening it
+// (via search suggestions or a contact) brings the whole conversation back.
+function closeDm(c) {
+  if (!c || c.type !== "dm") { deleteChat(c); return; }
+  chats.delete(c.key); persistDMs(); savePins();
+  if (c.key === activeKey) resetToEmpty();
   renderChatList($("searchInput").value);
 }
 function deleteChat(c) {
@@ -2425,6 +2495,11 @@ socket.on("call-ring", (p) => {
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 socket.on("call-auto-end", () => { if (call.active) endCall(); });
+// Caller cancelled before we answered → stop ringing + dismiss the popup.
+socket.on("call-cancelled", ({ room } = {}) => {
+  if (pendingCall && (!room || pendingCall.room === room)) hideToast();
+  if (room) dismissNotif(room);
+});
 socket.on("call-replaced", () => {
   if (call.active) { dismissNotif(call.roomKey || myRoom); endCall(); }
   showDeviceTakeover();
