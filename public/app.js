@@ -2059,11 +2059,13 @@ function ensureTile(identity, name, isMe) {
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>` +
+      `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>` +
       (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
     vGrid.appendChild(tile);
     if (!isMe) wireTileControls(tile, identity);
+    if (vGrid.classList.contains("has-focus")) relocateNewTile(tile);
   }
-  updateCallCount(); return tile;
+  updateCallCount(); scheduleFsLayout(); return tile;
 }
 // Громкость/мут конкретного участника (локально, через LiveKit setVolume)
 const tileVol = new Map(); // identity -> {vol, muted}
@@ -2082,7 +2084,13 @@ function removeParticipant(identity) {
   const sa = screenAudioEls.get(identity); if (sa) { sa.srcObject = null; sa.remove(); screenAudioEls.delete(identity); }
   updateCallCount();
 }
-function removeTile(id) { const t = $("tile-" + id); if (t) { if (t.classList.contains("focused")) vGrid.classList.remove("has-focus"); t.remove(); } }
+function removeTile(id) {
+  const t = $("tile-" + id); if (!t) return;
+  const wasFocused = t.classList.contains("focused");
+  t.remove();
+  if (wasFocused) { dissolveStrip(); vGrid.classList.remove("has-focus"); }
+  scheduleFsLayout();
+}
 function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
 // Свой self-view: всегда чистим <video>.srcObject перед attach, иначе на повторном
 // включении камеры остаётся "мёртвая" дорожка и локально превью не видно (см. detach выше).
@@ -2101,20 +2109,76 @@ function addScreenTile(id, name, mediaTrack) {
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>` +
       `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>`;
     vGrid.appendChild(tile);
-    // Клик по стриму (или по кнопке «смотреть») разворачивает его в большом
-    // экране крупным планом — как обычный стрим, а не в нативном видеоплеере.
-    const onWatch = (e) => { e.stopPropagation(); watchStream(tile); };
-    tile.addEventListener("click", onWatch);
-    tile.querySelector(".tile-expand").addEventListener("click", onWatch);
+    // Clicks are handled by the delegated handler on vGrid (zoom / spotlight).
+    if (vGrid.classList.contains("has-focus")) relocateNewTile(tile);
   }
   const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
+  scheduleFsLayout();
 }
-// Spotlight в окне большого экрана: показать выбранный стрим крупно, остальные — миниатюрами.
-// focusTile(null) — снять фокус (вернуться в сетку).
+// Spotlight: show one stream big, everyone else in a strip under it.
+// In fullscreen the non-focused tiles are moved into a dedicated .faces-strip
+// (so it can be a single centered, horizontally-scrollable row); focusTile(null)
+// dissolves the strip and returns to the balanced grid.
+function dissolveStrip() {
+  const s = vGrid.querySelector(":scope > .faces-strip");
+  if (s) { while (s.firstChild) vGrid.appendChild(s.firstChild); s.remove(); }
+}
+function buildStrip() {
+  dissolveStrip();
+  const s = document.createElement("div"); s.className = "faces-strip";
+  vGrid.appendChild(s);
+  vGrid.querySelectorAll(":scope > .tile:not(.focused)").forEach((t) => s.appendChild(t));
+}
+// A tile that appeared while a stream is spotlighted belongs in the strip.
+function relocateNewTile(tile) {
+  const s = vGrid.querySelector(":scope > .faces-strip");
+  if (s && !tile.classList.contains("focused")) s.appendChild(tile);
+}
 function focusTile(tile) {
+  dissolveStrip();
   vGrid.querySelectorAll(".tile.focused").forEach((t) => t.classList.remove("focused"));
-  if (tile) { tile.classList.add("focused"); vGrid.classList.add("has-focus"); }
-  else { vGrid.classList.remove("has-focus"); }
+  const fs = vGrid.classList.contains("fs");
+  if (tile) {
+    tile.classList.add("focused"); vGrid.classList.add("has-focus");
+    if (fs) { buildStrip(); showGridHint(); }
+  } else {
+    vGrid.classList.remove("has-focus");
+    if (fs) scheduleFsLayout();
+  }
+}
+
+// Balanced, rectangular fullscreen grid (Discord-style): compute the column
+// count + tile width that maximises tile size for 16:9 rectangles that fit the
+// stage, so tiles are never stretched into tall portrait columns.
+let fsLayoutRaf = 0;
+function scheduleFsLayout() { cancelAnimationFrame(fsLayoutRaf); fsLayoutRaf = requestAnimationFrame(layoutFsTiles); }
+function layoutFsTiles() {
+  if (!vGrid.classList.contains("fs") || vGrid.classList.contains("has-focus")) return;
+  const tiles = vGrid.querySelectorAll(":scope > .tile");
+  const n = tiles.length; if (!n) return;
+  const W = vGrid.clientWidth, H = vGrid.clientHeight; if (!W || !H) return;
+  const gap = 12, ratio = 16 / 9;
+  let best = { w: 0, cols: 1 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cw = (W - gap * (cols - 1)) / cols;
+    const ch = (H - gap * (rows - 1)) / rows;
+    let w = cw, h = w / ratio;
+    if (h > ch) { h = ch; w = h * ratio; }
+    if (w > best.w) best = { w, cols };
+  }
+  vGrid.style.setProperty("--fs-cols", best.cols);
+  vGrid.style.setProperty("--fs-tw", Math.floor(best.w) + "px");
+}
+
+// Small, auto-fading hint telling the user how to leave the spotlight.
+function showGridHint() {
+  const st = callStageEl(); if (!st) return;
+  let h = st.querySelector(".fs-hint");
+  if (!h) { h = document.createElement("div"); h.className = "fs-hint"; st.appendChild(h); }
+  h.textContent = t("fs_dblclick_hint") || "Double-click the stream to return to the grid";
+  h.classList.add("show");
+  clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove("show"), 3200);
 }
 function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; }
 function updateCallStatus() {
@@ -2312,6 +2376,7 @@ async function joinCall() {
 }
 function endCall() {
   hideToast(); stopRingtone();
+  if (isCallFullscreen()) exitCallFullscreen(); // tear down native/overlay fullscreen
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
@@ -2344,7 +2409,19 @@ socket.on("call-ring", (p) => {
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 socket.on("call-auto-end", () => { if (call.active) endCall(); });
-socket.on("call-replaced", () => { if (call.active) { dismissNotif(call.roomKey || myRoom); endCall(); } });
+socket.on("call-replaced", () => {
+  if (call.active) { dismissNotif(call.roomKey || myRoom); endCall(); }
+  showDeviceTakeover();
+});
+// Red notice (same style as the reconnecting banner) shown when another device
+// of yours joins a call and takes it over from this one.
+let takeoverEl = null;
+function showDeviceTakeover() {
+  if (!takeoverEl) { takeoverEl = document.createElement("div"); takeoverEl.className = "conn-status device-takeover"; document.body.appendChild(takeoverEl); }
+  takeoverEl.textContent = t("call_other_device") || "A different device connected to a call";
+  takeoverEl.classList.add("show");
+  clearTimeout(takeoverEl._t); takeoverEl._t = setTimeout(() => takeoverEl.classList.remove("show"), 6000);
+}
 
 // Контролы
 async function setMic(on) {
@@ -2553,11 +2630,8 @@ $("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseT
 
 // ⛶ Большой экран: звонок открывается в отдельном окне и разворачивается на весь экран.
 // Это заменяет и старый in-page фуллскрин, и кнопку поп-аута — теперь одна кнопка.
-// Cleaner call-control icons: the bundled "monitor" glyph looked like a
-// magnifier, and the big-screen button used a font character (⛶) that renders
-// inconsistently across OSes. Override with proper Ant Design SVGs.
-window.ICON.monitor = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h312v60H304c-8.8 0-16 7.2-16 16v36c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-36c0-8.8-7.2-16-16-16H616v-60h312c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z\"></path></svg>";
-window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" fill=\"currentColor\"><path d=\"M290 236.4l43.9-43.9a8.01 8.01 0 00-4.7-13.6L169 160c-5.1-.6-9.5 3.7-8.9 8.9L179 329.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L370 423.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L290 236.4zm352.7 187.3c3.1 3.1 8.2 3.1 11.3 0l133.7-133.6 43.7 43.7a8.01 8.01 0 0013.6-4.7L829.9 169c.6-5.1-3.7-9.5-8.9-8.9L660.7 179c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L566.3 370a8.03 8.03 0 000 11.3l42.4 42.4zM830 730.9l-43.7 43.7-133.6-133.7a8.03 8.03 0 00-11.3 0l-42.4 42.3c-3.1 3.1-3.1 8.2 0 11.3L732.6 770l-43.9 43.9a8.01 8.01 0 004.7 13.6L854 856c5.1.6 9.5-3.7 8.9-8.9L843.9 686c-.8-6.6-8.9-9.4-13.9-4.7zM370 600.3a8.03 8.03 0 00-11.3 0L225 733.9l-43.7-43.7a8.01 8.01 0 00-13.6 4.7L148.1 855c-.6 5.1 3.7 9.5 8.9 8.9L317.3 845c6.6-.8 9.4-8.9 4.7-13.6L278 787.6l133.6-133.7c3.1-3.1 3.1-8.2 0-11.3L370 600.3z\"></path></svg>";
+// Call-control icons now come from the Lucide set (see public/js/icons.js):
+// window.ICON.monitor (screen-share) and window.ICON.expand (maximize).
 
 // ---- Big screen: fullscreen the whole call view in-place (robust, works in
 // the browser and the desktop app — no popup window). Toggle with the button
@@ -2566,15 +2640,56 @@ window.ICON.expand = "<svg viewBox=\"64 64 896 896\" width=\"20\" height=\"20\" 
 // Fullscreen the call stage; a clicked stream is spotlighted big (not opened
 // in the browser's native video player); the controls auto-hide.
 const callStageEl = () => $("callStage");
-function isCallFullscreen() { const st = callStageEl(); return !!st && (document.fullscreenElement === st || document.webkitFullscreenElement === st); }
-function enterCallFullscreen() { const st = callStageEl(); if (st) (st.requestFullscreen || st.webkitRequestFullscreen || (() => {})).call(st); }
-function exitCallFullscreen() { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
-// Click a stream (tile or the watch button): spotlight it. Enters fullscreen if
-// not already there; clicking the spotlighted stream again returns to the grid.
-function watchStream(tile) {
-  if (isCallFullscreen()) focusTile(tile.classList.contains("focused") ? null : tile);
-  else { focusTile(tile); enterCallFullscreen(); }
+// iOS Safari has no element-level Fullscreen API, so fall back to a fixed
+// overlay (.manual-fs). manualFs tracks that mode; both paths run applyFsState.
+let manualFs = false;
+function nativeFsSupported() { const st = callStageEl(); return !!st && !!(st.requestFullscreen || st.webkitRequestFullscreen); }
+function isCallFullscreen() { const st = callStageEl(); return manualFs || (!!st && (document.fullscreenElement === st || document.webkitFullscreenElement === st)); }
+function enterCallFullscreen() {
+  const st = callStageEl(); if (!st) return;
+  if (nativeFsSupported()) { (st.requestFullscreen || st.webkitRequestFullscreen).call(st); }
+  else { manualFs = true; applyFsState(true); }
 }
+function exitCallFullscreen() {
+  if (manualFs) { manualFs = false; applyFsState(false); return; }
+  (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+}
+// Spotlight a tile. If not already fullscreen, go fullscreen first and apply the
+// focus once the fullscreenchange lands (so the strip is built in fs context).
+let pendingFocusId = null;
+function watchStream(tile) {
+  if (isCallFullscreen()) focusTile(tile);
+  else { pendingFocusId = tile.id; enterCallFullscreen(); }
+}
+function toggleFsBar() {
+  const st = callStageEl(); if (!st) return;
+  if (st.classList.contains("controls-on")) fsHideControls(); else fsShowControls();
+}
+// Click/double-click behaviour on tiles (delegated so it covers webcams, screen
+// shares and dynamically-added tiles):
+//   • grid tile  → single click zooms/spotlights it
+//   • focused    → single click toggles the control bar, double-click → grid
+let tileClickTimer = 0;
+vGrid.addEventListener("click", (e) => {
+  if (e.target.closest(".tile-ctrl")) return; // per-user mute/volume
+  const tile = e.target.closest(".tile"); if (!tile) return;
+  e.stopPropagation();
+  clearTimeout(tileClickTimer);
+  tileClickTimer = setTimeout(() => {
+    if (isCallFullscreen()) {
+      if (tile.classList.contains("focused")) toggleFsBar();
+      else focusTile(tile);
+    } else {
+      watchStream(tile); // docked: zoom into fullscreen spotlight
+    }
+  }, 230);
+});
+vGrid.addEventListener("dblclick", (e) => {
+  const tile = e.target.closest(".tile"); if (!tile) return;
+  e.stopPropagation(); clearTimeout(tileClickTimer);
+  if (tile.classList.contains("focused")) focusTile(null); // back to the grid
+  else watchStream(tile); // zoom (enters fullscreen from the dock if needed)
+});
 
 // Auto-hiding controls: cursor move (desktop) shows them; tap toggles (mobile);
 // they fade away after 5s of no interaction.
@@ -2585,6 +2700,41 @@ function fsBackgroundTap(e) {
   if (e.target.closest(".call-bar") || e.target.closest(".tile")) return; // controls / streams handle their own taps
   const st = callStageEl(); if (!st) return;
   if (st.classList.contains("controls-on")) fsHideControls(); else fsShowControls();
+}
+// Enter/exit setup shared by the native Fullscreen API and the iOS overlay.
+function applyFsState(on) {
+  const st = callStageEl(); if (!st) return;
+  const btn = $("expandBtn"), facesBtn = $("toggleFaces");
+  if (btn) btn.classList.toggle("active", on);
+  st.classList.toggle("fs-call", on);
+  st.classList.toggle("manual-fs", on && manualFs);
+  if (on) {
+    vGrid.classList.remove("pip-grid");
+    vGrid.classList.add("fs");
+    // Apply a spotlight requested from the docked view, else balanced grid.
+    const pending = pendingFocusId && $(pendingFocusId); pendingFocusId = null;
+    if (pending) focusTile(pending);
+    else if (vGrid.classList.contains("has-focus")) buildStrip();
+    else scheduleFsLayout();
+    fsShowControls();
+    st.addEventListener("mousemove", fsShowControls);
+    st.addEventListener("touchstart", fsBackgroundTap, { passive: true });
+    st.addEventListener("click", fsBackgroundTap);
+    window.addEventListener("resize", scheduleFsLayout);
+  } else {
+    // Leaving fullscreen: dissolve the strip, drop the spotlight, restore dock.
+    dissolveStrip();
+    vGrid.classList.remove("fs", "has-focus", "faces-hidden");
+    vGrid.querySelectorAll(".tile.focused").forEach((tl) => tl.classList.remove("focused"));
+    vGrid.style.removeProperty("--fs-cols"); vGrid.style.removeProperty("--fs-tw");
+    vGrid.classList.toggle("pip-grid", isMobile() && !st.classList.contains("hidden"));
+    if (facesBtn) facesBtn.classList.remove("active");
+    fsHideControls();
+    st.removeEventListener("mousemove", fsShowControls);
+    st.removeEventListener("touchstart", fsBackgroundTap);
+    st.removeEventListener("click", fsBackgroundTap);
+    window.removeEventListener("resize", scheduleFsLayout);
+  }
 }
 (function initBigScreen() {
   const btn = $("expandBtn");
@@ -2598,30 +2748,9 @@ function fsBackgroundTap(e) {
     facesBtn.innerHTML = window.ICON.users;
     facesBtn.onclick = () => { const hidden = vGrid.classList.toggle("faces-hidden"); facesBtn.classList.toggle("active", hidden); };
   }
-  document.addEventListener("fullscreenchange", () => {
-    const st = callStageEl(); const on = isCallFullscreen();
-    if (btn) btn.classList.toggle("active", on);
-    if (!st) return;
-    st.classList.toggle("fs-call", on);
-    if (on) {
-      vGrid.classList.add("pip-grid");
-      // Default to the balanced grid; the user spotlights a stream by clicking it.
-      fsShowControls();
-      st.addEventListener("mousemove", fsShowControls);
-      st.addEventListener("touchstart", fsBackgroundTap, { passive: true });
-      st.addEventListener("click", fsBackgroundTap);
-    } else {
-      // Restore the docked layout (mobile keeps .pip-grid when the stage shows).
-      vGrid.classList.toggle("pip-grid", isMobile() && !st.classList.contains("hidden"));
-      vGrid.classList.remove("faces-hidden");
-      if (facesBtn) facesBtn.classList.remove("active");
-      focusTile(null);
-      fsHideControls();
-      st.removeEventListener("mousemove", fsShowControls);
-      st.removeEventListener("touchstart", fsBackgroundTap);
-      st.removeEventListener("click", fsBackgroundTap);
-    }
-  });
+  const onFsChange = () => { if (!manualFs) applyFsState(isCallFullscreen()); };
+  document.addEventListener("fullscreenchange", onFsChange);
+  document.addEventListener("webkitfullscreenchange", onFsChange);
 })();
 
 // Keep-alive (не глушить звонок в фоне)

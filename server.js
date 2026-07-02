@@ -696,6 +696,25 @@ function callStatePayload(room) {
   return { room, count: logins.length, logins };
 }
 function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
+// Remove one socket from a call room, running the same end-of-call bookkeeping
+// (system message + meta cleanup) as a normal leave when the room empties.
+function removeFromCall(room, sid) {
+  const c = callRooms.get(room);
+  if (!c || !c.has(sid)) return;
+  c.delete(sid);
+  if (!c.size) {
+    callRooms.delete(room);
+    const meta = callMeta.get(room);
+    if (meta) {
+      clearTimeout(meta.ringTimer);
+      const dur = Date.now() - meta.startTs;
+      if (meta.answered && dur > 2000) saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_ended", fmtDuration(dur));
+      else saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
+      callMeta.delete(room);
+    }
+  }
+  broadcastCallState(room);
+}
 function fmtDuration(ms) {
   const sec = Math.floor(ms / 1000);
   const min = Math.floor(sec / 60);
@@ -974,34 +993,27 @@ io.on("connection", (socket) => {
   // ----- Звонок: только ringing (медиа — через LiveKit SFU) -----
   function callLeave() {
     if (!currentRoom) return;
-    const room = currentRoom;
-    const c = callRooms.get(room);
-    if (c) {
-      c.delete(socket.id);
-      if (!c.size) {
-        callRooms.delete(room);
-        const meta = callMeta.get(room);
-        if (meta) {
-          clearTimeout(meta.ringTimer);
-          const dur = Date.now() - meta.startTs;
-          if (meta.answered && dur > 2000) {
-            saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_ended", fmtDuration(dur));
-          } else {
-            saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
-          }
-          callMeta.delete(room);
-        }
-      }
-      broadcastCallState(room);
-    }
+    removeFromCall(currentRoom, socket.id);
   }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
-    // Выкинуть старые сокеты того же пользователя (другая вкладка / устройство)
+    // Same user already in a call on ANOTHER device/room → kick it (full
+    // cleanup) so this device takes over; the old one shows a red notice.
+    for (const [room, members] of [...callRooms]) {
+      if (room === currentRoom) continue;
+      for (const [sid, info] of [...members]) {
+        if (info.login === userLogin && sid !== socket.id) {
+          io.to(sid).emit("call-replaced", { reason: "other_device" });
+          removeFromCall(room, sid);
+        }
+      }
+    }
+    // Same user's old sockets in THIS room (extra tab/device) → silent swap
+    // (keep the call/meta running), old device still gets the notice.
     for (const [sid, info] of c) {
       if (info.login === userLogin && sid !== socket.id) {
-        io.to(sid).emit("call-replaced");
+        io.to(sid).emit("call-replaced", { reason: "other_device" });
         c.delete(sid);
       }
     }
