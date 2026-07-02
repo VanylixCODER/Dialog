@@ -1816,26 +1816,34 @@ a:focus-visible {
   cursor: pointer; opacity: 0; z-index: 3;
   transition: opacity var(--t-fast) var(--ease), background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
-.tile.screen:hover .tile-expand, .tile-expand:focus-visible { opacity: 1; }
+.tile:hover .tile-expand, .tile-expand:focus-visible { opacity: 1; }
 .tile-expand:hover { background: rgba(0, 0, 0, 0.82); color: var(--accent-400); }
 .tile-expand svg { width: 18px; height: 18px; }
 
 /* ═══ Big screen: fullscreen call (Discord-style) ═══════════════════════════
+   Keyed off .fs-call (set by JS) so it works with BOTH the native Fullscreen
+   API and the manual overlay used on iOS Safari (no element-fullscreen there).
    Stream fills the top, participants sit UNDER it in a strip you can hide;
    the controls float as one row and auto-hide (cursor hides with them). */
-#callStage:fullscreen, #callStage:-webkit-full-screen {
+#callStage.fs-call {
   max-height: none; height: 100vh; background: var(--bg-1);
   cursor: none;
 }
-#callStage:fullscreen.controls-on, #callStage:-webkit-full-screen.controls-on { cursor: auto; }
+/* iOS / no element-fullscreen: pin the stage over everything. */
+#callStage.manual-fs {
+  position: fixed; inset: 0; z-index: 200; width: 100vw; height: 100vh;
+  height: 100dvh;
+}
+#callStage.fs-call.controls-on { cursor: auto; }
 /* Docking chrome is irrelevant in fullscreen. */
-#callStage:fullscreen .call-grip,
-#callStage:fullscreen .call-resizer,
-#callStage:fullscreen #pingMeter { display: none; }
+#callStage.fs-call .call-grip,
+#callStage.fs-call .call-resizer,
+#callStage.fs-call #pingMeter { display: none; }
 
 /* Floating, auto-hiding control dock — ONE horizontal row (never wraps into a
-   vertical column), fades + slides in on activity. */
-#callStage:fullscreen .call-bar {
+   vertical column), fades + slides in on activity. Scrolls horizontally on
+   narrow screens rather than wrapping. */
+#callStage.fs-call .call-bar {
   position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 26px);
   flex-direction: row; align-items: center; gap: 10px;
   width: auto; max-width: 96vw; padding: 8px 12px;
@@ -1845,51 +1853,81 @@ a:focus-visible {
   opacity: 0; pointer-events: none; z-index: 30;
   transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
 }
-#callStage:fullscreen.controls-on .call-bar { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-#callStage:fullscreen .call-actions { flex-wrap: nowrap; padding: 0; background: transparent; border: none; }
-#callStage:fullscreen .call-meta { order: -1; margin: 0 4px 0 0; }
+#callStage.fs-call.controls-on .call-bar { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#callStage.fs-call .call-actions { flex-wrap: nowrap; padding: 0; background: transparent; border: none; }
+#callStage.fs-call .call-meta { order: -1; margin: 0 4px 0 0; }
 
 /* Buttons that only appear in fullscreen (e.g. hide-participants). */
 .call-btn.fs-only { display: none; }
-#callStage:fullscreen .call-btn.fs-only { display: grid; }
+#callStage.fs-call .call-btn.fs-only { display: grid; }
 
 /* ── Fullscreen call grid (Discord-style) ──────────────────────────────────
-   Tiles FILL the screen: a balanced grid (auto-fit → 1/2/3/4… per row) whose
-   rows share the full height. Overrides the docked flex layout entirely. */
-#callStage:fullscreen .video-grid {
+   Balanced RECTANGULAR grid: JS (layoutFsTiles) computes --fs-cols and --fs-tw
+   so every tile is a centred 16:9 rectangle that fits — never a tall portrait
+   column. Overrides the docked flex layout entirely. */
+#callStage.fs-call .video-grid.fs {
   flex: 1 1 auto; min-height: 0; height: auto;
-  display: grid; gap: 10px; padding: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  place-items: stretch; align-content: stretch;
+  display: grid; gap: 12px; padding: 14px;
+  grid-template-columns: repeat(var(--fs-cols, 2), var(--fs-tw, 1fr));
+  grid-auto-rows: auto;
+  place-content: center; justify-items: center; align-items: center;
   overflow: hidden;
 }
-#callStage:fullscreen .video-grid > .tile {
-  width: 100%; height: 100%; min-width: 0; min-height: 0; margin: 0;
-  aspect-ratio: auto; max-height: none; max-width: none;
+#callStage.fs-call .video-grid.fs > .tile {
+  width: var(--fs-tw, 100%); max-width: 100%; height: auto; aspect-ratio: 16 / 9;
+  min-width: 0; min-height: 0; max-height: none; margin: 0;
+  animation: tileIn 0.26s var(--ease) both; transition: opacity 0.28s var(--ease);
 }
-#callStage:fullscreen .video-grid > .tile video { width: 100%; height: 100%; }
+#callStage.fs-call .video-grid.fs > .tile video { width: 100%; height: 100%; }
 
-/* Spotlight (a stream was clicked): it fills the top; everyone else sits in a
-   short strip UNDER it. */
-#callStage:fullscreen .video-grid.has-focus {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
-  grid-template-rows: 1fr 16vh; grid-auto-rows: 16vh;
-  transition: grid-template-rows 0.34s var(--ease);
+/* Spotlight (a stream was clicked): the focused tile fills the top; everyone
+   else moves into a centred, horizontally-scrollable rectangular strip UNDER
+   it (JS builds the .faces-strip). */
+#callStage.fs-call .video-grid.fs.has-focus {
+  display: flex; flex-direction: column; gap: 12px; padding: 14px;
+  grid-template-columns: none; overflow: hidden;
 }
-#callStage:fullscreen .video-grid.has-focus > .tile.focused { grid-column: 1 / -1; grid-row: 1; }
-#callStage:fullscreen .video-grid.has-focus > .tile:not(.focused) { grid-row: 2; }
+#callStage.fs-call .video-grid.fs.has-focus > .tile.focused {
+  order: -1; flex: 1 1 auto; width: 100%; max-width: 100%; height: auto;
+  aspect-ratio: auto; min-height: 0; cursor: zoom-out;
+}
+#callStage.fs-call .video-grid.fs.has-focus > .tile.focused video { object-fit: contain; }
+#callStage.fs-call .video-grid.fs > .faces-strip {
+  flex: 0 0 auto; display: flex; gap: 10px; justify-content: safe center;
+  overflow-x: auto; overflow-y: hidden; padding: 2px 4px 6px; min-height: 0;
+  scrollbar-width: thin; scroll-behavior: smooth;
+  transition: height 0.3s var(--ease), opacity 0.3s var(--ease);
+}
+#callStage.fs-call .video-grid.fs > .faces-strip > .tile {
+  flex: 0 0 auto; height: 15vh; width: auto; aspect-ratio: 16 / 9;
+  max-height: none; min-width: 0; margin: 0; cursor: pointer;
+}
 /* Hide-participants toggle: collapse the strip; the stream fills — animated. */
-#callStage:fullscreen .video-grid.has-focus.faces-hidden { grid-template-rows: 1fr 0; }
-#callStage:fullscreen .video-grid.has-focus.faces-hidden > .tile:not(.focused) { opacity: 0; pointer-events: none; }
+#callStage.fs-call .video-grid.fs.has-focus.faces-hidden > .faces-strip {
+  height: 0; opacity: 0; pointer-events: none; padding: 0;
+}
 
-/* Tiles ease in; the strip glides open/closed. */
-#callStage:fullscreen .video-grid > .tile { animation: tileIn 0.26s var(--ease) both; transition: opacity 0.28s var(--ease); }
+/* Screen streams letter-box (show the whole screen) in fullscreen. */
+#callStage.fs-call .video-grid.fs .tile.screen video { object-fit: contain; }
+
 @keyframes tileIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
+  #callStage.fs-call .video-grid.fs > .tile { animation: none; }
   .video-grid.pip-grid .tile { animation: none; transition: opacity 0.2s linear; }
-  #callStage:fullscreen .call-bar { transition: opacity 0.2s linear; }
+  #callStage.fs-call .call-bar { transition: opacity 0.2s linear; }
 }
+
+/* "Double-click to return" hint — centred pill, fades in/out. */
+.fs-hint {
+  position: absolute; top: 18px; left: 50%; transform: translate(-50%, -8px);
+  background: rgba(0, 6, 2, 0.82); border: 1px solid var(--border-1);
+  color: var(--accent-200); font-size: 12.5px; font-weight: 700;
+  letter-spacing: 0.4px; padding: 7px 16px; border-radius: 999px;
+  backdrop-filter: blur(10px); z-index: 32;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+}
+.fs-hint.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* Square voice grid until someone turns on a stream: once any participant
    publishes camera/screen video, all face tiles switch to 16:9 video tiles. */
@@ -2675,6 +2713,18 @@ a:focus-visible {
   .return-pill { bottom: calc(90px + env(safe-area-inset-bottom)); }
   /* стейдж отменяет has-call grid (док не работает на мобиле) */
   .chat.has-call > #callStage { grid-area: call; }
+  /* Big-screen on phones: tighter padding, shorter face strip, and a control
+     pill that scrolls sideways instead of overflowing off-screen. */
+  #callStage.fs-call .video-grid.fs { gap: 8px; padding: 8px; }
+  #callStage.fs-call .video-grid.fs.has-focus { padding: 8px; gap: 8px; }
+  #callStage.fs-call .video-grid.fs > .faces-strip > .tile { height: 12vh; }
+  #callStage.fs-call .call-bar {
+    --cbtn: 44px; gap: 8px; bottom: calc(18px + env(safe-area-inset-bottom));
+    max-width: 94vw; overflow-x: auto; overflow-y: hidden; justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  #callStage.fs-call .call-bar::-webkit-scrollbar { display: none; }
+  .fs-hint { font-size: 11.5px; padding: 6px 12px; top: 12px; }
   .login-card { padding: 24px 18px; }
   .brand h1 { font-size: 22px; }
   .ci-actions { margin-top: 28px; gap: 36px; }
