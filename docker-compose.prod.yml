@@ -33,6 +33,21 @@ services:
     image: mysql:8
     container_name: dialog-mysql
     restart: unless-stopped
+    # Low-memory tuning for the 1 GB box. The big saver is performance_schema=OFF
+    # (~150-300 MB) + O_DIRECT (no double-caching with the OS). Keeping MySQL in
+    # real RAM avoids swap thrash, which is what actually slows queries here.
+    command: >
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=128M
+      --innodb-buffer-pool-instances=1
+      --innodb-log-buffer-size=8M
+      --innodb-flush-method=O_DIRECT
+      --max-connections=60
+      --table-open-cache=256
+      --tmp-table-size=16M
+      --max-heap-table-size=16M
+      --host-cache-size=0
+      --skip-name-resolve
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
