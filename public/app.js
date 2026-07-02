@@ -1449,7 +1449,7 @@ socket.on("history", (list) => {
   _moreHas = list.length >= CHUNK;
   _moreOldest = list.length ? list[0].id : null;
   _newestId = list.length ? list[list.length - 1].id : null;
-  if (list.length && _moreHas) { const sep = document.createElement("div"); sep.className = "system-msg"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
+  if (list.length && _moreHas) { const sep = document.createElement("div"); sep.className = "system-msg hist-sep"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
   list.forEach((m) => renderMessage(m, false, isPingForMe(m), true));
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
@@ -1459,21 +1459,34 @@ socket.on("history", (list) => {
 });
 // Older chunk prepended on scroll-up — instant, scroll position preserved.
 socket.on("more-messages", ({ msgs, before }) => {
-  if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; return; }
+  if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; removeHistSep(); return; }
   const cleared = clearedChats.get(myRoom);
   if (cleared) msgs = msgs.filter((m) => m.ts > cleared);
-  if (!msgs.length) { _moreHas = false; _moreLoading = false; return; }
-  const prev = messagesEl.scrollHeight;
-  const beforeCount = messagesEl.children.length;
+  if (!msgs.length) { _moreHas = false; _moreLoading = false; removeHistSep(); return; }
+  const prevH = messagesEl.scrollHeight;
+  const prevTop = messagesEl.scrollTop;
+  // Keep the "previous messages" marker pinned to the very top; older messages
+  // get inserted just below it (before the current oldest message).
+  const sep = messagesEl.querySelector(".hist-sep");
+  const anchor = sep ? sep.nextSibling : messagesEl.firstChild;
+  // renderMessage appends to the bottom; capture what it adds, then move that
+  // block to the top *in order* (before a FIXED anchor — no index shifting).
+  const startIdx = messagesEl.children.length;
   for (const m of msgs) renderMessage(m, false, isPingForMe(m), true);
-  for (let i = messagesEl.children.length - 1; i >= beforeCount; i--)
-    messagesEl.insertBefore(messagesEl.children[i], messagesEl.firstChild);
-  messagesEl.scrollTop = messagesEl.scrollHeight - prev;
+  const added = Array.prototype.slice.call(messagesEl.children, startIdx);
+  // The first day-separator is computed against the newest message (wrong
+  // context for a prepend) — drop that stray one; keep the correct inner ones.
+  if (added.length && added[0].classList.contains("day-sep")) { added[0].remove(); added.shift(); }
+  for (const node of added) messagesEl.insertBefore(node, anchor);
+  // Preserve the viewport: the message the user was looking at stays put.
+  messagesEl.scrollTop = prevTop + (messagesEl.scrollHeight - prevH);
   _moreOldest = msgs[0].id;
   _moreHas = msgs.length >= CHUNK;
   _moreLoading = false;
+  if (!_moreHas) removeHistSep();
   updateJumpBtn();
 });
+function removeHistSep() { const s = messagesEl.querySelector(".hist-sep"); if (s) s.remove(); }
 
 // Unload chunks above the newest KEEP_CHUNKS when we're back near the bottom, so
 // the DOM stays small after scrolling up through history.
@@ -2276,7 +2289,10 @@ function updateCallButton() {
   btn.classList.toggle("join-call", ongoing);
   // «Групповой звонок» только в группах; в DM участников всего двое — просто «Звонок».
   const startLabel = curKind === "group" ? t("t_call") : t("call_dm");
-  btn.title = inThis ? t("t_hangup") : ongoing ? t("join_call") : startLabel;
+  const tip = inThis ? t("t_hangup") : ongoing ? t("join_call") : startLabel;
+  // The visible hover tooltip is the CSS [data-tip] pill (set once in setIcons),
+  // so update BOTH it and the native title, else a DM still shows "Group call".
+  btn.title = tip; btn.setAttribute("data-tip", tip);
   btn.innerHTML = inThis ? window.ICON.phoneOff : window.ICON.phone;
 }
 // Показ/сворачивание оверлея звонка в зависимости от просматриваемого чата и флага minimized
