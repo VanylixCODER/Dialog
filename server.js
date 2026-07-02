@@ -709,7 +709,11 @@ function removeFromCall(room, sid) {
       clearTimeout(meta.ringTimer);
       const dur = Date.now() - meta.startTs;
       if (meta.answered && dur > 2000) saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_ended", fmtDuration(dur));
-      else saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
+      else {
+        saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
+        // Caller left before anyone answered → stop the callees' ringtone/popup.
+        for (const login of (meta.recips || [])) notifyUser(login, "call-cancelled", { room });
+      }
       callMeta.delete(room);
     }
   }
@@ -1048,6 +1052,7 @@ io.on("connection", (socket) => {
         const meta2 = callMeta.get(room);
         if (c2 && c2.size < 2 && meta2 && !meta2.answered) {
           io.to(room).emit("call-auto-end", { reason: "no_answer" });
+          for (const login of (meta2.recips || [])) notifyUser(login, "call-cancelled", { room });
           saveSystemMessage(room, meta2.initiatorLogin, meta2.initiatorName, "call_missed", fmtDuration(60000));
           c2.clear();
           callRooms.delete(room);
@@ -1063,8 +1068,9 @@ io.on("connection", (socket) => {
       if (room.startsWith("@grp:")) recips = await getGroupMembers(room.slice(5));
       else if (room.startsWith("@dm:")) recips = room.slice(4).split("~");
     } catch {}
-    for (const login of recips) {
-      if (login === userLogin) continue;
+    const ringed = recips.filter((l) => l !== userLogin);
+    const meta = callMeta.get(room); if (meta) meta.recips = ringed; // to dismiss on cancel
+    for (const login of ringed) {
       notifyUser(login, "call-ring", payload);
       sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room });
     }
