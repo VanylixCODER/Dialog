@@ -883,6 +883,14 @@ a:focus-visible {
 .chat-menu button svg { width: 16px; height: 16px; }
 /* Row context menu (long-press / right-click) — same look, opens at the touch. */
 .row-menu { min-width: 190px; transform-origin: top left; }
+/* Message right-click context menu */
+.msg-menu { min-width: 200px; transform-origin: top left; }
+.msg-menu button svg { width: 16px; height: 16px; flex-shrink: 0; }
+.msg-menu button span { flex: 1; }
+/* Input right-click context menu */
+.input-menu { min-width: 180px; transform-origin: top left; }
+.input-menu button { font-size: 12px; }
+.input-menu button svg { width: 15px; height: 15px; flex-shrink: 0; }
 /* Search suggestions: friends not in the list yet (reopen a closed DM). */
 .chat-suggest-head { padding: 12px 14px 4px; font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); font-weight: 800; }
 .chat-suggest .ci-last { color: var(--accent-300); font-style: italic; }

@@ -1936,6 +1936,42 @@ messagesEl.addEventListener("click", (e) => {
   const bl = e.target.closest(".msg.blocked:not(.revealed)"); if (bl) { bl.classList.add("revealed"); return; }
   const img = e.target.closest(".bubble.media img"); if (img) openLightbox(img.src);
 });
+// ---------- Message right-click menu ----------
+let msgMenu;
+function openMsgMenu(e, wrap) {
+  e.preventDefault();
+  const id = Number(wrap.dataset.id);
+  const mine = wrap.classList.contains("me");
+  const bubble = wrap.querySelector(".bubble");
+  const sel = window.getSelection();
+  const hasSel = sel && sel.rangeCount && sel.toString().trim() && wrap.contains(sel.anchorNode);
+  if (!msgMenu) {
+    msgMenu = document.createElement("div"); msgMenu.className = "chat-menu msg-menu hidden";
+    document.body.appendChild(msgMenu);
+  }
+  msgMenu.innerHTML = "";
+  const item = (label, icon, fn, danger) => {
+    const b = document.createElement("button");
+    if (danger) b.className = "danger";
+    b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>";
+    b.onclick = () => { msgMenu.classList.add("hidden"); fn(); };
+    msgMenu.appendChild(b);
+  };
+  item(t("react"), "smile", () => { const rb = wrap.querySelector(".ma-react"); if (rb) openReactPicker(rb, id); else { const fake = document.createElement("div"); fake.style.position = "fixed"; fake.style.left = e.clientX + "px"; fake.style.top = e.clientY + "px"; document.body.appendChild(fake); openReactPicker(fake, id); document.body.removeChild(fake); } });
+  if (bubble && bubble.textContent) item(t("copy_message"), "copy", () => copyToClipboard(bubble.textContent.trim()));
+  if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(sel.toString()); } });
+  if (mine) { item(t("edit"), "edit", () => startEdit(wrap)); item(t("delete_msg"), "trash", () => { if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id }); }, true); }
+  msgMenu.classList.remove("hidden");
+  msgMenu._openedAt = Date.now();
+  const mw = msgMenu.offsetWidth || 200, mh = msgMenu.offsetHeight || 180;
+  msgMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
+  msgMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - mh - 8)) + "px";
+}
+messagesEl.addEventListener("contextmenu", (e) => {
+  const wrap = e.target.closest(".msg");
+  if (!wrap) return;
+  openMsgMenu(e, wrap);
+});
 socket.on("msg-deleted", ({ id }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove(); });
 socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = formatMessage(text); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
 socket.on("msg-reaction", ({ id, reactions }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) renderReactions(el, reactions); });
@@ -1997,6 +2033,33 @@ $("sendBtn").onclick = sendText;
 $("msgInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
 let typingTimer;
 $("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
+// ---------- Input right-click menu ----------
+let inputMenu;
+$("msgInput").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const input = $("msgInput");
+  const hasSel = input.selectionStart !== input.selectionEnd;
+  if (!inputMenu) {
+    inputMenu = document.createElement("div"); inputMenu.className = "chat-menu input-menu hidden";
+    document.body.appendChild(inputMenu);
+  }
+  inputMenu.innerHTML = "";
+  const item = (label, icon, fn) => {
+    const b = document.createElement("button");
+    b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>";
+    b.onclick = () => { inputMenu.classList.add("hidden"); fn(); };
+    inputMenu.appendChild(b);
+  };
+  if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(input.value.substring(input.selectionStart, input.selectionEnd)); } });
+  if (navigator.clipboard?.readText) item(t("paste"), "clipboard", () => { navigator.clipboard.readText().then(text => { input.focus(); document.execCommand("insertText", false, text); }).catch(() => {}); });
+  if (hasSel) item(t("cut"), "cut", () => { try { document.execCommand("cut"); } catch { input.focus(); document.execCommand("delete"); } });
+  item(t("t_send"), "send", () => sendText());
+  inputMenu.classList.remove("hidden");
+  inputMenu._openedAt = Date.now();
+  const mw = inputMenu.offsetWidth || 180, mh = inputMenu.offsetHeight || 140;
+  inputMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
+  inputMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - mh - 8)) + "px";
+});
 const typingUsers = new Set();
 socket.on("typing", ({ name, isTyping }) => { if (isTyping) typingUsers.add(name); else typingUsers.delete(name); const arr = [...typingUsers]; $("typingIndicator").textContent = arr.length ? (arr.length === 1 ? t("typing_one", { name: arr[0] }) : t("typing_many", { names: arr.join(", ") })) : ""; });
 
@@ -3459,12 +3522,16 @@ document.addEventListener("keydown", (e) => {
   if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
   if (!$("composerMore").classList.contains("hidden")) { $("composerMore").classList.add("hidden"); return; }
   if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
+  if (msgMenu && !msgMenu.classList.contains("hidden")) { msgMenu.classList.add("hidden"); return; }
+  if (inputMenu && !inputMenu.classList.contains("hidden")) { inputMenu.classList.add("hidden"); return; }
 });
 
 // Click-outside для status-меню: глобальный click-проверка по DOM.
 // (chat menu уже имел свой обработчик в исходниках — оставляем; добавляем сюда только для новых штук.)
 document.addEventListener("click", (e) => {
   if (!$("meStatusMenu").classList.contains("hidden") && !e.target.closest("#meStatusMenu") && e.target !== $("meStatus")) closeStatusMenu();
+  if (msgMenu && !msgMenu.classList.contains("hidden") && !e.target.closest(".msg-menu")) { msgMenu.classList.add("hidden"); return; }
+  if (inputMenu && !inputMenu.classList.contains("hidden") && !e.target.closest(".input-menu")) { inputMenu.classList.add("hidden"); return; }
 });
 
 // ---------- Иконки ----------
