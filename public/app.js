@@ -909,7 +909,8 @@ function openChat(c) {
   renderChatList($("searchInput").value);
   if (call.active && c.key === call.roomKey) call.minimized = false; // вернулись в чат звонка
   syncCallUI(); updateCallButton();
-  applyWallpaper();  // per-chat→global wallpaper resolution, вызывается при каждой смене чата
+  applyWallpaper();
+  setTimeout(scrollDown, 50); // scroll to newest when opening/reopening a chat
   pushState();
 }
 function syncBlockComposer() {
