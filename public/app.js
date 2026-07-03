@@ -391,8 +391,12 @@ function wireAuthMirror() {
       inp.addEventListener("blur", () => { if (termFocus === inp.name) termFocus = null; updateTerminal(); });
     });
   });
-  // Eye toggles (show/hide password).
+  wireEyeToggles();
+}
+// Show/hide password toggles — wires every .toggle-eye once (login + profile).
+function wireEyeToggles() {
   document.querySelectorAll(".toggle-eye").forEach((btn) => {
+    if (btn._wired) return; btn._wired = true;
     btn.innerHTML = window.ICON.eye;
     btn.onclick = () => {
       const inp = btn.parentElement.querySelector("input");
@@ -402,6 +406,37 @@ function wireAuthMirror() {
     };
   });
 }
+// ── Change password (profile) — needs current password, 3-day cooldown ──
+const PW_COOLDOWN_MS = 3 * 24 * 3600 * 1000;
+function refreshPwCooldown() {
+  const btn = $("pwSaveBtn"), msg = $("pwMsg"); if (!btn || !msg) return;
+  const last = (profile && Number(profile.pwChangedAt)) || 0;
+  const until = last + PW_COOLDOWN_MS;
+  if (last && Date.now() < until) {
+    btn.disabled = true;
+    if (msg.className.indexOf("ok") === -1) { msg.className = "form-error"; msg.textContent = t("pw_cooldown", { date: new Date(until).toLocaleDateString() }); }
+  } else {
+    btn.disabled = false;
+    if (msg.className.indexOf("ok") === -1) msg.textContent = "";
+  }
+}
+$("pwSaveBtn") && ($("pwSaveBtn").onclick = async () => {
+  const msg = $("pwMsg"); msg.className = "form-error";
+  const cur = $("pwCurrent").value, n1 = $("pwNew").value, n2 = $("pwNew2").value;
+  if (n1.length < 6) { msg.textContent = t("err_pass_short"); return; }
+  if (n1 !== n2) { msg.textContent = t("err_pass_mismatch"); return; }
+  const { ok, data } = await api("/api/account/password", { current: cur, password: n1 });
+  if (!ok) {
+    if (data.error === "wrong_current") msg.textContent = t("pw_wrong_current");
+    else if (data.error === "cooldown") { profile.pwChangedAt = (data.retryAt || 0) - PW_COOLDOWN_MS; refreshPwCooldown(); }
+    else msg.textContent = data.error || t("err_generic");
+    return;
+  }
+  profile.pwChangedAt = data.changedAt || Date.now();
+  $("pwCurrent").value = $("pwNew").value = $("pwNew2").value = "";
+  msg.className = "form-error ok"; msg.textContent = t("pw_changed");
+  refreshPwCooldown();
+});
 // Cosmetic post-auth sequence in the terminal, then load the app.
 function playAuthSuccess() {
   termBusy = true;
@@ -3422,6 +3457,8 @@ function refreshProfilePane() {
   $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
   $("profileAvaInit").textContent = initials(myName);
+  if ($("pwMsg")) { $("pwMsg").className = "form-error"; $("pwMsg").textContent = ""; $("pwCurrent").value = $("pwNew").value = $("pwNew2").value = ""; }
+  wireEyeToggles(); refreshPwCooldown(); // change-password section
 }
 
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
