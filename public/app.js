@@ -707,6 +707,7 @@ function openChat(c) {
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
   $("messages").innerHTML = "";
+  showMsgSkeletons(); // placeholder until history arrives
   $("chatTitle").textContent = c.name;
   if (c.type === "group") {
     $("chatSub").textContent = t("room_sub_group");
@@ -1501,6 +1502,36 @@ socket.on("peer-left", (p) => { peers.delete(p.id); if (!$("infoPanel").classLis
 
 // ---------- Сообщения ----------
 const messagesEl = $("messages");
+// Skeleton placeholders shown while a chat's history is loading (initial open
+// or a scroll-up chunk) — nicer than a blank pane.
+function showMsgSkeletons(n = 8) {
+  clearMsgSkeletons(); chatEmptyNote(false);
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement("div");
+    d.className = "msg-skel" + (i % 3 === 1 ? " me" : "");
+    d.innerHTML = `<span class="sk-bubble" style="width:${45 + ((i * 53) % 45)}%"></span>`;
+    frag.appendChild(d);
+  }
+  messagesEl.appendChild(frag);
+}
+function showTopSkeletons(n = 3) {
+  const anchor = messagesEl.querySelector(".hist-sep") || messagesEl.firstChild;
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement("div"); d.className = "msg-skel top-skel" + (i % 2 ? " me" : "");
+    d.innerHTML = `<span class="sk-bubble" style="width:${50 + ((i * 41) % 40)}%"></span>`;
+    messagesEl.insertBefore(d, anchor);
+  }
+}
+function clearMsgSkeletons() { messagesEl.querySelectorAll(".msg-skel").forEach((s) => s.remove()); }
+// "Chat is empty — send a message" placeholder for a conversation with no history.
+function chatEmptyNote(show) {
+  let n = messagesEl.querySelector(".chat-empty-note");
+  if (show && !messagesEl.querySelector(".msg")) {
+    if (!n) { n = document.createElement("div"); n.className = "chat-empty-note"; messagesEl.appendChild(n); }
+    n.innerHTML = `<div class="cen-icon">${window.ICON.send || ""}</div><div class="cen-title">${escapeHtml(t("chat_empty_title"))}</div><div class="cen-sub">${escapeHtml(t("chat_empty_sub"))}</div>`;
+  } else if (n) { n.remove(); }
+}
 const CHUNK = 25;            // messages per chunk (initial load + each scroll-up)
 const KEEP_CHUNKS = 3;       // max chunks kept in the DOM before older ones are unloaded
 let _moreLoading = false;
@@ -1521,6 +1552,7 @@ socket.on("history", (list) => {
   _newestId = list.length ? list[list.length - 1].id : null;
   if (list.length && _moreHas) { const sep = document.createElement("div"); sep.className = "system-msg hist-sep"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
   list.forEach((m) => renderMessage(m, false, isPingForMe(m), true));
+  chatEmptyNote(true); // "Chat is empty…" when there's genuinely no history
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   scrollDown();
@@ -1529,6 +1561,7 @@ socket.on("history", (list) => {
 });
 // Older chunk prepended on scroll-up — instant, scroll position preserved.
 socket.on("more-messages", ({ msgs, before }) => {
+  clearMsgSkeletons(); // remove the top loading placeholders
   if (!msgs || !msgs.length) { _moreHas = false; _moreLoading = false; removeHistSep(); return; }
   const cleared = clearedChats.get(myRoom);
   if (cleared) msgs = msgs.filter((m) => m.ts > cleared);
@@ -1586,6 +1619,7 @@ messagesEl.addEventListener("scroll", () => {
     if (_moreLoading || !_moreHas || !_moreOldest) return;
     if (messagesEl.scrollTop > 300) return;
     _moreLoading = true;
+    showTopSkeletons(); // loading placeholders while the older chunk arrives
     socket.emit("load-more", { before: _moreOldest });
   }, 150);
 });
@@ -1709,6 +1743,9 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
         (mine ? `<button class="ma-btn ma-del" title="${t("delete_msg")}">${window.ICON.trash}</button>` : "") + `</div>`;
     }
   }
+  // A real message clears the "chat is empty" placeholder / any skeletons.
+  const _en = messagesEl.querySelector(".chat-empty-note"); if (_en) _en.remove();
+  if (messagesEl.querySelector(".msg-skel")) clearMsgSkeletons();
   // Разделитель дат — перед сообщением сменились сутки относительно последнего видимого.
   const curDay = new Date(m.ts).toDateString();
   const last = messagesEl.lastElementChild;
@@ -2455,6 +2492,7 @@ async function joinCall() {
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
+  $("flipCam") && $("flipCam").classList.add("hidden"); // camera starts off
   populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
   $("toggleDeafen").classList.remove("off"); $("toggleDeafen").innerHTML = window.ICON.headphones;
   dismissNotif(myRoom);
@@ -2556,6 +2594,8 @@ $("toggleCam").onclick = async () => {
   } catch { call.camOn = false; }
   $("toggleCam").classList.toggle("off", !call.camOn);
   $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
+  // Flip-camera button: only useful with the camera on and 2+ cameras (phones).
+  updateFlipCamBtn();
   if (call.camOn) {
     // self-view сразу, не дожидаясь LocalTrackPublished (подстраховка от приватного бага)
     const Src = window.LivekitClient && window.LivekitClient.Track.Source.Camera;
@@ -2565,6 +2605,27 @@ $("toggleCam").onclick = async () => {
     setTileAvatar("me", true);
   }
 };
+// Flip between the phone's front/back cameras (cycles video inputs). The button
+// only shows with the camera on and more than one camera present.
+let _hasMultiCam = false;
+async function updateFlipCamBtn() {
+  const btn = $("flipCam"); if (!btn) return;
+  if (call.camOn) {
+    try { _hasMultiCam = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput").length > 1; } catch { _hasMultiCam = false; }
+  }
+  btn.classList.toggle("hidden", !(call.camOn && _hasMultiCam));
+}
+async function flipCamera() {
+  if (!call.room || !call.camOn) return;
+  let cams = [];
+  try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput"); } catch {}
+  if (cams.length < 2) return;
+  const cur = Math.max(0, cams.findIndex((d) => d.deviceId === call.camId));
+  const next = cams[(cur + 1) % cams.length];
+  call.camId = next.deviceId;
+  try { await call.room.switchActiveDevice("videoinput", next.deviceId); saveDevicePrefs(); } catch {}
+}
+$("flipCam") && ($("flipCam").onclick = flipCamera);
 // ── Демонстрация экрана (Discord-стиль): сначала выбор качества, потом нативный
 // выбор окна/экрана. Захватываем ВИДЕО + ЗВУК через getDisplayMedia и публикуем
 // обе дорожки в комнату LiveKit (ScreenShare + ScreenShareAudio).
@@ -3284,8 +3345,8 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", hangUp: "t_hangup", contactsBtn: "contacts", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,

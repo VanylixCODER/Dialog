@@ -17,6 +17,7 @@ const I18N = {
     err_notfound: "No camera or microphone found.", err_inuse: "Camera/mic used by another app.",
     err_media: "Couldn't get camera/mic: ",
     t_emoji: "Emoji", t_more: "More", t_attach: "Attach file", t_send: "Send", t_voice: "Voice message",
+    chat_empty_title: "Chat is empty", chat_empty_sub: "Send a message to start the conversation", flip_cam: "Flip camera",
     t_mic: "Microphone", t_cam: "Camera", t_screen: "Share screen", t_hangup: "Leave call",
     t_call: "Group call", call_dm: "Call", stream_limit: "Stream limit reached — {n} max in a group call", t_window: "Window / fullscreen",
 
@@ -144,6 +145,7 @@ const I18N = {
     err_notfound: "Камера или микрофон не найдены.", err_inuse: "Камера/микрофон используются другим приложением.",
     err_media: "Не удалось получить камеру/микрофон: ",
     t_emoji: "Эмодзи", t_more: "Ещё", t_attach: "Прикрепить файл", t_send: "Отправить", t_voice: "Голосовое сообщение",
+    chat_empty_title: "Чат пуст", chat_empty_sub: "Отправьте сообщение, чтобы начать общение", flip_cam: "Сменить камеру",
     t_mic: "Микрофон", t_cam: "Камера", t_screen: "Демонстрация экрана", t_hangup: "Покинуть звонок",
     t_call: "Групповой звонок", call_dm: "Звонок", stream_limit: "Достигнут лимит трансляций — максимум {n} в групповом звонке", t_window: "Окно / весь экран",
 

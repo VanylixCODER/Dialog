@@ -1323,6 +1323,32 @@ a:focus-visible {
 .cm-item:active { background: var(--surface-3); }
 .cm-gif-label { font-weight: 700; letter-spacing: 1px; font-size: 13px; }
 
+/* ── Message loading skeletons (initial history + scroll-up chunks) ───────── */
+.msg-skel { display: flex; margin: 4px 0; }
+.msg-skel.me { justify-content: flex-end; }
+.sk-bubble {
+  display: block; height: 34px; border-radius: 16px; min-width: 80px;
+  background: linear-gradient(100deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skShimmer 1.3s ease-in-out infinite;
+}
+@keyframes skShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-bubble { animation: none; } }
+
+/* ── "Chat is empty — send a message" placeholder ────────────────────────── */
+.chat-empty-note {
+  margin: auto; text-align: center; padding: 36px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: var(--text-dim);
+}
+.chat-empty-note .cen-icon {
+  width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 6px;
+  border-radius: 50%; background: var(--surface-2); color: var(--accent-300);
+}
+.chat-empty-note .cen-icon svg { width: 22px; height: 22px; }
+.chat-empty-note .cen-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.chat-empty-note .cen-sub { font-size: 12.5px; max-width: 240px; }
+
 .input-wrap { flex: 1; min-width: 0; }
 #msgInput {
   width: 100%; resize: none;
@@ -2733,6 +2759,28 @@ a:focus-visible {
   .login-card { padding: 24px 18px; }
   .brand h1 { font-size: 22px; }
   .ci-actions { margin-top: 28px; gap: 36px; }
+
+  /* ── Mobile composer & chat polish ─────────────────────────────────────── */
+  .messages { padding-top: 10px; padding-bottom: 6px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .msg .bubble { font-size: 15px; line-height: 1.4; }        /* comfortable reading size */
+  .composer {
+    gap: 6px; padding-top: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom)); /* clear the home indicator */
+    align-items: flex-end;
+  }
+  #msgInput { font-size: 16px; }                              /* 16px avoids iOS zoom-on-focus */
+  /* The "+" more-button — prominent, tappable, matches the send button. */
+  #moreBtn { flex: 0 0 auto; color: var(--accent-300); }
+  #moreBtn svg { width: 24px; height: 24px; }
+  .icon-btn.send { flex: 0 0 auto; }
+  .composer-more { left: 8px; min-width: 180px; padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .cm-item { padding: 12px 14px; font-size: 15px; }          /* bigger tap targets */
+  /* Emoji / GIF panels sit above the composer, clear of the safe area. */
+  .emoji-picker, .gif-panel { bottom: calc(70px + env(safe-area-inset-bottom)); }
+  /* Flip-camera button: same size as the other round call controls. */
+  .flip-cam:not(.hidden) { display: grid; }
+  /* Chat-list rows a touch roomier for thumbs. */
+  .chat-item { padding-top: 10px; padding-bottom: 10px; }
 }
 
 /* ============ Status pill — хедер чатлиста, рядом с никнеймом ============ */
