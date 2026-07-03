@@ -2442,6 +2442,68 @@ function wireTileControls(tile, identity) {
   muteBtn.onclick = () => { st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); apply(); };
   apply();
 }
+// ---------- Stream volume popup (right-click / long-press on tile) ----------
+let streamVolPopup;
+function openStreamVolPopup(tile, identity, e) {
+  if (identity === profile.login) return;
+  if (!streamVolPopup) {
+    streamVolPopup = document.createElement("div");
+    streamVolPopup.id = "streamVolPopup";
+    streamVolPopup.className = "chat-menu stream-vol-popup hidden";
+    streamVolPopup.innerHTML =
+      `<button id="svpMute">${window.ICON.volume}</button>` +
+      `<input id="svpVol" type="range" min="0" max="1" step="0.05" value="1">` +
+      `<span class="svp-label" id="svpName">${escapeHtml(tile.querySelector(".tile-name")?.textContent?.trim() || "")}</span>`;
+    document.body.appendChild(streamVolPopup);
+    $("svpMute").onclick = () => {
+      const id = streamVolPopup._identity;
+      if (!id) return;
+      const st = tileVol.get(id);
+      if (!st) return;
+      st.muted = !st.muted;
+      $("svpMute").innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume;
+      $("svpMute").classList.toggle("muted", st.muted);
+      $("svpVol").disabled = st.muted;
+      applyTileVol(id);
+    };
+    $("svpVol").oninput = () => {
+      const id = streamVolPopup._identity;
+      if (!id) return;
+      const st = tileVol.get(id);
+      if (!st) return;
+      st.vol = parseFloat($("svpVol").value);
+      if (st.muted) {
+        st.muted = false;
+        $("svpMute").innerHTML = window.ICON.volume;
+        $("svpMute").classList.remove("muted");
+        $("svpVol").disabled = false;
+      }
+      applyTileVol(id);
+    };
+  }
+  const st = tileVol.get(identity) || { vol: 1, muted: false };
+  tileVol.set(identity, st);
+  $("svpMute").innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume;
+  $("svpMute").classList.toggle("muted", st.muted);
+  $("svpVol").value = st.vol;
+  $("svpVol").disabled = st.muted;
+  $("svpName").textContent = tile.querySelector(".tile-name")?.textContent?.trim() || "";
+  streamVolPopup._identity = identity;
+  streamVolPopup.classList.remove("hidden");
+  streamVolPopup._openedAt = Date.now();
+  requestAnimationFrame(() => {
+    const mw = streamVolPopup.offsetWidth || 180, mh = streamVolPopup.offsetHeight || 80;
+    streamVolPopup.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
+    streamVolPopup.style.top = Math.max(8, Math.min(e.clientY - 10, innerHeight - mh - 8)) + "px";
+  });
+}
+function applyTileVol(identity) {
+  const st = tileVol.get(identity);
+  if (!st) return;
+  const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity));
+  if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {}
+}
+
 function removeParticipant(identity) {
   const id = lkTile(identity); removeTile(id); removeTile("screen-" + id);
   const a = audioEls.get(identity); if (a) { a.srcObject = null; a.remove(); audioEls.delete(identity); }
@@ -2467,12 +2529,16 @@ function attachLocalCamera(track) {
 function addScreenTile(id, name, mediaTrack) {
   let tile = $("tile-screen-" + id);
   if (!tile) {
+    const identity = id === "me" ? profile.login : id;
     tile = document.createElement("div"); tile.id = "tile-screen-" + id; tile.className = "tile screen";
+    tile.dataset.identity = identity;
     tile.innerHTML =
       `<video autoplay playsinline ${id === "me" ? "muted" : ""}></video>` +
       `<div class="tile-name">🖥 ${escapeHtml(name)}</div>` +
-      `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>`;
+      `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>` +
+      (id === "me" ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
     vGrid.appendChild(tile);
+    if (id !== "me") wireTileControls(tile, identity);
     // Clicks are handled by the delegated handler on vGrid (zoom / spotlight).
     if (vGrid.classList.contains("has-focus")) relocateNewTile(tile);
   }
@@ -2890,26 +2956,27 @@ function fsReparent(el) {
 }
 function fsRestore(el) { if (el && el._homeParent && el.parentElement !== el._homeParent) { el._homeParent.appendChild(el); } }
 function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; fsReparent(m); m.classList.remove("hidden"); }
-function closeScreenModal() { const m = $("screenModal"); if (m) { m.classList.add("hidden"); fsRestore(m); } }
+function closeScreenModal() { const m = $("screenModal"); if (m) { m.classList.add("hidden"); fsRestore(m); const cb = $("ssIncludeAudio"); if (cb) cb.checked = false; } }
 function setShareActive(on) { call.sharing = on; $("shareScreen").classList.toggle("active", on); }
 async function startScreenShare() {
   const LK = window.LivekitClient;
   if (!call.room || !LK) return;
   const q = screenQuality;
+  const includeAudio = $("ssIncludeAudio") && $("ssIncludeAudio").checked;
   let stream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
-      audio: {
+      audio: includeAudio ? {
         // capture the shared audio raw (music/game quality) — no voice processing
         echoCancellation: false, noiseSuppression: false, autoGainControl: false,
         // don't replay captured audio through our own speakers → no feedback loop
         suppressLocalAudioPlayback: true,
-      },
+      } : false,
       // don't offer the Dialog tab itself as a source (so its audio — other
       // participants' voices — can never be captured/echoed back)
       selfBrowserSurface: "exclude",
-      systemAudio: "include",
+      systemAudio: includeAudio ? "include" : "exclude",
     });
   } catch { closeScreenModal(); setShareActive(false); return; } // пользователь отменил выбор
   const vTrack = stream.getVideoTracks()[0];
@@ -3094,6 +3161,33 @@ vGrid.addEventListener("dblclick", (e) => {
   if (tile.classList.contains("focused")) focusTile(null); // back to the grid
   else watchStream(tile); // zoom (enters fullscreen from the dock if needed)
 });
+// Right-click on tile → volume popup
+vGrid.addEventListener("contextmenu", (e) => {
+  const tile = e.target.closest(".tile");
+  if (!tile) return;
+  const identity = tile.dataset.identity;
+  if (!identity) return;
+  e.preventDefault();
+  openStreamVolPopup(tile, identity, e);
+});
+// Long-press on tile (mobile) → volume popup
+let tileHoldTimer = 0;
+vGrid.addEventListener("touchstart", (e) => {
+  const tile = e.target.closest(".tile");
+  if (!tile) return;
+  const identity = tile.dataset.identity;
+  if (!identity) return;
+  const tp = e.touches && e.touches[0];
+  clearTimeout(tileHoldTimer);
+  tileHoldTimer = setTimeout(() => {
+    try { navigator.vibrate && navigator.vibrate(15); } catch {}
+    openStreamVolPopup(tile, identity, { preventDefault() {}, clientX: tp ? tp.clientX : innerWidth / 2, clientY: tp ? tp.clientY : innerHeight / 2 });
+  }, 480);
+}, { passive: true });
+const cancelTileHold = () => clearTimeout(tileHoldTimer);
+vGrid.addEventListener("touchend", cancelTileHold);
+vGrid.addEventListener("touchmove", cancelTileHold, { passive: true });
+vGrid.addEventListener("touchcancel", cancelTileHold);
 
 // Auto-hiding controls: cursor move (desktop) shows them; tap toggles (mobile);
 // they fade away after 5s of no interaction.
@@ -3581,6 +3675,7 @@ document.addEventListener("keydown", (e) => {
   if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
   if (msgMenu && !msgMenu.classList.contains("hidden")) { msgMenu.classList.add("hidden"); return; }
   if (inputMenu && !inputMenu.classList.contains("hidden")) { inputMenu.classList.add("hidden"); return; }
+  if (streamVolPopup && !streamVolPopup.classList.contains("hidden")) { streamVolPopup.classList.add("hidden"); return; }
 });
 
 // Click-outside для status-меню: глобальный click-проверка по DOM.
@@ -3589,6 +3684,7 @@ document.addEventListener("click", (e) => {
   if (!$("meStatusMenu").classList.contains("hidden") && !e.target.closest("#meStatusMenu") && e.target !== $("meStatus")) closeStatusMenu();
   if (msgMenu && !msgMenu.classList.contains("hidden") && !e.target.closest(".msg-menu")) { msgMenu.classList.add("hidden"); return; }
   if (inputMenu && !inputMenu.classList.contains("hidden") && !e.target.closest(".input-menu")) { inputMenu.classList.add("hidden"); return; }
+  if (streamVolPopup && !streamVolPopup.classList.contains("hidden") && !e.target.closest("#streamVolPopup")) { streamVolPopup.classList.add("hidden"); return; }
 });
 
 // ---------- Иконки ----------

@@ -132,6 +132,7 @@ const I18N = {
     search: "Search", gif: "GIF",
     lb_hint: "Click outside or press Esc to close",
     ping_ms: "ms", language: "Language",
+    include_audio: "Include audio",
     err_unknown: "Error: {reason}",
   },
   ru: {
@@ -266,6 +267,7 @@ const I18N = {
     search: "Поиск", gif: "GIF",
     lb_hint: "Кликните снаружи или нажмите Esc, чтобы закрыть",
     ping_ms: "мс", language: "Язык",
+    include_audio: "Со звуком",
     err_unknown: "Ошибка: {reason}",
   },
 };
