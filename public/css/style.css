@@ -364,6 +364,46 @@ a:focus-visible {
 .login-loading p { color: var(--text-2); font-size: 14px; margin: 0; }
 .login-auth { display: flex; flex-direction: column; gap: 14px; }
 
+/* ── Login stage: card on the left, read-only mirror-terminal on the right ── */
+.auth-stage { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 26px; width: min(1040px, 96vw); }
+.auth-stage .login-card { flex: 0 0 auto; }
+.lang-switch { position: fixed; top: 16px; right: 20px; z-index: 6; display: flex; align-items: center; gap: 6px;
+  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-size: 13px; }
+.lang-switch button { background: none; border: none; color: var(--text-dim); cursor: pointer; font: inherit; padding: 2px 4px; letter-spacing: 1px; }
+.lang-switch button.active { color: var(--accent-400); font-weight: 700; }
+.lang-switch button:hover { color: var(--accent-300); }
+.lang-switch .ls-sep { color: var(--text-dim); opacity: .6; }
+
+.auth-terminal {
+  flex: 1 1 560px; max-width: 620px; height: 560px; max-height: 78vh;
+  display: flex; flex-direction: column;
+  background: #010601; border: 1px solid rgba(var(--primary-rgb), .5); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), .15), 0 24px 60px rgba(0, 0, 0, .6), var(--glow-sm);
+  animation: cardIn .6s var(--ease-out);
+}
+.term-bar { height: 26px; flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px;
+  background: linear-gradient(180deg, #0a1e10, #061006); border-bottom: 1px solid rgba(var(--primary-rgb), .4); }
+.tb-dots { display: flex; gap: 6px; }
+.tb-dots i { width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(var(--primary-rgb), .6); display: block; }
+.tb-dots i.x { background: rgba(var(--primary-rgb), .5); }
+.term-body { position: relative; flex: 1 1 auto; overflow: auto; padding: 16px 18px;
+  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-size: 15px; line-height: 1.7;
+  color: var(--accent-300); text-shadow: 0 0 6px rgba(var(--primary-rgb), .35); }
+.term-prompt { color: var(--accent-200); margin-bottom: 14px; }
+.term-prompt #termCmd { color: var(--accent-400); font-weight: 700; }
+.term-lines .tl { white-space: pre-wrap; word-break: break-word; }
+.term-lines .tv { color: var(--accent-100); }
+.tl.tdim { opacity: .9; margin-top: 4px; }
+.tl.tok { color: var(--accent-400); font-weight: 700; }
+.tcar { display: inline-block; width: 7px; color: var(--accent-400); animation: caretBlink 1s step-end infinite; }
+@keyframes caretBlink { 50% { opacity: 0; } }
+.term-gif { position: absolute; right: 22px; top: 50%; transform: translateY(-45%); width: 200px; max-width: 44%; opacity: .92; pointer-events: none; }
+
+@media (max-width: 900px) {
+  .auth-terminal { display: none; }   /* phones: just the card */
+  .lang-switch { top: 12px; right: 14px; }
+}
+
 .brand {
   display: flex; align-items: center; gap: 14px; justify-content: center;
   margin-bottom: 2px;

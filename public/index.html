@@ -18,6 +18,10 @@
 <body>
   <!-- ВХОД -->
   <div id="login" class="login">
+    <div class="lang-switch" id="langSwitch">
+      <button type="button" data-lang="en">en</button><span class="ls-sep">/</span><button type="button" data-lang="ru">ru</button>
+    </div>
+    <div class="auth-stage">
     <div class="login-card">
       <!-- Loading state — visible on page load until we know the auth status -->
       <div id="loginLoading" class="login-loading">
@@ -34,7 +38,7 @@
         </div>
         <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
           <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
-          <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
+          <span class="field-wrap"><input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
           <div class="form-error" id="loginError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
           <button type="button" class="auth-link" id="forgotLink" data-i18n="forgot_pw">Forgot password?</button>
@@ -43,8 +47,8 @@
           <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
           <input class="field" name="email" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" />
-          <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
-          <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" />
+          <span class="field-wrap"><input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
+          <span class="field-wrap"><input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
           <div class="form-error" id="registerError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
         </form>
@@ -56,6 +60,16 @@
           <button type="button" class="auth-link" id="forgotBack" data-i18n="back_to_login">Back to sign in</button>
         </form>
       </div>
+    </div>
+    <!-- Read-only terminal: mirrors what you type on the left (hacker aesthetic). -->
+    <div class="auth-terminal hidden" id="authTerminal" aria-hidden="true">
+      <div class="term-bar"><span class="tb-dots"><i></i><i></i><i class="x"></i></span></div>
+      <div class="term-body">
+        <div class="term-prompt">[admin@linux-machine ~]$ exec <span id="termCmd">signup</span></div>
+        <div id="termLines" class="term-lines"></div>
+        <img class="term-gif" src="/src/3Dialog.gif" alt="" />
+      </div>
+    </div>
     </div>
   </div>
 
