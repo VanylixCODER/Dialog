@@ -670,6 +670,12 @@ a:focus-visible {
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar.grp { color: var(--accent-300); border-radius: 8px; }
 .avatar[data-login="dref1x"], .tile-avatar[data-login="dref1x"] { border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; }
+/* Pentagon avatar for @username — the pfp is clipped into a regular pentagon. */
+.avatar[data-login="username"], .tile-avatar[data-login="username"] {
+  border-radius: 0; border-color: transparent;
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  -webkit-clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+}
 
 .chat-item .avatar { box-shadow: 0 0 0 0 transparent; }
 .chat-item:hover .avatar { border-color: var(--accent-400); box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08); }
@@ -3480,3 +3486,64 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
   0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.3); }
   50% { box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08); }
 }
+
+/* ===================== Account switcher ===================== */
+.account-menu {
+  position: fixed; z-index: 300; min-width: 240px; max-width: 300px;
+  background: var(--bg-2); border: 1px solid var(--border-1); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.45); padding: 8px; display: flex; flex-direction: column; gap: 2px;
+}
+.account-menu .acct-head { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px 4px; }
+.acct-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+.acct-row:hover { background: var(--bg-3); }
+.acct-row.active { background: rgba(var(--primary-rgb), .10); cursor: default; }
+.acct-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.acct-name { font-weight: 700; font-size: 14px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acct-login { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acct-out { background: none; border: 0; color: var(--text-3); cursor: pointer; padding: 6px; border-radius: 8px; display: grid; place-items: center; }
+.acct-out:hover { background: var(--bg-4); color: #ff6b6b; }
+.acct-out svg { width: 16px; height: 16px; }
+.acct-add { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 9px 8px; border-radius: 10px;
+  background: var(--bg-3); border: 1px dashed var(--border-2); color: var(--text-1); cursor: pointer; font-weight: 600; font-size: 13px; }
+.acct-add:hover { border-color: var(--accent-400); }
+.acct-add svg { width: 16px; height: 16px; }
+.acct-limit-note { font-size: 12px; color: var(--text-3); padding: 8px; text-align: center; }
+
+/* ===================== Admin panel ===================== */
+.admin-card { max-width: 860px; width: min(94vw, 860px); }
+.admin-body { padding: 14px 16px 18px; overflow: auto; }
+.admin-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.astat { background: var(--bg-2); border: 1px solid var(--border-1); border-radius: 12px; padding: 10px 14px; min-width: 84px; display: flex; flex-direction: column; }
+.astat-n { font-size: 22px; font-weight: 800; color: var(--accent-300); line-height: 1; }
+.astat-l { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+#adminSearch { margin-bottom: 12px; }
+.admin-users { display: flex; flex-direction: column; gap: 10px; }
+.admin-empty { color: var(--text-3); text-align: center; padding: 20px; }
+.auser { background: var(--bg-2); border: 1px solid var(--border-1); border-radius: 14px; padding: 12px 14px; }
+.auser-top { display: flex; align-items: center; gap: 10px; }
+.auser-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.auser-name { font-weight: 700; color: var(--text-1); }
+.auser-login { font-size: 12px; color: var(--text-3); }
+.auser-badges { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.abadge { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: var(--bg-4); color: var(--text-2); border: 1px solid var(--border-1); white-space: nowrap; }
+.abadge.on { color: #58d68d; border-color: #2e7d4f; }
+.abadge.ban { color: #ff7676; border-color: #7d2e2e; }
+.abadge.ok { color: #58d68d; }
+.auser-meta { font-size: 12px; color: var(--text-3); margin: 8px 0; word-break: break-all; }
+.auser-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.auser-actions button { font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border-1); color: var(--text-1); cursor: pointer; }
+.auser-actions button:hover { border-color: var(--accent-400); }
+.auser-actions button[data-act="ban"], .auser-actions button[data-act="banip"] { color: #ff8a8a; }
+.auser-devices { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.adev { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); background: var(--bg-3); padding: 6px 10px; border-radius: 8px; }
+.adev code { color: var(--text-3); }
+.adev button { margin-left: auto; font-size: 11px; padding: 4px 9px; border-radius: 7px; background: var(--bg-4); border: 1px solid var(--border-1); color: #ff8a8a; cursor: pointer; }
+.admin-iprow { display: flex; gap: 8px; margin-bottom: 12px; }
+.admin-iprow .field { flex: 1; }
+.admin-ips { display: flex; flex-direction: column; gap: 6px; }
+.aip { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border: 1px solid var(--border-1); border-radius: 10px; padding: 8px 12px; }
+.aip span { font-weight: 700; color: var(--text-1); }
+.aip em { color: var(--text-3); font-size: 12px; font-style: normal; }
+.aip button { margin-left: auto; font-size: 12px; padding: 5px 11px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border-1); color: var(--text-1); cursor: pointer; }
+.admin-logbar { margin-bottom: 8px; }
+.admin-logs { background: #05080a; color: #9fe6b6; border: 1px solid var(--border-1); border-radius: 10px; padding: 12px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow: auto; }

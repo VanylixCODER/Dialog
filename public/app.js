@@ -489,7 +489,93 @@ $("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
   sw.querySelectorAll("button").forEach((b) => b.onclick = () => { if (window.setLang) setLang(b.dataset.lang); mark(); updateTerminal(); });
   mark();
 })();
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); playAuthSuccess(); }
+function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); rememberAccount(p, tk); playAuthSuccess(); }
+
+// ---------- Multi-account (switch account, max 2 per device) ----------
+const MAX_ACCOUNTS = 2;
+let addingAccount = false;
+function getAccounts() { try { return JSON.parse(localStorage.getItem("dialog_accounts") || "[]"); } catch { return []; } }
+function saveAccounts(a) { localStorage.setItem("dialog_accounts", JSON.stringify(a.slice(0, MAX_ACCOUNTS))); }
+function rememberAccount(p, tk) {
+  if (!p || !tk) return;
+  let a = getAccounts().filter((x) => x.login !== p.login);
+  a.unshift({ login: p.login, name: p.name, token: tk });
+  saveAccounts(a);
+}
+function switchToAccount(login) {
+  const a = getAccounts().find((x) => x.login === login);
+  if (!a || (profile && login === profile.login)) return;
+  localStorage.setItem("dialog_token", a.token);
+  location.reload();
+}
+async function logoutToken(tk) {
+  try { await fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + tk } }); } catch {}
+}
+async function signOutAccount(login) {
+  const acc = getAccounts().find((x) => x.login === login);
+  if (acc) logoutToken(acc.token);
+  const rest = getAccounts().filter((x) => x.login !== login);
+  saveAccounts(rest);
+  if (profile && login === profile.login) {
+    if (rest[0]) localStorage.setItem("dialog_token", rest[0].token);
+    else localStorage.removeItem("dialog_token");
+    location.reload();
+  } else {
+    renderAccountMenu();
+  }
+}
+function beginAddAccount() {
+  if (getAccounts().length >= MAX_ACCOUNTS) { notify(t("acct_limit", { n: MAX_ACCOUNTS })); return; }
+  sessionStorage.setItem("dialog_add_account", "1");
+  location.reload();
+}
+// Small popover listing stored accounts + "Add account".
+function renderAccountMenu() {
+  let menu = $("accountMenu");
+  if (!menu) { menu = document.createElement("div"); menu.id = "accountMenu"; menu.className = "chat-menu account-menu hidden"; document.body.appendChild(menu); }
+  const accs = getAccounts();
+  menu.innerHTML = "";
+  const head = document.createElement("div"); head.className = "acct-head"; head.textContent = t("switch_account"); menu.appendChild(head);
+  for (const a of accs) {
+    const isActive = profile && a.login === profile.login;
+    const row = document.createElement("div"); row.className = "acct-row" + (isActive ? " active" : "");
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(a.login)}" style="width:32px;height:32px;font-size:13px"><img src="${avaUrl(a.login)}" onerror="this.remove()">${initials(a.name || a.login)}</div>`
+      + `<div class="acct-meta"><span class="acct-name">${escapeHtml(a.name || a.login)}</span><span class="acct-login">@${escapeHtml(a.login)}${isActive ? " · " + t("acct_current") : ""}</span></div>`
+      + `<button class="acct-out" title="${t("btn_logout")}">${window.ICON.logout || "✕"}</button>`;
+    row.querySelector(".acct-out").onclick = (e) => { e.stopPropagation(); signOutAccount(a.login); };
+    if (!isActive) row.onclick = () => switchToAccount(a.login);
+    menu.appendChild(row);
+  }
+  if (accs.length < MAX_ACCOUNTS) {
+    const add = document.createElement("button"); add.className = "acct-add";
+    add.innerHTML = (window.ICON.plus || "+") + "<span>" + t("add_account") + "</span>";
+    add.onclick = () => { closeAccountMenu(); beginAddAccount(); };
+    menu.appendChild(add);
+  } else {
+    const note = document.createElement("div"); note.className = "acct-limit-note"; note.textContent = t("acct_limit", { n: MAX_ACCOUNTS });
+    menu.appendChild(note);
+  }
+  return menu;
+}
+function closeAccountMenu() { const m = $("accountMenu"); if (m) m.classList.add("hidden"); }
+function toggleAccountMenu() {
+  const menu = renderAccountMenu();
+  const btn = $("accountBtn");
+  if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+  menu.classList.remove("hidden");
+  menu._openedAt = Date.now();
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth || 240;
+  menu.style.top = (r.bottom + 6) + "px";
+  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - mw - 8)) + "px";
+}
+$("accountBtn") && ($("accountBtn").onclick = (e) => { e.stopPropagation(); toggleAccountMenu(); });
+$("addAcctBack") && ($("addAcctBack").onclick = () => { sessionStorage.removeItem("dialog_add_account"); location.reload(); });
+document.addEventListener("click", (e) => {
+  const m = $("accountMenu"); if (!m || m.classList.contains("hidden")) return;
+  if (Date.now() - (m._openedAt || 0) < 300) return;
+  if (!e.target.closest("#accountMenu") && !e.target.closest("#accountBtn")) m.classList.add("hidden");
+});
 
 // ── Email reminder (secure account / verify) ──────────────────────────────
 function maybeShowEmailNag() {
@@ -530,22 +616,39 @@ function showLogin() {
   const term = $("authTerminal"); if (term) term.classList.remove("hidden");
   wireAuthMirror();
   updateTerminal();
+  try {
+    if (localStorage.getItem("dialog_banned")) {
+      localStorage.removeItem("dialog_banned");
+      const err = $("loginError"); if (err) { err.textContent = t("account_banned"); err.style.color = "#ff5a5a"; }
+    }
+  } catch {}
 }
 async function checkSession() {
   // Save the current URL route before any auth redirect — so after login we can
   // jump straight to the intended DM/group instead of staring at the empty app.
   const route = window.parsePath ? parsePath() : { lang: null, login: null, groupId: null };
   if (route.login || route.groupId) sessionStorage.setItem("dialog_route", JSON.stringify(route));
+  // "Add account" was requested: show the login screen even though a session
+  // exists — the previous account stays stored so you can return or switch back.
+  if (sessionStorage.getItem("dialog_add_account")) {
+    sessionStorage.removeItem("dialog_add_account");
+    addingAccount = true;
+    showLogin();
+    const back = $("addAcctBack"); if (back && getAccounts().length) back.classList.remove("hidden");
+    return;
+  }
   if (!token) { showLogin(); return; }
   const { ok, data } = await api("/api/me", null, "GET");
   if (ok) { profile = data.profile; enterApp(); } else { localStorage.removeItem("dialog_token"); showLogin(); }
 }
 
 function enterApp() {
+  rememberAccount(profile, token); // keep the active account listed in the switcher
   myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || "";
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
+  const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   socket.emit("identify", { token });
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
@@ -581,6 +684,13 @@ socket.on("connect", () => {
   // звонок (LiveKit) переподключается сам — наш сокет лишь восстанавливает чат
 });
 socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
+// Admin kicked this device (or ban): drop just THIS account and reload.
+socket.on("force-logout", () => {
+  if (profile) { const rest = getAccounts().filter((x) => x.login !== profile.login); saveAccounts(rest); if (rest[0]) localStorage.setItem("dialog_token", rest[0].token); else localStorage.removeItem("dialog_token"); }
+  else localStorage.removeItem("dialog_token");
+  location.reload();
+});
+socket.on("banned", () => { try { localStorage.setItem("dialog_banned", "1"); } catch {} localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Хранилище чатов (ЛС на сервере + localStorage fallback) ----------
 const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
@@ -3692,8 +3802,8 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
@@ -3760,4 +3870,147 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
   });
   // Initial render of themes into the grid (called after i18n is wired)
   if (typeof renderThemes === "function") renderThemes();
+})();
+
+// ==================== Admin Panel ====================
+// Visible only to admin accounts (profile.admin). All actions hit /api/admin/*,
+// which re-checks admin server-side; the UI gate is convenience only.
+(function initAdmin() {
+  const ov = $("adminOverlay"); if (!ov) return;
+  const openBtn = $("adminBtn"), closeBtn = $("adminClose");
+  const esc = (s) => escapeHtml(s == null ? "" : String(s));
+  const aapi = (path, body, method = "POST") => api(path, body, method);
+
+  function openAdmin() { ov.classList.remove("hidden"); showAdminTab("users"); loadAdminUsers(); loadAdminStats(); }
+  function closeAdmin() { ov.classList.add("hidden"); }
+  openBtn && (openBtn.onclick = openAdmin);
+  closeBtn && (closeBtn.onclick = closeAdmin);
+  ov.addEventListener("click", (e) => { if (e.target === ov) closeAdmin(); });
+
+  function showAdminTab(name) {
+    ov.querySelectorAll(".settings-tab").forEach((b) => b.classList.toggle("active", b.dataset.atab === name));
+    ov.querySelectorAll(".admin-pane").forEach((p) => p.classList.toggle("active", p.dataset.apane === name));
+    if (name === "logs") loadAdminLogs();
+    if (name === "ips") loadAdminIps();
+  }
+  ov.querySelectorAll(".settings-tab").forEach((b) => b.onclick = () => showAdminTab(b.dataset.atab));
+
+  async function loadAdminStats() {
+    const { ok, data } = await aapi("/api/admin/stats", null, "GET");
+    if (!ok) return;
+    const box = $("adminStats");
+    const cell = (k, v) => `<div class="astat"><span class="astat-n">${v}</span><span class="astat-l">${k}</span></div>`;
+    box.innerHTML = cell(t("adm_users"), data.users) + cell(t("adm_online"), data.online) + cell(t("adm_banned"), data.banned)
+      + cell(t("adm_verified"), data.verified) + cell(t("adm_messages"), data.messages) + cell(t("adm_groups"), data.groups)
+      + cell(t("adm_ip_bans"), data.banned_ips);
+  }
+
+  let usersCache = [];
+  async function loadAdminUsers() {
+    const q = ($("adminSearch").value || "").trim();
+    const { ok, data } = await aapi("/api/admin/users?q=" + encodeURIComponent(q), null, "GET");
+    if (!ok) { $("adminUsers").innerHTML = `<div class="admin-empty">${esc((data && data.error) || "error")}</div>`; return; }
+    usersCache = data;
+    renderAdminUsers();
+  }
+  function renderAdminUsers() {
+    const wrap = $("adminUsers");
+    if (!usersCache.length) { wrap.innerHTML = `<div class="admin-empty">${t("adm_no_users")}</div>`; return; }
+    wrap.innerHTML = usersCache.map((u) => {
+      const badges = [
+        u.online ? `<span class="abadge on">${t("adm_online")}${u.devices > 1 ? " ×" + u.devices : ""}</span>` : "",
+        u.banned ? `<span class="abadge ban">${t("adm_banned")}</span>` : "",
+        u.email_verified ? `<span class="abadge ok">✓ ${t("adm_email")}</span>` : (u.email ? `<span class="abadge">${t("adm_unverified")}</span>` : ""),
+      ].join("");
+      return `<div class="auser" data-login="${esc(u.login)}">
+        <div class="auser-top">
+          <div class="avatar" data-login="${esc(u.login)}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(u.login)}" onerror="this.remove()">${initials(u.name || u.login)}</div>
+          <div class="auser-id"><span class="auser-name">${esc(u.name)}</span><span class="auser-login">@${esc(u.login)}</span></div>
+          <div class="auser-badges">${badges}</div>
+        </div>
+        <div class="auser-meta">${esc(u.email || "—")} · IP ${esc(u.last_ip || "?")}</div>
+        <div class="auser-actions">
+          <button data-act="ban">${u.banned ? t("adm_unban") : t("adm_ban")}</button>
+          <button data-act="banip">${t("adm_ban_ip")}</button>
+          <button data-act="kick">${t("adm_kick_all")}</button>
+          <button data-act="devices">${t("adm_devices")}</button>
+          <button data-act="rename">${t("adm_rename")}</button>
+          <button data-act="email">${t("adm_change_email")}</button>
+          <button data-act="reset">${t("adm_send_reset")}</button>
+        </div>
+        <div class="auser-devices hidden"></div>
+      </div>`;
+    }).join("");
+    wrap.querySelectorAll(".auser").forEach((el) => {
+      const login = el.dataset.login;
+      el.querySelectorAll(".auser-actions button").forEach((b) => b.onclick = () => adminAction(b.dataset.act, login, el));
+    });
+  }
+
+  async function adminAction(act, login, el) {
+    if (act === "ban") {
+      const u = usersCache.find((x) => x.login === login);
+      const banned = !(u && u.banned);
+      if (banned && !confirm(t("adm_confirm_ban", { login }))) return;
+      const { ok, data } = await aapi("/api/admin/ban", { login, banned });
+      if (!ok) return notify((data && data.error) || "error");
+      notify(banned ? t("adm_done_ban", { login }) : t("adm_done_unban", { login }));
+      loadAdminUsers(); loadAdminStats();
+    } else if (act === "banip") {
+      if (!confirm(t("adm_confirm_banip", { login }))) return;
+      const { ok, data } = await aapi("/api/admin/ban-ip", { login });
+      notify(ok ? t("adm_done_banip", { ip: data.ip }) : ((data && data.error) || "error"));
+      loadAdminUsers(); loadAdminStats();
+    } else if (act === "kick") {
+      const { ok } = await aapi("/api/admin/kick", { login });
+      notify(ok ? t("adm_done_kick", { login }) : "error"); loadAdminUsers();
+    } else if (act === "devices") {
+      const box = el.querySelector(".auser-devices");
+      if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+      const { ok, data } = await aapi("/api/admin/devices?login=" + encodeURIComponent(login), null, "GET");
+      if (!ok) return;
+      box.innerHTML = data.length ? data.map((d) => `<div class="adev"><span>${esc(d.ip || "?")}</span><code>${esc(d.id.slice(0, 8))}</code><button data-id="${esc(d.id)}">${t("adm_kick_dev")}</button></div>`).join("") : `<div class="admin-empty">${t("adm_no_devices")}</div>`;
+      box.querySelectorAll("button").forEach((b) => b.onclick = async () => { await aapi("/api/admin/kick-device", { socketId: b.dataset.id }); notify(t("adm_done_kick_dev")); adminAction("devices", login, el); adminAction("devices", login, el); });
+      box.classList.remove("hidden");
+    } else if (act === "rename") {
+      const u = usersCache.find((x) => x.login === login);
+      const name = prompt(t("adm_new_name"), (u && u.name) || "");
+      if (name == null || !name.trim()) return;
+      const { ok, data } = await aapi("/api/admin/rename", { login, name: name.trim() });
+      notify(ok ? t("adm_done_rename") : ((data && data.error) || "error")); loadAdminUsers();
+    } else if (act === "email") {
+      const u = usersCache.find((x) => x.login === login);
+      const email = prompt(t("adm_new_email"), (u && u.email) || "");
+      if (email == null || !email.trim()) return;
+      const { ok, data } = await aapi("/api/admin/set-email", { login, email: email.trim() });
+      notify(ok ? t("adm_done_email") : ((data && data.error) || "error")); loadAdminUsers();
+    } else if (act === "reset") {
+      const { ok, data } = await aapi("/api/admin/send-reset", { login });
+      notify(ok ? t("adm_done_reset", { email: data.email }) : (data && data.error) === "no_email" ? t("adm_no_email") : "error");
+    }
+  }
+
+  async function loadAdminLogs() {
+    const { ok, data } = await aapi("/api/admin/logs", null, "GET");
+    if (!ok) return;
+    const pre = $("adminLogs");
+    pre.textContent = data.map((l) => `[${new Date(l.t).toLocaleTimeString()}] ${l.level.toUpperCase()}  ${l.line}`).join("\n");
+    pre.scrollTop = pre.scrollHeight;
+  }
+  async function loadAdminIps() {
+    const { ok, data } = await aapi("/api/admin/banned-ips", null, "GET");
+    if (!ok) return;
+    const box = $("adminIps");
+    box.innerHTML = data.length ? data.map((r) => `<div class="aip"><span>${esc(r.ip)}</span><em>${esc(r.reason || "")}</em><button data-ip="${esc(r.ip)}">${t("adm_unban_ip")}</button></div>`).join("") : `<div class="admin-empty">${t("adm_no_ipbans")}</div>`;
+    box.querySelectorAll("button").forEach((b) => b.onclick = async () => { await aapi("/api/admin/unban-ip", { ip: b.dataset.ip }); loadAdminIps(); loadAdminStats(); });
+  }
+
+  $("adminSearch") && ($("adminSearch").oninput = debounce(loadAdminUsers, 300));
+  $("adminLogRefresh") && ($("adminLogRefresh").onclick = loadAdminLogs);
+  $("adminIpBan") && ($("adminIpBan").onclick = async () => {
+    const ip = ($("adminIpInput").value || "").trim(); if (!ip) return;
+    const { ok, data } = await aapi("/api/admin/ban-ip", { ip });
+    if (ok) { $("adminIpInput").value = ""; loadAdminIps(); loadAdminStats(); notify(t("adm_done_banip", { ip: data.ip })); }
+    else notify((data && data.error) || "error");
+  });
 })();

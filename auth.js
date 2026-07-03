@@ -7,6 +7,12 @@ import { cacheGet, cacheSet, cacheDel } from "./cache.js";
 const scryptAsync = promisify(scrypt);
 const SESS_TTL = 7 * 24 * 3600; // кэш сессии — неделя
 
+// Admin accounts (comma-separated logins via env, default "admin").
+export const ADMIN_LOGINS = new Set(
+  (process.env.ADMIN_LOGINS || "admin").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+);
+export const isAdmin = (login) => ADMIN_LOGINS.has(String(login || "").toLowerCase());
+
 const hashPw = async (password, salt) => (await scryptAsync(password, salt, 64)).toString("hex");
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -55,6 +61,7 @@ export async function login(identifier, password) {
   }
   if (!u) throw new Error("Неверный логин или пароль");
   if (!(await pwMatches(u, password))) throw new Error("Неверный логин или пароль");
+  if (u.banned) throw new Error("Аккаунт заблокирован");
   return issueToken(u.login);
 }
 
@@ -77,6 +84,7 @@ export async function userByToken(token) {
   if (!login) return null;
   try { u = await db.getUser(login); } catch { return null; }
   if (!u) return null;
+  if (u.banned) return null; // banned mid-session → token stops resolving
   const profile = profileOf(u);
   cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL).catch(() => {}); // best-effort, не блокируем ответ
   return profile;
@@ -91,5 +99,6 @@ function profileOf(u) {
   return { login: u.login, name: u.name, description: u.description || "", status: u.status || "online",
            created_at: u.created_at,
            email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed,
-           pwChangedAt: Number(u.pw_changed_at) || 0 };
+           pwChangedAt: Number(u.pw_changed_at) || 0,
+           banned: !!u.banned, admin: isAdmin(u.login) };
 }
