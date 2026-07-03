@@ -358,10 +358,73 @@ async function api(path, body, method = "POST") {
 }
 
 // ---------- Аутентификация ----------
+// ── Auth terminal: read-only, mirrors the form you're filling (passwords masked) ──
+const AUTH_MODES = {
+  login: { cmd: "login", fields: [["Username", "login"], ["Password", "password", true]] },
+  register: { cmd: "signup", fields: [["Display name", "name"], ["Username", "login"], ["Email", "email"], ["Password", "password", true], ["Repeat Password", "password2", true]] },
+  forgot: { cmd: "recover", fields: [["Email", "email"]] }
+};
+let authMode = "login", termBusy = false, termFocus = null;
+function activeAuthForm() { return authMode === "register" ? $("registerForm") : authMode === "forgot" ? $("forgotForm") : $("loginForm"); }
+function updateTerminal() {
+  if (termBusy || !$("termLines")) return;
+  const m = AUTH_MODES[authMode]; if (!m) return;
+  $("termCmd").textContent = m.cmd;
+  const form = activeAuthForm();
+  let html = "";
+  for (const [label, name, mask] of m.fields) {
+    const el = form && form.elements[name]; const val = el ? el.value : "";
+    const shown = mask ? "*".repeat(val.length) : escapeHtml(val);
+    const caret = name === termFocus ? '<span class="tcar">▍</span>' : "";
+    html += `<div class="tl">~$: ${label}: <span class="tv">${shown}</span>${caret}</div>`;
+  }
+  $("termLines").innerHTML = html;
+}
+function setAuthMode(mode) { authMode = mode; updateTerminal(); }
+function wireAuthMirror() {
+  if (wireAuthMirror._done) return; wireAuthMirror._done = true;
+  ["loginForm", "registerForm", "forgotForm"].forEach((fid) => {
+    const f = $(fid); if (!f) return;
+    f.querySelectorAll("input").forEach((inp) => {
+      inp.addEventListener("input", updateTerminal);
+      inp.addEventListener("focus", () => { termFocus = inp.name; updateTerminal(); });
+      inp.addEventListener("blur", () => { if (termFocus === inp.name) termFocus = null; updateTerminal(); });
+    });
+  });
+  // Eye toggles (show/hide password).
+  document.querySelectorAll(".toggle-eye").forEach((btn) => {
+    btn.innerHTML = window.ICON.eye;
+    btn.onclick = () => {
+      const inp = btn.parentElement.querySelector("input");
+      const reveal = inp.type === "password";
+      inp.type = reveal ? "text" : "password";
+      btn.innerHTML = reveal ? window.ICON.eyeOff : window.ICON.eye;
+    };
+  });
+}
+// Cosmetic post-auth sequence in the terminal, then load the app.
+function playAuthSuccess() {
+  termBusy = true;
+  const lines = $("termLines");
+  if (!lines) { enterApp(); return; }
+  const add = (text, cls) => { const d = document.createElement("div"); d.className = "tl " + (cls || ""); d.textContent = text; lines.appendChild(d); return d; };
+  add("");
+  add(authMode === "register" ? "Creating account..." : "Signing in...", "tdim");
+  setTimeout(() => {
+    add(""); add("SUCCESS!!", "tok"); add("Redirecting in..", "tok");
+    const cd = add("3....", "tok");
+    setTimeout(() => { cd.textContent = "3.... 2..."; }, 650);
+    setTimeout(() => { cd.textContent = "3.... 2... 1.."; }, 1300);
+    setTimeout(() => { termBusy = false; enterApp(); }, 2050);
+  }, 700);
+}
+
 document.querySelectorAll(".auth-tab").forEach((tab) => tab.onclick = () => {
   document.querySelectorAll(".auth-tab").forEach((x) => x.classList.toggle("active", x === tab));
   $("loginForm").classList.toggle("hidden", tab.dataset.mode !== "login");
   $("registerForm").classList.toggle("hidden", tab.dataset.mode !== "register");
+  $("forgotForm").classList.add("hidden");
+  setAuthMode(tab.dataset.mode);
 });
 $("loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
@@ -377,14 +440,21 @@ $("registerForm").onsubmit = async (e) => {
   onAuth(data);
 };
 // Forgot password — reveal the email form, POST /api/forgot (server always 200).
-$("forgotLink") && ($("forgotLink").onclick = () => { $("loginForm").classList.add("hidden"); $("forgotForm").classList.remove("hidden"); $("forgotMsg").className = "form-error"; $("forgotMsg").textContent = ""; });
-$("forgotBack") && ($("forgotBack").onclick = () => { $("forgotForm").classList.add("hidden"); $("loginForm").classList.remove("hidden"); });
+$("forgotLink") && ($("forgotLink").onclick = () => { $("loginForm").classList.add("hidden"); $("forgotForm").classList.remove("hidden"); $("forgotMsg").className = "form-error"; $("forgotMsg").textContent = ""; setAuthMode("forgot"); });
+$("forgotBack") && ($("forgotBack").onclick = () => { $("forgotForm").classList.add("hidden"); $("loginForm").classList.remove("hidden"); setAuthMode("login"); });
 $("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
   e.preventDefault();
   await api("/api/forgot", { email: e.target.email.value.trim() });
   $("forgotMsg").className = "form-error ok"; $("forgotMsg").textContent = t("forgot_sent");
 });
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
+// Language switch (en / ru) on the login screen.
+(function initLangSwitch() {
+  const sw = $("langSwitch"); if (!sw) return;
+  const mark = () => sw.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.lang === (window.getLang ? getLang() : "en")));
+  sw.querySelectorAll("button").forEach((b) => b.onclick = () => { if (window.setLang) setLang(b.dataset.lang); mark(); updateTerminal(); });
+  mark();
+})();
+function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); playAuthSuccess(); }
 
 // ── Email reminder (secure account / verify) ──────────────────────────────
 function maybeShowEmailNag() {
@@ -422,6 +492,9 @@ $("emailNagDontShow") && ($("emailNagDontShow").onchange = async (e) => { if (e.
 function showLogin() {
   $("loginLoading").classList.add("hidden");
   $("loginAuth").classList.remove("hidden");
+  const term = $("authTerminal"); if (term) term.classList.remove("hidden");
+  wireAuthMirror();
+  updateTerminal();
 }
 async function checkSession() {
   // Save the current URL route before any auth redirect — so after login we can

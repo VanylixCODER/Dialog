@@ -13,6 +13,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/site.css" />
+  <style>
+    .lang-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: 1px; margin-left: 6px; }
+    .lang-pick button { background: none; border: none; color: #6f8a7b; cursor: pointer; font: inherit; padding: 2px 3px; }
+    .lang-pick button.active { color: #2ec96b; font-weight: 700; }
+    .lang-pick button:hover { color: #57e08d; }
+    .lang-pick .sep { color: #3c5346; }
+  </style>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -22,28 +29,28 @@
     <div class="wrap">
       <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
       <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="/download">Download</a>
-        <a class="nav-cta" id="navOpen" href="/login">Open Dialog</a>
+        <a href="#features" data-t="nav_features">Features</a>
+        <a href="/download" data-t="nav_download">Download</a>
+        <a class="nav-cta" id="navOpen" href="/login" data-t="nav_open">Open Dialog</a>
+        <span class="lang-pick" id="langPick"><button data-lang="en">en</button><span class="sep">/</span><button data-lang="ru">ru</button></span>
       </div>
     </div>
   </nav>
 
   <header class="hero wrap">
-    <span class="badge">▲ CHAT · CALLS · SCREEN SHARE</span>
-    <h1>Talk freely.<br /><span class="grad">Encrypted. Everywhere.</span></h1>
-    <p class="sub">Dialog is a fast, no-nonsense messenger with group voice &amp; video calls and screen sharing — in your browser, on your desktop, and on your phone.</p>
+    <span class="badge" data-t="badge">▲ CHAT · CALLS · SCREEN SHARE</span>
+    <h1><span data-t="h1a">Talk freely.</span><br /><span class="grad" data-t="h1b">Encrypted. Everywhere.</span></h1>
+    <p class="sub" data-t="sub">Dialog is a fast, no-nonsense messenger with group voice &amp; video calls and screen sharing — in your browser, on your desktop, and on your phone.</p>
     <div class="hero-cta">
       <a class="btn btn-primary" id="dlBtn" href="/download">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-        <span id="dlBtnLabel">Download</span>
+        <span id="dlBtnLabel" data-t="dl_download">Download</span>
       </a>
-      <a class="btn btn-ghost" id="browserBtn" href="/login">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>
+      <a class="btn btn-ghost" id="browserBtn" href="/login" data-t="browser_btn">
         Use in browser
       </a>
     </div>
-    <p class="hero-os" id="heroOs">All platforms · <a href="/download">see all downloads</a></p>
+    <p class="hero-os" id="heroOs"></p>
 
     <div class="hero-shot reveal">
       <img src="/src/preview.png" alt="Dialog app" onerror="this.closest('.hero-shot').style.display='none'" />
@@ -52,51 +59,51 @@
 
   <section id="features" class="wrap">
     <div class="section-head reveal">
-      <h2>Everything you need to stay in touch</h2>
-      <p>Built for speed and privacy, with the features you actually use.</p>
+      <h2 data-t="feat_h2">Everything you need to stay in touch</h2>
+      <p data-t="feat_p">Built for speed and privacy, with the features you actually use.</p>
     </div>
     <div class="features">
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <h3>Instant messaging</h3>
-        <p>Direct messages and group chats with reactions, edits, replies, voice notes, GIFs and file sharing.</p>
+        <h3 data-t="f1h">Instant messaging</h3>
+        <p data-t="f1p">Direct messages and group chats with reactions, edits, replies, voice notes, GIFs and file sharing.</p>
       </div>
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-        <h3>Group voice &amp; video</h3>
-        <p>Crystal-clear group calls powered by a low-latency media server — jump in with one tap.</p>
+        <h3 data-t="f2h">Group voice &amp; video</h3>
+        <p data-t="f2p">Crystal-clear group calls powered by a low-latency media server — jump in with one tap.</p>
       </div>
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
-        <h3>Screen sharing</h3>
-        <p>Share your whole screen in a call to present, pair, or game together — no extra software.</p>
+        <h3 data-t="f3h">Screen sharing</h3>
+        <p data-t="f3p">Share your whole screen in a call to present, pair, or game together — no extra software.</p>
       </div>
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg></div>
-        <h3>Native desktop apps</h3>
-        <p>Real apps for Windows, macOS and Linux with a system tray, auto-updates and a slick boot screen.</p>
+        <h3 data-t="f4h">Native desktop apps</h3>
+        <p data-t="f4p">Real apps for Windows, macOS and Linux with a system tray, auto-updates and a slick boot screen.</p>
       </div>
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
-        <h3>Notifications &amp; tray</h3>
-        <p>Native OS notifications and unread badges keep you in the loop, even when Dialog is in the background.</p>
+        <h3 data-t="f5h">Notifications &amp; tray</h3>
+        <p data-t="f5p">Native OS notifications and unread badges keep you in the loop, even when Dialog is in the background.</p>
       </div>
       <div class="feature reveal">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
-        <h3>Works everywhere</h3>
-        <p>Browser, desktop and Android — your chats, calls and contacts stay in sync across all of them.</p>
+        <h3 data-t="f6h">Works everywhere</h3>
+        <p data-t="f6p">Browser, desktop and Android — your chats, calls and contacts stay in sync across all of them.</p>
       </div>
     </div>
   </section>
 
   <section class="wrap">
     <div class="section-head reveal">
-      <h2>Get Dialog</h2>
-      <p>Download the app for your platform, or just open it in your browser — no install required.</p>
+      <h2 data-t="get_h2">Get Dialog</h2>
+      <p data-t="get_p">Download the app for your platform, or just open it in your browser — no install required.</p>
     </div>
     <div class="hero-cta reveal">
-      <a class="btn btn-primary" id="dlBtn2" href="/download">Download the app</a>
-      <a class="btn btn-ghost" href="/login">Open in browser</a>
+      <a class="btn btn-primary" id="dlBtn2" href="/download" data-t="get_dl">Download the app</a>
+      <a class="btn btn-ghost" href="/login" data-t="get_browser">Open in browser</a>
     </div>
   </section>
 
@@ -104,9 +111,9 @@
     <div class="wrap">
       <span>© <span id="yr"></span> Dialog · v<span id="ver"></span></span>
       <div style="display:flex; gap:18px;">
-        <a href="/download">Downloads</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/login">Sign in</a>
+        <a href="/download" data-t="foot_downloads">Downloads</a>
+        <a href="/privacy" data-t="foot_privacy">Privacy</a>
+        <a href="/login" data-t="foot_signin">Sign in</a>
       </div>
     </div>
   </footer>
@@ -114,37 +121,92 @@
   <script src="/js/downloads-data.js"></script>
   <script>
     (function () {
+      // Self-contained EN/RU dictionary for the marketing page.
+      var L = {
+        en: {
+          nav_features: "Features", nav_download: "Download", nav_open: "Open Dialog",
+          badge: "▲ CHAT · CALLS · SCREEN SHARE", h1a: "Talk freely.", h1b: "Encrypted. Everywhere.",
+          sub: "Dialog is a fast, no-nonsense messenger with group voice & video calls and screen sharing — in your browser, on your desktop, and on your phone.",
+          browser_btn: "Use in browser", dl_download: "Download",
+          feat_h2: "Everything you need to stay in touch", feat_p: "Built for speed and privacy, with the features you actually use.",
+          f1h: "Instant messaging", f1p: "Direct messages and group chats with reactions, edits, replies, voice notes, GIFs and file sharing.",
+          f2h: "Group voice & video", f2p: "Crystal-clear group calls powered by a low-latency media server — jump in with one tap.",
+          f3h: "Screen sharing", f3p: "Share your whole screen in a call to present, pair, or game together — no extra software.",
+          f4h: "Native desktop apps", f4p: "Real apps for Windows, macOS and Linux with a system tray, auto-updates and a slick boot screen.",
+          f5h: "Notifications & tray", f5p: "Native OS notifications and unread badges keep you in the loop, even when Dialog is in the background.",
+          f6h: "Works everywhere", f6p: "Browser, desktop and Android — your chats, calls and contacts stay in sync across all of them.",
+          get_h2: "Get Dialog", get_p: "Download the app for your platform, or just open it in your browser — no install required.",
+          get_dl: "Download the app", get_browser: "Open in browser",
+          foot_downloads: "Downloads", foot_privacy: "Privacy", foot_signin: "Sign in",
+          dl_for: "Download for", open_browser: "Open in browser",
+          os_all: "All platforms · <a href=\"/download\">see all downloads</a>",
+          os_for: "For {p} · <a href=\"/download\">other platforms &amp; installers</a>",
+          ios_soon: "iOS app coming soon · <a href=\"/download\">other platforms</a>",
+          open_dialog_arrow: "Open Dialog ›"
+        },
+        ru: {
+          nav_features: "Возможности", nav_download: "Скачать", nav_open: "Открыть Dialog",
+          badge: "▲ ЧАТ · ЗВОНКИ · ДЕМОНСТРАЦИЯ", h1a: "Общайтесь свободно.", h1b: "Шифрованно. Везде.",
+          sub: "Dialog — быстрый мессенджер с групповыми аудио- и видеозвонками и демонстрацией экрана — в браузере, на компьютере и телефоне.",
+          browser_btn: "Открыть в браузере", dl_download: "Скачать",
+          feat_h2: "Всё, что нужно для общения", feat_p: "Скорость и приватность — и функции, которыми реально пользуются.",
+          f1h: "Мгновенные сообщения", f1p: "Личные и групповые чаты с реакциями, редактированием, ответами, голосовыми, GIF и файлами.",
+          f2h: "Групповые аудио и видео", f2p: "Кристально чистые групповые звонки на медиасервере с низкой задержкой — вход в один тап.",
+          f3h: "Демонстрация экрана", f3p: "Делитесь экраном в звонке — презентации, совместная работа, игры. Без лишних программ.",
+          f4h: "Нативные приложения", f4p: "Настоящие приложения для Windows, macOS и Linux с треем, автообновлением и стильной загрузкой.",
+          f5h: "Уведомления и трей", f5p: "Системные уведомления и счётчики непрочитанного держат в курсе, даже когда Dialog свёрнут.",
+          f6h: "Работает везде", f6p: "Браузер, десктоп и Android — чаты, звонки и контакты синхронизированы.",
+          get_h2: "Установите Dialog", get_p: "Скачайте приложение для своей платформы или откройте в браузере — без установки.",
+          get_dl: "Скачать приложение", get_browser: "Открыть в браузере",
+          foot_downloads: "Загрузки", foot_privacy: "Приватность", foot_signin: "Войти",
+          dl_for: "Скачать для", open_browser: "Открыть в браузере",
+          os_all: "Все платформы · <a href=\"/download\">все загрузки</a>",
+          os_for: "Для {p} · <a href=\"/download\">другие платформы и установщики</a>",
+          ios_soon: "Приложение для iOS скоро · <a href=\"/download\">другие платформы</a>",
+          open_dialog_arrow: "Открыть Dialog ›"
+        }
+      };
       var D = window.DialogDownloads;
+      var lang = (function () { try { var s = localStorage.getItem("dialog_lang"); if (s === "en" || s === "ru") return s; } catch (e) {} return (navigator.language || "en").slice(0, 2) === "ru" ? "ru" : "en"; })();
+
+      function os_line(dict) {
+        var os = D.detectOS();
+        if (os === "ios") return dict.ios_soon;
+        if (D.PLATFORMS[os]) return dict.os_for.replace("{p}", D.PLATFORMS[os].label);
+        return dict.os_all;
+      }
+      function dlLabel(dict) {
+        var os = D.detectOS();
+        if (os === "ios") return dict.open_browser;
+        if (D.PLATFORMS[os]) return dict.dl_for + " " + D.PLATFORMS[os].label;
+        return dict.dl_download;
+      }
+      function apply(l) {
+        lang = l; var dict = L[l] || L.en;
+        document.documentElement.lang = l;
+        document.querySelectorAll("[data-t]").forEach(function (el) { var k = el.getAttribute("data-t"); if (dict[k] != null) el.textContent = dict[k]; });
+        document.getElementById("heroOs").innerHTML = os_line(dict);
+        document.getElementById("dlBtnLabel").textContent = dlLabel(dict);
+        try { if (localStorage.getItem("dialog_token")) document.getElementById("navOpen").textContent = dict.open_dialog_arrow; } catch (e) {}
+        document.querySelectorAll("#langPick button").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-lang") === l); });
+        try { localStorage.setItem("dialog_lang", l); } catch (e) {}
+      }
+      document.querySelectorAll("#langPick button").forEach(function (b) { b.onclick = function () { apply(b.getAttribute("data-lang")); }; });
+
       document.getElementById("ver").textContent = D.VERSION;
       document.getElementById("yr").textContent = new Date().getFullYear();
 
-      // OS-aware primary download button.
+      // OS-aware primary download button target (label handled by apply()).
       var os = D.detectOS();
       var btn = document.getElementById("dlBtn");
-      var label = document.getElementById("dlBtnLabel");
-      var heroOs = document.getElementById("heroOs");
-
-      if (os === "ios") {
-        label.textContent = "Open in browser";
-        btn.setAttribute("href", "/login");
-        heroOs.innerHTML = "iOS app coming soon · <a href=\"/download\">other platforms</a>";
-      } else if (D.PLATFORMS[os]) {
+      if (os === "ios") { btn.setAttribute("href", "/login"); }
+      else if (D.PLATFORMS[os]) {
         var p = D.PLATFORMS[os];
         var primary = p.installers.find(function (i) { return i.primary; }) || p.installers[0];
-        label.textContent = "Download for " + p.label;
-        btn.setAttribute("href", D.url(primary.file));
-        btn.setAttribute("download", "");
-        heroOs.innerHTML = "For " + p.label + " · <a href=\"/download\">other platforms &amp; installers</a>";
-      } else {
-        heroOs.innerHTML = "All platforms · <a href=\"/download\">see all downloads</a>";
+        btn.setAttribute("href", D.url(primary.file)); btn.setAttribute("download", "");
       }
 
-      // If already signed in, relabel the "Open Dialog" nav.
-      try {
-        if (localStorage.getItem("dialog_token")) {
-          document.getElementById("navOpen").textContent = "Open Dialog ›";
-        }
-      } catch (e) {}
+      apply(lang);
 
       // Reveal-on-scroll.
       var io = new IntersectionObserver(function (entries) {
