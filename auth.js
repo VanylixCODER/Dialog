@@ -27,22 +27,35 @@ export async function register(login, name, password, email) {
   return issueToken(login);
 }
 
-// Set a new password (used by the reset flow) — generates a fresh salt+hash.
+// Constant-time password check against a user row.
+async function pwMatches(u, password) {
+  const calc = Buffer.from(await hashPw(password, u.salt), "hex");
+  const stored = Buffer.from(u.hash, "hex");
+  return calc.length === stored.length && timingSafeEqual(calc, stored);
+}
+export async function verifyPassword(u, password) { return pwMatches(u, password); }
+
+// Set a new password (reset flow + profile change) — fresh salt+hash, stamps time.
 export async function setPassword(login, password) {
   if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
   const salt = randomBytes(16).toString("hex");
   const hash = await hashPw(password, salt);
-  await db.setUserPassword(login, salt, hash);
+  await db.setUserPassword(login, salt, hash, Date.now());
 }
 
-export async function login(loginName, password) {
-  loginName = String(loginName || "").trim().toLowerCase();
-  const u = await db.getUser(loginName);
+// Log in by username OR email.
+export async function login(identifier, password) {
+  identifier = String(identifier || "").trim().toLowerCase();
+  let u = null;
+  if (EMAIL_RE.test(identifier)) {
+    const byEmail = await db.getUserByEmail(identifier);
+    if (byEmail) u = await db.getUser(byEmail.login);
+  } else {
+    u = await db.getUser(identifier);
+  }
   if (!u) throw new Error("Неверный логин или пароль");
-  const calc = Buffer.from(await hashPw(password, u.salt), "hex");
-  const stored = Buffer.from(u.hash, "hex");
-  if (calc.length !== stored.length || !timingSafeEqual(calc, stored)) throw new Error("Неверный логин или пароль");
-  return issueToken(loginName);
+  if (!(await pwMatches(u, password))) throw new Error("Неверный логин или пароль");
+  return issueToken(u.login);
 }
 
 async function issueToken(loginName) {
@@ -77,5 +90,6 @@ export async function logout(token) {
 function profileOf(u) {
   return { login: u.login, name: u.name, description: u.description || "", status: u.status || "online",
            created_at: u.created_at,
-           email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed };
+           email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed,
+           pwChangedAt: Number(u.pw_changed_at) || 0 };
 }

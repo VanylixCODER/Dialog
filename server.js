@@ -45,7 +45,7 @@ import {
   getUserByEmail, setUserEmail, markEmailVerified, setNagDismissed,
   createEmailToken, getEmailToken, deleteEmailToken,
 } from "./db.js";
-import { sendVerifyEmail, sendResetEmail, mailEnabled } from "./mail.js";
+import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HISTORY_LIMIT = 25; // one chunk — initial load + each scroll-up page
@@ -131,8 +131,10 @@ app.post("/api/register", async (req, res) => {
   try {
     const { login, name, password, email } = req.body;
     const out = await auth.register(login, name, password, email);
-    // Fire-and-forget the verification email (never blocks/breaks signup).
-    sendVerification(out.profile.login, String(email).trim().toLowerCase(), out.profile.name).catch((e) => console.error("verify mail", e.message));
+    const addr = String(email).trim().toLowerCase();
+    // Fire-and-forget the verification + welcome emails (never block/break signup).
+    sendVerification(out.profile.login, addr, out.profile.name).catch((e) => console.error("verify mail", e.message));
+    sendWelcomeEmail(addr, out.profile.name).catch((e) => console.error("welcome mail", e.message));
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -234,6 +236,31 @@ app.post("/api/account/dismiss-nag", async (req, res) => {
   await setNagDismissed(me.login, true);
   for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
   res.json({ ok: true });
+});
+
+// Change password from the profile — requires the current password, and can
+// only be done once every 3 days.
+const PW_COOLDOWN_MS = 3 * 24 * 3600 * 1000;
+app.post("/api/account/password", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const { current, password } = req.body || {};
+    const u = await getUser(me.login);
+    if (!u) return res.status(400).json({ error: "not found" });
+    if (!(await auth.verifyPassword(u, String(current || "")))) return res.status(400).json({ error: "wrong_current" });
+    const last = Number(u.pw_changed_at) || 0;
+    if (last && Date.now() - last < PW_COOLDOWN_MS) {
+      return res.status(429).json({ error: "cooldown", retryAt: last + PW_COOLDOWN_MS });
+    }
+    await auth.setPassword(me.login, String(password || "")); // validates length, stamps time
+    // Keep THIS session, drop all others.
+    const keep = bearer(req);
+    for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) {
+      if (tk === keep) { await import("./cache.js").then((c) => c.cacheDel("sess:" + tk)); continue; }
+      await import("./db.js").then((m) => m.deleteSession(tk)); await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+    }
+    res.json({ ok: true, changedAt: Date.now(), retryAt: Date.now() + PW_COOLDOWN_MS });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // Forgot password → email a reset link. Always 200 (don't reveal which emails exist).

@@ -37,7 +37,7 @@
           <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
         </div>
         <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
-          <input class="field" name="login" type="text" data-i18n-ph="ph_login" maxlength="24" autocomplete="username" />
+          <input class="field" name="login" type="text" data-i18n-ph="ph_login_email" maxlength="190" autocomplete="username" />
           <span class="field-wrap"><input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
           <div class="form-error" id="loginError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
@@ -245,6 +245,14 @@
           <div class="lang-row">
             <span data-i18n="language">Language</span>
             <select id="settingsLang" class="lang-select"><option value="en">EN</option><option value="ru">RU</option></select>
+          </div>
+          <div class="uppercase-tag" data-i18n="change_pw">Change password</div>
+          <div class="pw-change">
+            <span class="field-wrap"><input id="pwCurrent" class="field" type="password" data-i18n-ph="ph_current_pw" autocomplete="current-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
+            <span class="field-wrap"><input id="pwNew" class="field" type="password" data-i18n-ph="ph_new_pw" autocomplete="new-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
+            <span class="field-wrap"><input id="pwNew2" class="field" type="password" data-i18n-ph="ph_new_pw2" autocomplete="new-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
+            <div class="form-error" id="pwMsg"></div>
+            <button id="pwSaveBtn" class="btn-ghost" data-i18n="change_pw">Change password</button>
           </div>
           <div style="color:var(--text-dim);font-size:12px;line-height:1.4" data-i18n="esc_to_close">Esc / click outside to close</div>
         </section>
