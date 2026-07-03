@@ -372,11 +372,53 @@ $("loginForm").onsubmit = async (e) => {
 $("registerForm").onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
   if (f.password.value !== f.password2.value) { $("registerError").textContent = t("err_pass_mismatch"); return; }
-  const { ok, data } = await api("/api/register", { name: f.name.value.trim(), login: f.login.value.trim(), password: f.password.value });
+  const { ok, data } = await api("/api/register", { name: f.name.value.trim(), login: f.login.value.trim(), email: f.email.value.trim(), password: f.password.value });
   if (!ok) { $("registerError").textContent = data.error || t("err_register_failed"); return; }
   onAuth(data);
 };
+// Forgot password — reveal the email form, POST /api/forgot (server always 200).
+$("forgotLink") && ($("forgotLink").onclick = () => { $("loginForm").classList.add("hidden"); $("forgotForm").classList.remove("hidden"); $("forgotMsg").className = "form-error"; $("forgotMsg").textContent = ""; });
+$("forgotBack") && ($("forgotBack").onclick = () => { $("forgotForm").classList.add("hidden"); $("loginForm").classList.remove("hidden"); });
+$("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
+  e.preventDefault();
+  await api("/api/forgot", { email: e.target.email.value.trim() });
+  $("forgotMsg").className = "form-error ok"; $("forgotMsg").textContent = t("forgot_sent");
+});
 function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); enterApp(); }
+
+// ── Email reminder (secure account / verify) ──────────────────────────────
+function maybeShowEmailNag() {
+  if (!profile || profile.nagDismissed) return;
+  if (profile.email && profile.emailVerified) return; // fully set up
+  if (Date.now() < Number(localStorage.getItem("dialog_email_nag_snooze") || 0)) return; // "remind later"
+  const unverified = !!profile.email && !profile.emailVerified;
+  $("emailNagTitle").textContent = unverified ? t("email_verify_title") : t("email_nag_title");
+  $("emailNagBody").textContent = unverified ? t("email_verify_body", { email: profile.email }) : t("email_nag_body");
+  $("emailNagInput").classList.toggle("hidden", unverified);
+  $("emailNagInput").value = "";
+  $("emailNagSave").textContent = unverified ? t("email_resend") : t("email_nag_save");
+  $("emailNagMsg").className = "form-error"; $("emailNagMsg").textContent = "";
+  $("emailNagDontShow").checked = false;
+  $("emailNagModal").classList.remove("hidden");
+}
+$("emailNagForm") && ($("emailNagForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = $("emailNagMsg"); msg.className = "form-error";
+  if (profile.email && !profile.emailVerified) {          // resend verification
+    const { ok, data } = await api("/api/account/resend-verify", {});
+    if (ok && data.alreadyVerified) { profile.emailVerified = true; $("emailNagModal").classList.add("hidden"); return; }
+    msg.className = ok ? "form-error ok" : "form-error"; msg.textContent = ok ? t("email_resent") : (data && data.error) || t("err_generic");
+    return;
+  }
+  const email = ($("emailNagInput").value || "").trim();     // add email
+  const { ok, data } = await api("/api/account/email", { email });
+  if (!ok) { msg.textContent = (data && data.error) || t("err_generic"); return; }
+  profile.email = data.email; profile.emailVerified = false;
+  msg.className = "form-error ok"; msg.textContent = t("email_link_sent");
+  setTimeout(() => $("emailNagModal").classList.add("hidden"), 1600);
+});
+$("emailNagLater") && ($("emailNagLater").onclick = () => { localStorage.setItem("dialog_email_nag_snooze", String(Date.now() + 24 * 3600 * 1000)); $("emailNagModal").classList.add("hidden"); });
+$("emailNagDontShow") && ($("emailNagDontShow").onchange = async (e) => { if (e.target.checked) { await api("/api/account/dismiss-nag", {}); profile.nagDismissed = true; $("emailNagModal").classList.add("hidden"); } });
 function showLogin() {
   $("loginLoading").classList.add("hidden");
   $("loginAuth").classList.remove("hidden");
@@ -401,6 +443,7 @@ function enterApp() {
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
   initPush(); requestMediaPermissions();
+  setTimeout(maybeShowEmailNag, 1200); // gentle email reminder after the app settles
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
   redeemStoredInvite();

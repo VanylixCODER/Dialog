@@ -42,7 +42,10 @@ import {
   getUserDMs, saveUserDMs,
   savePushSub, getPushSubs, deletePushSub,
   getRoomWatermarks, bumpWatermarks,
+  getUserByEmail, setUserEmail, markEmailVerified, setNagDismissed,
+  createEmailToken, getEmailToken, deleteEmailToken,
 } from "./db.js";
+import { sendVerifyEmail, sendResetEmail, mailEnabled } from "./mail.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HISTORY_LIMIT = 25; // one chunk — initial load + each scroll-up page
@@ -125,8 +128,13 @@ async function authUser(req) { return auth.userByToken(bearer(req)); }
 
 // ---------- REST: аутентификация ----------
 app.post("/api/register", async (req, res) => {
-  try { const { login, name, password } = req.body; res.json(await auth.register(login, name, password)); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const { login, name, password, email } = req.body;
+    const out = await auth.register(login, name, password, email);
+    // Fire-and-forget the verification email (never blocks/breaks signup).
+    sendVerification(out.profile.login, String(email).trim().toLowerCase(), out.profile.name).catch((e) => console.error("verify mail", e.message));
+    res.json(out);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 app.post("/api/login", async (req, res) => {
   try { const { login, password } = req.body; res.json(await auth.login(login, password)); }
@@ -138,6 +146,123 @@ app.get("/api/me", async (req, res) => {
   res.json({ profile: me });
 });
 app.post("/api/logout", async (req, res) => { await auth.logout(bearer(req)); res.json({ ok: true }); });
+
+// ---------- Email verification + password reset ----------
+const APP_ORIGIN = process.env.APP_URL || "https://dialogmsg.xyz";
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// Create a single-use token, store only its hash, return the raw token for the URL.
+async function makeEmailToken(login, email, purpose, ttlMs) {
+  const raw = crypto.randomBytes(32).toString("hex");
+  await createEmailToken(sha256(raw), login, email, purpose, Date.now() + ttlMs);
+  return raw;
+}
+async function sendVerification(login, email, name) {
+  if (!email) return;
+  const raw = await makeEmailToken(login, email, "verify", 24 * 3600 * 1000);
+  await sendVerifyEmail(email, name || login, `${APP_ORIGIN}/verify?token=${raw}`);
+}
+// Consume a token: valid, unexpired, right purpose → returns the row, else null.
+async function consumeToken(raw, purpose) {
+  if (!raw) return null;
+  const row = await getEmailToken(sha256(String(raw)));
+  if (!row || row.purpose !== purpose) return null;
+  await deleteEmailToken(row.token_hash);
+  if (Number(row.expires) < Date.now()) return null;
+  return row;
+}
+function htmlPage(title, heading, body, ok) {
+  const color = ok ? "#2ec96b" : "#ff5252";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+  <body style="margin:0;background:#050b06;color:#d6e6dc;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:grid;place-items:center;min-height:100vh">
+    <div style="max-width:420px;text-align:center;padding:28px 24px;background:#0b140d;border:1px solid #1c3324;border-radius:16px">
+      <div style="color:#2ec96b;font-weight:800;font-size:20px">Dialog</div>
+      <h1 style="font-size:20px;margin:16px 0 6px;color:${color}">${heading}</h1>
+      <p style="color:#a9c2b3;font-size:14px;line-height:1.5">${body}</p>
+      <a href="${APP_ORIGIN}/login" style="display:inline-block;margin-top:18px;background:#2ec96b;color:#04180c;text-decoration:none;font-weight:700;padding:11px 22px;border-radius:10px">Open Dialog</a>
+    </div>
+  </body></html>`;
+}
+
+// Click-through from the verification email.
+app.get("/verify", async (req, res) => {
+  try {
+    const row = await consumeToken(req.query.token, "verify");
+    if (!row) return res.status(400).send(htmlPage("Verification", "Link expired or invalid", "Request a new verification email from Dialog settings.", false));
+    // Only verify if the address still matches the account's current email.
+    const u = await getUser(row.login);
+    if (!u || (u.email || "").toLowerCase() !== row.email.toLowerCase()) return res.status(400).send(htmlPage("Verification", "Link no longer valid", "This email address has changed. Request a new verification email.", false));
+    await markEmailVerified(row.login);
+    for (const tk of await import("./db.js").then((m) => m.tokensForLogin(row.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+    res.send(htmlPage("Verified", "Email verified ✓", "Your email is confirmed. You can now recover your account if you ever lose access.", true));
+  } catch (e) { console.error("verify", e.message); res.status(500).send(htmlPage("Verification", "Something went wrong", "Please try again later.", false)); }
+});
+
+// Reset-password page (standalone) — reached from the reset email link.
+app.get("/reset", (req, res) => res.sendFile(join(__dirname, "public", "reset.html")));
+
+// Add / change email from the app (nag modal, settings).
+app.post("/api/account/email", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!auth.EMAIL_RE.test(email) || email.length > 190) return res.status(400).json({ error: "Введите корректный e-mail" });
+    const taken = await getUserByEmail(email);
+    if (taken && taken.login !== me.login) return res.status(400).json({ error: "E-mail уже используется" });
+    await setUserEmail(me.login, email);           // resets email_verified → 0
+    await setNagDismissed(me.login, false);
+    for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+    await sendVerification(me.login, email, me.name);
+    res.json({ ok: true, email, mailSent: mailEnabled() });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Resend the verification email for the current address.
+app.post("/api/account/resend-verify", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const u = await getUser(me.login);
+    if (!u || !u.email) return res.status(400).json({ error: "no email on file" });
+    if (u.email_verified) return res.json({ ok: true, alreadyVerified: true });
+    await sendVerification(u.login, u.email, u.name);
+    res.json({ ok: true, mailSent: mailEnabled() });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// "Don't show the email reminder again."
+app.post("/api/account/dismiss-nag", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  await setNagDismissed(me.login, true);
+  for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+  res.json({ ok: true });
+});
+
+// Forgot password → email a reset link. Always 200 (don't reveal which emails exist).
+app.post("/api/forgot", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (auth.EMAIL_RE.test(email)) {
+      const u = await getUserByEmail(email);
+      if (u && u.email_verified) {
+        const raw = await makeEmailToken(u.login, email, "reset", 3600 * 1000);
+        await sendResetEmail(email, u.name || u.login, `${APP_ORIGIN}/reset?token=${raw}`).catch((e) => console.error("reset mail", e.message));
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: true }); }
+});
+
+// Perform the reset with a valid token.
+app.post("/api/reset", async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    const row = await consumeToken(token, "reset");
+    if (!row) return res.status(400).json({ error: "Ссылка недействительна или устарела" });
+    await auth.setPassword(row.login, password);
+    // Invalidate every existing session for safety.
+    for (const tk of await import("./db.js").then((m) => m.tokensForLogin(row.login))) { await import("./db.js").then((m) => m.deleteSession(tk)); await import("./cache.js").then((c) => c.cacheDel("sess:" + tk)); }
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // ---------- REST: профиль ----------
 app.post("/api/profile", async (req, res) => {

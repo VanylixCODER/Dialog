@@ -37,14 +37,23 @@
           <input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" />
           <div class="form-error" id="loginError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
+          <button type="button" class="auth-link" id="forgotLink" data-i18n="forgot_pw">Forgot password?</button>
         </form>
         <form id="registerForm" class="auth-form hidden" method="POST" onsubmit="return false">
           <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
+          <input class="field" name="email" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" />
           <input class="field" name="password" type="password" data-i18n-ph="ph_password_hint" autocomplete="new-password" />
           <input class="field" name="password2" type="password" data-i18n-ph="ph_password2" autocomplete="new-password" />
           <div class="form-error" id="registerError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
+        </form>
+        <form id="forgotForm" class="auth-form hidden" method="POST" onsubmit="return false">
+          <p class="auth-hint" data-i18n="forgot_hint">Enter your email — we'll send a reset link.</p>
+          <input class="field" name="email" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" />
+          <div class="form-error" id="forgotMsg"></div>
+          <button type="submit" class="btn-primary" data-i18n="forgot_send">Send reset link</button>
+          <button type="button" class="auth-link" id="forgotBack" data-i18n="back_to_login">Back to sign in</button>
         </form>
       </div>
     </div>
@@ -431,6 +440,24 @@
         <button id="deleteChatMe" class="btn-ghost" data-i18n="delete_for_me" style="width:100%">Delete for me</button>
         <button id="deleteChatEveryone" class="btn-primary btn-danger" data-i18n="delete_for_everyone" style="width:100%">Delete for everyone</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Email reminder: shown to accounts with no email (or unverified) so they can
+       secure their account / enable password recovery. Soft — dismissible. -->
+  <div id="emailNagModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card" style="width:360px">
+      <div class="modal-title" id="emailNagTitle" data-i18n="email_nag_title">Secure your account</div>
+      <p class="fb-confirm-body" id="emailNagBody" data-i18n="email_nag_body">Link an email so you can recover your account if you lose your password. Without one, a lost password means a lost account.</p>
+      <form id="emailNagForm" onsubmit="return false" style="margin-top:6px">
+        <input class="field" id="emailNagInput" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" style="width:100%" />
+        <div class="form-error" id="emailNagMsg"></div>
+        <div class="modal-actions" style="flex-direction:column;gap:6px;margin-top:10px">
+          <button id="emailNagSave" class="btn-primary" data-i18n="email_nag_save" style="width:100%">Link email</button>
+          <button id="emailNagLater" type="button" class="btn-ghost" data-i18n="email_nag_later" style="width:100%">Remind me later</button>
+        </div>
+      </form>
+      <label class="fb-dont-show" style="margin-top:10px"><input type="checkbox" id="emailNagDontShow"> <span data-i18n="email_nag_dont_show">Don't show again</span></label>
     </div>
   </div>
 
