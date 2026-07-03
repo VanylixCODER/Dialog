@@ -1686,14 +1686,17 @@ function ytId(url) { const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|
 function addLinkExtras(wrap, text) {
   const url = firstUrl(text); if (!url) return;
   const yid = ytId(url);
-  if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`; wrap.appendChild(d); scrollDown(); return; }
+  // Only keep the view pinned to the bottom if we're ALREADY there — otherwise a
+  // preview on an older message (rendered while scrolling up) would yank the user
+  // back down to the latest messages.
+  if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`; const stick = atBottom(); wrap.appendChild(d); if (stick) scrollDown(); return; }
   fetch("/api/link-preview?url=" + encodeURIComponent(url), { headers: { Authorization: "Bearer " + token } })
     .then((r) => r.json()).then((d) => {
       if (!d || (!d.title && !d.image)) return;
       const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "link-preview";
       a.innerHTML = (d.image ? `<img class="lp-img" src="${escapeHtml(d.image)}" onerror="this.remove()">` : "") +
         `<div class="lp-body"><div class="lp-site">${escapeHtml(d.site || "")}</div><div class="lp-title">${escapeHtml(d.title || "")}</div><div class="lp-desc">${escapeHtml(d.description || "")}</div></div>`;
-      wrap.appendChild(a); scrollDown();
+      const stick = atBottom(); wrap.appendChild(a); if (stick) scrollDown();
     }).catch(() => {});
 }
 
