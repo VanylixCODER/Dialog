@@ -1552,6 +1552,7 @@ socket.on("history", (list) => {
   _newestId = list.length ? list[list.length - 1].id : null;
   if (list.length && _moreHas) { const sep = document.createElement("div"); sep.className = "system-msg hist-sep"; sep.textContent = t("prev_messages"); messagesEl.appendChild(sep); }
   list.forEach((m) => renderMessage(m, false, isPingForMe(m), true));
+  refreshOutgoingStatuses(); // apply real delivered/read state (watermark may have arrived first)
   chatEmptyNote(true); // "Chat is empty…" when there's genuinely no history
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
@@ -1592,6 +1593,7 @@ socket.on("more-messages", ({ msgs, before }) => {
   _moreOldest = msgs[0].id;
   _moreHas = msgs.length >= CHUNK;
   _moreLoading = false;
+  refreshOutgoingStatuses(); // older "me" messages get their real delivered/read ticks
   if (!_moreHas) removeHistSep();
   updateJumpBtn();
 });
@@ -1616,19 +1618,18 @@ function updateJumpBtn() { const b = $("jumpNewer"); if (b) b.classList.toggle("
 // older/top chunks), so we unload the older chunks and scroll to the bottom.
 function jumpToNewest() { pruneOldChunks(); scrollDown(); updateJumpBtn(); }
 
-let _moreScrollTimer = null;
 messagesEl.addEventListener("scroll", () => {
   updateJumpBtn();
   if (atBottom()) pruneOldChunks();
-  if (_moreScrollTimer) clearTimeout(_moreScrollTimer);
-  _moreScrollTimer = setTimeout(() => {
-    if (_moreLoading || !_moreHas || !_moreOldest) return;
-    if (messagesEl.scrollTop > 300) return;
+  // Prefetch the next older chunk WELL BEFORE the top (no debounce) so it's
+  // already in place by the time the user scrolls up to it — seamless, no
+  // visible loading. The _moreLoading guard prevents duplicate requests.
+  if (!_moreLoading && _moreHas && _moreOldest && messagesEl.scrollTop < 1000) {
     _moreLoading = true;
-    showTopSkeletons(); // loading placeholders while the older chunk arrives
+    showTopSkeletons(); // only seen if the user scrolls faster than the fetch
     socket.emit("load-more", { before: _moreOldest });
-  }, 150);
-});
+  }
+}, { passive: true });
 { const jb = $("jumpNewer"); if (jb) jb.onclick = jumpToNewest; }
 socket.on("message", (m) => {
   const ping = isPingForMe(m);
