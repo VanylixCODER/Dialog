@@ -981,6 +981,7 @@ a:focus-visible {
   padding: 6px 14px;
   text-align: center;
   user-select: none;
+  text-shadow: 0 0 12px rgba(0,0,0,0.7), 0 0 24px rgba(0,0,0,0.4);
 }
 .sys-line.call { color: var(--green); }
 .sys-line.call.missed { color: var(--red, #f55); }
@@ -2671,6 +2672,7 @@ a:focus-visible {
   margin: 18px 0 8px;
   color: var(--text-dim); font-size: 11px;
   letter-spacing: 1.4px; text-transform: uppercase; font-weight: 700;
+  text-shadow: 0 0 12px rgba(0,0,0,0.7), 0 0 24px rgba(0,0,0,0.4);
 }
 .day-sep::before, .day-sep::after {
   content: ""; height: 1px;
