@@ -22,6 +22,8 @@ dist/
 build.sh
 # Session logs
 session-*.md
+# Local Claude notes — keep out of the public repo
+CLAUDE.md
 # VNC / local junk
 *.vnc
 desktop/dialog-desktop-1.0.1-linux-x64.tar.gz
