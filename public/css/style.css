@@ -3495,50 +3495,57 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
 /* ===================== Account switcher ===================== */
 /* Same terminal-glass treatment as .chat-menu — dark translucent, green edge. */
 .account-menu {
-  position: fixed; z-index: 1900; min-width: 248px; max-width: 320px;
-  background: rgba(2, 10, 4, 0.92);
-  border: 1px solid rgba(var(--primary-rgb), 0.4); border-radius: var(--r-3);
-  box-shadow: var(--shadow-md); backdrop-filter: blur(10px) saturate(140%);
-  padding: 7px; display: flex; flex-direction: column; gap: 3px;
+  position: fixed; z-index: 1900; width: 292px; max-width: calc(100vw - 24px);
+  background: rgba(2, 10, 4, 0.94);
+  border: 1px solid rgba(var(--primary-rgb), 0.4); border-radius: var(--r-4);
+  box-shadow: var(--shadow-lg); backdrop-filter: blur(12px) saturate(140%);
+  padding: 8px; display: flex; flex-direction: column; gap: 4px;
   animation: menuPop 0.18s var(--ease-out); transform-origin: top left;
 }
 .account-menu .acct-head {
   font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--text-dim); padding: 6px 10px 4px;
+  color: var(--text-dim); padding: 6px 8px 6px;
 }
 .acct-row {
-  position: relative; display: flex; align-items: center; gap: 11px;
-  padding: 8px 9px; border-radius: var(--r-2); cursor: pointer;
+  position: relative;
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 9px 11px; border-radius: var(--r-3); cursor: pointer;
   border: 1px solid transparent;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
 }
 .acct-row:hover { background: var(--accent-faint); border-color: var(--border-1); }
 .acct-row.active { background: var(--surface-2); border-color: var(--border-2); cursor: default; }
 .acct-row.active::before {
-  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--accent-400); box-shadow: var(--glow-sm);
 }
-.acct-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.acct-av { width: 40px; height: 40px; font-size: 15px; }
+.acct-meta { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .acct-name { font-weight: 700; font-size: 14px; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acct-login { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.acct-out {
-  background: none; border: 0; color: var(--text-dim); cursor: pointer;
-  padding: 6px; border-radius: var(--r-2); display: grid; place-items: center;
-  opacity: 0; transition: opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+.acct-side { display: flex; align-items: center; gap: 8px; }
+.acct-cur {
+  font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--accent-200); background: var(--accent-faint);
+  border: 1px solid var(--border-2); border-radius: var(--r-pill); padding: 3px 8px;
 }
-.acct-row:hover .acct-out, .acct-row.active .acct-out { opacity: 1; }
+.acct-out {
+  flex-shrink: 0; background: none; border: 0; color: var(--text-dim); cursor: pointer;
+  width: 30px; height: 30px; border-radius: var(--r-2); display: grid; place-items: center;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
 .acct-out:hover { background: rgba(255, 82, 82, 0.14); color: var(--danger); }
-.acct-out svg { width: 16px; height: 16px; }
+.acct-out svg { width: 17px; height: 17px; }
 .acct-add {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-top: 3px; padding: 10px; border-radius: var(--r-2);
+  margin-top: 4px; padding: 11px; border-radius: var(--r-3);
   background: transparent; border: 1px dashed var(--border-2); color: var(--text);
   cursor: pointer; font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
   transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .acct-add:hover { border-color: var(--accent-400); color: var(--accent-200); background: var(--accent-faint); }
 .acct-add svg { width: 15px; height: 15px; }
-.acct-limit-note { font-size: 11px; color: var(--text-dim); padding: 9px 8px 5px; text-align: center; letter-spacing: .3px; }
+.acct-limit-note { font-size: 11px; color: var(--text-dim); padding: 9px 8px 4px; text-align: center; letter-spacing: .3px; }
 
 /* ===================== Admin panel ===================== */
 .admin-card {
@@ -3562,34 +3569,45 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
 .admin-empty { color: var(--text-dim); text-align: center; padding: 26px; font-size: 13px; letter-spacing: .4px; }
 .auser {
   background: var(--surface-1); border: 1px solid var(--border-1); border-radius: var(--r-3);
-  padding: 13px 15px; transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+  padding: 14px 16px; transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .auser:hover { border-color: var(--border-2); background: var(--surface-2); }
-.auser-top { display: flex; align-items: center; gap: 11px; }
-.auser-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.auser-name { font-weight: 700; color: var(--text-strong); }
+.auser.is-banned { border-color: rgba(255, 82, 82, 0.35); background: rgba(255, 82, 82, 0.05); }
+.auser-top { display: flex; align-items: center; gap: 12px; }
+.auser-av { width: 40px; height: 40px; font-size: 15px; }
+.auser-id { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.auser-name { font-weight: 700; font-size: 15px; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .auser-login { font-size: 12px; color: var(--text-dim); }
 .auser-badges { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
 .abadge {
-  font-size: 10px; font-weight: 700; letter-spacing: .4px; padding: 3px 8px; border-radius: var(--r-pill);
+  font-size: 10px; font-weight: 700; letter-spacing: .4px; padding: 3px 9px; border-radius: var(--r-pill);
   background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border-1); white-space: nowrap;
 }
 .abadge.on { color: var(--accent-200); border-color: var(--border-2); background: var(--accent-faint); box-shadow: var(--glow-sm); }
 .abadge.ban { color: var(--danger); border-color: rgba(255, 82, 82, 0.5); background: rgba(255, 82, 82, 0.12); }
 .abadge.ok { color: var(--accent-300); }
-.auser-meta { font-size: 12px; color: var(--text-dim); margin: 9px 0 11px; word-break: break-all; font-family: ui-monospace, Menlo, Consolas, monospace; }
-.auser-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.auser-meta {
+  display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-dim);
+  margin: 11px 0 12px; font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.auser-meta svg { width: 14px; height: 14px; opacity: .7; flex-shrink: 0; }
+.auser-meta span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auser-meta i { width: 1px; height: 12px; background: var(--border-2); margin: 0 3px; flex-shrink: 0; }
+.auser-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.auser-actions .aa-sep { flex: 1 1 12px; min-width: 8px; }
 .auser-actions button {
-  font-size: 11px; font-weight: 700; letter-spacing: .4px; padding: 6px 11px; border-radius: var(--r-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: .3px; padding: 7px 11px; border-radius: var(--r-2);
   background: var(--surface-1); border: 1px solid var(--border-1); color: var(--text); cursor: pointer;
   transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
+.auser-actions button svg { width: 14px; height: 14px; }
 .auser-actions button:hover { border-color: var(--accent-400); color: var(--accent-200); background: var(--accent-faint); }
 .auser-actions button:active { transform: translateY(1px); }
-.auser-actions button[data-act="ban"], .auser-actions button[data-act="banip"] { color: var(--danger); }
-.auser-actions button[data-act="ban"]:hover, .auser-actions button[data-act="banip"]:hover {
-  border-color: rgba(255, 82, 82, 0.6); color: #ffb3b3; background: rgba(255, 82, 82, 0.12);
-}
+.auser-actions button.warn { color: var(--accent-100); }
+.auser-actions button.warn:hover { border-color: #e0b34a; color: #ffd98a; background: rgba(224, 179, 74, 0.12); }
+.auser-actions button.danger { color: var(--danger); border-color: rgba(255, 82, 82, 0.32); }
+.auser-actions button.danger:hover { border-color: rgba(255, 82, 82, 0.6); color: #ffb3b3; background: rgba(255, 82, 82, 0.12); }
 .auser-devices { margin-top: 11px; display: flex; flex-direction: column; gap: 6px; }
 .adev {
   display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text);
