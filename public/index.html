@@ -32,6 +32,7 @@
       <div id="loginAuth" class="login-auth hidden">
         <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
         <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
+        <button type="button" class="auth-link hidden" id="addAcctBack" data-i18n="back_to_app">← Back to app</button>
         <div class="auth-tabs">
           <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
           <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
@@ -85,6 +86,8 @@
         </div>
         <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
         <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
+        <button id="adminBtn" class="hicon-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
+        <button id="accountBtn" class="hicon-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
@@ -547,6 +550,39 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <!-- Admin panel (opened only for admin accounts via #adminBtn) -->
+  <div id="adminOverlay" class="settings-overlay hidden" role="dialog" aria-modal="true">
+    <div class="settings-card admin-card" role="document">
+      <div class="settings-head">
+        <h2 data-i18n="admin_panel">Admin Panel</h2>
+        <button id="adminClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      </div>
+      <nav class="settings-tabs" id="adminTabs" role="tablist">
+        <button class="settings-tab active" data-atab="users" role="tab">Users</button>
+        <button class="settings-tab" data-atab="ips" role="tab">IP bans</button>
+        <button class="settings-tab" data-atab="logs" role="tab">Logs</button>
+      </nav>
+      <div class="admin-body">
+        <section class="admin-pane active" data-apane="users">
+          <div id="adminStats" class="admin-stats"></div>
+          <input id="adminSearch" class="field" placeholder="Search login / name / email…" autocomplete="off" />
+          <div id="adminUsers" class="admin-users"></div>
+        </section>
+        <section class="admin-pane" data-apane="ips">
+          <div class="admin-iprow">
+            <input id="adminIpInput" class="field" placeholder="1.2.3.4" autocomplete="off" />
+            <button id="adminIpBan" class="btn-primary" data-i18n="admin_ban_ip">Ban IP</button>
+          </div>
+          <div id="adminIps" class="admin-ips"></div>
+        </section>
+        <section class="admin-pane" data-apane="logs">
+          <div class="admin-logbar"><button id="adminLogRefresh" class="btn-ghost" data-i18n="admin_refresh">Refresh</button></div>
+          <pre id="adminLogs" class="admin-logs"></pre>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script src="/js/i18n.js"></script>
   <script src="/js/icons.js"></script>

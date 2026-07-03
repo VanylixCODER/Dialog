@@ -77,6 +77,8 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN email_verified TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN nag_dismissed TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN pw_changed_at BIGINT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN banned TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN last_ip VARCHAR(45) NULL"); } catch {}
   // UNIQUE index still allows multiple NULLs (existing users keep no email).
   try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
   // Single-use, hashed tokens for email verification + password reset.
@@ -177,6 +179,13 @@ export async function initSchema() {
     PRIMARY KEY (login, chat_key),
     KEY idx_pins_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // IP bans (admin panel). Any request/socket from a listed IP is refused.
+  await pool.query(`CREATE TABLE IF NOT EXISTS banned_ips (
+    ip VARCHAR(45) NOT NULL PRIMARY KEY,
+    reason VARCHAR(190) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -184,7 +193,7 @@ export async function createUser(login, name, salt, hash, email = null) {
   await execute("INSERT INTO users (login, name, salt, hash, email) VALUES (?,?,?,?,?)", [login, name, salt, hash, email]);
 }
 export async function getUser(login) {
-  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip FROM users WHERE login=?", [login]);
   return r[0] || null;
 }
 export async function getUserByEmail(email) {
@@ -486,6 +495,52 @@ export async function savePinnedChats(login, keys) {
   if (!keys || !keys.length) return;
   const vals = keys.slice(0, 200).map((k) => [login, String(k)]);
   await execute("INSERT INTO pinned_chats (login, chat_key) VALUES ?", [vals]);
+}
+
+// ---------- Админка ----------
+export async function adminListUsers(q = "", limit = 100) {
+  const like = "%" + String(q || "").toLowerCase() + "%";
+  const r = await query(
+    "SELECT login, name, email, email_verified, banned, last_ip, created_at FROM users WHERE (?='%%' OR LOWER(login) LIKE ? OR LOWER(name) LIKE ? OR LOWER(COALESCE(email,'')) LIKE ?) ORDER BY created_at DESC LIMIT ?",
+    [like, like, like, like, Math.min(500, limit | 0 || 100)]
+  );
+  return r.map((u) => ({ ...u, banned: !!u.banned, email_verified: !!u.email_verified }));
+}
+export async function adminStats() {
+  const one = async (sql) => { const r = await query(sql); return Number(r[0] ? r[0].n : 0); };
+  return {
+    users: await one("SELECT COUNT(*) n FROM users"),
+    banned: await one("SELECT COUNT(*) n FROM users WHERE banned=1"),
+    verified: await one("SELECT COUNT(*) n FROM users WHERE email_verified=1"),
+    messages: await one("SELECT COUNT(*) n FROM messages"),
+    groups: await one("SELECT COUNT(*) n FROM chat_groups"),
+    sessions: await one("SELECT COUNT(*) n FROM sessions"),
+    banned_ips: await one("SELECT COUNT(*) n FROM banned_ips"),
+  };
+}
+export async function setUserBanned(login, banned) {
+  await execute("UPDATE users SET banned=? WHERE login=?", [banned ? 1 : 0, login]);
+}
+export async function setUserName(login, name) {
+  await execute("UPDATE users SET name=? WHERE login=?", [String(name).slice(0, 64), login]);
+}
+export async function setUserLastIp(login, ip) {
+  if (!login || !ip) return;
+  try { await execute("UPDATE users SET last_ip=? WHERE login=?", [String(ip).slice(0, 45), login]); } catch {}
+}
+export async function isIpBanned(ip) {
+  if (!ip) return false;
+  const r = await query("SELECT 1 FROM banned_ips WHERE ip=? LIMIT 1", [String(ip).slice(0, 45)]);
+  return !!r.length;
+}
+export async function banIp(ip, reason = null) {
+  if (!ip) return;
+  await execute("INSERT INTO banned_ips (ip, reason) VALUES (?,?) ON DUPLICATE KEY UPDATE reason=VALUES(reason)", [String(ip).slice(0, 45), reason]);
+}
+export async function unbanIp(ip) { await execute("DELETE FROM banned_ips WHERE ip=?", [String(ip).slice(0, 45)]); }
+export async function listBannedIps() {
+  const r = await query("SELECT ip, reason, created_at FROM banned_ips ORDER BY created_at DESC LIMIT 500");
+  return r;
 }
 
 // ---------- Курсоры доставки / просмотра (per-user, per-room) ----------
