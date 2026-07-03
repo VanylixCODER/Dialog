@@ -992,7 +992,7 @@ a:focus-visible {
   max-width: 100%;
   padding: 9px 14px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  background: var(--bg-2);
   border: 1px solid var(--border-1);
   color: var(--text); font-size: 14px; line-height: 1.5;
   word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap;
@@ -1009,7 +1009,7 @@ a:focus-visible {
   bottom: -1px;
 }
 .msg.me .bubble {
-  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.16), rgba(var(--primary-rgb), 0.08));
+  background: var(--bg-4);
   border-color: var(--accent-400);
   color: var(--accent-100);
   box-shadow: 0 4px 18px rgba(var(--primary-rgb), 0.16);
@@ -1040,7 +1040,7 @@ a:focus-visible {
   padding: 11px 14px; min-width: 240px; max-width: 360px;
   text-decoration: none;
   color: var(--text);
-  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  background: var(--bg-2);
   border: 1px solid var(--border-1);
   border-radius: 14px;
   cursor: pointer;
@@ -1048,7 +1048,7 @@ a:focus-visible {
 }
 .bubble.file:hover {
   border-color: var(--accent-400);
-  background: var(--accent-soft);
+  background: var(--bg-4);
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(var(--primary-rgb), 0.18);
 }
@@ -1085,7 +1085,7 @@ a:focus-visible {
 }
 .bubble.file:hover .file-dl { color: var(--accent-100); transform: translateY(2px); }
 .msg.me .bubble.file {
-  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.16), rgba(var(--primary-rgb), 0.08));
+  background: var(--bg-4);
   border-color: var(--accent-400);
 }
 
@@ -1130,7 +1130,7 @@ a:focus-visible {
 }
 .msg.ping .bubble {
   border-color: var(--accent-400);
-  background: rgba(var(--primary-rgb), 0.12);
+  background: var(--bg-3);
   box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.25), 0 0 22px rgba(var(--primary-rgb), 0.16);
   animation: pingIn 0.5s var(--ease-out);
 }
@@ -2993,7 +2993,7 @@ body[data-theme="dracula"] {
 }
 /* Dracula собственные бампы: зелёная галочка доставки заменилась на cyan-Dracula,
    потому что primary-зелёного #50fa7b у нас нет в палитре green-* (там фиолет). */
-body[data-theme="dracula"] .msg.me .bubble { color: #f8f8f2; background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.22), rgba(var(--primary-rgb), 0.12)); border-color: #bd93f9; }
+body[data-theme="dracula"] .msg.me .bubble { color: #f8f8f2; background: var(--bg-4); border-color: #bd93f9; }
 body[data-theme="dracula"] .msg-status[data-status="delivered"] { color: #8be9fd; }
 body[data-theme="dracula"] .msg-status[data-status="read"] { color: #50fa7b; }
 
