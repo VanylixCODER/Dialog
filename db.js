@@ -72,6 +72,22 @@ export async function initSchema() {
     status VARCHAR(12) NOT NULL DEFAULT 'online',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // Email (verification + password recovery) — added via migration so existing DBs upgrade.
+  try { await pool.query("ALTER TABLE users ADD COLUMN email VARCHAR(190) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN email_verified TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN nag_dismissed TINYINT NOT NULL DEFAULT 0"); } catch {}
+  // UNIQUE index still allows multiple NULLs (existing users keep no email).
+  try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
+  // Single-use, hashed tokens for email verification + password reset.
+  await pool.query(`CREATE TABLE IF NOT EXISTS email_tokens (
+    token_hash CHAR(64) PRIMARY KEY,
+    login VARCHAR(24) NOT NULL,
+    email VARCHAR(190) NOT NULL,
+    purpose VARCHAR(12) NOT NULL,
+    expires BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_et_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS messages (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, room VARCHAR(64) NOT NULL,
@@ -155,13 +171,39 @@ export async function initSchema() {
 }
 
 // ---------- Пользователи / профиль ----------
-export async function createUser(login, name, salt, hash) {
-  await execute("INSERT INTO users (login, name, salt, hash) VALUES (?,?,?,?)", [login, name, salt, hash]);
+export async function createUser(login, name, salt, hash, email = null) {
+  await execute("INSERT INTO users (login, name, salt, hash, email) VALUES (?,?,?,?,?)", [login, name, salt, hash, email]);
 }
 export async function getUser(login) {
-  const r = await query("SELECT login, name, salt, hash, description, status, created_at FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed FROM users WHERE login=?", [login]);
   return r[0] || null;
 }
+export async function getUserByEmail(email) {
+  const r = await query("SELECT login, name, email, email_verified FROM users WHERE email=?", [String(email || "").toLowerCase()]);
+  return r[0] || null;
+}
+export async function setUserEmail(login, email) {
+  await execute("UPDATE users SET email=?, email_verified=0 WHERE login=?", [email, login]);
+}
+export async function markEmailVerified(login) {
+  await execute("UPDATE users SET email_verified=1 WHERE login=?", [login]);
+}
+export async function setNagDismissed(login, val) {
+  await execute("UPDATE users SET nag_dismissed=? WHERE login=?", [val ? 1 : 0, login]);
+}
+export async function setUserPassword(login, salt, hash) {
+  await execute("UPDATE users SET salt=?, hash=? WHERE login=?", [salt, hash, login]);
+}
+// ---------- Email tokens (verify / reset) — single-use, stored hashed ----------
+export async function createEmailToken(tokenHash, login, email, purpose, expires) {
+  await execute("DELETE FROM email_tokens WHERE login=? AND purpose=?", [login, purpose]); // one live token per purpose
+  await execute("INSERT INTO email_tokens (token_hash, login, email, purpose, expires) VALUES (?,?,?,?,?)", [tokenHash, login, email, purpose, expires]);
+}
+export async function getEmailToken(tokenHash) {
+  const r = await query("SELECT token_hash, login, email, purpose, expires FROM email_tokens WHERE token_hash=?", [tokenHash]);
+  return r[0] || null;
+}
+export async function deleteEmailToken(tokenHash) { await execute("DELETE FROM email_tokens WHERE token_hash=?", [tokenHash]); }
 export async function updateProfile(login, { name, avatar, description, status }) {
   const sets = [], vals = [];
   if (name !== undefined) { sets.push("name=?"); vals.push(name); }

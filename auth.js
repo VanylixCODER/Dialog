@@ -9,16 +9,30 @@ const SESS_TTL = 7 * 24 * 3600; // кэш сессии — неделя
 
 const hashPw = async (password, salt) => (await scryptAsync(password, salt, 64)).toString("hex");
 
-export async function register(login, name, password) {
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export async function register(login, name, password, email) {
   login = String(login || "").trim().toLowerCase();
   name = String(name || "").trim() || login;
+  email = String(email || "").trim().toLowerCase();
   if (!/^[a-z0-9_]{3,24}$/.test(login)) throw new Error("Логин: латиница/цифры, 3–24");
   if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
+  // Email is required for new accounts (soft-verified afterwards).
+  if (!EMAIL_RE.test(email) || email.length > 190) throw new Error("Введите корректный e-mail");
   if (await db.getUser(login)) throw new Error("Логин занят");
+  if (await db.getUserByEmail(email)) throw new Error("E-mail уже используется");
   const salt = randomBytes(16).toString("hex");
   const hash = await hashPw(password, salt);
-  await db.createUser(login, name, salt, hash);
+  await db.createUser(login, name, salt, hash, email);
   return issueToken(login);
+}
+
+// Set a new password (used by the reset flow) — generates a fresh salt+hash.
+export async function setPassword(login, password) {
+  if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
+  const salt = randomBytes(16).toString("hex");
+  const hash = await hashPw(password, salt);
+  await db.setUserPassword(login, salt, hash);
 }
 
 export async function login(loginName, password) {
@@ -62,5 +76,6 @@ export async function logout(token) {
 
 function profileOf(u) {
   return { login: u.login, name: u.name, description: u.description || "", status: u.status || "online",
-           created_at: u.created_at };
+           created_at: u.created_at,
+           email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed };
 }

@@ -3,7 +3,10 @@ const I18N = {
   en: {
     brand_sub: "Chat · Group calls · Screen share",
     tab_login: "Sign in", tab_register: "Sign up",
-    ph_login: "Username", ph_password: "Password", ph_name: "Display name",
+    ph_login: "Username", ph_password: "Password", ph_name: "Display name", ph_email: "Email",
+    forgot_pw: "Forgot password?", forgot_hint: "Enter your email — we'll send a reset link.", forgot_send: "Send reset link", forgot_sent: "If that email is registered, a reset link is on its way.", back_to_login: "Back to sign in",
+    email_nag_title: "Secure your account", email_nag_body: "Link an email so you can recover your account if you lose your password. Without one, a lost password means a lost account.", email_nag_save: "Link email", email_nag_later: "Remind me later", email_nag_dont_show: "Don't show again",
+    email_verify_title: "Verify your email", email_verify_body: "We sent a verification link to {email}. Check your inbox to finish securing your account.", email_resend: "Resend email", email_resent: "Verification email sent.", email_link_sent: "Verification link sent — check your inbox.", err_generic: "Something went wrong",
     ph_login_hint: "Username (a–z, 3–24)", ph_password_hint: "Password (6+ chars)", ph_password2: "Repeat password",
     ph_message: "Write a message…", btn_login: "Sign in", btn_register: "Create account", btn_logout: "Log out",
     err_login_failed: "Sign in failed", err_register_failed: "Sign up failed", err_pass_mismatch: "Passwords don't match",
@@ -131,7 +134,10 @@ const I18N = {
   ru: {
     brand_sub: "Чат · Групповые звонки · Демонстрация экрана",
     tab_login: "Войти", tab_register: "Регистрация",
-    ph_login: "Логин", ph_password: "Пароль", ph_name: "Имя",
+    ph_login: "Логин", ph_password: "Пароль", ph_name: "Имя", ph_email: "E-mail",
+    forgot_pw: "Забыли пароль?", forgot_hint: "Введите e-mail — вышлем ссылку для сброса.", forgot_send: "Отправить ссылку", forgot_sent: "Если этот e-mail зарегистрирован, ссылка уже в пути.", back_to_login: "Назад ко входу",
+    email_nag_title: "Защитите аккаунт", email_nag_body: "Привяжите e-mail, чтобы восстановить доступ, если забудете пароль. Без него потеря пароля — потеря аккаунта.", email_nag_save: "Привязать e-mail", email_nag_later: "Напомнить позже", email_nag_dont_show: "Больше не показывать",
+    email_verify_title: "Подтвердите e-mail", email_verify_body: "Мы отправили ссылку на {email}. Проверьте почту, чтобы завершить защиту аккаунта.", email_resend: "Отправить снова", email_resent: "Письмо отправлено.", email_link_sent: "Ссылка отправлена — проверьте почту.", err_generic: "Что-то пошло не так",
     ph_login_hint: "Логин (a–z, 3–24)", ph_password_hint: "Пароль (6+ символов)", ph_password2: "Повторите пароль",
     ph_message: "Напишите сообщение…", btn_login: "Войти", btn_register: "Создать аккаунт", btn_logout: "Выйти",
     err_login_failed: "Ошибка входа", err_register_failed: "Ошибка регистрации", err_pass_mismatch: "Пароли не совпадают",
