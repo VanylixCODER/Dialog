@@ -1582,7 +1582,13 @@ socket.on("more-messages", ({ msgs, before }) => {
   if (added.length && added[0].classList.contains("day-sep")) { added[0].remove(); added.shift(); }
   for (const node of added) messagesEl.insertBefore(node, anchor);
   // Preserve the viewport: the message the user was looking at stays put.
+  // IMPORTANT: do it INSTANTLY — the list has `scroll-behavior: smooth`, which
+  // would otherwise animate this restore downward and drag the reader back
+  // toward the recent messages every time a chunk loads.
+  const _sb = messagesEl.style.scrollBehavior;
+  messagesEl.style.scrollBehavior = "auto";
   messagesEl.scrollTop = prevTop + (messagesEl.scrollHeight - prevH);
+  messagesEl.style.scrollBehavior = _sb;
   _moreOldest = msgs[0].id;
   _moreHas = msgs.length >= CHUNK;
   _moreLoading = false;
