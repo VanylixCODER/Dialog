@@ -40,6 +40,7 @@ import {
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend,
   getUserDMs, saveUserDMs,
+  getPinnedChats, savePinnedChats,
   savePushSub, getPushSubs, deletePushSub,
   getRoomWatermarks, bumpWatermarks,
   getUserByEmail, setUserEmail, markEmailVerified, setNagDismissed,
@@ -660,6 +661,18 @@ app.post("/api/dms", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const list = Array.isArray(req.body.dms) ? req.body.dms.slice(0, 50) : [];
   await saveUserDMs(me.login, list);
+  res.json({ ok: true });
+});
+
+// ---------- REST: закреплённые чаты (серверная синхронизация) ----------
+app.get("/api/pins", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json(await getPinnedChats(me.login));
+});
+app.post("/api/pins", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const keys = Array.isArray(req.body.keys) ? req.body.keys.slice(0, 200) : [];
+  await savePinnedChats(me.login, keys);
   res.json({ ok: true });
 });
 
