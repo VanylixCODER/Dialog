@@ -539,9 +539,9 @@ function renderAccountMenu() {
   for (const a of accs) {
     const isActive = profile && a.login === profile.login;
     const row = document.createElement("div"); row.className = "acct-row" + (isActive ? " active" : "");
-    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(a.login)}" style="width:32px;height:32px;font-size:13px"><img src="${avaUrl(a.login)}" onerror="this.remove()">${initials(a.name || a.login)}</div>`
-      + `<div class="acct-meta"><span class="acct-name">${escapeHtml(a.name || a.login)}</span><span class="acct-login">@${escapeHtml(a.login)}${isActive ? " · " + t("acct_current") : ""}</span></div>`
-      + `<button class="acct-out" title="${t("btn_logout")}">${window.ICON.logout || "✕"}</button>`;
+    row.innerHTML = `<div class="avatar acct-av" data-login="${escapeHtml(a.login)}"><img src="${avaUrl(a.login)}" onerror="this.remove()">${initials(a.name || a.login)}</div>`
+      + `<div class="acct-meta"><span class="acct-name">${escapeHtml(a.name || a.login)}</span><span class="acct-login">@${escapeHtml(a.login)}</span></div>`
+      + `<div class="acct-side">${isActive ? `<span class="acct-cur">${t("acct_current")}</span>` : ""}<button class="acct-out" title="${t("btn_logout")}">${window.ICON.logout || "✕"}</button></div>`;
     row.querySelector(".acct-out").onclick = (e) => { e.stopPropagation(); signOutAccount(a.login); };
     if (!isActive) row.onclick = () => switchToAccount(a.login);
     menu.appendChild(row);
@@ -3922,21 +3922,24 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
         u.banned ? `<span class="abadge ban">${t("adm_banned")}</span>` : "",
         u.email_verified ? `<span class="abadge ok">✓ ${t("adm_email")}</span>` : (u.email ? `<span class="abadge">${t("adm_unverified")}</span>` : ""),
       ].join("");
-      return `<div class="auser" data-login="${esc(u.login)}">
+      const IC = window.ICON;
+      const btn = (act, icon, label, cls) => `<button data-act="${act}"${cls ? ` class="${cls}"` : ""}>${IC[icon] || ""}<span>${label}</span></button>`;
+      return `<div class="auser${u.banned ? " is-banned" : ""}" data-login="${esc(u.login)}">
         <div class="auser-top">
-          <div class="avatar" data-login="${esc(u.login)}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(u.login)}" onerror="this.remove()">${initials(u.name || u.login)}</div>
+          <div class="avatar auser-av" data-login="${esc(u.login)}"><img src="${avaUrl(u.login)}" onerror="this.remove()">${initials(u.name || u.login)}</div>
           <div class="auser-id"><span class="auser-name">${esc(u.name)}</span><span class="auser-login">@${esc(u.login)}</span></div>
           <div class="auser-badges">${badges}</div>
         </div>
-        <div class="auser-meta">${esc(u.email || "—")} · IP ${esc(u.last_ip || "?")}</div>
+        <div class="auser-meta">${IC.mail}<span>${esc(u.email || "—")}</span><i></i>IP <span>${esc(u.last_ip || "?")}</span></div>
         <div class="auser-actions">
-          <button data-act="ban">${u.banned ? t("adm_unban") : t("adm_ban")}</button>
-          <button data-act="banip">${t("adm_ban_ip")}</button>
-          <button data-act="kick">${t("adm_kick_all")}</button>
-          <button data-act="devices">${t("adm_devices")}</button>
-          <button data-act="rename">${t("adm_rename")}</button>
-          <button data-act="email">${t("adm_change_email")}</button>
-          <button data-act="reset">${t("adm_send_reset")}</button>
+          ${btn("rename", "edit", t("adm_rename"))}
+          ${btn("email", "mail", t("adm_change_email"))}
+          ${btn("reset", "key", t("adm_send_reset"))}
+          ${btn("devices", "monitor", t("adm_devices"))}
+          <span class="aa-sep"></span>
+          ${btn("kick", "logout", t("adm_kick_all"), "warn")}
+          ${btn("banip", "shield", t("adm_ban_ip"), "danger")}
+          ${btn("ban", "ban", u.banned ? t("adm_unban") : t("adm_ban"), u.banned ? "" : "danger")}
         </div>
         <div class="auser-devices hidden"></div>
       </div>`;
