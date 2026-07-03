@@ -2576,8 +2576,16 @@ $("toggleCam").onclick = async () => {
 //     колонки, что разрывает петлю обратной связи.
 let screenTrack = null, screenAudioTrack = null;
 let screenQuality = { w: 1920, h: 1080, fps: 30 };
-function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; m.classList.remove("hidden"); }
-function closeScreenModal() { const m = $("screenModal"); if (m) m.classList.add("hidden"); }
+// A natively-fullscreened element paints on top of everything, so a body-level
+// modal would be hidden BEHIND the call. While fullscreen, reparent the screen
+// dialog INTO the stage so its quality/options sit on top of the stream.
+function fsReparent(el) {
+  const st = callStageEl();
+  if (isCallFullscreen() && st && el.parentElement !== st) { el._homeParent = el._homeParent || el.parentElement; st.appendChild(el); }
+}
+function fsRestore(el) { if (el && el._homeParent && el.parentElement !== el._homeParent) { el._homeParent.appendChild(el); } }
+function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; fsReparent(m); m.classList.remove("hidden"); }
+function closeScreenModal() { const m = $("screenModal"); if (m) { m.classList.add("hidden"); fsRestore(m); } }
 function setShareActive(on) { call.sharing = on; $("shareScreen").classList.toggle("active", on); }
 async function startScreenShare() {
   const LK = window.LivekitClient;
@@ -2814,6 +2822,7 @@ function applyFsState(on) {
     window.addEventListener("resize", scheduleFsLayout);
   } else {
     // Leaving fullscreen: dissolve the strip, drop the spotlight, restore dock.
+    fsRestore($("screenModal")); // move the screen dialog back to the body
     dissolveStrip();
     vGrid.classList.remove("fs", "has-focus", "faces-hidden");
     vGrid.querySelectorAll(".tile.focused").forEach((tl) => tl.classList.remove("focused"));
@@ -3204,7 +3213,11 @@ function renderMeStatus() {
   pill.innerHTML = `<span class="st-dot ms-dot st-${cls}"></span><span>${escapeHtml(t(labelKey))}</span>`;
   pill.classList.toggle("me-status-dnd", myStatus === "dnd");
   pill.classList.toggle("me-status-invisible", myStatus === "invisible");
+  // Report to the desktop shell (tray radio reflects the real status). No-op in a browser.
+  try { window.dispatchEvent(new CustomEvent("dialog-presence", { detail: { status: myStatus } })); } catch {}
 }
+// Let the desktop tray drive the status. Browser-safe (nothing calls it there).
+window.__dialogSetStatus = (k) => { if (["online", "dnd", "invisible"].includes(k) && k !== myStatus) setMyStatus(k); };
 function openStatusMenu() {
   const menu = $("meStatusMenu"); if (!menu) return;
   menu.innerHTML = "";
