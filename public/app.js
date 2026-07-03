@@ -586,14 +586,35 @@ socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); locatio
 const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
 const lsSet = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 function dmKey(login) { return "@dm:" + [profile.login, login].sort().join("~"); }
+// The contact list is fully server-sided: DMs live in `user_dms`, pins in `pinned_chats`.
+// No localStorage source of truth — the account's chat list follows it across devices.
 let _dmsSynced = false;
+let pinnedKeys = new Set();      // authoritative set of pinned chat keys (server-synced)
+function applyPins() { for (const c of chats.values()) c.pinned = pinnedKeys.has(c.key); }
 function loadStoredChats() {
-  lsGet("dialog_dms").forEach((c) => chats.set(c.key, c));
   loadPins();
   if (!_dmsSynced) { _dmsSynced = true; syncDMsFromServer(); }
 }
-function savePins() { lsSet("dialog_pins", [...chats.values()].filter((c) => c.pinned).map((c) => c.key)); }
-function loadPins() { const pinned = new Set(lsGet("dialog_pins")); for (const c of chats.values()) c.pinned = pinned.has(c.key); }
+async function loadPins() {
+  const { ok, data } = await api("/api/pins", null, "GET");
+  if (ok && Array.isArray(data)) pinnedKeys = new Set(data);
+  // One-time migration: older clients kept pins in localStorage. If the server has
+  // none yet but we still have the old list, push it up once, then forget it.
+  if (ok && pinnedKeys.size === 0) {
+    const legacy = lsGet("dialog_pins");
+    if (Array.isArray(legacy) && legacy.length) {
+      pinnedKeys = new Set(legacy);
+      api("/api/pins", { keys: [...pinnedKeys] });
+      try { localStorage.removeItem("dialog_pins"); } catch {}
+    }
+  }
+  applyPins();
+  renderChatList($("searchInput").value);
+}
+async function savePins() {
+  pinnedKeys = new Set([...chats.values()].filter((c) => c.pinned).map((c) => c.key));
+  await api("/api/pins", { keys: [...pinnedKeys] });
+}
 function upsertChat(c) { const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
 async function syncDMsFromServer() {
   const { ok, data } = await api("/api/dms", null, "GET");
@@ -603,18 +624,18 @@ async function syncDMsFromServer() {
     if (!localKeys.has(d.key)) chats.set(d.key, d);
   }
   _dmsSynced = true;
+  applyPins();
   renderChatList($("searchInput").value);
 }
 async function persistDMs() {
   const dms = [...chats.values()].filter((c) => c.type === "dm").slice(0, 50);
-  lsSet("dialog_dms", dms);
   await api("/api/dms", { dms });
 }
 async function loadGroups() {
   const { ok, data } = await api("/api/groups", null, "GET");
   if (!ok) return;
   data.groups.forEach((g) => { const key = "@grp:" + g.id; if (!chats.has(key)) chats.set(key, { key, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0, pinned: false }); });
-  loadPins();
+  applyPins();
   renderChatList($("searchInput").value);
 }
 function isMuted(room) { return lsGet("dialog_muted").includes(room); }
@@ -724,7 +745,7 @@ function renderChatList(filter = "") {
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="ci-del" title="${c.type === "dm" ? t("close_dm") : t("delete_chat")}">✕</span>`}</div></div>`;
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : (c.type === "group" ? `<span class="ci-del" title="${t("delete_chat")}">✕</span>` : "")}</div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
     // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
     // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
@@ -780,7 +801,6 @@ function openChatMenu(c, x, y) {
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
   item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "close" : "check", () => togglePin(c));
-  if (c.type === "dm") item(t("close_dm"), "back", () => closeDm(c));
   item(t("delete_chat"), "trash", () => deleteChat(c), true);
   menu.classList.remove("hidden");
   menu._openedAt = Date.now();

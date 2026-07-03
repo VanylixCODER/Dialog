@@ -169,6 +169,14 @@ export async function initSchema() {
     PRIMARY KEY (login, chat_key),
     KEY idx_dms_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Pinned chats (DMs and groups) — server-sided so pins follow the account across devices.
+  await pool.query(`CREATE TABLE IF NOT EXISTS pinned_chats (
+    login VARCHAR(24) NOT NULL,
+    chat_key VARCHAR(64) NOT NULL,
+    PRIMARY KEY (login, chat_key),
+    KEY idx_pins_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -466,6 +474,18 @@ export async function saveUserDMs(login, dms) {
   if (!dms || !dms.length) return;
   const vals = dms.map((d) => [login, d.key, d.login, d.name || "", d.ts || 0]);
   await execute("INSERT INTO user_dms (login, chat_key, target_login, name, ts) VALUES ?", [vals]);
+}
+
+// ---------- Закреплённые чаты (серверная синхронизация) ----------
+export async function getPinnedChats(login) {
+  const r = await query("SELECT chat_key FROM pinned_chats WHERE login=?", [login]);
+  return r.map((x) => x.chat_key);
+}
+export async function savePinnedChats(login, keys) {
+  await execute("DELETE FROM pinned_chats WHERE login=?", [login]);
+  if (!keys || !keys.length) return;
+  const vals = keys.slice(0, 200).map((k) => [login, String(k)]);
+  await execute("INSERT INTO pinned_chats (login, chat_key) VALUES ?", [vals]);
 }
 
 // ---------- Курсоры доставки / просмотра (per-user, per-room) ----------
