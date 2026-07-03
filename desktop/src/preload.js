@@ -45,6 +45,18 @@ window.addEventListener("dialog-unread", (e) => {
 window.addEventListener("dialog-notif-click", (e) => {
   ipcRenderer.send("notification-click", (e.detail && e.detail.room) || null);
 });
+// Page reports its status → the tray radio reflects the real state.
+window.addEventListener("dialog-presence", (e) => {
+  ipcRenderer.send("presence", (e.detail && e.detail.status) || "online");
+});
+
+// --- 2b. Tray → page: apply a status chosen from the tray menu ------------
+ipcRenderer.on("set-presence", (_e, value) => {
+  const v = ["online", "dnd", "invisible"].indexOf(value) >= 0 ? value : "online";
+  webFrame.executeJavaScript(
+    "window.__dialogSetStatus && window.__dialogSetStatus(" + JSON.stringify(v) + ");"
+  );
+});
 
 // --- 3. Inject the main-world notification tap ----------------------------
 // Runs before the page's own scripts (socket.io.js, app.js) so it can wrap the
