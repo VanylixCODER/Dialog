@@ -310,7 +310,7 @@ app.post("/api/report", async (req, res) => {
     const description = String(req.body.description || "").trim();
     if (!target || target === me.login) return res.status(400).json({ error: "bad_target" });
     if (!REPORT_REASONS.has(reason)) return res.status(400).json({ error: "bad_reason" });
-    if (!req.body.messageId) return res.status(400).json({ error: "no_message" }); // a message must be linked
+    // A message is linked when reporting from chat; profile/member-list reports may omit it.
     if (!(await getUser(target))) return res.status(400).json({ error: "no_user" });
     const id = await createReport({
       reporter: me.login, target, room: String(req.body.room || "").slice(0, 64),

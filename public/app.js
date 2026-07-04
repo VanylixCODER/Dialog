@@ -461,10 +461,21 @@ document.querySelectorAll(".auth-tab").forEach((tab) => tab.onclick = () => {
   $("forgotForm").classList.add("hidden");
   setAuthMode(tab.dataset.mode);
 });
+// Map server auth error codes to the current UI language.
+function authErr(code) {
+  if (!code) return t("err_login_failed");
+  if (code === "bad_credentials") return t("err_login_failed");
+  if (code === "account_banned") return t("account_banned");
+  if (String(code).startsWith("report_banned:")) {
+    const until = Number(String(code).split(":")[1]) || 0;
+    return t("report_banned_until", { date: new Date(until).toLocaleString() });
+  }
+  return code; // already-localized or unknown — show as-is
+}
 $("loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
   const { ok, data } = await api("/api/login", { login: f.login.value.trim(), password: f.password.value });
-  if (!ok) { $("loginError").textContent = data.error || t("err_login_failed"); return; }
+  if (!ok) { $("loginError").textContent = authErr(data.error); return; }
   onAuth(data);
 };
 $("registerForm").onsubmit = async (e) => {
@@ -1645,6 +1656,7 @@ async function openMiniProfile(login) {
   $("mpDesc").textContent = data.description || "";
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
+  $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
 }
 $("mpCancel").onclick = () => $("mpModal").classList.add("hidden");
 $("chatAva").onclick = () => {
@@ -1776,6 +1788,15 @@ function renderMembers() {
         // обновится автоматически. Дополнительный setTimeout отсутствует, ничего лишнего.
       };
       li.appendChild(rm);
+    }
+    // Report this member (anyone but yourself). Small flag; stops propagation so the row's
+    // click (open mini-profile) doesn't also fire.
+    if (login !== profile.login) {
+      const rep = document.createElement("button");
+      rep.className = "member-report"; rep.title = t("report_user");
+      rep.innerHTML = window.ICON.flag || "!";
+      rep.onclick = (e) => { e.stopPropagation(); openReportModal({ target: login, targetName: name }); };
+      li.appendChild(rep);
     }
     // Клавиатурная навигация по сайдпанели участников: Tab → focus (кольцо из .member:focus-visible), Enter/Space → то же, что и клик.
     li.tabIndex = 0; li.setAttribute("role", "button");
@@ -2170,16 +2191,33 @@ const DCG = [
   ["selfharm", "dcg_selfharm", "dcg_selfharm_d"],
   ["other", "dcg_other", "dcg_other_d"],
 ];
+// Find the most recent visible message from `login` in the open chat (to auto-link
+// when reporting from a profile / member list).
+function latestMessageFrom(login) {
+  if (!messagesEl) return null;
+  const els = messagesEl.querySelectorAll('.msg[data-from]');
+  for (let i = els.length - 1; i >= 0; i--) {
+    if (els[i].dataset.from === login) {
+      const b = els[i].querySelector(".bubble");
+      return { id: Number(els[i].dataset.id) || null, preview: b ? b.textContent.trim() : "" };
+    }
+  }
+  return null;
+}
 let _report = null;
 function openReportModal({ target, targetName, messageId, room, preview }) {
-  _report = { target, messageId, room, preview };
+  // If opened without a message (profile/member list), try to attach their latest one.
+  if (!messageId) { const found = latestMessageFrom(target); if (found && found.id) { messageId = found.id; preview = found.preview; } }
+  _report = { target, messageId: messageId || null, room: room || myRoom || activeKey || "", preview: preview || "" };
   $("reportTarget").textContent = "@" + target;
   const sel = $("reportReason");
   sel.innerHTML = DCG.map(([code, tk]) => `<option value="${code}">${escapeHtml(t(tk))}</option>`).join("");
   const desc = $("reportRuleDesc");
   const showDesc = () => { const found = DCG.find((d) => d[0] === sel.value); desc.textContent = found ? t(found[2]) : ""; };
   sel.onchange = showDesc; showDesc();
-  $("reportLinked").innerHTML = `<span class="rl-tag">${t("report_linked_msg")}</span><span class="rl-body">${escapeHtml((preview || t("pv_media")).slice(0, 160))}</span>`;
+  $("reportLinked").innerHTML = messageId
+    ? `<span class="rl-tag">${t("report_linked_msg")}</span><span class="rl-body">${escapeHtml((preview || t("pv_media")).slice(0, 160))}</span>`
+    : `<span class="rl-tag">${t("report_linked_msg")}</span><span class="rl-body rl-none">${t("report_no_msg")}</span>`;
   $("reportDesc").value = "";
   $("reportMsg").className = "form-error"; $("reportMsg").textContent = "";
   $("reportModal").classList.remove("hidden");

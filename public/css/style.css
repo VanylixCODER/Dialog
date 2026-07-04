@@ -3732,3 +3732,14 @@ body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0
 body.stream-protected #messages, body.stream-protected .bubble { user-select: none; }
 body.stream-blank::after { content: ""; position: fixed; inset: 0; background: #000; z-index: 99998; }
 body.stream-blank::before { content: "🔒 Protected"; position: fixed; inset: 0; z-index: 99999; display: grid; place-items: center; color: #2ec96b; font: 700 15px ui-monospace, monospace; letter-spacing: 2px; }
+
+/* Report affordances (member list + mini-profile) */
+.member-report { margin-left: 2px; background: none; border: 0; color: var(--text-dim); cursor: pointer;
+  width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; flex-shrink: 0;
+  opacity: 0; transition: opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.member:hover .member-report, .member:focus-within .member-report { opacity: .65; }
+.member-report:hover { opacity: 1; color: #ff8a8a; background: rgba(255,82,82,0.12); }
+.member-report svg { width: 15px; height: 15px; }
+.mp-report { width: auto; padding: 0 18px; }
+.mp-report:hover { color: #ff8a8a; border-color: rgba(255,82,82,0.5); }
+.rl-none { color: var(--text-dim); font-style: italic; }
