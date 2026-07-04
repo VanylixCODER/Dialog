@@ -43,6 +43,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="dialogmsg.xyz" />
             </intent-filter>
+            <!-- Custom scheme: dialog://join/<code> (invite "Open in app" button) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dialog" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
