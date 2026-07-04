@@ -85,6 +85,10 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN report_ban_ms BIGINT NULL"); } catch {} // ban duration for the "unstable" tooltip (0 = life)
   try { await pool.query("ALTER TABLE users ADD COLUMN stream_protect TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN email_changed_at BIGINT NULL"); } catch {}
+  // Privacy preferences.
+  try { await pool.query("ALTER TABLE users ADD COLUMN pref_friend_req VARCHAR(12) NOT NULL DEFAULT 'everyone'"); } catch {} // everyone | fof | nobody
+  try { await pool.query("ALTER TABLE users ADD COLUMN pref_group_add TINYINT NOT NULL DEFAULT 1"); } catch {}          // friends can add me to groups
+  try { await pool.query("ALTER TABLE users ADD COLUMN pref_read_receipts TINYINT NOT NULL DEFAULT 1"); } catch {}       // send read receipts
   // UNIQUE index still allows multiple NULLs (existing users keep no email).
   try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
   // Single-use, hashed tokens for email verification + password reset.
@@ -153,6 +157,10 @@ export async function initSchema() {
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_invites_group (group_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // Invite-link limits: max_uses (null = unlimited), uses counter, expires (null = never).
+  try { await pool.query("ALTER TABLE group_invites ADD COLUMN max_uses INT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE group_invites ADD COLUMN uses INT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE group_invites ADD COLUMN expires BIGINT NULL"); } catch {}
 
   // Очередь ожидающих заявок на вступление (от in-app suggestions и от redemption кодов).
   // UNIQUE KEY на паре (group_id, login) — запрещает дубли: повторный suggest/redeem одного и того
@@ -221,7 +229,7 @@ export async function createUser(login, name, salt, hash, email = null) {
   await execute("INSERT INTO users (login, name, salt, hash, email) VALUES (?,?,?,?,?)", [login, name, salt, hash, email]);
 }
 export async function getUser(login) {
-  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip, report_ban_until, report_reason, report_ban_ms, stream_protect, email_changed_at FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip, report_ban_until, report_reason, report_ban_ms, stream_protect, email_changed_at, pref_friend_req, pref_group_add, pref_read_receipts FROM users WHERE login=?", [login]);
   return r[0] || null;
 }
 export async function getUserByEmail(email) {
@@ -408,12 +416,14 @@ export async function deleteGroup(id) {
 // ---------- Приглашения в группу (invite-codes + suggestion queue) ----------
 // server.js хранит SHA-256 хеш кода; здесь просто INSERT/SELECT/DELETE хеша.
 // UNIQUE KEY на code_hash в group_invites даёт O(log n) lookup при redeem.
-export async function createGroupInvite(groupId, creatorLogin, hash) {
-  const res = await execute("INSERT INTO group_invites (group_id, creator_login, code_hash) VALUES (?,?,?)", [groupId, creatorLogin, hash]);
+export async function createGroupInvite(groupId, creatorLogin, hash, maxUses = null, expires = null) {
+  const res = await execute("INSERT INTO group_invites (group_id, creator_login, code_hash, max_uses, expires) VALUES (?,?,?,?,?)",
+    [groupId, creatorLogin, hash, maxUses, expires]);
   return res.insertId;
 }
 export async function getGroupInvites(groupId) {
-  return await query("SELECT id, creator_login, created_at FROM group_invites WHERE group_id=? ORDER BY id DESC", [groupId]);
+  const r = await query("SELECT id, creator_login, created_at, max_uses, uses, expires FROM group_invites WHERE group_id=? ORDER BY id DESC", [groupId]);
+  return r.map((x) => ({ ...x, max_uses: x.max_uses == null ? null : Number(x.max_uses), uses: Number(x.uses) || 0, expires: x.expires == null ? null : Number(x.expires) }));
 }
 export async function revokeGroupInvite(invId) {
   const r = await query("SELECT group_id FROM group_invites WHERE id=?", [invId]);
@@ -423,8 +433,15 @@ export async function revokeGroupInvite(invId) {
 }
 // Поиск по хешу — использует UNIQUE(code_hash), ровно одна строка. Без хеша функция бесполезна.
 export async function getInviteByHash(hash) {
-  const r = await query("SELECT id, group_id, creator_login FROM group_invites WHERE code_hash=?", [hash]);
-  return r[0] || null;
+  const r = await query("SELECT id, group_id, creator_login, max_uses, uses, expires FROM group_invites WHERE code_hash=?", [hash]);
+  if (!r.length) return null;
+  const x = r[0];
+  return { ...x, max_uses: x.max_uses == null ? null : Number(x.max_uses), uses: Number(x.uses) || 0, expires: x.expires == null ? null : Number(x.expires) };
+}
+// Count a redemption; auto-delete the invite once it's exhausted so it stops resolving.
+export async function bumpInviteUse(invId) {
+  await execute("UPDATE group_invites SET uses = uses + 1 WHERE id=?", [invId]);
+  await execute("DELETE FROM group_invites WHERE id=? AND max_uses IS NOT NULL AND uses >= max_uses", [invId]);
 }
 // Создать заявку на вступление. INSERT IGNORE: повторный вызов (suggest/redeem для того же логина)
 // не плодит дубликатов. Возвращает {duplicate: bool}, чтобы вызывающий мог выбрать ответ.
@@ -496,6 +513,34 @@ export async function declineFriend(me, other) { await execute("DELETE FROM rela
 export async function removeFriend(me, other) {
   await execute("DELETE FROM relations WHERE login=? AND target=? AND type='friend'", [me, other]);
   await execute("DELETE FROM relations WHERE login=? AND target=? AND type='friend'", [other, me]);
+}
+// Do a and b share at least one mutual friend? (used for the "friends of friends" pref)
+export async function haveMutualFriend(a, b) {
+  const r = await query(
+    "SELECT 1 FROM relations ra JOIN relations rb ON ra.target = rb.target WHERE ra.login=? AND ra.type='friend' AND rb.login=? AND rb.type='friend' LIMIT 1",
+    [a, b]
+  );
+  return !!r.length;
+}
+
+// ---------- Privacy preferences ----------
+export async function getPrefs(login) {
+  const r = await query("SELECT pref_friend_req, pref_group_add, pref_read_receipts FROM users WHERE login=?", [login]);
+  const u = r[0] || {};
+  return {
+    friendReq: u.pref_friend_req || "everyone",
+    groupAdd: u.pref_group_add == null ? true : !!u.pref_group_add,
+    readReceipts: u.pref_read_receipts == null ? true : !!u.pref_read_receipts,
+  };
+}
+export async function setPrefs(login, patch) {
+  const sets = [], vals = [];
+  if (patch.friendReq !== undefined) { sets.push("pref_friend_req=?"); vals.push(patch.friendReq); }
+  if (patch.groupAdd !== undefined) { sets.push("pref_group_add=?"); vals.push(patch.groupAdd ? 1 : 0); }
+  if (patch.readReceipts !== undefined) { sets.push("pref_read_receipts=?"); vals.push(patch.readReceipts ? 1 : 0); }
+  if (!sets.length) return;
+  vals.push(login);
+  await execute("UPDATE users SET " + sets.join(", ") + " WHERE login=?", vals);
 }
 
 // ---------- Web Push подписки ----------

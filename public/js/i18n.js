@@ -167,6 +167,18 @@ const I18N = {
     report_banned_until: "Account temporarily banned until {date}.", report_no_msg: "No specific message", report_user: "Report user",
     ctd_body: "Are you sure you want to delete this group?", ctd_undone: "This can not be undone.",
     ctd_type_pre: "Type", ctd_type_post: "to confirm.", ctd_placeholder: "Enter group name", group: "group",
+    // Preferences
+    tab_prefs: "Preferences", pref_saved: "Saved",
+    pref_friend_req: "Friend requests", pref_friend_req_d: "Who can send you friend requests",
+    pref_everyone: "Everyone", pref_fof: "Friends of friends", pref_nobody: "Nobody",
+    pref_group_add: "Friends can add me to groups", pref_group_add_d: "Let others add or invite you into group chats",
+    pref_read_receipts: "Read receipts", pref_read_receipts_d: "Let others see when you've read their messages",
+    err_req_blocked: "This user isn't accepting friend requests.",
+    // Invite limits
+    invite_max_uses: "Max uses", invite_expiry_days: "Expires (days)", invite_unlimited: "∞", invite_never: "never",
+    invite_uses: "Uses", invite_expiry: "Expires", invite_never_short: "no expiry",
+    invite_expired: "expired", invite_in_days: "in {n}d", invite_in_hours: "in {n}h",
+    redeem_expired: "That invite link has expired.", redeem_used_up: "That invite link has reached its use limit.",
     // Admin reports
     adm_reports: "Reports", adm_rep_pending: "Pending", adm_rep_actioned: "Actioned", adm_rep_false: "False reports", adm_rep_all: "All",
     adm_rep_newest: "Newest first", adm_rep_oldest: "Oldest first", adm_rep_search: "Search reports (user, reason, text)…",
@@ -363,6 +375,18 @@ const I18N = {
     report_banned_until: "Аккаунт временно заблокирован до {date}.", report_no_msg: "Без конкретного сообщения", report_user: "Пожаловаться",
     ctd_body: "Вы уверены, что хотите удалить эту группу?", ctd_undone: "Это действие необратимо.",
     ctd_type_pre: "Введите", ctd_type_post: "для подтверждения.", ctd_placeholder: "Введите название группы", group: "группа",
+    // Настройки — предпочтения
+    tab_prefs: "Предпочтения", pref_saved: "Сохранено",
+    pref_friend_req: "Заявки в друзья", pref_friend_req_d: "Кто может отправлять вам заявки в друзья",
+    pref_everyone: "Все", pref_fof: "Друзья друзей", pref_nobody: "Никто",
+    pref_group_add: "Друзья могут добавлять меня в группы", pref_group_add_d: "Разрешить добавлять и приглашать вас в группы",
+    pref_read_receipts: "Отчёты о прочтении", pref_read_receipts_d: "Показывать другим, что вы прочитали их сообщения",
+    err_req_blocked: "Этот пользователь не принимает заявки в друзья.",
+    // Лимиты инвайтов
+    invite_max_uses: "Макс. использований", invite_expiry_days: "Истекает (дней)", invite_unlimited: "∞", invite_never: "никогда",
+    invite_uses: "Использований", invite_expiry: "Истекает", invite_never_short: "без срока",
+    invite_expired: "истёк", invite_in_days: "через {n}д", invite_in_hours: "через {n}ч",
+    redeem_expired: "Срок этой ссылки-приглашения истёк.", redeem_used_up: "Лимит использований этой ссылки исчерпан.",
     // Админ — репорты
     adm_reports: "Жалобы", adm_rep_pending: "Ожидают", adm_rep_actioned: "Обработаны", adm_rep_false: "Ложные", adm_rep_all: "Все",
     adm_rep_newest: "Сначала новые", adm_rep_oldest: "Сначала старые", adm_rep_search: "Поиск жалоб (юзер, причина, текст)…",

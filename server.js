@@ -38,7 +38,8 @@ import {
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
-  sendFriendRequest, acceptFriend, declineFriend, removeFriend,
+  sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend,
+  getPrefs, setPrefs, bumpInviteUse,
   getUserDMs, saveUserDMs,
   getPinnedChats, savePinnedChats,
   savePushSub, getPushSubs, deletePushSub,
@@ -550,12 +551,18 @@ app.post("/api/groups/:id/members", async (req, res) => {
   const room = "@grp:" + id;
   const before = await getGroupMembers(id);
   if (Array.isArray(req.body.add)) {
-    const logins = req.body.add.map((l) => String(l).toLowerCase());
+    // Skip anyone who has turned off "friends can add me to groups".
+    const requested = req.body.add.map((l) => String(l).toLowerCase());
+    const logins = [];
+    for (const l of requested) { if ((await getPrefs(l)).groupAdd) logins.push(l); }
+    const blocked = requested.filter((l) => !logins.includes(l));
     await addGroupMembers(id, logins);
     for (const login of logins) {
       const u = await getUser(login);
       if (u) saveSystemMessage(room, login, u.name, "join", "");
     }
+    if (blocked.length && !logins.length) { res.json({ ok: false, error: "add_blocked", blocked }); return; }
+    req._blockedAdds = blocked;
   }
   if (req.body.remove) {
     const login = String(req.body.remove).toLowerCase();
@@ -595,7 +602,11 @@ app.post("/api/groups/:id/invites", async (req, res) => {
     const id = req.params.id;
     if (!/^\d+$/.test(id) || !(await isGroupMember(id, me.login))) return res.status(403).json({ error: "no access" });
     const code = genInviteCode();
-    await createGroupInvite(id, me.login, hashInviteCode(code));
+    // Optional limits: maxUses (>=1) and days (>=1). 0/absent = unlimited / never expires.
+    const maxUses = Math.max(0, Math.min(9999, Number(req.body.maxUses) || 0)) || null;
+    const days = Math.max(0, Math.min(365, Number(req.body.days) || 0));
+    const expires = days > 0 ? Date.now() + days * 86400000 : null;
+    await createGroupInvite(id, me.login, hashInviteCode(code), maxUses, expires);
     // Овнеру И создателю — обоим полезно видеть новую точку входа в списке инвайтов. Создатель не
     // получит повторного socket-event потому что генерирует код в своём клиенте и сразу ре-фетчит,
     // но emit «на всякий случай» — для апдейта UI без ручного refetch.
@@ -641,9 +652,13 @@ app.post("/api/groups/redeem", async (req, res) => {
     if (!code) return res.status(400).json({ error: "no code" });
     const inv = await getInviteByHash(hashInviteCode(code));
     if (!inv) return res.json({ ok: false, status: "invalid" });
+    // Enforce invite-link limits.
+    if (inv.expires != null && inv.expires < Date.now()) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "expired" }); }
+    if (inv.max_uses != null && inv.uses >= inv.max_uses) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "used_up" }); }
     if (await isGroupMember(inv.group_id, me.login)) return res.json({ ok: true, status: "already", group: inv.group_id });
     const d = await createPendingInvite(inv.group_id, me.login, me.login);
     if (d.duplicate) return res.json({ ok: true, status: "duplicate", group: inv.group_id });
+    await bumpInviteUse(inv.id); // count this redemption toward the link's usage cap
     const g = await getGroup(inv.group_id);
     if (g) notifyUser(g.owner, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
     notifyUser(me.login, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
@@ -666,6 +681,7 @@ app.post("/api/groups/:id/suggest", async (req, res) => {
     for (const target of targets) {
       if (!(await getUser(target))) continue;
       if (await isGroupMember(id, target)) continue;
+      if (!(await getPrefs(target)).groupAdd) continue; // target disallows being added to groups
       const d = await createPendingInvite(id, target, me.login);
       if (!d.duplicate) {
         created++;
@@ -733,12 +749,40 @@ app.post("/api/relations", async (req, res) => {
   notifyUser(me.login, "relations-changed", {});
   res.json({ ok: true });
 });
+// Can `from` send `to` a friend request, given `to`'s privacy preference?
+async function canFriendRequest(from, to) {
+  const p = await getPrefs(to);
+  if (p.friendReq === "nobody") return false;
+  if (p.friendReq === "fof") return await haveMutualFriend(from, to); // friends-of-friends only
+  return true; // everyone
+}
+
+// ---------- REST: privacy preferences ----------
+app.get("/api/prefs", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json(await getPrefs(me.login));
+});
+app.post("/api/prefs", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const patch = {};
+  if (["everyone", "fof", "nobody"].includes(req.body.friendReq)) patch.friendReq = req.body.friendReq;
+  if (typeof req.body.groupAdd === "boolean") patch.groupAdd = req.body.groupAdd;
+  if (typeof req.body.readReceipts === "boolean") patch.readReceipts = req.body.readReceipts;
+  await setPrefs(me.login, patch);
+  for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+  res.json({ ok: true, prefs: await getPrefs(me.login) });
+});
+
 app.post("/api/friend", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const target = String(req.body.target || "").toLowerCase();
   const action = req.body.action;
   if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
-  if (action === "request") { if (!(await getUser(target))) return res.status(404).json({ error: "not found" }); await sendFriendRequest(me.login, target); }
+  if (action === "request") {
+    if (!(await getUser(target))) return res.status(404).json({ error: "not found" });
+    if (!(await canFriendRequest(me.login, target))) return res.status(403).json({ error: "req_blocked" });
+    await sendFriendRequest(me.login, target);
+  }
   else if (action === "accept") await acceptFriend(me.login, target);
   else if (action === "decline") await declineFriend(me.login, target);
   else if (action === "remove") await removeFriend(me.login, target);
@@ -1349,6 +1393,8 @@ io.on("connection", (socket) => {
       if (await isBlockedBy(dmTo, userLogin)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_sender" }); return; }
       const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo));
       if (!allowed) {
+        // Respect the recipient's friend-request preference before auto-creating one.
+        if (!(await canFriendRequest(userLogin, dmTo))) { socket.emit("dm-blocked", { partner: dmTo, status: "blocked" }); return; }
         const status = await sendFriendRequest(userLogin, dmTo);
         socket.emit("dm-blocked", { partner: dmTo, status });
         notifyUser(dmTo, "relations-changed", {}); notifyUser(userLogin, "relations-changed", {});
