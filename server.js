@@ -47,6 +47,8 @@ import {
   createEmailToken, getEmailToken, deleteEmailToken,
   adminListUsers, adminStats, setUserBanned, setUserName, setUserLastIp,
   isIpBanned, banIp, unbanIp, listBannedIps,
+  createReport, listReports, getReport, resolveReport, countPendingReports,
+  setUserReportBan, clearUserReport, setStreamProtect, setEmailWithStamp,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -75,10 +77,17 @@ for (const level of ["log", "info", "warn", "error"]) {
   console[level] = (...args) => { pushLog(level, args); orig(...args); };
 }
 
-// In-memory mirror of banned_ips so the request/socket gate stays synchronous.
-const bannedIpSet = new Set();
+// In-memory mirror of banned_ips (ip -> expires|null) so the gate stays synchronous.
+const bannedIps = new Map();
 // Normalize IPv4-mapped IPv6 (::ffff:1.2.3.4) down to the v4 form for consistent matching.
 const normIp = (ip) => String(ip || "").replace(/^::ffff:/, "").trim();
+// Synchronous ban check with expiry — lazily forgets a lapsed temporary IP ban.
+function ipIsBanned(ip) {
+  if (!bannedIps.has(ip)) return false;
+  const exp = bannedIps.get(ip);
+  if (exp != null && exp < Date.now()) { bannedIps.delete(ip); unbanIp(ip).catch(() => {}); return false; }
+  return true;
+}
 
 // ---------- Web Push ----------
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC || "";
@@ -109,7 +118,7 @@ app.use(express.json({ limit: B64_BUFFER_MB + "mb" }));
 
 // IP-ban gate — refuse everything from a banned IP (checked against the in-memory mirror).
 app.use((req, res, next) => {
-  if (bannedIpSet.has(normIp(req.ip))) return res.status(403).send("Your IP has been banned.");
+  if (ipIsBanned(normIp(req.ip))) return res.status(403).send("Your IP has been banned.");
   next();
 });
 
@@ -151,6 +160,9 @@ app.get(["/download", "/downloads"], (_req, res) =>
 );
 app.get(["/privacy", "/privacy-policy"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "privacy.html"))
+);
+app.get(["/guidelines", "/dcg", "/rules"], (_req, res) =>
+  res.sendFile(join(__dirname, "public", "guidelines.html"))
 );
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -237,19 +249,77 @@ app.get("/verify", async (req, res) => {
 // Reset-password page (standalone) — reached from the reset email link.
 app.get("/reset", (req, res) => res.sendFile(join(__dirname, "public", "reset.html")));
 
-// Add / change email from the app (nag modal, settings).
+// Add / change email from the app (nag modal, settings). Changing an existing
+// address is rate-limited to once a week; first-time linking is always allowed.
+const EMAIL_COOLDOWN_MS = 7 * 24 * 3600 * 1000;
 app.post("/api/account/email", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
     const email = String(req.body.email || "").trim().toLowerCase();
     if (!auth.EMAIL_RE.test(email) || email.length > 190) return res.status(400).json({ error: "Введите корректный e-mail" });
+    const u = await getUser(me.login);
+    if (email === (u.email || "")) return res.status(400).json({ error: "same_email" });
+    const last = Number(u.email_changed_at) || 0;
+    if (u.email && last && Date.now() - last < EMAIL_COOLDOWN_MS) {
+      return res.status(429).json({ error: "cooldown", retryAt: last + EMAIL_COOLDOWN_MS });
+    }
     const taken = await getUserByEmail(email);
     if (taken && taken.login !== me.login) return res.status(400).json({ error: "E-mail уже используется" });
-    await setUserEmail(me.login, email);           // resets email_verified → 0
+    await setEmailWithStamp(me.login, email);      // resets email_verified → 0, stamps time
     await setNagDismissed(me.login, false);
     for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
     await sendVerification(me.login, email, me.name);
-    res.json({ ok: true, email, mailSent: mailEnabled() });
+    res.json({ ok: true, email, mailSent: mailEnabled(), retryAt: Date.now() + EMAIL_COOLDOWN_MS });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Change own display name (nickname) from the Account tab.
+app.post("/api/account/nickname", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const name = String(req.body.name || "").trim().slice(0, 32);
+    if (!name) return res.status(400).json({ error: "empty" });
+    await setUserName(me.login, name);
+    for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+    try {
+      const friends = await getFriendLogins(me.login);
+      for (const f of friends) notifyUser(f, "profile-updated", { login: me.login, name, avatarChanged: false });
+      notifyUser(me.login, "profile-updated", { login: me.login, name, avatarChanged: false });
+    } catch {}
+    res.json({ ok: true, name });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Toggle the "content protection" (anti-stream) account setting.
+app.post("/api/account/stream-protect", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const on = !!req.body.on;
+  await setStreamProtect(me.login, on);
+  for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+  res.json({ ok: true, on });
+});
+
+// ---------- Reports (moderation) ----------
+// Report-reason codes double as the Dialog Community Guidelines (DCG) sections.
+const REPORT_REASONS = new Set(["harassment", "hate", "threats", "nsfw", "spam", "doxxing", "illegal", "impersonation", "selfharm", "other"]);
+app.post("/api/report", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const target = String(req.body.target || "").trim().toLowerCase();
+    const reason = String(req.body.reason || "").trim();
+    const description = String(req.body.description || "").trim();
+    if (!target || target === me.login) return res.status(400).json({ error: "bad_target" });
+    if (!REPORT_REASONS.has(reason)) return res.status(400).json({ error: "bad_reason" });
+    if (!req.body.messageId) return res.status(400).json({ error: "no_message" }); // a message must be linked
+    if (!(await getUser(target))) return res.status(400).json({ error: "no_user" });
+    const id = await createReport({
+      reporter: me.login, target, room: String(req.body.room || "").slice(0, 64),
+      message_id: Number(req.body.messageId) || null, msg_preview: String(req.body.msgPreview || ""),
+      reason, description,
+    });
+    // Ping every admin in realtime so the queue badge updates.
+    for (const a of auth.ADMIN_LOGINS) notifyUser(a, "new-report", { id, target, reason });
+    res.json({ ok: true, id });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -732,7 +802,55 @@ async function kickAllDevices(login) {
 
 app.get("/api/admin/stats", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
-  res.json({ ...(await adminStats()), online: userSockets.size });
+  res.json({ ...(await adminStats()), online: userSockets.size, reports: await countPendingReports() });
+});
+// ---- Reports review ----
+app.get("/api/admin/reports", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const list = await listReports({ filter: String(req.query.filter || "pending"), q: String(req.query.q || ""), sort: String(req.query.sort || "new") });
+  res.json(list);
+});
+app.get("/api/admin/reports-count", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  res.json({ pending: await countPendingReports() });
+});
+// Resolve a report: IP-ban the target (days or life) OR mark it a false report.
+app.post("/api/admin/reports/:id/resolve", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const rep = await getReport(req.params.id);
+  if (!rep) return res.status(404).json({ error: "no_report" });
+  const action = String(req.body.action || "");
+  if (action === "false") {
+    await resolveReport(rep.id, { status: "false", resolution: "false", by: (await authUser(req)).login });
+    return res.json({ ok: true });
+  }
+  if (action === "ipban") {
+    const life = !!req.body.life;
+    const days = life ? 0 : Math.max(1, Number(req.body.days) || 1);
+    const until = life ? null : Date.now() + days * 86400000;
+    const durationMs = life ? 0 : days * 86400000;   // 0 = life (for the unstable tooltip)
+    // Mark the account "unstable" (guilty) + set the login-block window; life = hard ban.
+    await setUserReportBan(rep.target, { until, reason: rep.reason, durationMs });
+    if (life) await setUserBanned(rep.target, true);
+    // IP-ban the target's last-known IP for the same window.
+    const u = await getUser(rep.target);
+    const ip = normIp(u && u.last_ip);
+    if (ip) await applyIpBan(ip, "report:" + rep.reason, until);
+    await kickAllDevices(rep.target);
+    await resolveReport(rep.id, { status: "actioned", resolution: life ? "ipban_life" : ("ipban_" + days + "d"), ban_until: until, by: (await authUser(req)).login });
+    return res.json({ ok: true });
+  }
+  res.status(400).json({ error: "bad_action" });
+});
+// Lift a user's "unstable" mark (reporter forgave / appeal granted).
+app.post("/api/admin/clear-unstable", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const login = String(req.body.login || "").toLowerCase();
+  if (!login) return res.status(400).json({ error: "bad_target" });
+  await clearUserReport(login);
+  if (!(await getUser(login)).banned) { /* allow login again if not hard-banned */ }
+  for (const tk of await import("./db.js").then((m) => m.tokensForLogin(login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
+  res.json({ ok: true });
 });
 app.get("/api/admin/users", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
@@ -785,24 +903,29 @@ app.post("/api/admin/kick-device", async (req, res) => {
   s.emit("force-logout", { reason: "kicked" }); s.disconnect(true);
   res.json({ ok: true });
 });
+// Apply an IP ban (expires = null for life), sync the in-memory map, and kick live sockets on it.
+async function applyIpBan(ip, reason, expires = null) {
+  await banIp(ip, reason, expires);
+  bannedIps.set(ip, expires);
+  for (const s of io.sockets.sockets.values()) if (s._ip === ip) { s.emit("banned", { ip: true }); s.disconnect(true); }
+}
 app.post("/api/admin/ban-ip", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
-  // Ban a raw IP, or the last-known IP of a login.
+  // Ban a raw IP, or the last-known IP of a login. Optional `days` → temporary.
   let ip = normIp(req.body.ip || "");
   const login = String(req.body.login || "").toLowerCase();
-  if (!ip && login) { const u = await getUser(login); ip = normIp(u && u.last_ip); if (login) await setUserBanned(login, true); }
+  const days = Number(req.body.days) || 0;
+  const expires = days > 0 ? Date.now() + days * 86400000 : null;
+  if (!ip && login) { const u = await getUser(login); ip = normIp(u && u.last_ip); if (login && !days) await setUserBanned(login, true); }
   if (!ip) return res.status(400).json({ error: "no_ip" });
-  await banIp(ip, req.body.reason || (login ? "user:" + login : null));
-  bannedIpSet.add(ip);
-  if (login) await kickAllDevices(login);
-  // Kick any live socket currently on that IP.
-  for (const s of io.sockets.sockets.values()) if (s._ip === ip) { s.emit("banned", { ip: true }); s.disconnect(true); }
+  await applyIpBan(ip, req.body.reason || (login ? "user:" + login : null), expires);
+  if (login && !days) await kickAllDevices(login);
   res.json({ ok: true, ip });
 });
 app.post("/api/admin/unban-ip", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
   const ip = normIp(req.body.ip || "");
-  await unbanIp(ip); bannedIpSet.delete(ip);
+  await unbanIp(ip); bannedIps.delete(ip);
   res.json({ ok: true });
 });
 app.post("/api/admin/rename", async (req, res) => {
@@ -1154,7 +1277,7 @@ io.on("connection", (socket) => {
   let currentRoom = null, userLogin = null, userName = null;
   const sockIp = normIp((socket.handshake.headers["x-forwarded-for"] || "").split(",")[0] || socket.handshake.address);
   socket._ip = sockIp;
-  if (bannedIpSet.has(sockIp)) { socket.emit("banned", { ip: true }); socket.disconnect(true); return; }
+  if (ipIsBanned(sockIp)) { socket.emit("banned", { ip: true }); socket.disconnect(true); return; }
   socket.emit("server-info", { region: SERVER_REGION });
 
   socket.on("latency", (cb) => { if (typeof cb === "function") cb(Date.now()); });
@@ -1433,7 +1556,7 @@ app.get(/^\/(?!api\/|src\/|js\/|css\/|socket\.io\/)/, (req, res) => {
 // ---------- Старт ----------
 async function start() {
   await waitForDb(); await initSchema(); console.log("MySQL подключён, схема готова");
-  try { for (const r of await listBannedIps()) bannedIpSet.add(normIp(r.ip)); } catch {}
+  try { for (const r of await listBannedIps()) bannedIps.set(normIp(r.ip), r.expires == null ? null : Number(r.expires)); } catch {}
   const PORT = Number(process.env.PORT || 3000);
   httpServer.listen(PORT, () => {
     console.log(`Dialog запущен (${useHttps ? "HTTPS" : "HTTP"})  порт ${PORT}`);

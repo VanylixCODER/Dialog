@@ -79,6 +79,12 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN pw_changed_at BIGINT NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN banned TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN last_ip VARCHAR(45) NULL"); } catch {}
+  // Report/moderation + account settings.
+  try { await pool.query("ALTER TABLE users ADD COLUMN report_ban_until BIGINT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN report_reason VARCHAR(190) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN report_ban_ms BIGINT NULL"); } catch {} // ban duration for the "unstable" tooltip (0 = life)
+  try { await pool.query("ALTER TABLE users ADD COLUMN stream_protect TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN email_changed_at BIGINT NULL"); } catch {}
   // UNIQUE index still allows multiple NULLs (existing users keep no email).
   try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
   // Single-use, hashed tokens for email verification + password reset.
@@ -186,6 +192,28 @@ export async function initSchema() {
     reason VARCHAR(190) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  try { await pool.query("ALTER TABLE banned_ips ADD COLUMN expires BIGINT NULL"); } catch {} // null = permanent
+
+  // User reports (moderation queue). Each report links a specific message.
+  await pool.query(`CREATE TABLE IF NOT EXISTS reports (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    reporter VARCHAR(24) NOT NULL,
+    target VARCHAR(24) NOT NULL,
+    room VARCHAR(64) NULL,
+    message_id BIGINT NULL,
+    msg_preview VARCHAR(400) NULL,
+    reason VARCHAR(40) NOT NULL,
+    description VARCHAR(1000) NULL,
+    status VARCHAR(12) NOT NULL DEFAULT 'pending',
+    resolution VARCHAR(24) NULL,
+    ban_until BIGINT NULL,
+    resolved_by VARCHAR(24) NULL,
+    created_at BIGINT NOT NULL,
+    resolved_at BIGINT NULL,
+    KEY idx_reports_status (status),
+    KEY idx_reports_target (target),
+    KEY idx_reports_created (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -193,7 +221,7 @@ export async function createUser(login, name, salt, hash, email = null) {
   await execute("INSERT INTO users (login, name, salt, hash, email) VALUES (?,?,?,?,?)", [login, name, salt, hash, email]);
 }
 export async function getUser(login) {
-  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip, report_ban_until, report_reason, report_ban_ms, stream_protect, email_changed_at FROM users WHERE login=?", [login]);
   return r[0] || null;
 }
 export async function getUserByEmail(email) {
@@ -237,8 +265,18 @@ export async function getAvatar(login) {
   return r[0] ? r[0].avatar : null;
 }
 export async function getProfileCard(login) {
-  const r = await query("SELECT login, name, description, status, created_at FROM users WHERE login=?", [login]);
-  return r[0] || null;
+  const r = await query("SELECT login, name, description, status, created_at, email_verified, report_reason, report_ban_until, report_ban_ms FROM users WHERE login=?", [login]);
+  const u = r[0];
+  if (!u) return null;
+  // "unstable" is a persistent guilty mark (report_reason set), independent of whether
+  // the ban window has elapsed. Others see the red tag + reason/duration on hover.
+  const unstable = !!u.report_reason;
+  return {
+    login: u.login, name: u.name, description: u.description, status: u.status, created_at: u.created_at,
+    accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
+    reportReason: unstable ? u.report_reason : null,
+    reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
+  };
 }
 export async function getStatus(login) {
   const r = await query("SELECT status FROM users WHERE login=?", [login]);
@@ -501,10 +539,10 @@ export async function savePinnedChats(login, keys) {
 export async function adminListUsers(q = "", limit = 100) {
   const like = "%" + String(q || "").toLowerCase() + "%";
   const r = await query(
-    "SELECT login, name, email, email_verified, banned, last_ip, created_at FROM users WHERE (?='%%' OR LOWER(login) LIKE ? OR LOWER(name) LIKE ? OR LOWER(COALESCE(email,'')) LIKE ?) ORDER BY created_at DESC LIMIT ?",
+    "SELECT login, name, email, email_verified, banned, last_ip, created_at, report_reason FROM users WHERE (?='%%' OR LOWER(login) LIKE ? OR LOWER(name) LIKE ? OR LOWER(COALESCE(email,'')) LIKE ?) ORDER BY created_at DESC LIMIT ?",
     [like, like, like, like, Math.min(500, limit | 0 || 100)]
   );
-  return r.map((u) => ({ ...u, banned: !!u.banned, email_verified: !!u.email_verified }));
+  return r.map((u) => ({ ...u, banned: !!u.banned, email_verified: !!u.email_verified, unstable: !!u.report_reason }));
 }
 export async function adminStats() {
   const one = async (sql) => { const r = await query(sql); return Number(r[0] ? r[0].n : 0); };
@@ -530,17 +568,62 @@ export async function setUserLastIp(login, ip) {
 }
 export async function isIpBanned(ip) {
   if (!ip) return false;
-  const r = await query("SELECT 1 FROM banned_ips WHERE ip=? LIMIT 1", [String(ip).slice(0, 45)]);
-  return !!r.length;
+  const r = await query("SELECT expires FROM banned_ips WHERE ip=? LIMIT 1", [String(ip).slice(0, 45)]);
+  if (!r.length) return false;
+  const exp = r[0].expires == null ? null : Number(r[0].expires);
+  if (exp != null && exp < Date.now()) { await unbanIp(ip).catch(() => {}); return false; } // expired → clear
+  return true;
 }
-export async function banIp(ip, reason = null) {
+export async function banIp(ip, reason = null, expires = null) {
   if (!ip) return;
-  await execute("INSERT INTO banned_ips (ip, reason) VALUES (?,?) ON DUPLICATE KEY UPDATE reason=VALUES(reason)", [String(ip).slice(0, 45), reason]);
+  await execute("INSERT INTO banned_ips (ip, reason, expires) VALUES (?,?,?) ON DUPLICATE KEY UPDATE reason=VALUES(reason), expires=VALUES(expires)", [String(ip).slice(0, 45), reason, expires]);
 }
 export async function unbanIp(ip) { await execute("DELETE FROM banned_ips WHERE ip=?", [String(ip).slice(0, 45)]); }
 export async function listBannedIps() {
-  const r = await query("SELECT ip, reason, created_at FROM banned_ips ORDER BY created_at DESC LIMIT 500");
-  return r;
+  const r = await query("SELECT ip, reason, created_at, expires FROM banned_ips ORDER BY created_at DESC LIMIT 500");
+  return r.map((x) => ({ ...x, expires: x.expires == null ? null : Number(x.expires) }));
+}
+
+// ---------- Репорты (модерация) ----------
+export async function createReport(rep) {
+  const r = await execute(
+    "INSERT INTO reports (reporter, target, room, message_id, msg_preview, reason, description, status, created_at) VALUES (?,?,?,?,?,?,?, 'pending', ?)",
+    [rep.reporter, rep.target, rep.room || null, rep.message_id || null, (rep.msg_preview || "").slice(0, 400), rep.reason, (rep.description || "").slice(0, 1000), Date.now()]
+  );
+  return r.insertId;
+}
+export async function listReports({ filter = "pending", q = "", sort = "new", limit = 300 } = {}) {
+  const where = [];
+  const params = [];
+  if (filter === "pending") where.push("status='pending'");
+  else if (filter === "false") where.push("status='false'");
+  else if (filter === "actioned") where.push("status='actioned'");
+  if (q) { const like = "%" + String(q).toLowerCase() + "%"; where.push("(LOWER(target) LIKE ? OR LOWER(reporter) LIKE ? OR LOWER(reason) LIKE ? OR LOWER(COALESCE(description,'')) LIKE ?)"); params.push(like, like, like, like); }
+  const sql = "SELECT * FROM reports" + (where.length ? " WHERE " + where.join(" AND ") : "")
+    + " ORDER BY created_at " + (sort === "old" ? "ASC" : "DESC") + " LIMIT " + (Math.min(500, limit | 0 || 300));
+  const r = await query(sql, params);
+  return r.map((x) => ({ ...x, created_at: Number(x.created_at), resolved_at: x.resolved_at == null ? null : Number(x.resolved_at), ban_until: x.ban_until == null ? null : Number(x.ban_until) }));
+}
+export async function getReport(id) { const r = await query("SELECT * FROM reports WHERE id=?", [id]); return r[0] || null; }
+export async function resolveReport(id, { status, resolution, ban_until, by }) {
+  await execute("UPDATE reports SET status=?, resolution=?, ban_until=?, resolved_by=?, resolved_at=? WHERE id=?",
+    [status, resolution || null, ban_until || null, by || null, Date.now(), id]);
+}
+export async function countPendingReports() { const r = await query("SELECT COUNT(*) n FROM reports WHERE status='pending'"); return Number(r[0].n); }
+
+// Apply / clear the "unstable" moderation mark on a user.
+export async function setUserReportBan(login, { until, reason, durationMs }) {
+  await execute("UPDATE users SET report_ban_until=?, report_reason=?, report_ban_ms=? WHERE login=?",
+    [until || null, reason || null, durationMs == null ? null : durationMs, login]);
+}
+export async function clearUserReport(login) {
+  await execute("UPDATE users SET report_ban_until=NULL, report_reason=NULL, report_ban_ms=NULL WHERE login=?", [login]);
+}
+export async function setStreamProtect(login, on) {
+  await execute("UPDATE users SET stream_protect=? WHERE login=?", [on ? 1 : 0, login]);
+}
+export async function setEmailWithStamp(login, email) {
+  await execute("UPDATE users SET email=?, email_verified=0, email_changed_at=? WHERE login=?", [email, Date.now(), login]);
 }
 
 // ---------- Курсоры доставки / просмотра (per-user, per-room) ----------
