@@ -59,11 +59,12 @@ export async function login(identifier, password) {
   } else {
     u = await db.getUser(identifier);
   }
-  if (!u) throw new Error("Неверный логин или пароль");
-  if (!(await pwMatches(u, password))) throw new Error("Неверный логин или пароль");
-  if (u.banned) throw new Error("Аккаунт заблокирован");
+  // Throw stable codes (not localized text) so the client renders them in the user's language.
+  if (!u) throw new Error("bad_credentials");
+  if (!(await pwMatches(u, password))) throw new Error("bad_credentials");
+  if (u.banned) throw new Error("account_banned");
   const rbu = Number(u.report_ban_until) || 0;
-  if (rbu && rbu > Date.now()) throw new Error("Аккаунт временно заблокирован до " + new Date(rbu).toLocaleString());
+  if (rbu && rbu > Date.now()) throw new Error("report_banned:" + rbu);
   return issueToken(u.login);
 }
 

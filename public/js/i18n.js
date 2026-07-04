@@ -165,6 +165,7 @@ const I18N = {
     report_desc_ph: "What happened? Add any context that helps moderators decide.",
     report_send: "Send report", report_sent: "Report sent — thank you.", report_need_msg: "A message must be attached to report.",
     report_linked_msg: "Linked message", report_read_dcg: "Read the Dialog Community Guidelines →", pv_media: "media",
+    report_banned_until: "Account temporarily banned until {date}.", report_no_msg: "No specific message", report_user: "Report user",
     // Admin reports
     adm_reports: "Reports", adm_rep_pending: "Pending", adm_rep_actioned: "Actioned", adm_rep_false: "False reports", adm_rep_all: "All",
     adm_rep_newest: "Newest first", adm_rep_oldest: "Oldest first", adm_rep_search: "Search reports (user, reason, text)…",
@@ -359,6 +360,7 @@ const I18N = {
     report_desc_ph: "Что произошло? Добавьте детали, чтобы модераторам было проще.",
     report_send: "Отправить жалобу", report_sent: "Жалоба отправлена — спасибо.", report_need_msg: "К жалобе нужно приложить сообщение.",
     report_linked_msg: "Сообщение", report_read_dcg: "Правила сообщества Dialog →", pv_media: "медиа",
+    report_banned_until: "Аккаунт временно заблокирован до {date}.", report_no_msg: "Без конкретного сообщения", report_user: "Пожаловаться",
     // Админ — репорты
     adm_reports: "Жалобы", adm_rep_pending: "Ожидают", adm_rep_actioned: "Обработаны", adm_rep_false: "Ложные", adm_rep_all: "Все",
     adm_rep_newest: "Сначала новые", adm_rep_oldest: "Сначала старые", adm_rep_search: "Поиск жалоб (юзер, причина, текст)…",
