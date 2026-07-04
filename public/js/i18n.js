@@ -142,8 +142,7 @@ const I18N = {
     adm_new_name: "New display name:", adm_new_email: "New email:", adm_no_email: "User has no email on file",
     // Settings / Account tab
     tab_general: "General", tab_account: "Account",
-    acc_nickname: "Nickname", acc_email: "Email", acc_privacy: "Privacy",
-    acc_stream: "Content protection", acc_stream_d: "Deters screenshots & screen recording — blanks Dialog when it loses focus or a capture key is pressed. True protection only exists in the desktop/mobile apps.",
+    acc_nickname: "Nickname", acc_email: "Email",
     acc_email_none: "No email linked yet — add one to secure your account.",
     acc_email_unverified: "Check your inbox to verify this address.",
     acc_email_cooldown: "Email can be changed again after {date}.",
@@ -340,8 +339,7 @@ const I18N = {
     adm_new_name: "Новое имя:", adm_new_email: "Новая почта:", adm_no_email: "У пользователя нет почты",
     // Настройки / вкладка Аккаунт
     tab_general: "Общие", tab_account: "Аккаунт",
-    acc_nickname: "Никнейм", acc_email: "Почта", acc_privacy: "Приватность",
-    acc_stream: "Защита контента", acc_stream_d: "Мешает скриншотам и записи экрана — затемняет Dialog при потере фокуса или нажатии клавиши захвата. Настоящая защита есть только в приложениях для ПК/телефона.",
+    acc_nickname: "Никнейм", acc_email: "Почта",
     acc_email_none: "Почта не привязана — добавьте, чтобы защитить аккаунт.",
     acc_email_unverified: "Проверьте почту, чтобы подтвердить адрес.",
     acc_email_cooldown: "Почту можно сменить снова после {date}.",
