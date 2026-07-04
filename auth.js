@@ -107,7 +107,6 @@ function profileOf(u) {
            email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed,
            pwChangedAt: Number(u.pw_changed_at) || 0,
            emailChangedAt: Number(u.email_changed_at) || 0,
-           streamProtect: !!u.stream_protect,
            accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
            reportReason: unstable ? u.report_reason : null,
            reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,

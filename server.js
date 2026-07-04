@@ -48,7 +48,7 @@ import {
   adminListUsers, adminStats, setUserBanned, setUserName, setUserLastIp,
   isIpBanned, banIp, unbanIp, listBannedIps,
   createReport, listReports, getReport, resolveReport, countPendingReports,
-  setUserReportBan, clearUserReport, setStreamProtect, setEmailWithStamp,
+  setUserReportBan, clearUserReport, setEmailWithStamp,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -288,15 +288,6 @@ app.post("/api/account/nickname", async (req, res) => {
     } catch {}
     res.json({ ok: true, name });
   } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-// Toggle the "content protection" (anti-stream) account setting.
-app.post("/api/account/stream-protect", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const on = !!req.body.on;
-  await setStreamProtect(me.login, on);
-  for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
-  res.json({ ok: true, on });
 });
 
 // ---------- Reports (moderation) ----------

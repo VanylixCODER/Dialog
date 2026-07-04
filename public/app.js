@@ -660,7 +660,6 @@ function enterApp() {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
-  applyStreamProtect(!!profile.streamProtect);
   socket.emit("identify", { token });
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
@@ -3865,8 +3864,6 @@ function refreshAccountPane() {
   }
   // Password
   if ($("pwMsg")) { $("pwMsg").className = "form-error"; $("pwMsg").textContent = ""; $("pwCurrent").value = $("pwNew").value = $("pwNew2").value = ""; }
-  // Content protection toggle
-  if ($("accStreamProtect")) $("accStreamProtect").checked = !!profile.streamProtect;
   wireEyeToggles(); refreshPwCooldown();
 }
 function banTimeLabel(ms) {
@@ -3897,33 +3894,6 @@ $("accEmailSave") && ($("accEmailSave").onclick = async () => {
   msg.className = "form-error ok"; msg.textContent = t("email_link_sent");
   refreshAccountPane();
 });
-$("accStreamProtect") && ($("accStreamProtect").onchange = async (e) => {
-  const on = e.target.checked;
-  const { ok } = await api("/api/account/stream-protect", { on });
-  if (ok) { profile.streamProtect = on; applyStreamProtect(on); }
-});
-
-// Web "content protection" deterrent. Browsers can't truly block capture, but we can
-// blank Dialog when it loses focus / a tab is hidden / PrintScreen is pressed.
-let _streamGuardWired = false;
-function streamGuard() {
-  const on = document.body.classList.contains("stream-protected");
-  const hide = on && (document.visibilityState === "hidden" || !document.hasFocus());
-  document.body.classList.toggle("stream-blank", hide);
-}
-function applyStreamProtect(on) {
-  document.body.classList.toggle("stream-protected", !!on);
-  if (on && !_streamGuardWired) {
-    _streamGuardWired = true;
-    document.addEventListener("visibilitychange", streamGuard);
-    window.addEventListener("blur", streamGuard);
-    window.addEventListener("focus", streamGuard);
-    document.addEventListener("keyup", (e) => {
-      if (e.key === "PrintScreen") { document.body.classList.add("stream-blank"); try { navigator.clipboard && navigator.clipboard.writeText(" "); } catch {} setTimeout(streamGuard, 500); }
-    });
-  }
-  streamGuard();
-}
 // Feedback line in the General tab (mailto link built here so i18n stays plain text).
 function setFeedbackNote() {
   const el = $("feedbackNote"); if (!el) return;
