@@ -3743,3 +3743,32 @@ body.stream-blank::before { content: "🔒 Protected"; position: fixed; inset: 0
 .mp-report { width: auto; padding: 0 18px; }
 .mp-report:hover { color: #ff8a8a; border-color: rgba(255,82,82,0.5); }
 .rl-none { color: var(--text-dim); font-style: italic; }
+
+/* ===================== Type-to-confirm delete dialog ===================== */
+.ctd-card { text-align: left; }
+.ctd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.ctd-head .modal-title { margin: 0; }
+.ctd-body { color: var(--text-dim); font-size: 14px; line-height: 1.5; margin: 4px 0 8px; }
+.ctd-warn { color: var(--danger); font-weight: 700; }
+.ctd-instruct { color: var(--text); font-size: 14px; margin: 14px 0 8px; }
+.ctd-name {
+  display: inline-flex; align-items: center; gap: 6px; vertical-align: baseline;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); border-radius: 7px;
+  padding: 2px 8px; color: #fff; font-weight: 700; cursor: copy; font-size: 13.5px;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.ctd-name:hover { background: rgba(255,255,255,0.12); border-color: var(--accent-400); }
+.ctd-name.copied { background: var(--accent-faint); border-color: var(--accent-400); color: var(--accent-200); }
+.ctd-copy { display: inline-grid; place-items: center; opacity: .7; }
+.ctd-copy svg { width: 13px; height: 13px; }
+.ctd-name.copied .ctd-copy::after { content: "✓"; }
+.ctd-name.copied .ctd-copy svg { display: none; }
+#ctdInput { width: 100%; margin-top: 2px; }
+.ctd-actions { display: flex; gap: 8px; margin-top: 14px; }
+.ctd-actions .btn-danger, .ctd-actions .btn-ghost { width: auto; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; }
+.ctd-actions .btn-danger:disabled { filter: grayscale(0.5) brightness(0.7); cursor: not-allowed; opacity: .7; }
+.ctd-kbd {
+  font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .3px;
+  background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.18); border-radius: 5px; padding: 3px 6px; color: rgba(255,255,255,0.85);
+}
+.btn-ghost .ctd-kbd { background: rgba(255,255,255,0.05); }
