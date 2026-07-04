@@ -537,6 +537,29 @@ app.post("/api/groups/:id/leave", async (req, res) => {
   } catch (e) { console.error("group leave", e.message); res.status(500).json({ error: "server error" }); }
 });
 
+// Redeem an invite code → auto-join (must be BEFORE "/api/groups/:id" or Express
+// matches :id="redeem" and this never runs — that was why joining silently failed).
+// Unauthenticated → {loginRequired:true}; authenticated → joins directly.
+app.post("/api/groups/redeem", async (req, res) => {
+  try {
+    const me = await authUser(req);
+    if (!me) return res.json({ loginRequired: true });
+    const code = String(req.body.code || "").trim();
+    if (!code) return res.status(400).json({ error: "no code" });
+    const inv = await getInviteByHash(hashInviteCode(code));
+    if (!inv) return res.json({ ok: false, status: "invalid" });
+    if (inv.expires != null && inv.expires < Date.now()) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "expired" }); }
+    if (inv.max_uses != null && inv.uses >= inv.max_uses) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "used_up" }); }
+    if (await isGroupMember(inv.group_id, me.login)) return res.json({ ok: true, status: "already", group: inv.group_id });
+    await addGroupMembers(inv.group_id, [me.login]); // the link IS the invitation — no approval
+    const u = await getUser(me.login);
+    if (u) saveSystemMessage("@grp:" + inv.group_id, me.login, u.name, "join", "");
+    await bumpInviteUse(inv.id);
+    for (const l of await getGroupMembers(inv.group_id)) notifyUser(l, "group-updated", { id: inv.group_id });
+    res.json({ ok: true, status: "joined", group: inv.group_id });
+  } catch (e) { console.error("redeem", e.message); res.status(500).json({ error: "server error" }); }
+});
+
 // Управление (только владелец): rename / avatar / add / remove / delete
 async function notifyGroup(id, event, data) { try { for (const l of await getGroupMembers(id)) notifyUser(l, event, data); } catch {} }
 app.post("/api/groups/:id", async (req, res) => {
@@ -659,29 +682,6 @@ app.get("/api/invite/:code", async (req, res) => {
     res.json({ ok: true, group: { id: g.id, name: g.name, members: members.length },
       remaining: inv.max_uses == null ? null : Math.max(0, inv.max_uses - inv.uses), expires: inv.expires });
   } catch (e) { console.error("invite preview", e.message); res.status(500).json({ error: "server error" }); }
-});
-
-// Redeem кода: неавторизованный получает {loginRequired:true}. Авторизованный — авто-join по ссылке.
-app.post("/api/groups/redeem", async (req, res) => {
-  try {
-    const me = await authUser(req);
-    if (!me) return res.json({ loginRequired: true });
-    const code = String(req.body.code || "").trim();
-    if (!code) return res.status(400).json({ error: "no code" });
-    const inv = await getInviteByHash(hashInviteCode(code));
-    if (!inv) return res.json({ ok: false, status: "invalid" });
-    // Enforce invite-link limits.
-    if (inv.expires != null && inv.expires < Date.now()) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "expired" }); }
-    if (inv.max_uses != null && inv.uses >= inv.max_uses) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "used_up" }); }
-    if (await isGroupMember(inv.group_id, me.login)) return res.json({ ok: true, status: "already", group: inv.group_id });
-    // Invite links join directly (no owner approval — the link IS the invitation).
-    await addGroupMembers(inv.group_id, [me.login]);
-    const u = await getUser(me.login);
-    if (u) saveSystemMessage("@grp:" + inv.group_id, me.login, u.name, "join", "");
-    await bumpInviteUse(inv.id); // count this join toward the link's usage cap
-    for (const l of await getGroupMembers(inv.group_id)) notifyUser(l, "group-updated", { id: inv.group_id });
-    res.json({ ok: true, status: "joined", group: inv.group_id });
-  } catch (e) { console.error("redeem", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // In-app suggestion (любой участник может предложить друга). Цель НЕ добавляется в группу сразу —
