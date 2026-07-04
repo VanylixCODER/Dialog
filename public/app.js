@@ -836,7 +836,8 @@ function markDeliveredSeenUpToLast() {
   const id = lastVisiblePartnerId();
   if (id && !isDnd() && myRoom) {
     socket.emit("delivery", { maxId: id });
-    if (document.visibilityState === "visible") socket.emit("seen", { maxId: id });
+    // Respect the "read receipts" preference — if off, don't tell others we've read.
+    if (document.visibilityState === "visible" && (!profile || profile.prefReadReceipts !== false)) socket.emit("seen", { maxId: id });
   }
 }
 function renderChatList(filter = "") {
@@ -1281,6 +1282,14 @@ async function copyToClipboard(text) {
     return ok;
   } catch { return false; }
 }
+function invExpiryLabel(ts) {
+  const ms = ts - Date.now();
+  if (ms <= 0) return t("invite_expired");
+  const d = Math.floor(ms / 86400000);
+  if (d >= 1) return t("invite_in_days", { n: d });
+  const h = Math.max(1, Math.ceil(ms / 3600000));
+  return t("invite_in_hours", { n: h });
+}
 function renderInviteList(invites) {
   const box = $("gsInviteList"); if (!box) return;
   box.innerHTML = "";
@@ -1288,10 +1297,14 @@ function renderInviteList(invites) {
   // Все участники видят все активные коды (прозрачность внутри группы). Revoke — овнер (любые)
   // или сам создатель (свои).
   invites.forEach((inv) => {
-    const row = document.createElement("div"); row.className = "contact-row";
+    const row = document.createElement("div"); row.className = "contact-row invite-row";
     const creator = inv.creator_login;
     const label = creator === profile.login ? t("you_suffix") : creator;
-    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(creator)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(creator)}" onerror="this.remove()">${initials(creator)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">#${inv.id}</span></span>`;
+    const usesTxt = inv.max_uses != null ? `${inv.uses}/${inv.max_uses}` : `${inv.uses}·∞`;
+    const expTxt = inv.expires != null ? invExpiryLabel(inv.expires) : t("invite_never_short");
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(creator)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(creator)}" onerror="this.remove()">${initials(creator)}</div>`
+      + `<span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">#${inv.id}</span>`
+      + `<span class="invite-tags"><span class="inv-tag" title="${t("invite_uses")}">${window.ICON.users || ""} ${usesTxt}</span><span class="inv-tag" title="${t("invite_expiry")}">${window.ICON.clock || ""} ${escapeHtml(expTxt)}</span></span></span>`;
     const canRevoke = gsOwner || creator === profile.login;
     if (canRevoke) {
       const b = document.createElement("button"); b.className = "danger"; b.textContent = t("invite_revoke");
@@ -1338,7 +1351,9 @@ async function resolvePending(pid, action) {
 }
 $("gsGenerateCode").onclick = async () => {
   $("gsInviteError").textContent = "";
-  const { ok, data } = await api("/api/groups/" + gsId + "/invites", {});
+  const maxUses = Math.max(0, Number($("gsInviteUses")?.value) || 0);
+  const days = Math.max(0, Number($("gsInviteDays")?.value) || 0);
+  const { ok, data } = await api("/api/groups/" + gsId + "/invites", { maxUses, days });
   if (!ok) { $("gsInviteError").textContent = data.error || t("err_invite_create"); return; }
   // Endpoint возвращает plaintext ОДИН РАЗ (как пароль) — формируем полный URL и кладём в clipboard.
   // Fallback: буфер недоступен → показываем URL/код в тосте, чтобы пользователь мог скопировать вручную.
@@ -1404,6 +1419,10 @@ async function redeemStoredInvite() {
     notify(t("redeem_pending")); loadGroups();
   } else if (data.status === "invalid") {
     notify(t("redeem_invalid"));
+  } else if (data.status === "expired") {
+    notify(t("redeem_expired"));
+  } else if (data.status === "used_up") {
+    notify(t("redeem_used_up"));
   }
 }
 // group-updated: если пейн groups активен — перечитать; иначе просто обновить список чатов/панели.
@@ -1639,7 +1658,7 @@ $("reqSendBtn").onclick = async () => {
   const inp = $("reqInput"); const target = (inp?.value || "").trim().toLowerCase();
   if (!target) return;
   const { ok, data } = await api("/api/friend", { target, action: "request" });
-  if (!ok) { const e = $("reqError"); if (e) e.textContent = data.error || t("err_user_not_found"); return; }
+  if (!ok) { const e = $("reqError"); if (e) e.textContent = (data && data.error) === "req_blocked" ? t("err_req_blocked") : (data.error || t("err_user_not_found")); return; }
   if (inp) inp.value = ""; loadRelations();
 };
 async function loadRelations() {
@@ -3757,7 +3776,7 @@ function dismissNotif(room) {
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "account", "contacts", "themes", "groups", "devices"];
+const SETTINGS_TABS = ["profile", "account", "prefs", "contacts", "themes", "groups", "devices"];
 function openSettings(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
@@ -3771,6 +3790,7 @@ function openSettings(tab) {
   if (tab === "contacts") loadRelations();
   if (tab === "profile") refreshProfilePane();
   if (tab === "account") refreshAccountPane();
+  if (tab === "prefs") refreshPrefsPane();
   if (tab === "groups") populateGroupSettingsPane();
   if (tab === "devices") populateDeviceSettings();
   // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
@@ -3797,6 +3817,7 @@ function hydratePane(tab) {
   if (!settingsOpen) return;
   if (tab === "profile") refreshProfilePane();
   else if (tab === "account") refreshAccountPane();
+  else if (tab === "prefs") refreshPrefsPane();
   else if (tab === "contacts") loadRelations();
   else if (tab === "groups") {
     // Сентинел `id: null` кеширует и режим «без активной группы» (placeholder), чтобы повторные клики
@@ -3899,6 +3920,29 @@ function setFeedbackNote() {
   const el = $("feedbackNote"); if (!el) return;
   el.innerHTML = t("feedback_text").replace("{email}", `<a href="mailto:feedback@dialogmsg.xyz">feedback@dialogmsg.xyz</a>`);
 }
+
+// ---------- Preferences tab ----------
+function refreshPrefsPane() {
+  if (!profile) return;
+  if ($("prefFriendReq")) $("prefFriendReq").value = profile.prefFriendReq || "everyone";
+  if ($("prefGroupAdd")) $("prefGroupAdd").checked = profile.prefGroupAdd !== false;
+  if ($("prefReadReceipts")) $("prefReadReceipts").checked = profile.prefReadReceipts !== false;
+  if ($("prefMsg")) $("prefMsg").textContent = "";
+}
+async function savePref(patch) {
+  const { ok, data } = await api("/api/prefs", patch);
+  const msg = $("prefMsg");
+  if (!ok) { if (msg) { msg.className = "form-error"; msg.textContent = (data && data.error) || t("err_generic"); } return; }
+  if (data.prefs) {
+    profile.prefFriendReq = data.prefs.friendReq;
+    profile.prefGroupAdd = data.prefs.groupAdd;
+    profile.prefReadReceipts = data.prefs.readReceipts;
+  }
+  if (msg) { msg.className = "form-error ok"; msg.textContent = t("pref_saved"); setTimeout(() => { if (msg.textContent === t("pref_saved")) msg.textContent = ""; }, 1500); }
+}
+$("prefFriendReq") && ($("prefFriendReq").onchange = (e) => savePref({ friendReq: e.target.value }));
+$("prefGroupAdd") && ($("prefGroupAdd").onchange = (e) => savePref({ groupAdd: e.target.checked }));
+$("prefReadReceipts") && ($("prefReadReceipts").onchange = (e) => savePref({ readReceipts: e.target.checked }));
 
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
 // он живой и в HTML, и в логике; зато аватар/profileSave/logoutBtn и т.д. обёрнуты
