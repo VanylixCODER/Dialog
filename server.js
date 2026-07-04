@@ -165,6 +165,10 @@ app.get(["/privacy", "/privacy-policy"], (_req, res) =>
 app.get(["/guidelines", "/dcg", "/rules"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "guidelines.html"))
 );
+// Group-invite join page (a dedicated confirmation page, not the full app).
+app.get(["/invite/:code", "/join/:code"], (_req, res) =>
+  res.sendFile(join(__dirname, "public", "invite.html"))
+);
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 async function authUser(req) { return auth.userByToken(bearer(req)); }
@@ -613,7 +617,7 @@ app.post("/api/groups/:id/invites", async (req, res) => {
     const g = await getGroup(id);
     if (g) notifyUser(g.owner, "invite-created", { id });
     notifyUser(me.login, "invite-created", { id });
-    res.json({ ok: true, code, url: "/?invite=" + encodeURIComponent(code) });
+    res.json({ ok: true, code, url: "/invite/" + encodeURIComponent(code) });
   } catch (e) { console.error("invite create", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.get("/api/groups/:id/invites", async (req, res) => {
@@ -642,8 +646,22 @@ app.delete("/api/groups/:id/invites/:invId", async (req, res) => {
   } catch (e) { console.error("invite revoke", e.message); res.status(500).json({ error: "server error" }); }
 });
 
-// Redeem кода: неавторизованный получает {loginRequired:true} (клиент будит login + сохраняет код в
-// sessionStorage). Авторизованный создаёт pending-invite (НЕ авто-join) — овнер должен approve.
+// Public invite preview (no auth) — powers the /invite/<code> join page.
+app.get("/api/invite/:code", async (req, res) => {
+  try {
+    const inv = await getInviteByHash(hashInviteCode(req.params.code));
+    if (!inv) return res.json({ ok: false, status: "invalid" });
+    if (inv.expires != null && inv.expires < Date.now()) return res.json({ ok: false, status: "expired" });
+    if (inv.max_uses != null && inv.uses >= inv.max_uses) return res.json({ ok: false, status: "used_up" });
+    const g = await getGroup(inv.group_id);
+    if (!g) return res.json({ ok: false, status: "invalid" });
+    const members = await getGroupMembers(inv.group_id);
+    res.json({ ok: true, group: { id: g.id, name: g.name, members: members.length },
+      remaining: inv.max_uses == null ? null : Math.max(0, inv.max_uses - inv.uses), expires: inv.expires });
+  } catch (e) { console.error("invite preview", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// Redeem кода: неавторизованный получает {loginRequired:true}. Авторизованный — авто-join по ссылке.
 app.post("/api/groups/redeem", async (req, res) => {
   try {
     const me = await authUser(req);
@@ -656,13 +674,13 @@ app.post("/api/groups/redeem", async (req, res) => {
     if (inv.expires != null && inv.expires < Date.now()) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "expired" }); }
     if (inv.max_uses != null && inv.uses >= inv.max_uses) { await revokeGroupInvite(inv.id).catch(() => {}); return res.json({ ok: false, status: "used_up" }); }
     if (await isGroupMember(inv.group_id, me.login)) return res.json({ ok: true, status: "already", group: inv.group_id });
-    const d = await createPendingInvite(inv.group_id, me.login, me.login);
-    if (d.duplicate) return res.json({ ok: true, status: "duplicate", group: inv.group_id });
-    await bumpInviteUse(inv.id); // count this redemption toward the link's usage cap
-    const g = await getGroup(inv.group_id);
-    if (g) notifyUser(g.owner, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
-    notifyUser(me.login, "pending-new", { id: inv.group_id, login: me.login, via: "code" });
-    res.json({ ok: true, status: "pending", group: inv.group_id });
+    // Invite links join directly (no owner approval — the link IS the invitation).
+    await addGroupMembers(inv.group_id, [me.login]);
+    const u = await getUser(me.login);
+    if (u) saveSystemMessage("@grp:" + inv.group_id, me.login, u.name, "join", "");
+    await bumpInviteUse(inv.id); // count this join toward the link's usage cap
+    for (const l of await getGroupMembers(inv.group_id)) notifyUser(l, "group-updated", { id: inv.group_id });
+    res.json({ ok: true, status: "joined", group: inv.group_id });
   } catch (e) { console.error("redeem", e.message); res.status(500).json({ error: "server error" }); }
 });
 

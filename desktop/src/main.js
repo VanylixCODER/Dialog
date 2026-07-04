@@ -34,15 +34,43 @@ app.commandLine.appendSwitch(
 // Autoplay audio (call ringtones / beeps) without a user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
+// Deep links: register the dialog:// scheme so group-invite links can open the app.
+// A "dialog://join/<code>" (or dialog://invite/<code>) URL routes the window to the
+// hosted /login?invite=<code> page, where the web app auto-joins the group.
+try { app.setAsDefaultProtocolClient("dialog"); } catch (_) {}
+function inviteCodeFromDeepLink(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "dialog:") return null;
+    // dialog://join/<code>  → host="join", pathname="/<code>"
+    const code = decodeURIComponent((u.pathname || "").replace(/^\/+/, "")) || decodeURIComponent(u.hostname || "");
+    return code || null;
+  } catch (_) { return null; }
+}
+function openInvite(code) {
+  if (!code) return;
+  showMainWindow();
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.loadURL(config.APP_ORIGIN + "/login?invite=" + encodeURIComponent(code));
+  }
+}
+function handleDeepLinkArgs(argv) {
+  const arg = (argv || []).find((a) => typeof a === "string" && a.startsWith("dialog://"));
+  if (arg) openInvite(inviteCodeFromDeepLink(arg));
+}
+
 // Single-instance lock — focus the existing window on a second launch.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_e, argv) => {
     showMainWindow();
+    handleDeepLinkArgs(argv); // Windows/Linux deliver the deep link as an argv here
   });
 }
+// macOS delivers deep links via open-url.
+app.on("open-url", (e, url) => { e.preventDefault(); openInvite(inviteCodeFromDeepLink(url)); });
 
 if (process.platform === "win32") {
   app.setAppUserModelId(config.APP_USER_MODEL_ID);
@@ -399,6 +427,10 @@ app.whenReady().then(() => {
   if (!isDev) {
     setupAutoUpdate({ getMainWindow: () => mainWin });
   }
+
+  // Cold start from a dialog:// deep link (Windows/Linux pass it in argv).
+  const wc0 = mainWin && mainWin.webContents;
+  if (wc0) wc0.once("did-finish-load", () => handleDeepLinkArgs(process.argv));
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

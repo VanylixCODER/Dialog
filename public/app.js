@@ -1411,8 +1411,9 @@ async function redeemStoredInvite() {
     try { sessionStorage.setItem("dialog_inv", code); } catch {}
     return;
   }
-  if (data.status === "already") {
-    notify(t("redeem_already")); loadGroups();
+  if (data.status === "joined" || data.status === "already") {
+    notify(t(data.status === "joined" ? "redeem_joined" : "redeem_already"));
+    await loadGroups();
     if (data.group) openRoomByKey("@grp:" + data.group);
   } else if (data.status === "pending" || data.status === "duplicate") {
     // duplicate — пользователь уже предложил этого юзера ранее; UX одинаков с pending.

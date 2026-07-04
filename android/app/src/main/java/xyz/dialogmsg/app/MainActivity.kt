@@ -3,8 +3,10 @@ package xyz.dialogmsg.app
 import android.Manifest
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -59,11 +61,38 @@ class MainActivity : AppCompatActivity() {
         loader.setStatus(BootLoader.Status.CONNECTING)
 
         if (isOnline()) {
-            webView.loadUrl(BuildConfig.APP_URL)
+            webView.loadUrl(startUrl(intent))
         } else {
             loader.setStatus(BootLoader.Status.OFFLINE)
             scheduleReload()
         }
+    }
+
+    // App opened while already running (singleTask) via a deep link → load the target.
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        val u = startUrl(newIntent)
+        if (u != BuildConfig.APP_URL) webView.loadUrl(u)
+    }
+
+    // Resolve the URL to load from a launch/deep-link intent.
+    //   https://dialogmsg.xyz/invite/<code>  → open that exact page
+    //   dialog://join/<code>  |  dialog://invite/<code>  → /login?invite=<code>
+    private fun startUrl(src: Intent?): String {
+        val data: Uri? = src?.data
+        if (data != null) {
+            if (data.scheme == "dialog") {
+                val code = data.lastPathSegment ?: data.host
+                if (!code.isNullOrBlank()) {
+                    val origin = BuildConfig.APP_URL.substringBefore("/login")
+                    return origin + "/login?invite=" + Uri.encode(code)
+                }
+            } else if (data.scheme == "https" && data.host == "dialogmsg.xyz") {
+                return data.toString()
+            }
+        }
+        return BuildConfig.APP_URL
     }
 
     @SuppressLint("SetJavaScriptEnabled")
