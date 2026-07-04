@@ -1221,7 +1221,53 @@ $("gsSave").onclick = async () => {
 };
 async function removeGroupMember(login) { await api("/api/groups/" + gsId + "/members", { remove: login }); populateGroupSettingsPane(); }
 $("gsLeave").onclick = () => { closeSettings(); if (confirm(t("leave_group"))) leaveCurrentGroup(); };
-$("gsDelete").onclick = async () => { if (!gsOwner) return; if (!confirm(t("confirm_del_group"))) return; await api("/api/groups/" + gsId, null, "DELETE"); closeSettings(); };
+$("gsDelete").onclick = () => {
+  if (!gsOwner) return;
+  const gname = (chats.get("@grp:" + gsId) || {}).name || $("gsName")?.value || t("group");
+  confirmByTyping({
+    title: t("delete_group"), body: t("ctd_body"), name: gname, confirmLabel: t("delete_group"),
+    onConfirm: async () => { const gid = gsId; await api("/api/groups/" + gid, null, "DELETE"); closeSettings(); },
+  });
+};
+
+// ---------- Reusable "type the name to confirm" destructive dialog ----------
+let _ctd = null;
+function confirmByTyping({ title, body, name, confirmLabel, onConfirm }) {
+  _ctd = { name: String(name || ""), onConfirm };
+  $("ctdTitle").textContent = title || t("delete_group");
+  if (body) $("ctdBody").textContent = body;
+  $("ctdConfirmLabel").textContent = confirmLabel || t("delete_group");
+  $("ctdNameText").textContent = _ctd.name;
+  $("ctdCopyIc").innerHTML = window.ICON.copy || "⧉";
+  const input = $("ctdInput");
+  input.value = "";
+  ctdValidate();
+  $("confirmTypeModal").classList.remove("hidden");
+  setTimeout(() => input.focus(), 30);
+}
+function ctdValidate() {
+  const ok = _ctd && $("ctdInput").value.trim() === _ctd.name.trim() && _ctd.name.trim().length > 0;
+  $("ctdConfirm").disabled = !ok;
+  return ok;
+}
+function closeCtd() { $("confirmTypeModal").classList.add("hidden"); _ctd = null; }
+$("ctdInput") && ($("ctdInput").oninput = ctdValidate);
+$("ctdConfirm") && ($("ctdConfirm").onclick = () => { if (!ctdValidate()) return; const fn = _ctd.onConfirm; closeCtd(); if (fn) fn(); });
+$("ctdCancel") && ($("ctdCancel").onclick = closeCtd);
+$("ctdClose") && ($("ctdClose").onclick = closeCtd);
+// Click the name chip to copy it (like the screenshot).
+$("ctdName") && ($("ctdName").onclick = () => {
+  if (!_ctd) return;
+  copyToClipboard(_ctd.name);
+  const chip = $("ctdName"); chip.classList.add("copied");
+  setTimeout(() => chip.classList.remove("copied"), 1100);
+});
+// Keyboard: Ctrl/⌘+Enter confirms, Esc cancels — only while this modal is open.
+document.addEventListener("keydown", (e) => {
+  if ($("confirmTypeModal").classList.contains("hidden")) return;
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCtd(); }
+  else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (ctdValidate()) { const fn = _ctd.onConfirm; closeCtd(); if (fn) fn(); } }
+}, true);
 
 // ---------- Group invites + pending queue (UI рисует; владельцу — pending, всем — инвайты) ----------
 // Копирование в буфер с fallback на execCommand: navigator.clipboard требует user gesture и secure

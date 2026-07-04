@@ -532,6 +532,23 @@
     </div>
   </div>
 
+  <!-- Type-to-confirm destructive action (e.g. delete group) -->
+  <div id="confirmTypeModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card ctd-card" style="width:440px;max-width:94vw">
+      <div class="ctd-head">
+        <div class="modal-title" id="ctdTitle">Delete group</div>
+        <button id="ctdClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      </div>
+      <p class="ctd-body"><span id="ctdBody" data-i18n="ctd_body">Are you sure you want to delete this group?</span> <b class="ctd-warn" data-i18n="ctd_undone">This can not be undone.</b></p>
+      <p class="ctd-instruct"><span data-i18n="ctd_type_pre">Type</span> <button type="button" class="ctd-name" id="ctdName" title="Copy"><span id="ctdNameText"></span><span class="ctd-copy" id="ctdCopyIc"></span></button> <span data-i18n="ctd_type_post">to confirm.</span></p>
+      <input id="ctdInput" class="field" autocomplete="off" spellcheck="false" data-i18n-ph="ctd_placeholder" />
+      <div class="modal-actions ctd-actions">
+        <button id="ctdConfirm" class="btn-danger" disabled><span id="ctdConfirmLabel" data-i18n="delete_group">Delete group</span> <kbd class="ctd-kbd">Ctrl ↵</kbd></button>
+        <button id="ctdCancel" class="btn-ghost"><span data-i18n="cancel">Cancel</span> <kbd class="ctd-kbd">Esc</kbd></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Flashbang confirm dialog — fires before applying the Flashbang theme.
        Intercept at the swatch click level (selectTheme), not in applyTheme(), so the
        init path (loadSavedTheme) keeps restoring saved themes silently. -->
