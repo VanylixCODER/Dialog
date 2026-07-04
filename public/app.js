@@ -649,6 +649,7 @@ function enterApp() {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
+  applyStreamProtect(!!profile.streamProtect);
   socket.emit("identify", { token });
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
@@ -1630,6 +1631,16 @@ async function openMiniProfile(login) {
   $("mpAva").setAttribute("data-login", login);
   $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
   $("mpName").textContent = data.name; $("mpLogin").textContent = data.login;
+  // "Unstable" moderation tag — a red block icon; hover reveals the reason + ban length.
+  const tag = $("mpTag");
+  if (tag) {
+    const unstable = data.accountStatus === "unstable" && data.reportReason;
+    tag.classList.toggle("hidden", !unstable);
+    if (unstable) {
+      tag.querySelector(".ut-ic").innerHTML = window.ICON.ban || "⛔";
+      $("mpTagTip").textContent = t("unstable_tip", { reason: t("dcg_" + data.reportReason) || data.reportReason, time: banTimeLabel(data.reportBanMs) });
+    }
+  }
   $("mpStatus").textContent = t("status_" + (data.status === "offline" ? "offline" : data.status));
   $("mpDesc").textContent = data.description || "";
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
@@ -1997,6 +2008,8 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   // appears immediately instead of animating in one by one.
   wrap.className = "msg" + (mine ? " me" : "") + (ping ? " ping" : "") + (isB ? " blocked" : "") + (instant ? " no-anim" : "");
   wrap.dataset.id = m.id != null ? m.id : "";
+  if (m.fromLogin) wrap.dataset.from = m.fromLogin;
+  if (m.name) wrap.dataset.fromname = m.name;
   if (m.localId != null) wrap.dataset.localid = String(m.localId);
   if (m._optimistic) wrap.dataset.acked = ""; // ещё не подтверждено сервером
   else if (m.id != null) wrap.dataset.acked = "1";
@@ -2127,6 +2140,10 @@ function openMsgMenu(e, wrap) {
   if (bubble && bubble.textContent) item(t("copy_message"), "copy", () => copyToClipboard(bubble.textContent.trim()));
   if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(sel.toString()); } });
   if (mine) { item(t("edit"), "edit", () => startEdit(wrap)); item(t("delete_msg"), "trash", () => { if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id }); }, true); }
+  // Report someone else's message (a message must be linked to a report).
+  if (!mine && wrap.dataset.from) {
+    item(t("report_message"), "flag", () => openReportModal({ target: wrap.dataset.from, targetName: wrap.dataset.fromname || wrap.dataset.from, messageId: id, room: myRoom || activeKey, preview: (bubble && bubble.textContent ? bubble.textContent.trim() : "") }), true);
+  }
   msgMenu.classList.remove("hidden");
   msgMenu._openedAt = Date.now();
   const mw = msgMenu.offsetWidth || 200, mh = msgMenu.offsetHeight || 180;
@@ -2137,6 +2154,46 @@ messagesEl.addEventListener("contextmenu", (e) => {
   const wrap = e.target.closest(".msg");
   if (!wrap) return;
   openMsgMenu(e, wrap);
+});
+
+// ---------- Reports ----------
+// Dialog Community Guidelines — the report reasons. Codes match the server whitelist.
+const DCG = [
+  ["harassment", "dcg_harassment", "dcg_harassment_d"],
+  ["hate", "dcg_hate", "dcg_hate_d"],
+  ["threats", "dcg_threats", "dcg_threats_d"],
+  ["nsfw", "dcg_nsfw", "dcg_nsfw_d"],
+  ["spam", "dcg_spam", "dcg_spam_d"],
+  ["doxxing", "dcg_doxxing", "dcg_doxxing_d"],
+  ["illegal", "dcg_illegal", "dcg_illegal_d"],
+  ["impersonation", "dcg_impersonation", "dcg_impersonation_d"],
+  ["selfharm", "dcg_selfharm", "dcg_selfharm_d"],
+  ["other", "dcg_other", "dcg_other_d"],
+];
+let _report = null;
+function openReportModal({ target, targetName, messageId, room, preview }) {
+  _report = { target, messageId, room, preview };
+  $("reportTarget").textContent = "@" + target;
+  const sel = $("reportReason");
+  sel.innerHTML = DCG.map(([code, tk]) => `<option value="${code}">${escapeHtml(t(tk))}</option>`).join("");
+  const desc = $("reportRuleDesc");
+  const showDesc = () => { const found = DCG.find((d) => d[0] === sel.value); desc.textContent = found ? t(found[2]) : ""; };
+  sel.onchange = showDesc; showDesc();
+  $("reportLinked").innerHTML = `<span class="rl-tag">${t("report_linked_msg")}</span><span class="rl-body">${escapeHtml((preview || t("pv_media")).slice(0, 160))}</span>`;
+  $("reportDesc").value = "";
+  $("reportMsg").className = "form-error"; $("reportMsg").textContent = "";
+  $("reportModal").classList.remove("hidden");
+}
+$("reportCancel") && ($("reportCancel").onclick = () => $("reportModal").classList.add("hidden"));
+$("reportSend") && ($("reportSend").onclick = async () => {
+  if (!_report) return;
+  const reason = $("reportReason").value;
+  const description = $("reportDesc").value.trim();
+  const msg = $("reportMsg"); msg.className = "form-error";
+  const { ok, data } = await api("/api/report", { target: _report.target, room: _report.room, messageId: _report.messageId, msgPreview: _report.preview, reason, description });
+  if (!ok) { msg.textContent = (data && data.error) === "no_message" ? t("report_need_msg") : ((data && data.error) || t("err_generic")); return; }
+  msg.className = "form-error ok"; msg.textContent = t("report_sent");
+  setTimeout(() => $("reportModal").classList.add("hidden"), 1200);
 });
 socket.on("msg-deleted", ({ id }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove(); });
 socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = formatMessage(text); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
@@ -3617,7 +3674,7 @@ function dismissNotif(room) {
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "contacts", "themes", "groups", "devices"];
+const SETTINGS_TABS = ["profile", "account", "contacts", "themes", "groups", "devices"];
 function openSettings(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
@@ -3630,6 +3687,7 @@ function openSettings(tab) {
   if (!ov._themesRendered) renderThemes();
   if (tab === "contacts") loadRelations();
   if (tab === "profile") refreshProfilePane();
+  if (tab === "account") refreshAccountPane();
   if (tab === "groups") populateGroupSettingsPane();
   if (tab === "devices") populateDeviceSettings();
   // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
@@ -3655,6 +3713,7 @@ let gsFetching = false;  // in-flight guard: предотвращает спам
 function hydratePane(tab) {
   if (!settingsOpen) return;
   if (tab === "profile") refreshProfilePane();
+  else if (tab === "account") refreshAccountPane();
   else if (tab === "contacts") loadRelations();
   else if (tab === "groups") {
     // Сентинел `id: null` кеширует и режим «без активной группы» (placeholder), чтобы повторные клики
@@ -3682,8 +3741,109 @@ function refreshProfilePane() {
   $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
   $("profileAvaInit").textContent = initials(myName);
+  setFeedbackNote();
+}
+
+// ---------- Account tab (nickname · email w/ 1-week cooldown · password · status · privacy) ----------
+const EMAIL_COOLDOWN_MS = 7 * 24 * 3600 * 1000;
+function accStatusMeta(s) {
+  if (s === "unstable") return { cls: "unstable", icon: "ban", label: t("acc_st_unstable") };
+  if (s === "unverified") return { cls: "unverified", icon: "mail", label: t("acc_st_unverified") };
+  return { cls: "stable", icon: "shield", label: t("acc_st_stable") };
+}
+function refreshAccountPane() {
+  if (!profile) return;
+  // Account status card
+  const st = profile.accountStatus || (profile.emailVerified ? "stable" : "unverified");
+  const m = accStatusMeta(st);
+  const box = $("accStatusBox");
+  if (box) {
+    let detail = st === "stable" ? t("acc_st_stable_d") : st === "unverified" ? t("acc_st_unverified_d") : t("acc_st_unstable_d");
+    if (st === "unstable" && profile.reportReason) {
+      detail = t("acc_st_unstable_reason", { reason: t("dcg_" + profile.reportReason) || profile.reportReason, time: banTimeLabel(profile.reportBanMs) });
+    }
+    box.className = "acc-status " + m.cls;
+    box.innerHTML = `<div class="acc-st-ic">${window.ICON[m.icon] || ""}</div><div class="acc-st-body"><b>${escapeHtml(m.label)}</b><small>${escapeHtml(detail)}</small></div>`;
+  }
+  // Nickname
+  if ($("accNick")) { $("accNick").value = myName || ""; $("accNickMsg").textContent = ""; }
+  // Email + cooldown hint
+  if ($("accEmail")) {
+    $("accEmail").value = profile.email || "";
+    $("accEmailMsg").textContent = "";
+    const last = Number(profile.emailChangedAt) || 0;
+    const until = last + EMAIL_COOLDOWN_MS;
+    const hint = $("accEmailHint");
+    if (!profile.email) hint.textContent = t("acc_email_none");
+    else if (!profile.emailVerified) hint.textContent = t("acc_email_unverified");
+    else if (until > Date.now()) hint.textContent = t("acc_email_cooldown", { date: new Date(until).toLocaleDateString() });
+    else hint.textContent = t("acc_email_verified");
+  }
+  // Password
   if ($("pwMsg")) { $("pwMsg").className = "form-error"; $("pwMsg").textContent = ""; $("pwCurrent").value = $("pwNew").value = $("pwNew2").value = ""; }
-  wireEyeToggles(); refreshPwCooldown(); // change-password section
+  // Content protection toggle
+  if ($("accStreamProtect")) $("accStreamProtect").checked = !!profile.streamProtect;
+  wireEyeToggles(); refreshPwCooldown();
+}
+function banTimeLabel(ms) {
+  if (ms === 0 || ms == null) return t("acc_ban_life");
+  const days = Math.round(ms / 86400000);
+  return t("acc_ban_days", { n: days });
+}
+$("accNickSave") && ($("accNickSave").onclick = async () => {
+  const name = ($("accNick").value || "").trim();
+  const msg = $("accNickMsg"); msg.className = "form-error";
+  if (!name) { msg.textContent = t("err_generic"); return; }
+  const { ok, data } = await api("/api/account/nickname", { name });
+  if (!ok) { msg.textContent = (data && data.error) || t("err_generic"); return; }
+  profile.name = name; myName = name; $("myName").textContent = name; setMyAvatar();
+  msg.className = "form-error ok"; msg.textContent = t("pw_changed_ok_generic");
+});
+$("accEmailSave") && ($("accEmailSave").onclick = async () => {
+  const email = ($("accEmail").value || "").trim();
+  const msg = $("accEmailMsg"); msg.className = "form-error";
+  const { ok, data } = await api("/api/account/email", { email });
+  if (!ok) {
+    if (data && data.error === "cooldown") msg.textContent = t("acc_email_cooldown", { date: new Date(data.retryAt).toLocaleDateString() });
+    else if (data && data.error === "same_email") msg.textContent = t("acc_email_same");
+    else msg.textContent = (data && data.error) || t("err_generic");
+    return;
+  }
+  profile.email = data.email; profile.emailVerified = false; profile.emailChangedAt = Date.now();
+  msg.className = "form-error ok"; msg.textContent = t("email_link_sent");
+  refreshAccountPane();
+});
+$("accStreamProtect") && ($("accStreamProtect").onchange = async (e) => {
+  const on = e.target.checked;
+  const { ok } = await api("/api/account/stream-protect", { on });
+  if (ok) { profile.streamProtect = on; applyStreamProtect(on); }
+});
+
+// Web "content protection" deterrent. Browsers can't truly block capture, but we can
+// blank Dialog when it loses focus / a tab is hidden / PrintScreen is pressed.
+let _streamGuardWired = false;
+function streamGuard() {
+  const on = document.body.classList.contains("stream-protected");
+  const hide = on && (document.visibilityState === "hidden" || !document.hasFocus());
+  document.body.classList.toggle("stream-blank", hide);
+}
+function applyStreamProtect(on) {
+  document.body.classList.toggle("stream-protected", !!on);
+  if (on && !_streamGuardWired) {
+    _streamGuardWired = true;
+    document.addEventListener("visibilitychange", streamGuard);
+    window.addEventListener("blur", streamGuard);
+    window.addEventListener("focus", streamGuard);
+    document.addEventListener("keyup", (e) => {
+      if (e.key === "PrintScreen") { document.body.classList.add("stream-blank"); try { navigator.clipboard && navigator.clipboard.writeText(" "); } catch {} setTimeout(streamGuard, 500); }
+    });
+  }
+  streamGuard();
+}
+// Feedback line in the General tab (mailto link built here so i18n stays plain text).
+function setFeedbackNote() {
+  const el = $("feedbackNote"); if (!el) return;
+  el.innerHTML = t("feedback_text").replace("{email}", `<a href="mailto:feedback@dialogmsg.xyz">feedback@dialogmsg.xyz</a>`);
 }
 
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
@@ -3881,7 +4041,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
   const esc = (s) => escapeHtml(s == null ? "" : String(s));
   const aapi = (path, body, method = "POST") => api(path, body, method);
 
-  function openAdmin() { ov.classList.remove("hidden"); showAdminTab("users"); loadAdminUsers(); loadAdminStats(); }
+  function openAdmin() { ov.classList.remove("hidden"); showAdminTab("users"); loadAdminUsers(); loadAdminStats(); refreshRepBadge(); }
   function closeAdmin() { ov.classList.add("hidden"); }
   openBtn && (openBtn.onclick = openAdmin);
   closeBtn && (closeBtn.onclick = closeAdmin);
@@ -3892,8 +4052,75 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     ov.querySelectorAll(".admin-pane").forEach((p) => p.classList.toggle("active", p.dataset.apane === name));
     if (name === "logs") loadAdminLogs();
     if (name === "ips") loadAdminIps();
+    if (name === "reports") loadAdminReports();
   }
   ov.querySelectorAll(".settings-tab").forEach((b) => b.onclick = () => showAdminTab(b.dataset.atab));
+
+  // ---- Reports review ----
+  let repFilter = "pending", repSort = "new";
+  const DCGL = (typeof DCG !== "undefined") ? DCG : [];
+  const reasonLabel = (code) => { const d = DCGL.find((x) => x[0] === code); return d ? t(d[1]) : code; };
+  async function refreshRepBadge() {
+    const { ok, data } = await aapi("/api/admin/reports-count", null, "GET");
+    if (!ok) return;
+    const b = $("repBadge"); if (!b) return;
+    b.textContent = data.pending; b.classList.toggle("hidden", !data.pending);
+  }
+  async function loadAdminReports() {
+    const q = ($("repSearch").value || "").trim();
+    const { ok, data } = await aapi(`/api/admin/reports?filter=${repFilter}&sort=${repSort}&q=${encodeURIComponent(q)}`, null, "GET");
+    const wrap = $("adminReports");
+    if (!ok) { wrap.innerHTML = `<div class="admin-empty">${esc((data && data.error) || "error")}</div>`; return; }
+    if (!data.length) { wrap.innerHTML = `<div class="admin-empty">${t("adm_rep_none")}</div>`; return; }
+    wrap.innerHTML = data.map((r) => {
+      const when = new Date(r.created_at).toLocaleString();
+      const resolved = r.status !== "pending";
+      const statusTag = r.status === "pending" ? `<span class="rep-st pending">${t("adm_rep_pending")}</span>`
+        : r.status === "false" ? `<span class="rep-st false">${t("adm_rep_false")}</span>`
+        : `<span class="rep-st actioned">${esc(r.resolution || t("adm_rep_actioned"))}</span>`;
+      return `<div class="arep" data-id="${r.id}" data-target="${esc(r.target)}">
+        <div class="arep-top">
+          <div class="arep-who"><b>@${esc(r.reporter)}</b> ${t("adm_rep_reported")} <b class="arep-target">@${esc(r.target)}</b></div>
+          ${statusTag}
+        </div>
+        <div class="arep-reason">${window.ICON.flag || ""}<span>${esc(reasonLabel(r.reason))}</span><time>${esc(when)}</time></div>
+        ${r.description ? `<div class="arep-desc">${esc(r.description)}</div>` : ""}
+        ${r.msg_preview ? `<div class="arep-msg"><span class="rl-tag">${t("report_linked_msg")}</span>${esc(r.msg_preview)}</div>` : ""}
+        ${resolved ? "" : `<div class="arep-actions">
+          <input type="number" min="1" class="field arep-days" placeholder="${t("adm_days")}" value="7">
+          <button data-act="ipban-days" class="warn">${t("adm_ipban_days")}</button>
+          <button data-act="ipban-life" class="danger">${t("adm_ipban_life")}</button>
+          <button data-act="false">${t("adm_mark_false")}</button>
+        </div>`}
+      </div>`;
+    }).join("");
+    wrap.querySelectorAll(".arep").forEach((el) => {
+      el.querySelectorAll(".arep-actions button").forEach((b) => b.onclick = () => resolveReport(b.dataset.act, el));
+    });
+  }
+  async function resolveReport(act, el) {
+    const id = el.dataset.id, target = el.dataset.target;
+    let body;
+    if (act === "ipban-days") { const days = Math.max(1, Number(el.querySelector(".arep-days").value) || 1); if (!confirm(t("adm_confirm_repban", { login: target, days })) ) return; body = { action: "ipban", days }; }
+    else if (act === "ipban-life") { if (!confirm(t("adm_confirm_repban_life", { login: target }))) return; body = { action: "ipban", life: true }; }
+    else if (act === "false") { body = { action: "false" }; }
+    const { ok, data } = await aapi(`/api/admin/reports/${id}/resolve`, body);
+    notify(ok ? t("adm_rep_done") : ((data && data.error) || "error"));
+    loadAdminReports(); refreshRepBadge(); loadAdminStats();
+  }
+  $("repSearch") && ($("repSearch").oninput = debounce(loadAdminReports, 300));
+  ov.querySelectorAll(".rep-filt").forEach((b) => b.onclick = () => {
+    ov.querySelectorAll(".rep-filt").forEach((x) => x.classList.toggle("active", x === b));
+    repFilter = b.dataset.repfilter; loadAdminReports();
+  });
+  $("repSort") && ($("repSort").onclick = () => {
+    repSort = repSort === "new" ? "old" : "new";
+    $("repSort").textContent = t(repSort === "new" ? "adm_rep_newest" : "adm_rep_oldest");
+    loadAdminReports();
+  });
+  // Live badge: refresh when a new report arrives and when the panel opens.
+  socket.on("new-report", () => { refreshRepBadge(); if (!ov.classList.contains("hidden")) loadAdminReports(); });
+  if (profile && profile.admin) refreshRepBadge();
 
   async function loadAdminStats() {
     const { ok, data } = await aapi("/api/admin/stats", null, "GET");
@@ -3901,8 +4128,8 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     const box = $("adminStats");
     const cell = (k, v) => `<div class="astat"><span class="astat-n">${v}</span><span class="astat-l">${k}</span></div>`;
     box.innerHTML = cell(t("adm_users"), data.users) + cell(t("adm_online"), data.online) + cell(t("adm_banned"), data.banned)
-      + cell(t("adm_verified"), data.verified) + cell(t("adm_messages"), data.messages) + cell(t("adm_groups"), data.groups)
-      + cell(t("adm_ip_bans"), data.banned_ips);
+      + cell(t("adm_verified"), data.verified) + cell(t("adm_reports"), data.reports || 0) + cell(t("adm_messages"), data.messages)
+      + cell(t("adm_groups"), data.groups) + cell(t("adm_ip_bans"), data.banned_ips);
   }
 
   let usersCache = [];
@@ -3920,6 +4147,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       const badges = [
         u.online ? `<span class="abadge on">${t("adm_online")}${u.devices > 1 ? " ×" + u.devices : ""}</span>` : "",
         u.banned ? `<span class="abadge ban">${t("adm_banned")}</span>` : "",
+        u.unstable ? `<span class="abadge ban">${t("acc_st_unstable")}</span>` : "",
         u.email_verified ? `<span class="abadge ok">✓ ${t("adm_email")}</span>` : (u.email ? `<span class="abadge">${t("adm_unverified")}</span>` : ""),
       ].join("");
       const IC = window.ICON;
@@ -3936,6 +4164,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
           ${btn("email", "mail", t("adm_change_email"))}
           ${btn("reset", "key", t("adm_send_reset"))}
           ${btn("devices", "monitor", t("adm_devices"))}
+          ${u.unstable ? btn("clear-unstable", "check", t("adm_clear_unstable")) : ""}
           <span class="aa-sep"></span>
           ${btn("kick", "logout", t("adm_kick_all"), "warn")}
           ${btn("banip", "shield", t("adm_ban_ip"), "danger")}
@@ -3990,6 +4219,10 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     } else if (act === "reset") {
       const { ok, data } = await aapi("/api/admin/send-reset", { login });
       notify(ok ? t("adm_done_reset", { email: data.email }) : (data && data.error) === "no_email" ? t("adm_no_email") : "error");
+    } else if (act === "clear-unstable") {
+      if (!confirm(t("adm_confirm_clear_unstable", { login }))) return;
+      const { ok } = await aapi("/api/admin/clear-unstable", { login });
+      notify(ok ? t("adm_done_clear_unstable", { login }) : "error"); loadAdminUsers();
     }
   }
 

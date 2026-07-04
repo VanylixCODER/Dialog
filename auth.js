@@ -62,6 +62,8 @@ export async function login(identifier, password) {
   if (!u) throw new Error("Неверный логин или пароль");
   if (!(await pwMatches(u, password))) throw new Error("Неверный логин или пароль");
   if (u.banned) throw new Error("Аккаунт заблокирован");
+  const rbu = Number(u.report_ban_until) || 0;
+  if (rbu && rbu > Date.now()) throw new Error("Аккаунт временно заблокирован до " + new Date(rbu).toLocaleString());
   return issueToken(u.login);
 }
 
@@ -85,6 +87,8 @@ export async function userByToken(token) {
   try { u = await db.getUser(login); } catch { return null; }
   if (!u) return null;
   if (u.banned) return null; // banned mid-session → token stops resolving
+  const rbu = Number(u.report_ban_until) || 0;
+  if (rbu && rbu > Date.now()) return null; // active report ban → kicked until it lapses
   const profile = profileOf(u);
   cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL).catch(() => {}); // best-effort, не блокируем ответ
   return profile;
@@ -96,9 +100,16 @@ export async function logout(token) {
 }
 
 function profileOf(u) {
+  const unstable = !!u.report_reason;
   return { login: u.login, name: u.name, description: u.description || "", status: u.status || "online",
            created_at: u.created_at,
            email: u.email || null, emailVerified: !!u.email_verified, nagDismissed: !!u.nag_dismissed,
            pwChangedAt: Number(u.pw_changed_at) || 0,
+           emailChangedAt: Number(u.email_changed_at) || 0,
+           streamProtect: !!u.stream_protect,
+           accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
+           reportReason: unstable ? u.report_reason : null,
+           reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
+           reportBanUntil: Number(u.report_ban_until) || 0,
            banned: !!u.banned, admin: isAdmin(u.login) };
 }
