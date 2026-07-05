@@ -28,6 +28,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loader: BootLoader
     private lateinit var notifications: NotificationHelper
 
+    companion object {
+        // Weak ref to the live WebView so the call screen / notification actions can drive
+        // the web app (answer/decline a call, accept/decline a friend request).
+        private var webRef: java.lang.ref.WeakReference<WebView>? = null
+        private val ui = Handler(Looper.getMainLooper())
+        fun evalJs(js: String) {
+            val wv = webRef?.get() ?: return
+            ui.post { try { wv.evaluateJavascript(js, null) } catch (_: Exception) {} }
+        }
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private var pageReady = false
     private var connected = true
@@ -117,11 +128,13 @@ class MainActivity : AppCompatActivity() {
         // JS bridge: page can call Android.notify(...) / Android.ready() etc.
         webView.addJavascriptInterface(
             WebAppInterface(
+                context = this,
                 onReady = { runOnUiThread { onPageReady() } },
                 notifications = notifications
             ),
             "Android"
         )
+        webRef = java.lang.ref.WeakReference(webView)
 
         webView.webChromeClient = DialogWebChromeClient(this)
         webView.webViewClient = DialogWebViewClient(

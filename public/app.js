@@ -1446,6 +1446,11 @@ socket.on("pending-new", (p) => {
   // Тот, кого пригласили, получает тост «заявка отправлена» даже если пейн закрыт — иначе
   // действие invisible.
   if (profile && p.login === profile.login) notify(t("redeem_pending"));
+  // Group owner gets a native heads-up that someone wants to join (approve in the app).
+  else if (NATIVE && NATIVE.notify) {
+    const g = chats.get("@grp:" + p.id);
+    try { NATIVE.notify(t("group_join_req_title"), t("group_join_req_body", { login: p.login, group: (g && g.name) || ("#" + p.id) }), "@grp:" + p.id); } catch (e) {}
+  }
 });
 socket.on("pending-resolved", (p) => {
   if (profile) notify(p.action === "approve" ? t("pending_approve") : t("pending_decline"));
@@ -1775,7 +1780,32 @@ socket.on("presence", ({ login, status }) => {
     if (dot) dot.className = "st-dot ch-status st-" + statusClass(status);
   }
 });
-socket.on("relations-changed", () => loadRelations());
+socket.on("relations-changed", async () => {
+  const before = new Set(relations.incoming || []);
+  await loadRelations();
+  // New incoming friend request → native notification with Accept / Decline actions.
+  if (NATIVE && NATIVE.friendRequest) {
+    (relations.incoming || []).forEach((l) => { if (!before.has(l)) { try { NATIVE.friendRequest(String(l), String(l)); } catch (e) {} } });
+  }
+});
+// Native friend-request notification actions call back here.
+window.__dialogFriend = async (login, action) => {
+  try { await friend(login, action); if (action === "accept") { await refreshPresence(); openDM(login); } } catch (e) {}
+};
+// Native message-notification actions (Reply / Mark read / Silent).
+window.__dialogMarkRead = (room) => {
+  try { const c = chats.get(room); if (c) { c.unread = 0; renderChatList($("searchInput").value); } if (room === myRoom) markDeliveredSeenUpToLast(); } catch (e) {}
+};
+window.__dialogSilent = (room) => {
+  try { if (!isMuted(room)) toggleMute(room); renderChatList($("searchInput").value); } catch (e) {}
+};
+window.__dialogReply = (room, text) => {
+  try {
+    if (!room || !text) return;
+    openRoomByKey(room);
+    setTimeout(() => { const inp = $("msgInput"); if (inp) { inp.value = text; sendText(); } }, 500);
+  } catch (e) {}
+};
 socket.on("profile-updated", ({ login, name, avatarChanged }) => {
   if (!login) return;
   if (profile && login === profile.login) {
@@ -3107,7 +3137,7 @@ socket.on("call-ring", (p) => {
   if (call.active) return;
   ensureAudioCtx();
   if (!isMuted(p.room) && !isDnd()) {
-    sfx.call();
+    if (!NATIVE) sfx.call(); // native app rings via the OS (ringer/DND-aware)
     notify(t("call_in", { title: p.title }), p.room);
   }
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
@@ -3654,6 +3684,21 @@ function startCava() {
   };
   frame();
 }
+// ---- Native (Android app) bridge for the full-screen incoming-call screen ----
+const NATIVE = (typeof window.Android !== "undefined" && window.Android) ? window.Android : null;
+function nativeIncomingCall(ctx, name, callerLogin) {
+  if (!NATIVE || !NATIVE.incomingCall) return false;
+  try { NATIVE.incomingCall(ctx ? ctx.room : "", String(name || ""), String(callerLogin || ""), ctx ? String(ctx.title || "") : "", !!(ctx && ctx.kind === "group")); return true; }
+  catch (e) { return false; }
+}
+function nativeCancelIncomingCall() { if (NATIVE && NATIVE.cancelIncomingCall) { try { NATIVE.cancelIncomingCall(); } catch (e) {} } }
+// Native calls these back from the IncomingCallActivity buttons.
+window.__dialogCall = {
+  answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },
+  decline() { hideToast(); },
+  declineDnd() { hideToast(); try { setMyStatus("dnd"); } catch (e) {} },
+};
+
 let toastTimer, pendingCall = null;
 function showToast(from, name, ctx) {
   if (isDnd()) return;
@@ -3661,10 +3706,13 @@ function showToast(from, name, ctx) {
   let callerLogin = ""; if (ctx?.room?.startsWith("@dm:")) callerLogin = ctx.room.slice(4).split("~").find((l) => l !== profile.login) || "";
   $("toastAvatar").innerHTML = callerLogin ? `<img src="${avaUrl(callerLogin)}" onerror="this.remove()"><span>${initials(name)}</span>` : `<span>${initials(name)}</span>`;
   $("toastSub").textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
-  $("callToast").classList.remove("hidden"); startRingtone();
+  $("callToast").classList.remove("hidden");
+  // On the Android app, hand off to the native full-screen call screen (ringtone/vibrate
+  // there respects the phone's ringer/DND mode). Otherwise play the in-app ringtone.
+  if (!nativeIncomingCall(ctx, name, callerLogin)) startRingtone();
   clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 60000);
 }
-function hideToast() { clearTimeout(toastTimer); pendingCall = null; $("callToast").classList.add("hidden"); stopRingtone(); }
+function hideToast() { clearTimeout(toastTimer); pendingCall = null; $("callToast").classList.add("hidden"); stopRingtone(); nativeCancelIncomingCall(); }
 $("toastJoin").onclick = () => {
   const pc = pendingCall;
   if (pc && pc.room !== myRoom) { hideToast(); openRoomByKey(pc.room, pc.title); setTimeout(joinCall, 600); } else joinCall();
