@@ -8,10 +8,11 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 
 /**
- * Renders native Android notifications for messages/calls that the web app
- * raises through the JS bridge. Tapping a notification reopens the app.
+ * Renders native Android notifications for messages/calls/requests that the web app
+ * raises through the JS bridge. Notification actions route back through CallActionReceiver.
  */
 class NotificationHelper(private val context: Context) {
 
@@ -20,6 +21,8 @@ class NotificationHelper(private val context: Context) {
     companion object {
         const val CHANNEL_MESSAGES = "messages"
         const val CHANNEL_CALLS = "calls"
+        const val CHANNEL_SOCIAL = "social"
+        const val KEY_REPLY = "key_reply"
         private var idCounter = 1000
     }
 
@@ -27,47 +30,91 @@ class NotificationHelper(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_MESSAGES,
-                    "Messages",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
+                NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH)
             )
             nm.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_CALLS,
-                    "Calls",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply { setSound(null, null) }
+                NotificationChannel(CHANNEL_CALLS, "Calls", NotificationManager.IMPORTANCE_HIGH)
+                    .apply { setSound(null, null) }
+            )
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_SOCIAL, "Requests", NotificationManager.IMPORTANCE_HIGH)
             )
         }
     }
 
-    fun show(title: String, body: String, chatId: String) {
+    private fun openAppIntent(chatId: String): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("chatId", chatId)
         }
-        val pending = PendingIntent.getActivity(
-            context,
-            chatId.hashCode(),
-            intent,
+        return PendingIntent.getActivity(
+            context, chatId.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
 
-        val notif = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+    private fun actionIntent(action: String, arg: String, mutable: Boolean = false): PendingIntent {
+        val i = Intent(context, CallActionReceiver::class.java).apply {
+            this.action = action
+            putExtra("arg", arg)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        flags = flags or if (mutable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getBroadcast(context, (action + arg).hashCode(), i, flags)
+    }
+
+    // Incoming chat message — with Reply / Mark read / Silent actions.
+    fun show(title: String, body: String, chatId: String) {
+        val b = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title.ifBlank { "Dialog" })
             .setContentText(body)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pending)
-            .build()
+            .setContentIntent(openAppIntent(chatId))
 
-        try {
-            manager.notify(idCounter++, notif)
-        } catch (e: SecurityException) {
-            // POST_NOTIFICATIONS not granted; ignore silently.
+        if (chatId.isNotBlank()) {
+            val remoteInput = RemoteInput.Builder(KEY_REPLY).setLabel("Reply").build()
+            val replyAction = NotificationCompat.Action.Builder(
+                R.drawable.ic_notification, "Reply", actionIntent(CallActionReceiver.ACTION_REPLY, chatId, mutable = true)
+            ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
+            b.addAction(replyAction)
+            b.addAction(R.drawable.ic_notification, "Mark read", actionIntent(CallActionReceiver.ACTION_READ, chatId))
+            b.addAction(R.drawable.ic_notification, "Silent", actionIntent(CallActionReceiver.ACTION_SILENT, chatId))
         }
+        safeNotify(if (chatId.isNotBlank()) chatId.hashCode() else idCounter++, b.build())
+    }
+
+    // A call we couldn't ring for (Do-Not-Disturb) → leave a missed-call note.
+    fun missedCall(name: String, room: String) {
+        val b = NotificationCompat.Builder(context, CHANNEL_CALLS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Missed call")
+            .setContentText(name.ifBlank { "Someone" } + " tried to call you")
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openAppIntent(room))
+        safeNotify(("missed" + room).hashCode(), b.build())
+    }
+
+    // Friend request — Accept / Decline directly from the notification.
+    fun friendRequest(login: String, name: String) {
+        val b = NotificationCompat.Builder(context, CHANNEL_SOCIAL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Friend request")
+            .setContentText("$name wants to add you")
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openAppIntent(""))
+            .addAction(R.drawable.ic_notification, "Accept", actionIntent(CallActionReceiver.ACTION_FRIEND_ACCEPT, login))
+            .addAction(R.drawable.ic_notification, "Decline", actionIntent(CallActionReceiver.ACTION_FRIEND_DECLINE, login))
+        safeNotify(("fr" + login).hashCode(), b.build())
+    }
+
+    fun cancel(id: Int) { manager.cancel(id) }
+
+    private fun safeNotify(id: Int, notif: android.app.Notification) {
+        try { manager.notify(id, notif) } catch (e: SecurityException) { /* POST_NOTIFICATIONS not granted */ }
     }
 }
