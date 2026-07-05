@@ -18,12 +18,35 @@ class CallActionReceiver : BroadcastReceiver() {
         const val ACTION_READ = "xyz.dialogmsg.app.MARK_READ"
         const val ACTION_SILENT = "xyz.dialogmsg.app.SILENT"
         const val ACTION_REPLY = "xyz.dialogmsg.app.REPLY"
+        const val ACTION_CALL_ANSWER = "xyz.dialogmsg.app.CALL_ANSWER"
+        const val ACTION_CALL_DECLINE = "xyz.dialogmsg.app.CALL_DECLINE"
+        const val ACTION_CALL_MUTE = "xyz.dialogmsg.app.CALL_MUTE"
+        const val ACTION_CALL_END = "xyz.dialogmsg.app.CALL_END"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         val arg = intent.getStringExtra("arg") ?: ""
         val a = jsStr(arg)
         when (intent.action) {
+            ACTION_CALL_ANSWER -> {
+                RingController.stop(context)
+                MainActivity.evalJs("window.__dialogCall && window.__dialogCall.answer()")
+                NotificationManagerCompat.from(context).cancel(NotificationHelper.INCOMING_ID)
+                IncomingCallActivity.dismiss(context)
+                runCatching {
+                    context.startActivity(Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    })
+                }
+            }
+            ACTION_CALL_DECLINE -> {
+                RingController.stop(context)
+                MainActivity.evalJs("window.__dialogCall && window.__dialogCall.decline()")
+                NotificationManagerCompat.from(context).cancel(NotificationHelper.INCOMING_ID)
+                IncomingCallActivity.dismiss(context)
+            }
+            ACTION_CALL_MUTE -> MainActivity.evalJs("window.__dialogCall && window.__dialogCall.mute()")
+            ACTION_CALL_END -> MainActivity.evalJs("window.__dialogCall && window.__dialogCall.end()")
             ACTION_FRIEND_ACCEPT -> {
                 MainActivity.evalJs("window.__dialogFriend && window.__dialogFriend($a,'accept')")
                 cancel(context, ("fr" + arg).hashCode())

@@ -3085,6 +3085,8 @@ async function joinCall() {
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
+  // Android: start the foreground service (keeps the call alive in the background + ongoing notification).
+  if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   try {
     await room.connect(data.url, data.token);
@@ -3127,6 +3129,7 @@ function endCall() {
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive(); updateCallButton(); stopCallTimer();
+  if (NATIVE && NATIVE.callEnded) { try { NATIVE.callEnded(); } catch (e) {} }
   if (wasActive) sfx.end();
   stopPing();
 }
@@ -3712,6 +3715,9 @@ window.__dialogCall = {
   answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },
   decline() { hideToast(); },
   declineDnd() { hideToast(); try { setMyStatus("dnd"); } catch (e) {} },
+  // Ongoing-call notification actions (Mute / End).
+  mute() { const b = $("toggleMic"); if (b) b.click(); },
+  end() { const b = $("hangUp"); if (b) b.click(); },
 };
 
 let toastTimer, pendingCall = null;

@@ -23,6 +23,7 @@ class NotificationHelper(private val context: Context) {
         const val CHANNEL_CALLS = "calls"
         const val CHANNEL_SOCIAL = "social"
         const val KEY_REPLY = "key_reply"
+        const val INCOMING_ID = 4001
         private var idCounter = 1000
     }
 
@@ -110,6 +111,52 @@ class NotificationHelper(private val context: Context) {
             .addAction(R.drawable.ic_notification, "Accept", actionIntent(CallActionReceiver.ACTION_FRIEND_ACCEPT, login))
             .addAction(R.drawable.ic_notification, "Decline", actionIntent(CallActionReceiver.ACTION_FRIEND_DECLINE, login))
         safeNotify(("fr" + login).hashCode(), b.build())
+    }
+
+    // Incoming call → a call notification with a FULL-SCREEN intent. Android shows the
+    // full-screen IncomingCallActivity when the screen is locked/idle, and a heads-up
+    // notification with Answer / Cancel when another app is in the foreground.
+    fun showIncomingCall(room: String, name: String, isGroup: Boolean) {
+        val fs = Intent(context, IncomingCallActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(IncomingCallActivity.EXTRA_ROOM, room)
+            putExtra(IncomingCallActivity.EXTRA_NAME, name)
+            putExtra(IncomingCallActivity.EXTRA_GROUP, isGroup)
+        }
+        val fsPi = PendingIntent.getActivity(
+            context, INCOMING_ID, fs,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val b = NotificationCompat.Builder(context, CHANNEL_CALLS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (isGroup) "Incoming group call" else "Incoming call")
+            .setContentText(name)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setFullScreenIntent(fsPi, true)
+            .setContentIntent(fsPi)
+            .addAction(R.drawable.ic_notification, "Answer Call", actionIntent(CallActionReceiver.ACTION_CALL_ANSWER, room))
+            .addAction(R.drawable.ic_notification, "Cancel Call", actionIntent(CallActionReceiver.ACTION_CALL_DECLINE, room))
+        safeNotify(INCOMING_ID, b.build())
+    }
+
+    fun cancelIncoming() { manager.cancel(INCOMING_ID) }
+
+    // Ongoing "On a call" notification used by CallService (Mute / End actions).
+    fun buildOngoingCall(title: String, sub: String): android.app.Notification {
+        return NotificationCompat.Builder(context, CHANNEL_CALLS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title.ifBlank { "On a call" })
+            .setContentText(sub.ifBlank { "Tap to return to the call" })
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setContentIntent(openAppIntent(""))
+            .addAction(R.drawable.ic_notification, "Mute", actionIntent(CallActionReceiver.ACTION_CALL_MUTE, ""))
+            .addAction(R.drawable.ic_notification, "End", actionIntent(CallActionReceiver.ACTION_CALL_END, ""))
+            .build()
     }
 
     fun cancel(id: Int) { manager.cancel(id) }

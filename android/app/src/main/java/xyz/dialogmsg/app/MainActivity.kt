@@ -3,10 +3,12 @@ package xyz.dialogmsg.app
 import android.Manifest
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
+import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.util.Rational
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -33,9 +35,25 @@ class MainActivity : AppCompatActivity() {
         // the web app (answer/decline a call, accept/decline a friend request).
         private var webRef: java.lang.ref.WeakReference<WebView>? = null
         private val ui = Handler(Looper.getMainLooper())
+        // Set by the web app via the bridge — gates Picture-in-Picture on leaving the app.
+        @Volatile private var callActive = false
+        fun setCallActive(active: Boolean) { callActive = active }
+        fun isCallActive() = callActive
         fun evalJs(js: String) {
             val wv = webRef?.get() ?: return
             ui.post { try { wv.evaluateJavascript(js, null) } catch (_: Exception) {} }
+        }
+    }
+
+    // Leaving the app (Home / recents) during a call → shrink into Picture-in-Picture.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isCallActive() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching {
+                enterPictureInPictureMode(
+                    PictureInPictureParams.Builder().setAspectRatio(Rational(3, 4)).build()
+                )
+            }
         }
     }
 
