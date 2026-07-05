@@ -104,6 +104,7 @@ function resolveBgForChat(chatKey) {
   const glob = getGlobalBg();
   if (glob && glob.startsWith("data:")) return glob;
   const theme = document.body.dataset.theme;
+  if (theme === "aero") return "/src/aerobg.png";
   if (theme && theme !== "matrix") return "/src/DefaultBG.png";
   return null;
 }
@@ -241,6 +242,7 @@ const THEMES = [
   { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
   { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"] },
 ];
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix (migration for users with old localStorage);
@@ -251,6 +253,9 @@ function applyTheme(key) {
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+  // Themes can change the default chat wallpaper (e.g. aero → aerobg.png), so repaint
+  // the open chat's background immediately instead of waiting for the next chat open.
+  try { applyWallpaper(); } catch {}
 }
 // Restore theme from localStorage on init WITHOUT triggering the flashbang easter egg.
 // Reads the saved key and stamps body[data-theme] directly. Invalid/missing keys leave
