@@ -3084,7 +3084,7 @@ async function joinCall() {
   if (!LK) { alert(t("call_disabled")); return; }
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix(); startPing();
-  $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start();
+  $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   try {
     await room.connect(data.url, data.token);
@@ -3126,10 +3126,25 @@ function endCall() {
   krispNode = null; stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
-  stopKeepAlive(); updateCallButton();
+  stopKeepAlive(); updateCallButton(); stopCallTimer();
   if (wasActive) sfx.end();
   stopPing();
 }
+// ---- Mobile call header: live duration timer ----
+let _callTimer = null, _callStart = 0;
+function startCallTimer() {
+  _callStart = Date.now();
+  const title = $("cmhTitle"); if (title) title.textContent = curKind === "group" ? t("t_call") : t("call_dm");
+  const tick = () => {
+    const s = Math.floor((Date.now() - _callStart) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+    const el = $("callTimer"); if (el) el.textContent = mm + ":" + ss;
+  };
+  tick(); clearInterval(_callTimer); _callTimer = setInterval(tick, 1000);
+}
+function stopCallTimer() { clearInterval(_callTimer); _callTimer = null; const el = $("callTimer"); if (el) el.textContent = "00:00"; }
+$("cmhBack") && ($("cmhBack").onclick = () => { call.minimized = true; syncCallUI(); });
+$("cmhFlip") && ($("cmhFlip").onclick = () => { const f = $("flipCam"); if (f && !f.classList.contains("hidden")) f.click(); else { const c = $("toggleCam"); if (c) c.click(); } });
 $("hangUp").onclick = endCall;
 
 // Ringing (через Socket.IO + push) — медиа поднимает LiveKit
@@ -4109,7 +4124,7 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
