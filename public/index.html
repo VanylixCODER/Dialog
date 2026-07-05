@@ -129,6 +129,12 @@
         <canvas id="callMatrix" class="call-matrix"></canvas>
         <div class="call-grip" id="callGrip" title="Drag to dock left / right / top"><span></span><span></span></div>
         <div id="callResizer" class="call-resizer"></div>
+        <!-- Mobile call header (title + live duration) — shown only on small screens -->
+        <div class="call-mhead">
+          <button class="cmh-back" id="cmhBack" aria-label="Minimize">‹</button>
+          <div class="cmh-title"><b id="cmhTitle" data-i18n="t_call">Call</b><span id="callTimer">00:00</span></div>
+          <button class="cmh-action" id="cmhFlip" aria-label="Flip camera"></button>
+        </div>
         <div id="videoGrid" class="video-grid"></div>
         <div id="pingMeter"><span id="pingValue">--</span><span id="pingUnit" data-i18n="ping_ms">ms</span></div>
         <div class="call-bar">
