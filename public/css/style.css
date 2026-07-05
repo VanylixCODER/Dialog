@@ -71,8 +71,8 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Шрифты (UI Inter fallback для читабельности; mono для акцентов) */
-  --font-ui: "Segoe UI", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
-  --display: "Segoe UI", "Segoe UI Variable Display", "Segoe UI Variable", "Segoe", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
+  --font-ui: "Segoe UI", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
+  --display: "Segoe UI", "Segoe UI Variable Display", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
 }
 
 /* Базовый сброс -------------------------------------------------- */
@@ -3339,6 +3339,270 @@ body[data-theme="mono-light"] .bubble, body[data-theme="mono-light"] .msg, body[
 body[data-theme="mono-light"] .es-logo, body[data-theme="mono-light"] .mention, body[data-theme="mono-light"] .setting-tab { animation: none; text-shadow: none; }
 body[data-theme="mono-light"] .icon-btn.send { background: #000000; color: #ffffff; border-color: #000000; box-shadow: 0 0 0 1px rgba(0,0,0,.2) inset, 0 2px 8px rgba(0,0,0,0.18); }
 body[data-theme="mono-light"] .btn-primary { color: #ffffff; box-shadow: inset 0 -2px 0 rgba(255,255,255,.15), 0 4px 14px rgba(0,0,0,0.22); }
+
+/* ============ Windows XP (Luna "Olive Green") ============
+   The classic 2003 Windows look: an aero desktop wallpaper (aerobg.png) behind
+   glossy green "Luna" title bars, beige-green control panels, hard 1px borders
+   and candy Start-button gloss on every button + bubble. A hard light pivot away
+   from the dark neon default — we retune the whole token palette, kill the matrix
+   rain / neon strips / glow text-shadow, and re-skin the signature components.
+   Theme key stays "aero" (legacy id); wallpaper is /src/aerobg.png; label reads "Windows XP". */
+body[data-theme="aero"] {
+  --primary-rgb: 78, 145, 40;                      /* Luna olive green #4e9128 */
+  --accent-100: #14290c;                           /* deep green (text-strong) */
+  --accent-200: #234718;
+  --accent-300: #3f7d1f;
+  --accent-400: #4e9128;                           /* primary grass green */
+  --accent-500: #3f7d1f;
+  --accent-600: #2f6015;
+  --accent-700: rgba(var(--primary-rgb), 0.35);
+  --accent-glow: rgba(var(--primary-rgb), 0.45);
+  --accent-soft: rgba(var(--primary-rgb), 0.14);
+  --accent-faint: rgba(var(--primary-rgb), 0.07);
+
+  --cyan-300: #2aa79b;                             /* teal accent to match the wallpaper */
+  --danger: #d13a2f;
+  --warn: #e08a1e;
+
+  /* XP light panels — classic Luna beige-grey shifted faintly green */
+  --bg-0: #eef3e6;
+  --bg-1: #e9efdf;
+  --bg-2: #f4f8ee;
+  --bg-3: #ffffff;
+  --bg-4: #dde8cc;
+
+  --surface-1: rgba(255, 255, 255, 0.50);
+  --surface-2: rgba(255, 255, 255, 0.70);
+  --surface-3: rgba(var(--primary-rgb), 0.16);
+
+  --border-1: rgba(60, 110, 30, 0.22);
+  --border-2: rgba(60, 110, 30, 0.36);
+  --border-3: rgba(60, 110, 30, 0.54);
+
+  --text: #244018;
+  --text-strong: #14290c;
+  --text-dim: #5f7a4d;
+
+  --glow-sm: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  --glow-md: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 2px 10px rgba(30, 70, 15, 0.16);
+  --glow-lg: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 4px 18px rgba(30, 70, 15, 0.22);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 2px 8px rgba(40, 80, 20, 0.16);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 10px 30px rgba(40, 80, 20, 0.24);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 22px 60px rgba(40, 80, 20, 0.30);
+
+  /* The desktop wallpaper — the aero ribbon image, over a teal→blue fallback wash. */
+  background:
+    url("/src/aerobg.png") center center / cover no-repeat,
+    linear-gradient(180deg, #1f8a82 0%, #12507f 60%, #0e3a6b 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  text-shadow: none;
+  /* Tahoma is the native XP UI face; Open Sans / Segoe are the web fallbacks. */
+  font-family: "Tahoma", "Segoe UI", "Open Sans", Verdana, system-ui, -apple-system, sans-serif;
+}
+/* The green Luna title-bar gloss — reused by the chat header + list header. */
+body[data-theme="aero"] {
+  --xp-title: linear-gradient(180deg, #8ecb58 0%, #62a834 6%, #4e9128 48%, #3f7d1f 92%, #367018 100%);
+  --xp-btn: linear-gradient(180deg, #b6ea7f 0%, #79c246 48%, #57a12c 50%, #46901f 100%);
+}
+/* Kill every dark-theme decoration: scanlines, matrix rain, neon strips, glow. */
+body[data-theme="aero"]::before { display: none; }
+body[data-theme="aero"] .chatlist::before,
+body[data-theme="aero"] .brand-logo::after,
+body[data-theme="aero"] .chat-head::after,
+body[data-theme="aero"] .composer::before,
+body[data-theme="aero"] .voice-bar::before,
+body[data-theme="aero"] .ci-ava-wrap::before,
+body[data-theme="aero"] .ci-ava-wrap::after,
+body[data-theme="aero"] .tile-avatar::before,
+body[data-theme="aero"] .call-matrix { display: none; }
+body[data-theme="aero"] .bubble,
+body[data-theme="aero"] .msg,
+body[data-theme="aero"] .chat-title,
+body[data-theme="aero"] .es-logo,
+body[data-theme="aero"] .mention { text-shadow: none; }
+body[data-theme="aero"] ::selection { background: rgba(var(--primary-rgb), 0.28); color: var(--text-strong); }
+body[data-theme="aero"] a { color: var(--accent-300); }
+body[data-theme="aero"] a:hover { color: var(--accent-500); text-shadow: none; }
+
+/* --- Panels: light XP controls, lightly frosted so the wallpaper glows through --- */
+body[data-theme="aero"] .chatlist {
+  background: linear-gradient(180deg, rgba(244, 248, 238, 0.86), rgba(224, 234, 208, 0.80));
+  border-right: 1px solid rgba(60, 110, 30, 0.28);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+/* List header = a green Luna title bar. */
+body[data-theme="aero"] .cl-head {
+  background: var(--xp-title);
+  border-bottom: 1px solid #2f6015;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+body[data-theme="aero"] .cl-head .me-name { color: #ffffff; text-shadow: 0 1px 1px rgba(0, 40, 0, 0.5); }
+body[data-theme="aero"] .cl-head .hicon-btn { color: rgba(255, 255, 255, 0.9); }
+body[data-theme="aero"] .cl-head .hicon-btn:hover { color: #ffffff; background: rgba(255, 255, 255, 0.22); border-color: rgba(255, 255, 255, 0.35); }
+body[data-theme="aero"] .chat.has-wallpaper .messages {
+  background: linear-gradient(180deg, rgba(244, 248, 238, 0.78), rgba(224, 234, 208, 0.72));
+}
+/* Chat header = the main green Luna title bar. */
+body[data-theme="aero"] .chat-head {
+  background: var(--xp-title);
+  border-bottom: 1px solid #2f6015;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+body[data-theme="aero"] .chat-head .chat-title { color: #ffffff; text-shadow: 0 1px 1px rgba(0, 40, 0, 0.5); }
+body[data-theme="aero"] .chat-head .icon-btn {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+body[data-theme="aero"] .chat-head .icon-btn:hover { background: rgba(255, 255, 255, 0.34); border-color: rgba(255, 255, 255, 0.55); color: #ffffff; }
+body[data-theme="aero"] .composer {
+  background: linear-gradient(180deg, rgba(244, 248, 238, 0.80), rgba(224, 234, 208, 0.88));
+  border-top: 1px solid rgba(60, 110, 30, 0.3);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+body[data-theme="aero"] .info-panel {
+  background: linear-gradient(180deg, rgba(244, 248, 238, 0.86), rgba(224, 234, 208, 0.80));
+  border-left: 1px solid rgba(60, 110, 30, 0.28);
+  color: var(--text);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+
+/* --- Cards, modals & floating menus: light XP panels --- */
+body[data-theme="aero"] .modal-card,
+body[data-theme="aero"] .settings-card,
+body[data-theme="aero"] .chat-menu,
+body[data-theme="aero"] .react-picker,
+body[data-theme="aero"] .me-status-menu,
+body[data-theme="aero"] .emoji-picker,
+body[data-theme="aero"] .gif-panel,
+body[data-theme="aero"] .composer-more,
+body[data-theme="aero"] .notify-toast {
+  background: linear-gradient(180deg, rgba(248, 251, 244, 0.96), rgba(233, 240, 222, 0.94));
+  border: 1px solid #7aa64e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 18px 50px rgba(20, 50, 10, 0.30);
+  color: var(--text);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+body[data-theme="aero"] .login-card {
+  background: linear-gradient(180deg, rgba(248, 251, 244, 0.94), rgba(224, 234, 208, 0.90));
+  border: 1px solid #7aa64e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 24px 64px rgba(20, 50, 10, 0.38);
+  color: var(--text);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+body[data-theme="aero"] .brand h1 { color: var(--text-strong); letter-spacing: 2px; }
+body[data-theme="aero"] .brand-logo {
+  background: linear-gradient(180deg, #eafbe0, #c6e79f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 3px 10px rgba(50, 90, 20, 0.30);
+}
+
+/* --- Fields: white inset wells with a hard XP border --- */
+body[data-theme="aero"] .field,
+body[data-theme="aero"] .cl-search {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #7aa64e;
+  box-shadow: inset 0 2px 3px rgba(40, 70, 20, 0.14);
+  color: var(--text-strong);
+  border-radius: 4px;
+}
+body[data-theme="aero"] .field:focus,
+body[data-theme="aero"] .cl-search:focus {
+  border-color: var(--accent-400);
+  box-shadow: inset 0 2px 3px rgba(40, 70, 20, 0.14), 0 0 0 3px rgba(var(--primary-rgb), 0.25);
+}
+
+/* --- The XP green "Start-button" gloss: bright top sheen, dark base --- */
+body[data-theme="aero"] .btn-primary {
+  background: var(--xp-btn);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 45, 0, 0.5);
+  border: 1px solid #3a7a18;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -8px 12px rgba(20, 60, 0, 0.25),
+    0 3px 10px rgba(40, 90, 15, 0.4);
+}
+body[data-theme="aero"] .btn-primary:hover { filter: brightness(1.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -8px 12px rgba(20,60,0,0.25), 0 6px 18px rgba(40,90,15,0.5); }
+body[data-theme="aero"] .btn-primary.loading::before { border-color: rgba(255, 255, 255, 0.55); border-top-color: #ffffff; }
+body[data-theme="aero"] .btn-ghost {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(228, 238, 214, 0.8));
+  border: 1px solid #7aa64e;
+  color: var(--accent-300);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(40, 80, 20, 0.14);
+}
+body[data-theme="aero"] .btn-ghost:hover { color: var(--accent-500); border-color: var(--accent-400); background: linear-gradient(180deg, #ffffff, #e6f2d6); }
+
+/* --- Icon buttons: light XP pebbles; Send gets the green gloss --- */
+body[data-theme="aero"] .composer .icon-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(228, 238, 214, 0.7));
+  border: 1px solid #7aa64e;
+  color: var(--accent-300);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+}
+body[data-theme="aero"] .composer .icon-btn:hover { color: var(--accent-500); border-color: var(--accent-400); background: linear-gradient(180deg, #ffffff, #dcecc6); }
+body[data-theme="aero"] .icon-btn.send {
+  background: var(--xp-btn);
+  border-color: #3a7a18;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -6px 10px rgba(20, 60, 0, 0.25), 0 3px 10px rgba(40, 90, 15, 0.4);
+}
+body[data-theme="aero"] .icon-btn.send:hover { filter: brightness(1.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -6px 10px rgba(20,60,0,0.25), 0 6px 16px rgba(40,90,15,0.5); }
+
+/* --- Chat list rows: glossy green "selected item" highlight (XP list select) --- */
+body[data-theme="aero"] .chat-item:hover { background: rgba(255, 255, 255, 0.5); }
+body[data-theme="aero"] .chat-item.active {
+  background: linear-gradient(180deg, #79c246, #47901f);
+  border-left-color: #2f6015;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 8px rgba(40, 90, 15, 0.35);
+}
+body[data-theme="aero"] .chat-item.active .ci-name,
+body[data-theme="aero"] .chat-item.active .ci-last,
+body[data-theme="aero"] .chat-item.active .ci-time { color: #ffffff; opacity: 1; }
+body[data-theme="aero"] .chat-item.pinned { background: rgba(255, 255, 255, 0.38); }
+
+/* --- Bubbles: white for theirs, glossy green for mine --- */
+body[data-theme="aero"] .bubble {
+  background: linear-gradient(180deg, #ffffff, #f0f6e6);
+  border: 1px solid #9cbf74;
+  color: var(--text-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 8px rgba(40, 80, 20, 0.16);
+}
+body[data-theme="aero"] .msg.me .bubble {
+  background: linear-gradient(180deg, #8fd257 0%, #5aa72f 52%, #47901f 100%);
+  border-color: #3a7a18;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 12px rgba(40, 90, 15, 0.35);
+}
+body[data-theme="aero"] .msg.me .mention { color: #ffffff; }
+body[data-theme="aero"] .msg.me .bubble::after,
+body[data-theme="aero"] .msg:not(.me) .bubble::after { background: transparent; }
+body[data-theme="aero"] .bubble.file { background: linear-gradient(180deg, #ffffff, #f0f6e6); border-color: #9cbf74; color: var(--text-strong); }
+body[data-theme="aero"] .bubble.file .file-name { color: var(--accent-500); }
+body[data-theme="aero"] .msg.me .bubble.file { background: linear-gradient(180deg, #8fd257, #47901f); border-color: #3a7a18; }
+body[data-theme="aero"] .msg.me .bubble.file .file-name,
+body[data-theme="aero"] .msg.me .bubble.file .file-size,
+body[data-theme="aero"] .msg.me .bubble.file .file-dl { color: #ffffff; }
+
+/* Status dots stay canonical green/red on the light panels. */
+body[data-theme="aero"] .st-online { background: #22c55e; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 8px rgba(34, 197, 94, 0.5); }
+body[data-theme="aero"] .st-dnd { background: #ef4444; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7); }
+/* Empty-state logo: soft green, no neon glow. */
+body[data-theme="aero"] .es-logo { color: var(--accent-400); text-shadow: 0 2px 6px rgba(40, 90, 15, 0.3); animation: none; }
+body[data-theme="aero"] .es-logo img { filter: drop-shadow(0 3px 8px rgba(40, 90, 15, 0.35)); }
+body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.5); }
+
 /* ============ Custom Theme Editor: 2-column layout + live preview ============ */
 /* Default tokens for the preview pane. The live-preview <style> injects the user's
    CSS under .ct-preview-scope so these are what the sample looks like BEFORE they
