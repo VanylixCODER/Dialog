@@ -242,7 +242,7 @@ const THEMES = [
   { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
   { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
-  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"] },
+  { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"], beta: true },
 ];
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix (migration for users with old localStorage);
@@ -328,7 +328,7 @@ function renderThemes() {
     b.className = "theme-opt";
     b.dataset.theme = theme.key;
     b.type = "button";
-    b.innerHTML = `<div class="theme-swatch">${theme.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(window.t("theme_" + theme.key))}</span><span class="theme-desc">${escapeHtml(window.t("theme_desc_" + theme.key))}</span>`;
+    b.innerHTML = `<div class="theme-swatch">${theme.swatch.map((c) => `<span style="background:${c}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(window.t("theme_" + theme.key))}${theme.beta ? `<span class="theme-beta">${window.t("beta")}</span>` : ""}</span><span class="theme-desc">${escapeHtml(window.t("theme_desc_" + theme.key))}</span>`;
     b.onclick = () => selectTheme(theme.key);
     grid.appendChild(b);
   }

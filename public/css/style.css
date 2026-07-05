@@ -4101,3 +4101,15 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   #callStage .call-btn-group { flex: 0 0 auto; }
   #callStage #minBtn, #callStage .call-fs, #callStage .call-drop { display: none; } /* header + pill cover these */
 }
+
+/* BETA tag on a theme card (e.g. AeroDialog) */
+.theme-opt { position: relative; }
+.theme-name { position: static; }
+.theme-beta {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  font-size: 9px; font-weight: 800; letter-spacing: 1.2px;
+  padding: 3px 8px; border-radius: 999px;
+  background: linear-gradient(180deg, #ffc24d, #ff9e1f); color: #241400;
+  border: 1px solid rgba(0,0,0,0.25);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+}
