@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationManagerCompat
 import java.lang.ref.WeakReference
 
 /**
@@ -119,8 +120,13 @@ class IncomingCallActivity : Activity() {
         return b
     }
 
+    private fun clearNotif() {
+        runCatching { NotificationManagerCompat.from(this).cancel(NotificationHelper.INCOMING_ID) }
+    }
+
     private fun onAnswer() {
         RingController.stop(this)
+        clearNotif()
         MainActivity.evalJs("window.__dialogCall && window.__dialogCall.answer()")
         // Bring the chat app to the front so the user lands in the call.
         runCatching {
@@ -133,12 +139,14 @@ class IncomingCallActivity : Activity() {
 
     private fun onDecline() {
         RingController.stop(this)
+        clearNotif()
         MainActivity.evalJs("window.__dialogCall && window.__dialogCall.decline()")
         finish()
     }
 
     private fun onDeclineDnd() {
         RingController.stop(this)
+        clearNotif()
         MainActivity.evalJs("window.__dialogCall && window.__dialogCall.declineDnd()")
         finish()
     }
