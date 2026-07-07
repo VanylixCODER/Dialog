@@ -4264,3 +4264,10 @@ body.motion-off, body.motion-off *, body.motion-off *::before, body.motion-off *
 .chat-item:hover { transform: translateX(3px); }
 .rail-btn:hover { transform: translateY(-1px); }
 .rail-btn:active { transform: scale(0.9); }
+
+/* ===================== DaisyUI migration ===================== */
+/* Batch 1 — feedback. Toast fade (DaisyUI .toast/.alert do positioning + card). */
+.nt { opacity: 0; pointer-events: none; transition: opacity 0.22s var(--ease); }
+.nt.show { opacity: 1; }
+.nt .alert { box-shadow: var(--shadow-md); }
+/* Old .notify-toast / .lds-dot rules are now unused (kept in-file as legacy archive). */

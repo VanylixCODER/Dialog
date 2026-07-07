@@ -3921,7 +3921,17 @@ function dayLabel(dayStr) {
 }
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
-function notify(text, room) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.dataset.room = room || ""; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
+function notify(text, room) {
+  let el = $("notifyToast");
+  if (!el) {
+    el = document.createElement("div"); el.id = "notifyToast";
+    el.className = "toast toast-top toast-end nt";
+    el.innerHTML = '<div class="alert alert-info"><span class="nt-text"></span></div>';
+    document.body.appendChild(el);
+  }
+  el.querySelector(".nt-text").textContent = text; el.dataset.room = room || "";
+  el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500);
+}
 function dismissNotif(room) {
   const el = $("notifyToast");
   if (el && el.dataset.room === room) { el.classList.remove("show"); clearTimeout(el._t); }
