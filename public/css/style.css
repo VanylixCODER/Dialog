@@ -4248,3 +4248,19 @@ body.motion-off, body.motion-off *, body.motion-off *::before, body.motion-off *
 }
 .ap-range { width: 160px; max-width: 50%; accent-color: var(--accent-400); cursor: pointer; }
 .pref-label small em { color: var(--accent-300); font-style: normal; font-weight: 700; }
+
+/* ===================== Motion layer (gated by the animation knob) ===================== */
+@keyframes slideInRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes railPop { from { opacity: 0; transform: translateY(6px) scale(.9); } to { opacity: 1; transform: none; } }
+@media (max-width: 720px) {
+  .app.in-chat .chat { animation: slideInRight 0.26s var(--ease-out); }
+  .app-rail .rail-btn { animation: railPop 0.3s var(--ease-out) backwards; }
+  .app-rail .rail-group .rail-btn:nth-child(2) { animation-delay: .03s; }
+  .app-rail .rail-group .rail-btn:nth-child(3) { animation-delay: .06s; }
+  .app-rail .rail-group .rail-btn:nth-child(4) { animation-delay: .09s; }
+}
+/* subtle chat-row hover nudge + smoother transitions */
+.chat-item { transition: background var(--t-fast) var(--ease), transform var(--t-base) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease); }
+.chat-item:hover { transform: translateX(3px); }
+.rail-btn:hover { transform: translateY(-1px); }
+.rail-btn:active { transform: scale(0.9); }
