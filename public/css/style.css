@@ -75,6 +75,35 @@
   --display: "Segoe UI", "Segoe UI Variable Display", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* ── DaisyUI bridge ───────────────────────────────────────────────
+   DaisyUI 5 is loaded fully @layer-scoped, so these unlayered mappings win and
+   make its component variables follow Dialog's existing theme tokens. Every
+   built-in theme + Theme Studio theme already sets --accent-* / --bg-* / --danger,
+   so this single rule themes all DaisyUI components automatically (green-terminal),
+   and --radius-* tracks the roundness scale. */
+body {
+  --color-base-100: var(--bg-1);
+  --color-base-200: var(--bg-2);
+  --color-base-300: var(--bg-3);
+  --color-base-content: var(--text-strong, #e9ffec);
+  --color-primary: var(--accent-400);
+  --color-primary-content: #04140a;
+  --color-secondary: var(--accent-300);
+  --color-secondary-content: #04140a;
+  --color-accent: var(--accent-500);
+  --color-accent-content: #04140a;
+  --color-neutral: var(--bg-3);
+  --color-neutral-content: var(--text-strong, #e9ffec);
+  --color-info: var(--accent-300);
+  --color-success: #3fb950;   --color-success-content: #04140a;
+  --color-warning: #e0b34a;   --color-warning-content: #1a1200;
+  --color-error: var(--danger, #ff5252);   --color-error-content: #ffffff;
+  --radius-box: var(--r-4);
+  --radius-field: var(--r-2);
+  --radius-selector: var(--r-2);
+  --border: 1px;
+}
+
 /* Базовый сброс -------------------------------------------------- */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
