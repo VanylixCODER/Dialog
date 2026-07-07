@@ -190,6 +190,10 @@ const I18N = {
     pref_everyone: "Everyone", pref_fof: "Friends of friends", pref_nobody: "Nobody",
     pref_group_add: "Friends can add me to groups", pref_group_add_d: "Let others add or invite you into group chats",
     pref_read_receipts: "Read receipts", pref_read_receipts_d: "Let others see when you've read their messages",
+    ap_title: "Appearance", ap_radius: "Corner roundness",
+    ap_density: "Density", ap_density_d: "Comfortable or compact spacing", ap_comfortable: "Comfortable", ap_compact: "Compact",
+    ap_motion: "Animations", ap_motion_d: "How much the UI moves", ap_motion_full: "Full", ap_motion_subtle: "Subtle", ap_motion_off: "Off",
+    ap_size: "Interface size", ap_size_d: "Scale the whole UI", ap_small: "Small", ap_normal: "Normal", ap_large: "Large",
     err_req_blocked: "This user isn't accepting friend requests.",
     // Invite limits
     invite_max_uses: "Max uses", invite_expiry_days: "Expires (days)", invite_unlimited: "∞", invite_never: "never",
@@ -415,6 +419,10 @@ const I18N = {
     pref_everyone: "Все", pref_fof: "Друзья друзей", pref_nobody: "Никто",
     pref_group_add: "Друзья могут добавлять меня в группы", pref_group_add_d: "Разрешить добавлять и приглашать вас в группы",
     pref_read_receipts: "Отчёты о прочтении", pref_read_receipts_d: "Показывать другим, что вы прочитали их сообщения",
+    ap_title: "Оформление", ap_radius: "Скругление углов",
+    ap_density: "Плотность", ap_density_d: "Просторные или компактные отступы", ap_comfortable: "Просторно", ap_compact: "Компактно",
+    ap_motion: "Анимации", ap_motion_d: "Насколько подвижен интерфейс", ap_motion_full: "Полные", ap_motion_subtle: "Умеренные", ap_motion_off: "Выкл",
+    ap_size: "Размер интерфейса", ap_size_d: "Масштаб всего UI", ap_small: "Маленький", ap_normal: "Обычный", ap_large: "Большой",
     err_req_blocked: "Этот пользователь не принимает заявки в друзья.",
     // Лимиты инвайтов
     invite_max_uses: "Макс. использований", invite_expiry_days: "Истекает (дней)", invite_unlimited: "∞", invite_never: "никогда",

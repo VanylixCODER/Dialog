@@ -4088,6 +4088,7 @@ function refreshPrefsPane() {
   if ($("prefGroupAdd")) $("prefGroupAdd").checked = profile.prefGroupAdd !== false;
   if ($("prefReadReceipts")) $("prefReadReceipts").checked = profile.prefReadReceipts !== false;
   if ($("prefMsg")) $("prefMsg").textContent = "";
+  refreshAppearancePane();
 }
 async function savePref(patch) {
   const { ok, data } = await api("/api/prefs", patch);
@@ -4103,6 +4104,38 @@ async function savePref(patch) {
 $("prefFriendReq") && ($("prefFriendReq").onchange = (e) => savePref({ friendReq: e.target.value }));
 $("prefGroupAdd") && ($("prefGroupAdd").onchange = (e) => savePref({ groupAdd: e.target.checked }));
 $("prefReadReceipts") && ($("prefReadReceipts").onchange = (e) => savePref({ readReceipts: e.target.checked }));
+
+// ---------- Appearance knobs (roundness / density / animation / UI size) ----------
+// Global, per-device (localStorage) — applied to <html>/<body>, independent of theme.
+const AP = {
+  radius: () => localStorage.getItem("dialog_ap_radius"),
+  density: () => localStorage.getItem("dialog_ap_density") || "comfortable",
+  motion: () => localStorage.getItem("dialog_ap_motion") || "full",
+  scale: () => localStorage.getItem("dialog_ap_scale") || "1",
+};
+function applyAppearance() {
+  try {
+    const root = document.documentElement, b = document.body;
+    const radius = AP.radius() == null ? 100 : Number(AP.radius());
+    root.style.setProperty("--radius-scale", (radius / 100).toFixed(2));
+    root.style.setProperty("--ui-scale", String(Number(AP.scale()) || 1));
+    b.classList.toggle("dense", AP.density() === "dense");
+    b.classList.remove("motion-off", "motion-subtle", "motion-full");
+    const m = AP.motion(); if (m === "off" || m === "subtle") b.classList.add("motion-" + m);
+  } catch {}
+}
+applyAppearance(); // apply immediately (no flash)
+function refreshAppearancePane() {
+  const r = AP.radius() == null ? 100 : Number(AP.radius());
+  if ($("apRadius")) { $("apRadius").value = r; if ($("apRadiusV")) $("apRadiusV").textContent = r + "%"; }
+  if ($("apDensity")) $("apDensity").value = AP.density();
+  if ($("apMotion")) $("apMotion").value = AP.motion();
+  if ($("apScale")) $("apScale").value = String(Number(AP.scale()) || 1);
+}
+$("apRadius") && ($("apRadius").oninput = (e) => { localStorage.setItem("dialog_ap_radius", e.target.value); if ($("apRadiusV")) $("apRadiusV").textContent = e.target.value + "%"; applyAppearance(); });
+$("apDensity") && ($("apDensity").onchange = (e) => { localStorage.setItem("dialog_ap_density", e.target.value); applyAppearance(); });
+$("apMotion") && ($("apMotion").onchange = (e) => { localStorage.setItem("dialog_ap_motion", e.target.value); applyAppearance(); });
+$("apScale") && ($("apScale").onchange = (e) => { localStorage.setItem("dialog_ap_scale", e.target.value); applyAppearance(); });
 
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
 // он живой и в HTML, и в логике; зато аватар/profileSave/logoutBtn и т.д. обёрнуты
