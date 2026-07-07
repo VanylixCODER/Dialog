@@ -17,8 +17,11 @@
        (used as the web fallback everywhere Segoe UI isn't installed, and as the face
        for the Frutiger Aero theme). -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Open+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <!-- DaisyUI 5 (component + theme layer). Fully @layer-scoped, so our unlayered
-       style.css always wins on conflicts; our themes drive its CSS variables. -->
+  <!-- Cascade-layer order: "legacy" (archived/old component CSS) sits BELOW DaisyUI's
+       layers, so migrating a component = demote its old rules into @layer legacy and
+       DaisyUI takes over. Unlayered CSS still beats everything (untouched components). -->
+  <style>@layer legacy, base, utilities, daisyui;</style>
+  <!-- DaisyUI 5 (component + theme layer). Our themes drive its CSS variables. -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.6.14/daisyui.css" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -32,7 +35,7 @@
     <div class="login-card">
       <!-- Loading state — visible on page load until we know the auth status -->
       <div id="loginLoading" class="login-loading">
-        <div class="lds-dot"><span></span><span></span><span></span></div>
+        <span class="loading loading-dots loading-lg" style="color:var(--accent-400)"></span>
         <p data-i18n="connecting">Connecting…</p>
       </div>
       <!-- Auth forms — shown only when we need the user to sign in -->
