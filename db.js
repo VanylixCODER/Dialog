@@ -194,6 +194,20 @@ export async function initSchema() {
     KEY idx_pins_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // User-created themes (theme studio + workshop). tokens = JSON of the editor values.
+  await pool.query(`CREATE TABLE IF NOT EXISTS themes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    owner VARCHAR(24) NOT NULL,
+    name VARCHAR(48) NOT NULL,
+    tokens TEXT NOT NULL,
+    published TINYINT NOT NULL DEFAULT 0,
+    installs INT NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    KEY idx_themes_owner (owner),
+    KEY idx_themes_pub (published, installs)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // IP bans (admin panel). Any request/socket from a listed IP is refused.
   await pool.query(`CREATE TABLE IF NOT EXISTS banned_ips (
     ip VARCHAR(45) NOT NULL PRIMARY KEY,
@@ -542,6 +556,49 @@ export async function setPrefs(login, patch) {
   vals.push(login);
   await execute("UPDATE users SET " + sets.join(", ") + " WHERE login=?", vals);
 }
+
+// ---------- Themes (studio + workshop) ----------
+const MAX_THEMES_PER_USER = 12;
+const MAX_PUBLISHED_PER_USER = 3;
+const rowToTheme = (t) => ({ id: t.id, owner: t.owner, name: t.name, tokens: safeJson(t.tokens), published: !!t.published, installs: Number(t.installs) || 0, updated_at: Number(t.updated_at) || 0 });
+function safeJson(s) { try { return JSON.parse(s); } catch { return {}; } }
+
+export async function getUserThemes(owner) {
+  const r = await query("SELECT * FROM themes WHERE owner=? ORDER BY updated_at DESC", [owner]);
+  return r.map(rowToTheme);
+}
+export async function getTheme(id) { const r = await query("SELECT * FROM themes WHERE id=?", [id]); return r[0] ? rowToTheme(r[0]) : null; }
+export async function countUserThemes(owner) { const r = await query("SELECT COUNT(*) n FROM themes WHERE owner=?", [owner]); return Number(r[0].n); }
+export async function countPublished(owner) { const r = await query("SELECT COUNT(*) n FROM themes WHERE owner=? AND published=1", [owner]); return Number(r[0].n); }
+export async function saveTheme(owner, { id, name, tokens }) {
+  const now = Date.now();
+  const json = JSON.stringify(tokens || {}).slice(0, 60000);
+  name = String(name || "Untitled").slice(0, 48);
+  if (id) {
+    const cur = await getTheme(id);
+    if (!cur || cur.owner !== owner) return { error: "not_found" };
+    await execute("UPDATE themes SET name=?, tokens=?, updated_at=? WHERE id=? AND owner=?", [name, json, now, id, owner]);
+    return { id };
+  }
+  if (await countUserThemes(owner) >= MAX_THEMES_PER_USER) return { error: "too_many" };
+  const res = await execute("INSERT INTO themes (owner, name, tokens, created_at, updated_at) VALUES (?,?,?,?,?)", [owner, name, json, now, now]);
+  return { id: res.insertId };
+}
+export async function deleteTheme(owner, id) { await execute("DELETE FROM themes WHERE id=? AND owner=?", [id, owner]); }
+export async function setThemePublished(owner, id, published) {
+  await execute("UPDATE themes SET published=?, updated_at=? WHERE id=? AND owner=?", [published ? 1 : 0, Date.now(), id, owner]);
+}
+export async function listWorkshop(q = "", sort = "popular", limit = 60) {
+  const like = "%" + String(q || "").toLowerCase() + "%";
+  const order = sort === "new" ? "updated_at DESC" : "installs DESC, updated_at DESC";
+  const r = await query(
+    "SELECT * FROM themes WHERE published=1 AND (?='%%' OR LOWER(name) LIKE ? OR LOWER(owner) LIKE ?) ORDER BY " + order + " LIMIT ?",
+    [like, like, like, Math.min(200, limit | 0 || 60)]
+  );
+  return r.map(rowToTheme);
+}
+export async function incThemeInstalls(id) { await execute("UPDATE themes SET installs = installs + 1 WHERE id=?", [id]); }
+export const THEME_LIMITS = { max: MAX_THEMES_PER_USER, published: MAX_PUBLISHED_PER_USER };
 
 // ---------- Web Push подписки ----------
 export async function savePushSub(login, sub) {

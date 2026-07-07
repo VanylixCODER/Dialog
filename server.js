@@ -40,6 +40,7 @@ import {
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend,
   getPrefs, setPrefs, bumpInviteUse,
+  getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
   getPinnedChats, savePinnedChats,
   savePushSub, getPushSubs, deletePushSub,
@@ -789,6 +790,48 @@ app.post("/api/prefs", async (req, res) => {
   await setPrefs(me.login, patch);
   for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
   res.json({ ok: true, prefs: await getPrefs(me.login) });
+});
+
+// ---------- REST: Themes (studio + workshop) ----------
+app.get("/api/themes", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json({ themes: await getUserThemes(me.login), limits: THEME_LIMITS, published: await countPublished(me.login) });
+});
+app.post("/api/themes", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const { id, name, tokens } = req.body || {};
+  if (!tokens || typeof tokens !== "object") return res.status(400).json({ error: "bad_tokens" });
+  const out = await saveTheme(me.login, { id: id || null, name, tokens });
+  if (out.error) return res.status(400).json(out);
+  res.json({ ok: true, id: out.id });
+});
+app.delete("/api/themes/:id", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  await deleteTheme(me.login, Number(req.params.id) || 0);
+  res.json({ ok: true });
+});
+app.post("/api/themes/:id/publish", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = Number(req.params.id) || 0;
+  const th = await getTheme(id);
+  if (!th || th.owner !== me.login) return res.status(404).json({ error: "not_found" });
+  const publish = !!req.body.published;
+  if (publish && !th.published && (await countPublished(me.login)) >= THEME_LIMITS.published) {
+    return res.status(400).json({ error: "publish_limit", limit: THEME_LIMITS.published });
+  }
+  await setThemePublished(me.login, id, publish);
+  res.json({ ok: true, published: publish });
+});
+app.get("/api/themes/workshop", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json({ themes: await listWorkshop(String(req.query.q || ""), String(req.query.sort || "popular")) });
+});
+app.post("/api/themes/:id/install", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const th = await getTheme(Number(req.params.id) || 0);
+  if (!th || !th.published) return res.status(404).json({ error: "not_found" });
+  await incThemeInstalls(th.id);
+  res.json({ ok: true, theme: { name: th.name, tokens: th.tokens, owner: th.owner } });
 });
 
 app.post("/api/friend", async (req, res) => {
