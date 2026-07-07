@@ -312,6 +312,35 @@
             <label class="switch"><input type="checkbox" id="prefReadReceipts" /><span class="switch-track"></span></label>
           </div>
           <div class="form-error" id="prefMsg"></div>
+
+          <div class="uppercase-tag" data-i18n="ap_title" style="margin-top:8px">Appearance</div>
+          <div class="pref-row">
+            <div class="pref-label"><b data-i18n="ap_radius">Corner roundness</b><small><em id="apRadiusV"></em></small></div>
+            <input type="range" id="apRadius" class="ap-range" min="0" max="180" step="10" />
+          </div>
+          <div class="pref-row">
+            <div class="pref-label"><b data-i18n="ap_density">Density</b><small data-i18n="ap_density_d">Comfortable or compact spacing</small></div>
+            <select id="apDensity" class="field pref-select">
+              <option value="comfortable" data-i18n="ap_comfortable">Comfortable</option>
+              <option value="dense" data-i18n="ap_compact">Compact</option>
+            </select>
+          </div>
+          <div class="pref-row">
+            <div class="pref-label"><b data-i18n="ap_motion">Animations</b><small data-i18n="ap_motion_d">How much the UI moves</small></div>
+            <select id="apMotion" class="field pref-select">
+              <option value="full" data-i18n="ap_motion_full">Full</option>
+              <option value="subtle" data-i18n="ap_motion_subtle">Subtle</option>
+              <option value="off" data-i18n="ap_motion_off">Off</option>
+            </select>
+          </div>
+          <div class="pref-row">
+            <div class="pref-label"><b data-i18n="ap_size">Interface size</b><small data-i18n="ap_size_d">Scale the whole UI</small></div>
+            <select id="apScale" class="field pref-select">
+              <option value="0.9" data-i18n="ap_small">Small</option>
+              <option value="1" data-i18n="ap_normal">Normal</option>
+              <option value="1.1" data-i18n="ap_large">Large</option>
+            </select>
+          </div>
         </section>
         <!-- Contacts -->
         <section class="settings-pane" data-pane="contacts" role="tabpanel">

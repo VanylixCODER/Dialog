@@ -56,11 +56,12 @@
   --shadow-md: 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset, 0 12px 38px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 0 0 1px rgba(var(--primary-rgb), 0.16) inset, 0 22px 64px rgba(0, 0, 0, 0.6);
 
-  /* Радиусы */
-  --r-1: 4px;
-  --r-2: 6px;
-  --r-3: 10px;
-  --r-4: 14px;
+  /* Радиусы — scaled by the "corner roundness" appearance knob (--radius-scale). */
+  --radius-scale: 1;
+  --r-1: calc(4px * var(--radius-scale));
+  --r-2: calc(6px * var(--radius-scale));
+  --r-3: calc(10px * var(--radius-scale));
+  --r-4: calc(14px * var(--radius-scale));
   --r-pill: 999px;
 
   /* Тайминги */
@@ -4192,3 +4193,24 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 .ts-thumb .tt-bub.out { align-self: flex-end; width: 46%; border-style: solid; border-width: 1px; }
 .ts-thumb .tt-status { display: flex; gap: 4px; position: absolute; right: 8px; bottom: 7px; }
 .ts-thumb .tt-status i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+
+/* ===================== Appearance knobs ===================== */
+/* Font / UI size — scales the whole interface (Chromium/WebKit zoom). */
+#app { zoom: var(--ui-scale, 1); }
+
+/* Density — "compact" trims the roomy paddings on the busiest surfaces. */
+body.dense .chat-item { padding-top: 6px; padding-bottom: 6px; }
+body.dense .bubble { padding: 6px 12px; }
+body.dense .msg { margin-top: 4px; }
+body.dense .composer { padding: 8px 16px; }
+body.dense .settings-pane, body.dense .ts-pane, body.dense .admin-pane { gap: 9px; }
+body.dense .contact-row, body.dense .member { padding-top: 6px; padding-bottom: 6px; }
+
+/* Animation level — default (no class) = full. Subtle shortens; Off disables. */
+body.motion-subtle { --t-fast: 80ms; --t-base: 130ms; --t-slow: 200ms; }
+body.motion-off, body.motion-off *, body.motion-off *::before, body.motion-off *::after {
+  animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important; scroll-behavior: auto !important;
+}
+.ap-range { width: 160px; max-width: 50%; accent-color: var(--accent-400); cursor: pointer; }
+.pref-label small em { color: var(--accent-300); font-style: normal; font-weight: 700; }
