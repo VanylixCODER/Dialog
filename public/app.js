@@ -4589,8 +4589,24 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     tsMsg(t("ts_published")); loadMine();
   });
 
-  function swatch(tk) {
-    return `<span class="ts-sw"><i style="background:${escapeHtml(tk.primary)}"></i><i style="background:${escapeHtml(tk.secondary)}"></i><i style="background:${escapeHtml(tk.bg)}"></i><i style="background:${escapeHtml(tk.online)}"></i></span>`;
+  // Mini mock-up of the app painted in the theme's colors — a real little preview.
+  function swatch(tkRaw) {
+    const t = { ...DEFAULT_TOKENS, ...(tkRaw || {}) };
+    const bg2 = shade(t.bg, 12), line = shade(t.bg, 30), txt = shade(t.primary, 55);
+    const st = (c) => `<i style="background:${escapeHtml(c)}"></i>`;
+    return `<div class="ts-thumb" style="background:${escapeHtml(t.bg)}">
+      <div class="tt-side" style="background:${escapeHtml(bg2)}">
+        <span class="tt-ava" style="background:${escapeHtml(t.primary)}"></span>
+        <span class="tt-l" style="background:${escapeHtml(line)}"></span>
+        <span class="tt-l" style="background:${escapeHtml(line)}"></span>
+      </div>
+      <div class="tt-main">
+        <div class="tt-head" style="border-color:${escapeHtml(line)}"><b style="background:${escapeHtml(t.primary)}"></b><em style="background:${escapeHtml(line)}"></em></div>
+        <span class="tt-bub" style="background:${escapeHtml(bg2)}"></span>
+        <span class="tt-bub out" style="background:${escapeHtml(t.primary)};border-color:rgba(${hexToRgb(t.secondary).join(",")},.9)"></span>
+        <div class="tt-status">${st(t.online)}${st(t.dnd)}${st(t.offline)}</div>
+      </div>
+    </div>`;
   }
 
   // ---- my themes ----
