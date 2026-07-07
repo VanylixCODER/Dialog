@@ -257,6 +257,87 @@ function applyTheme(key) {
   // the open chat's background immediately instead of waiting for the next chat open.
   try { applyWallpaper(); } catch {}
 }
+
+// ---------- User themes (Theme Studio + Workshop) ----------
+// A user theme is a set of tokens; applying it injects a <style> that overrides the
+// CSS variables (+ a few rules) scoped to body[data-theme="user"], loads its Google Font,
+// and paints its background. Fully separate from the built-in data-theme presets.
+const DEFAULT_TOKENS = {
+  name: "My Theme", primary: "#00ff5a", secondary: "#3df58a", bg: "#000604",
+  online: "#3fb950", dnd: "#ff5252", offline: "#6e7681",
+  alpha: 0.92, blur: 6, font: "", bgImage: "",
+};
+function hexToRgb(hex) {
+  hex = String(hex || "").trim().replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  const n = parseInt(hex, 16);
+  if (isNaN(n) || hex.length !== 6) return [0, 255, 90];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const rgbStr = (hex) => hexToRgb(hex).join(", ");
+function shade(hex, pct) {
+  const [r, g, b] = hexToRgb(hex); const f = pct / 100;
+  const adj = (c) => Math.max(0, Math.min(255, Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f)));
+  return `rgb(${adj(r)}, ${adj(g)}, ${adj(b)})`;
+}
+function themeCss(tk) {
+  const t = { ...DEFAULT_TOKENS, ...(tk || {}) };
+  const p = rgbStr(t.primary);
+  const bg = hexToRgb(t.bg).join(", ");
+  const alpha = Math.max(0.2, Math.min(1, Number(t.alpha)));
+  const blur = Math.max(0, Math.min(40, Number(t.blur)));
+  const s = 'body[data-theme="user"]';
+  let css = `${s}{
+    --primary-rgb:${p};
+    --accent-100:${shade(t.primary, 72)};--accent-200:${shade(t.primary, 46)};--accent-300:${shade(t.primary, 22)};
+    --accent-400:${t.primary};--accent-500:${shade(t.primary, -26)};--accent-600:${shade(t.primary, -46)};
+    --text:${shade(t.primary, 22)};--text-strong:${shade(t.primary, 72)};--text-dim:${shade(t.primary, -26)};
+    --secondary-rgb:${rgbStr(t.secondary)};
+    --bg-0:${shade(t.bg, -34)};--bg-1:${t.bg};--bg-2:${shade(t.bg, 7)};--bg-3:${shade(t.bg, 15)};--bg-4:${shade(t.bg, 26)};
+    ${t.font ? `font-family:'${t.font.replace(/[^\w \-]/g, "")}', ui-sans-serif, system-ui, sans-serif;` : ""}
+  }
+  ${s} .st-online{background:${t.online} !important;box-shadow:0 0 0 2px rgba(${hexToRgb(t.online).join(",")},.25) !important;}
+  ${s} .st-dnd{background:${t.dnd} !important;}
+  ${s} .st-offline{background:${t.offline} !important;opacity:.85;}
+  ${s} .msg.me .bubble{border-color:rgba(var(--secondary-rgb),.55);}
+  ${s} a{color:rgba(var(--secondary-rgb),1);}`;
+  if (alpha < 0.999 || blur > 0) {
+    const surf = ".chatlist, .chat-head, .composer, .settings-card, .admin-card, .chat-menu, .account-menu, .call-actions, .cl-head";
+    css += `\n${s} :is(${surf}){background-color:rgba(${bg}, ${alpha});${blur ? `backdrop-filter:blur(${blur}px) saturate(130%);-webkit-backdrop-filter:blur(${blur}px) saturate(130%);` : ""}}`;
+  }
+  if (t.bgImage) {
+    const url = String(t.bgImage).replace(/["\\]/g, "");
+    css += `\n${s} .messages, ${s} .empty-state{background-image:url("${url}") !important;background-size:cover !important;background-position:center !important;}`;
+  }
+  return css;
+}
+function loadThemeFont(font) {
+  const clean = String(font || "").replace(/[^\w \-]/g, "").trim();
+  let link = document.getElementById("user-theme-font");
+  if (!clean) { if (link) link.remove(); return; }
+  const href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(clean).replace(/%20/g, "+") + ":wght@400;500;600;700&display=swap";
+  if (!link) { link = document.createElement("link"); link.id = "user-theme-font"; link.rel = "stylesheet"; document.head.appendChild(link); }
+  if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+}
+function applyUserTheme(tk, opts = {}) {
+  const preview = !!opts.preview;
+  const id = preview ? "user-theme-preview" : "user-theme";
+  let style = document.getElementById(id);
+  if (!style) { style = document.createElement("style"); style.id = id; document.head.appendChild(style); }
+  style.textContent = themeCss(tk);
+  loadThemeFont(tk.font);
+  document.body.dataset.theme = "user";
+  if (!preview) {
+    const pv = document.getElementById("user-theme-preview"); if (pv) pv.remove();
+    try { localStorage.setItem("dialog_user_theme", JSON.stringify(tk)); localStorage.setItem("dialog_theme", "user"); } catch {}
+    const grid = $("themeGrid"); if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.remove("active"));
+  }
+}
+function clearThemePreview() {
+  const pv = document.getElementById("user-theme-preview"); if (pv) pv.remove();
+  // Restore whatever real theme was active before previewing.
+  try { const saved = localStorage.getItem("dialog_theme"); if (saved === "user") { const tk = JSON.parse(localStorage.getItem("dialog_user_theme") || "{}"); applyUserTheme(tk); } else { const st = document.getElementById("user-theme"); if (st) st.remove(); loadThemeFont(""); applyTheme(saved || "matrix"); } } catch {}
+}
 // Restore theme from localStorage on init WITHOUT triggering the flashbang easter egg.
 // Reads the saved key and stamps body[data-theme] directly. Invalid/missing keys leave
 // the attribute empty, so :root defaults (matrix-style tokens) apply — same as before
@@ -311,6 +392,10 @@ function applyTheme(key) {
     function loadSavedTheme() {
   try {
     const saved = localStorage.getItem("dialog_theme");
+    if (saved === "user") {
+      const tk = JSON.parse(localStorage.getItem("dialog_user_theme") || "null");
+      if (tk) { applyUserTheme(tk); return; }
+    }
     if (saved && THEMES.find((x) => x.key === saved)) document.body.dataset.theme = saved;
   } catch {}
 }
@@ -4422,4 +4507,155 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     if (ok) { $("adminIpInput").value = ""; loadAdminIps(); loadAdminStats(); notify(t("adm_done_banip", { ip: data.ip })); }
     else notify((data && data.error) || "error");
   });
+})();
+
+// ==================== Theme Studio ====================
+(function initThemeStudio() {
+  const ov = $("themeStudio"); if (!ov) return;
+  let cur = { ...DEFAULT_TOKENS };
+  let curId = null;
+
+  function open() { ov.classList.remove("hidden"); showTab("editor"); writeControls(cur); loadMine(); }
+  function close() { ov.classList.add("hidden"); clearThemePreview(); }
+  $("openThemeStudio") && ($("openThemeStudio").onclick = open);
+  $("tsClose") && ($("tsClose").onclick = close);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  function showTab(name) {
+    ov.querySelectorAll(".settings-tab").forEach((b) => b.classList.toggle("active", b.dataset.tstab === name));
+    ov.querySelectorAll(".ts-pane").forEach((p) => p.classList.toggle("active", p.dataset.tspane === name));
+    if (name === "mine") loadMine();
+    if (name === "workshop") loadWorkshop();
+  }
+  ov.querySelectorAll(".settings-tab").forEach((b) => b.onclick = () => showTab(b.dataset.tstab));
+
+  // ---- editor controls ----
+  const C = {
+    name: $("tsName"), primary: $("tsPrimary"), secondary: $("tsSecondary"), bg: $("tsBg"),
+    online: $("tsOnline"), dnd: $("tsDnd"), offline: $("tsOffline"),
+    alpha: $("tsAlpha"), blur: $("tsBlur"), font: $("tsFont"), fontCustom: $("tsFontCustom"), bgUrl: $("tsBgUrl"),
+  };
+  function writeControls(tk) {
+    C.name.value = tk.name || "My Theme";
+    C.primary.value = tk.primary; C.secondary.value = tk.secondary; C.bg.value = tk.bg;
+    C.online.value = tk.online; C.dnd.value = tk.dnd; C.offline.value = tk.offline;
+    C.alpha.value = Math.round((tk.alpha ?? 0.92) * 100); C.blur.value = tk.blur ?? 6;
+    const presets = [...C.font.options].map((o) => o.value);
+    if (tk.font && !presets.includes(tk.font)) { C.font.value = "__custom"; C.fontCustom.classList.remove("hidden"); C.fontCustom.value = tk.font; }
+    else { C.font.value = tk.font || ""; C.fontCustom.classList.add("hidden"); C.fontCustom.value = ""; }
+    C.bgUrl.value = tk.bgImage || "";
+    $("tsAlphaV").textContent = C.alpha.value + "%"; $("tsBlurV").textContent = C.blur.value + "px";
+  }
+  function readControls() {
+    const font = C.font.value === "__custom" ? (C.fontCustom.value || "").trim() : C.font.value;
+    return {
+      name: (C.name.value || "My Theme").trim(), primary: C.primary.value, secondary: C.secondary.value, bg: C.bg.value,
+      online: C.online.value, dnd: C.dnd.value, offline: C.offline.value,
+      alpha: Number(C.alpha.value) / 100, blur: Number(C.blur.value), font, bgImage: (C.bgUrl.value || "").trim(),
+    };
+  }
+  function livePreview() {
+    cur = readControls();
+    $("tsAlphaV").textContent = C.alpha.value + "%"; $("tsBlurV").textContent = C.blur.value + "px";
+    applyUserTheme(cur, { preview: true });
+  }
+  Object.values(C).forEach((el) => { if (el) el.addEventListener("input", livePreview); });
+  C.font.addEventListener("change", () => { C.fontCustom.classList.toggle("hidden", C.font.value !== "__custom"); livePreview(); });
+  $("tsBgUpload") && ($("tsBgUpload").onclick = () => $("tsBgFile").click());
+  $("tsBgFile") && ($("tsBgFile").onchange = (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { tsMsg(t("ts_img_too_big"), true); return; }
+    const r = new FileReader(); r.onload = () => { C.bgUrl.value = r.result; livePreview(); }; r.readAsDataURL(f);
+  });
+  $("tsReset") && ($("tsReset").onclick = () => { cur = { ...DEFAULT_TOKENS }; curId = null; writeControls(cur); livePreview(); });
+
+  function tsMsg(text, err) { const m = $("tsMsg"); if (!m) return; m.className = "form-error" + (err ? "" : " ok"); m.textContent = text; }
+
+  // ---- save / publish ----
+  async function save() {
+    cur = readControls();
+    const { ok, data } = await api("/api/themes", { id: curId, name: cur.name, tokens: cur });
+    if (!ok) { tsMsg((data && data.error) === "too_many" ? t("ts_too_many") : t("err_generic"), true); return null; }
+    curId = data.id;
+    applyUserTheme(cur); // persist + apply for real
+    tsMsg(t("ts_saved"));
+    loadMine();
+    return curId;
+  }
+  $("tsSave") && ($("tsSave").onclick = save);
+  $("tsPublish") && ($("tsPublish").onclick = async () => {
+    let id = curId; if (!id) id = await save(); if (!id) return;
+    const { ok, data } = await api(`/api/themes/${id}/publish`, { published: true });
+    if (!ok) { tsMsg((data && data.error) === "publish_limit" ? t("ts_publish_limit", { n: (data && data.limit) || 3 }) : t("err_generic"), true); return; }
+    tsMsg(t("ts_published")); loadMine();
+  });
+
+  function swatch(tk) {
+    return `<span class="ts-sw"><i style="background:${escapeHtml(tk.primary)}"></i><i style="background:${escapeHtml(tk.secondary)}"></i><i style="background:${escapeHtml(tk.bg)}"></i><i style="background:${escapeHtml(tk.online)}"></i></span>`;
+  }
+
+  // ---- my themes ----
+  async function loadMine() {
+    const { ok, data } = await api("/api/themes", null, "GET");
+    const box = $("tsMine"); if (!box) return;
+    if (!ok) { box.innerHTML = ""; return; }
+    $("tsMineHint").textContent = t("ts_mine_hint", { pub: data.published, max: data.limits.published });
+    if (!data.themes.length) { box.innerHTML = `<div class="admin-empty">${t("ts_no_mine")}</div>`; return; }
+    box.innerHTML = data.themes.map((th) => `<div class="ts-item" data-id="${th.id}">
+      ${swatch(th.tokens)}
+      <div class="ts-item-meta"><b>${escapeHtml(th.name)}</b><small>${th.published ? "🌐 " + t("ts_published_tag") + " · " + th.installs + " ⤓" : t("ts_private")}</small></div>
+      <div class="ts-item-actions">
+        <button data-a="apply">${t("ts_apply")}</button>
+        <button data-a="edit">${t("ts_edit")}</button>
+        <button data-a="pub" class="${th.published ? "" : "accent"}">${th.published ? t("ts_unpublish") : t("ts_publish")}</button>
+        <button data-a="del" class="danger">${t("ts_delete")}</button>
+      </div></div>`).join("");
+    box.querySelectorAll(".ts-item").forEach((el) => {
+      const th = data.themes.find((x) => x.id === Number(el.dataset.id));
+      el.querySelectorAll("button").forEach((b) => b.onclick = () => mineAction(b.dataset.a, th));
+    });
+  }
+  async function mineAction(a, th) {
+    if (a === "apply") { cur = { ...DEFAULT_TOKENS, ...th.tokens }; curId = th.id; applyUserTheme(cur); notify(t("ts_applied")); }
+    else if (a === "edit") { cur = { ...DEFAULT_TOKENS, ...th.tokens }; curId = th.id; writeControls(cur); showTab("editor"); livePreview(); }
+    else if (a === "pub") {
+      const { ok, data } = await api(`/api/themes/${th.id}/publish`, { published: !th.published });
+      if (!ok) { notify((data && data.error) === "publish_limit" ? t("ts_publish_limit", { n: (data && data.limit) || 3 }) : t("err_generic")); return; }
+      loadMine();
+    } else if (a === "del") {
+      if (!confirm(t("ts_del_confirm", { name: th.name }))) return;
+      await api(`/api/themes/${th.id}`, null, "DELETE");
+      if (curId === th.id) curId = null;
+      loadMine();
+    }
+  }
+
+  // ---- workshop ----
+  async function loadWorkshop() {
+    const q = ($("tsWsSearch").value || "").trim();
+    const { ok, data } = await api("/api/themes/workshop?q=" + encodeURIComponent(q), null, "GET");
+    const box = $("tsWorkshop"); if (!box) return;
+    if (!ok) { box.innerHTML = ""; return; }
+    if (!data.themes.length) { box.innerHTML = `<div class="admin-empty">${t("ts_no_ws")}</div>`; return; }
+    box.innerHTML = data.themes.map((th) => `<div class="ts-item" data-id="${th.id}">
+      ${swatch(th.tokens)}
+      <div class="ts-item-meta"><b>${escapeHtml(th.name)}</b><small>${t("ts_by", { who: "@" + escapeHtml(th.owner) })} · ${th.installs} ⤓</small></div>
+      <div class="ts-item-actions">
+        <button data-a="apply" class="accent">${t("ts_apply")}</button>
+        <button data-a="copy">${t("ts_save_copy")}</button>
+      </div></div>`).join("");
+    box.querySelectorAll(".ts-item").forEach((el) => {
+      const th = data.themes.find((x) => x.id === Number(el.dataset.id));
+      el.querySelectorAll("button").forEach((b) => b.onclick = () => wsAction(b.dataset.a, th));
+    });
+  }
+  async function wsAction(a, th) {
+    const { ok, data } = await api(`/api/themes/${th.id}/install`, {});
+    const tokens = (ok && data.theme && data.theme.tokens) ? data.theme.tokens : th.tokens;
+    if (a === "apply") { cur = { ...DEFAULT_TOKENS, ...tokens }; curId = null; applyUserTheme(cur); notify(t("ts_applied")); }
+    else if (a === "copy") {
+      const r = await api("/api/themes", { name: (th.name || "Theme") + " *", tokens: { ...DEFAULT_TOKENS, ...tokens } });
+      notify(r.ok ? t("ts_copied") : ((r.data && r.data.error) === "too_many" ? t("ts_too_many") : t("err_generic")));
+    }
+  }
+  $("tsWsSearch") && ($("tsWsSearch").oninput = debounce(loadWorkshop, 300));
 })();
