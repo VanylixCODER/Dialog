@@ -83,6 +83,21 @@
 
   <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="app hidden">
+    <!-- Slim icon rail (primary navigation). Buttons keep their ids so existing
+         handlers stay wired; a couple are new (theme / settings). -->
+    <nav class="app-rail" id="appRail" aria-label="Main">
+      <div class="rail-brand"><img src="/src/lil_dialog.webp" alt="Dialog" /></div>
+      <div class="rail-group">
+        <button id="newGroupBtn" class="rail-btn" data-i18n-title="new_group" title="New group">＋</button>
+        <button id="contactsBtn" class="rail-btn" data-i18n-title="contacts" title="Contacts">👥</button>
+        <button id="accountBtn" class="rail-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
+        <button id="railTheme" class="rail-btn" data-i18n-title="ts_title" title="Theme Studio">🎨</button>
+        <button id="adminBtn" class="rail-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
+        <button id="installBtn" class="rail-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
+      </div>
+      <div class="rail-spacer"></div>
+      <button id="railSettings" class="rail-btn" data-i18n-title="settings" title="Settings">⚙</button>
+    </nav>
     <aside class="chatlist">
       <div class="cl-head">
         <div class="avatar me-trigger" id="myAvatar" tabindex="0" role="button" data-i18n-title="open_profile" title="Open profile" aria-label="Open profile">?</div>
@@ -91,11 +106,6 @@
           <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
-        <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
-        <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
-        <button id="adminBtn" class="hicon-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
-        <button id="accountBtn" class="hicon-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
-        <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
         <div class="vb-info" id="vbInfo"><span class="vb-dot"></span><span class="vb-label"></span></div>
