@@ -55,11 +55,12 @@ batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in pro
 - [ ] Reuse MediaRecorder→`socket.emit(audio)`; generalize `resetVoice()`.
 - [ ] Deploy + verify on phone + desktop.
 
-## Batch 5 — Matrix-rain chat background  [ ]
-- [ ] Refactor `matrix.js` into reusable renderer (`mount/setOptions/start/stop`); keep login instance.
-- [ ] Canvas behind chat; show on Matrix theme (default) or global toggle; ~0.8 opacity + light blur; hide when custom bg set.
-- [ ] Speed + character color from Appearances.
-- [ ] Deploy + verify.
+## Batch 5 — Matrix-rain chat background  [x]
+- [x] `#chatMatrix` canvas behind messages (z-index:-1 inside isolated `.chat`); ~0.8 opacity + blur(2px).
+- [x] `updateChatMatrix()` hooked into `applyWallpaper()` (covers chat open, bg change, theme change) + user-theme apply + visibilitychange.
+- [x] `matrixEffective()` = ON by default for Matrix theme, OFF elsewhere (stored on/off overrides); hidden when a custom bg is set.
+- [x] Appearance subtab: matrix toggle + speed + character-color, persisted; en+ru strings.
+- [~] Deploy + verify.
 
 ## Batch 6 — Calls: incoming buttons + Cava voice visualizer  [ ]
 - [ ] Remake incoming-call buttons (`#toastJoin`/`#toastClose` `.ci-btn`) — flat, centered icons.
