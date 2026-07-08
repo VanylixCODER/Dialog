@@ -112,6 +112,7 @@
     if (grps.ok && grps.data.groups) grps.data.groups.forEach((g) => chats.set("@grp:" + g.id, { key: "@grp:" + g.id, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0 }));
     await loadPins(); refreshPresence(); renderList(); loadRelations();
     api("/api/prefs").then(({ ok, data }) => { if (ok) me.prefReadReceipts = data.readReceipts !== false; });
+    api("/api/admin/stats").then(({ ok }) => { if (ok) $("#rail-admin").classList.remove("hidden"); });
   }
   function connect() {
     socket = io();
@@ -641,7 +642,11 @@
   }
   $("#report-close").onclick = () => $("#report").classList.add("hidden");
   $("#report").onclick = (e) => { if (e.target.id === "report") $("#report").classList.add("hidden"); };
-  function openThemes() {
+  function applyServerTheme(tokens, name) {
+    if (!tokens || !tokens.primary || !tokens.bg) return toast("That theme isn't compatible with this app");
+    const t = { ...getCustom(), ...tokens }; localStorage.setItem("dialog_beta_custom", JSON.stringify(t)); localStorage.setItem("dialog_beta_theme", "custom"); applyCustom(t); toast((name ? name + " " : "") + "applied");
+  }
+  async function openThemes() {
     $("#set-title").textContent = "Themes";
     const cur = localStorage.getItem("dialog_beta_theme") || "dialog"; const tk = getCustom();
     $("#set-body").innerHTML = `<div class="theme-grid">${THEMES.map(([k, name, sw]) => `<div class="theme-card ${cur === k ? "active" : ""}" data-t="${k}"><div class="theme-sw">${sw.map((c) => `<i style="background:${c}"></i>`).join("")}</div><b>${name}${k === "matrix" ? " ⛶" : ""}</b></div>`).join("")}
@@ -659,8 +664,73 @@
     const liveB = () => { const t = readB(); localStorage.setItem("dialog_beta_custom", JSON.stringify(t)); applyCustom(t); $$(".theme-card").forEach((x) => x.classList.toggle("active", x.dataset.t === "custom")); };
     ["b-primary", "b-secondary", "b-bg", "b-text", "b-blur", "b-glow"].forEach((id) => $("#" + id).addEventListener("input", liveB));
     $("#b-apply").onclick = () => { liveB(); localStorage.setItem("dialog_beta_theme", "custom"); toast("Custom theme applied"); };
+    // cloud themes (my themes + workshop)
+    const cloud = document.createElement("div"); cloud.id = "theme-cloud"; $("#set-body").appendChild(cloud);
+    renderThemeCloud(cloud);
     $("#settings").classList.remove("hidden");
   }
+  async function renderThemeCloud(cloud) {
+    const mine = (await api("/api/themes")).data || { themes: [], limits: {}, published: 0 };
+    const shop = (await api("/api/themes/workshop")).data || { themes: [] };
+    const swatch = (t) => `<span class="theme-sw sm">${["primary", "bg", "secondary"].map((k) => `<i style="background:${esc((t.tokens && t.tokens[k]) || "#333")}"></i>`).join("")}</span>`;
+    cloud.innerHTML = `<div class="set-sec">My themes</div>
+      <button class="btn btn-primary btn-sm" id="th-save" style="align-self:flex-start">Save current as theme</button>
+      <div class="cloud-list">${(mine.themes || []).map((t) => `<div class="cloud-item" data-id="${t.id}">${swatch(t)}<span class="ci-name">${esc(t.name || "Untitled")}</span><span class="ci-acts"><button class="btn btn-xs" data-apply>Apply</button><button class="btn btn-xs btn-ghost" data-pub>${t.published ? "Unpublish" : "Publish"}</button><button class="btn btn-xs btn-ghost danger" data-del>✕</button></span></div>`).join("") || '<div class="muted sm">No saved themes yet.</div>'}</div>
+      <div class="set-sec">Workshop</div>
+      <div class="cloud-list">${(shop.themes || []).map((t) => `<div class="cloud-item" data-id="${t.id}">${swatch(t)}<span class="ci-name">${esc(t.name || "Untitled")}<small class="muted"> · @${esc(t.owner || "")}</small></span><span class="ci-acts"><button class="btn btn-xs" data-install>Install</button></span></div>`).join("") || '<div class="muted sm">Nothing published yet.</div>'}</div>`;
+    $("#th-save").onclick = async () => { const name = prompt("Theme name", "My theme"); if (!name) return; const { ok, data } = await api("/api/themes", { name: name.slice(0, 40), tokens: getCustom() }); toast(ok ? "Saved" : (data.error || "Couldn't save")); if (ok) renderThemeCloud(cloud); };
+    const shopById = Object.fromEntries((shop.themes || []).map((t) => [t.id, t])), mineById = Object.fromEntries((mine.themes || []).map((t) => [t.id, t]));
+    $$(".cloud-item", cloud).forEach((row) => {
+      const id = +row.dataset.id;
+      const ap = row.querySelector("[data-apply]"); if (ap) ap.onclick = () => applyServerTheme(mineById[id] && mineById[id].tokens, mineById[id] && mineById[id].name);
+      const pub = row.querySelector("[data-pub]"); if (pub) pub.onclick = async () => { const t = mineById[id]; const { ok, data } = await api("/api/themes/" + id + "/publish", { published: !t.published }); toast(ok ? (data.published ? "Published" : "Unpublished") : (data.error === "publish_limit" ? "Publish limit reached" : "Failed")); if (ok) renderThemeCloud(cloud); };
+      const del = row.querySelector("[data-del]"); if (del) del.onclick = async () => { if (!confirm("Delete this theme?")) return; await api("/api/themes/" + id, null, "DELETE"); renderThemeCloud(cloud); };
+      const inst = row.querySelector("[data-install]"); if (inst) inst.onclick = async () => { const { ok, data } = await api("/api/themes/" + id + "/install"); if (ok && data.theme) applyServerTheme(data.theme.tokens, data.theme.name); else toast("Couldn't install"); };
+    });
+  }
+  /* ---------- admin ---------- */
+  let admT;
+  async function openAdmin() {
+    $("#set-title").textContent = "Admin";
+    const body = $("#set-body"); body.innerHTML = '<div class="muted sm">Loading…</div>';
+    const stats = (await api("/api/admin/stats")).data || {};
+    const cards = [["users", "Users"], ["online", "Online"], ["banned", "Banned"], ["messages", "Messages"], ["groups", "Groups"], ["reports", "Reports"]];
+    body.innerHTML = `<div class="admin-stats">${cards.map(([k, l]) => `<div class="astat"><b>${stats[k] ?? "—"}</b><span>${l}</span></div>`).join("")}</div>
+      <div class="set-sec">Pending reports</div><div id="adm-reports"></div>
+      <div class="set-sec">Users</div><input class="set-input" id="adm-q" placeholder="Search users…"><div id="adm-users"></div>`;
+    loadAdminReports(); loadAdminUsers("");
+    $("#adm-q").oninput = (e) => { clearTimeout(admT); const q = e.target.value; admT = setTimeout(() => loadAdminUsers(q), 300); };
+    $("#settings").classList.remove("hidden");
+  }
+  async function loadAdminReports() {
+    const box = $("#adm-reports"); if (!box) return; const { data } = await api("/api/admin/reports?filter=pending");
+    const list = Array.isArray(data) ? data : (data.reports || []);
+    box.innerHTML = list.length ? list.map((r) => `<div class="adm-rep" data-id="${r.id}" data-target="${esc(r.target)}">
+      <div><b>@${esc(r.target)}</b> <span class="badge badge-xs badge-warning">${esc(r.reason)}</span> <small class="muted">by @${esc(r.reporter)}</small></div>
+      ${r.description ? `<div class="sm">${esc(r.description)}</div>` : ""}${r.msg_preview ? `<div class="sm muted">“${esc(r.msg_preview)}”</div>` : ""}
+      <div class="adm-acts"><button class="btn btn-xs btn-ghost" data-false>False</button><button class="btn btn-xs" data-ban="1">Ban 1d</button><button class="btn btn-xs" data-ban="7">Ban 7d</button><button class="btn btn-xs btn-error" data-life>Ban life</button></div></div>`).join("") : '<div class="muted sm">No pending reports 🎉</div>';
+    $$(".adm-rep", box).forEach((row) => {
+      const id = row.dataset.id, resolve = async (b) => { await api(`/api/admin/reports/${id}/resolve`, b); loadAdminReports(); };
+      row.querySelector("[data-false]").onclick = () => resolve({ action: "false" });
+      $$("[data-ban]", row).forEach((b) => b.onclick = () => resolve({ action: "ipban", days: +b.dataset.ban }));
+      row.querySelector("[data-life]").onclick = () => { if (confirm("Permanently ban @" + row.dataset.target + "?")) resolve({ action: "ipban", life: true }); };
+    });
+  }
+  async function loadAdminUsers(q) {
+    const box = $("#adm-users"); if (!box) return; const { data } = await api("/api/admin/users?q=" + encodeURIComponent(q));
+    const list = Array.isArray(data) ? data : [];
+    box.innerHTML = list.length ? list.map((u) => `<div class="adm-user" data-login="${esc(u.login)}">
+      <span class="dot ${u.online ? "online" : "offline"}" style="position:static;display:inline-block"></span>
+      <span class="au-name"><b>${esc(u.name)}</b> <small class="muted">@${esc(u.login)}</small>${u.banned ? ' <span class="badge badge-xs badge-error">banned</span>' : ""}${u.report_reason ? ' <span class="badge badge-xs badge-warning">unstable</span>' : ""}</span>
+      <span class="ci-acts">${u.online ? '<button class="btn btn-xs btn-ghost" data-kick>Kick</button>' : ""}${u.report_reason ? '<button class="btn btn-xs btn-ghost" data-clear>Clear</button>' : ""}<button class="btn btn-xs ${u.banned ? "" : "btn-error"}" data-ban>${u.banned ? "Unban" : "Ban"}</button></span></div>`).join("") : '<div class="muted sm">No users</div>';
+    $$(".adm-user", box).forEach((row) => {
+      const login = row.dataset.login;
+      const kb = row.querySelector("[data-kick]"); if (kb) kb.onclick = async () => { await api("/api/admin/kick", { login }); toast("Kicked all devices"); };
+      const cl = row.querySelector("[data-clear]"); if (cl) cl.onclick = async () => { await api("/api/admin/clear-unstable", { login }); loadAdminUsers($("#adm-q").value); };
+      row.querySelector("[data-ban]").onclick = async () => { const banned = row.querySelector("[data-ban]").textContent === "Ban"; await api("/api/admin/ban", { login, banned }); loadAdminUsers($("#adm-q").value); };
+    });
+  }
+
   $("#set-close").onclick = () => $("#settings").classList.add("hidden");
   $("#settings").onclick = (e) => { if (e.target.id === "settings") $("#settings").classList.add("hidden"); };
   function closeSheets() { ["#settings", "#mp", "#gnew", "#report"].forEach((s) => $(s).classList.add("hidden")); }
@@ -668,7 +738,7 @@
   /* ---------- nav ---------- */
   $$("[data-nav]").forEach((b) => b.onclick = () => {
     const n = b.dataset.nav; $$(".rail-btn, .dock-btn").forEach((x) => x.classList.toggle("active", x.dataset.nav === n && (n === "chats" || n === "contacts")));
-    if (n === "settings") openSettings(); else if (n === "theme") openThemes();
+    if (n === "settings") openSettings(); else if (n === "theme") openThemes(); else if (n === "admin") openAdmin();
     else if (n === "contacts") setListMode("people");
     else if (n === "chats") { filter = "all"; $$("#filters .chip").forEach((x) => x.classList.toggle("active", x.dataset.f === "all")); setListMode("chats"); }
   });

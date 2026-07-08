@@ -388,3 +388,17 @@ input[type="color"] { width: 46px; height: 34px; border: 1px solid rgba(255,255,
 .tgl:checked::after { transform: translateX(18px); }
 .mp-report { color: var(--color-error) !important; margin-left: auto; }
 #rp-reason { cursor: pointer; }
+
+/* ══════════ Batch F/G: cloud themes · admin ══════════ */
+.theme-sw.sm { display: inline-flex; gap: 2px; vertical-align: middle; } .theme-sw.sm i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.cloud-list { display: flex; flex-direction: column; gap: 4px; }
+.cloud-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 10px; background: var(--color-base-300); }
+.ci-name { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ci-acts { display: flex; gap: 4px; flex-shrink: 0; } .ci-acts .danger { color: var(--color-error); }
+.admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.astat { background: var(--color-base-300); border-radius: 12px; padding: 10px; text-align: center; }
+.astat b { display: block; font-size: 20px; color: var(--color-primary); } .astat span { font-size: 11px; opacity: .7; }
+.adm-rep { background: var(--color-base-300); border-radius: 12px; padding: 10px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 5px; }
+.adm-acts { display: flex; gap: 5px; flex-wrap: wrap; }
+.adm-user { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 10px; }
+.adm-user:hover { background: var(--color-base-300); } .au-name { flex: 1; min-width: 0; font-size: 13px; }
