@@ -182,13 +182,11 @@
         <button class="icon-btn desktop-only" id="emojiBtn" data-i18n-title="t_emoji">😊</button>
         <button class="icon-btn desktop-only" id="gifBtn" data-i18n-title="gif">GIF</button>
         <button class="icon-btn desktop-only" id="attachBtn" data-i18n-title="t_attach">📎</button>
-        <button class="icon-btn desktop-only" id="voiceBtn" data-i18n-title="t_voice">🎤</button>
         <button class="icon-btn mobile-only" id="moreBtn" data-i18n-title="t_more">⋮</button>
         <div id="composerMore" class="composer-more hidden" role="menu">
           <button class="cm-item" data-action="emoji">😊 <span data-i18n="t_emoji">Emoji</span></button>
           <button class="cm-item" data-action="gif"><span class="cm-gif-label">GIF</span></button>
           <button class="cm-item" data-action="attach">📎 <span data-i18n="t_attach">Attach</span></button>
-          <button class="cm-item" data-action="voice">🎤 <span data-i18n="t_voice">Voice</span></button>
         </div>
         <input id="fileInput" type="file" hidden />
         <!-- Drop-зона живёт прямо внутри #chatPane через .drop-overlay; css .chat.dragover делает
@@ -196,6 +194,15 @@
              dragenter реально принёс файлы. -->
         <div class="input-wrap"><textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea></div>
         <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
+        <div id="recBar" class="rec-bar hidden">
+          <span class="rec-dot"></span>
+          <span id="recTime" class="rec-time">0:00</span>
+          <span class="rec-hint" data-i18n="rec_hint">Slide up to lock · left to cancel</span>
+          <div class="rec-actions">
+            <button id="recCancel" class="rec-cancel" type="button" data-i18n="rec_cancel">Cancel</button>
+            <button id="recSend" class="rec-send" type="button" data-i18n-title="t_send" title="Send"></button>
+          </div>
+        </div>
         <div id="uploadProgress" class="upload-progress hidden">
           <div class="up-bar"><div class="up-fill" id="upFill"></div></div>
           <span class="up-text" id="upText">0%</span>
@@ -371,6 +378,10 @@
             <div id="apMatrixCtrls" class="ap-border-ctrls hidden">
               <label class="ap-row ap-slider"><span><span data-i18n="ap_matrix_speed">Speed</span> <em id="apMatrixSpeedV"></em></span><input type="range" id="apMatrixSpeed" min="1" max="10" step="1" /></label>
               <label class="ap-row"><span data-i18n="ap_matrix_color">Character color</span><input type="color" id="apMatrixColor" /></label>
+            </div>
+            <div class="ap-row ap-toggle-row">
+              <div class="ap-label"><b data-i18n="ap_callviz">Call voice visualizer</b><small data-i18n="ap_callviz_d">Live audio bars on each participant's tile while they talk.</small></div>
+              <label class="switch"><input type="checkbox" id="apCallViz" /><span class="switch-track"></span></label>
             </div>
           </div>
         </section>
