@@ -628,37 +628,50 @@
   });
 
   /* ================= CALLS (LiveKit) ================= */
-  const call = { room: null, active: false, key: null, micOn: true, camOn: false, t0: 0, timer: 0 };
+  const call = { room: null, active: false, key: null, micOn: true, camOn: false, screenOn: false, deaf: false, t0: 0, timer: 0 };
   const tiles = new Map();
   const lkTileId = (id) => (id === me.login ? "me" : id);
-  function ensureTile(id, name, isMe) {
-    const tid = isMe ? "me" : id; if (tiles.has(tid)) return tiles.get(tid);
-    const el = document.createElement("div"); el.className = "tile" + (isMe ? " me" : ""); el.id = "tile-" + tid;
-    el.innerHTML = `<div class="avatar t-ava" data-login="${esc(id)}"><img src="${avaUrl(id)}" onerror="this.remove()">${esc(initials(name))}</div><div class="t-name">${esc(name)}${isMe ? " (you)" : ""}</div>`;
+  const setIc = (btn, name) => { if (window.BIC && window.BIC[name]) { btn.innerHTML = window.BIC[name]; btn.dataset.ic = name; btn.dataset.icDone = "1"; } };
+  const SCREEN = "screen_share";
+  const isScreen = (pub, track) => (pub && pub.source === SCREEN) || (track && track.source === SCREEN);
+  function ensureTile(id, name, isMe, screen) {
+    const tid = (isMe ? "me" : id) + (screen ? "-screen" : ""); if (tiles.has(tid)) return tiles.get(tid);
+    const el = document.createElement("div"); el.className = "tile" + (isMe ? " me" : "") + (screen ? " screen" : ""); el.id = "tile-" + tid;
+    el.innerHTML = `<div class="avatar t-ava" data-login="${esc(id)}"><img src="${avaUrl(id)}" onerror="this.remove()">${esc(initials(name))}</div><div class="t-name">${esc(name)}${isMe ? " (you)" : ""}${screen ? " · screen" : ""}</div>`;
     $("#tiles").appendChild(el); tiles.set(tid, el); return el;
   }
   function attachTrack(track, pub, p) {
-    const tid = p.isLocal ? "me" : p.identity;
-    if (track.kind === "audio") { const a = track.attach(); a.autoplay = true; a.style.display = "none"; document.body.appendChild(a); return; }
-    const tile = ensureTile(p.identity, p.name || p.identity, p.isLocal); const v = track.attach(); tile.appendChild(v); const av = tile.querySelector(".t-ava"); if (av) av.style.display = "none";
+    if (track.kind === "audio") { const a = track.attach(); a.autoplay = true; a.muted = call.deaf; a.style.display = "none"; a.dataset.remoteAudio = "1"; document.body.appendChild(a); return; }
+    const screen = isScreen(pub, track);
+    const tile = ensureTile(p.identity, p.name || p.identity, p.isLocal, screen);
+    const v = track.attach(); v.playsInline = true; if (p.isLocal) v.muted = true; tile.appendChild(v);
+    const av = tile.querySelector(".t-ava"); if (av) av.style.display = "none";
   }
-  function detachTrack(track) { track.detach().forEach((el) => el.remove()); }
+  function detachTrack(track) { track.detach().forEach((el) => el.remove()); cleanupTiles(); }
+  function cleanupTiles() {
+    $$("#tiles .tile").forEach((t) => {
+      if (t.querySelector("video")) return;
+      if (t.id.endsWith("-screen")) { tiles.delete(t.id.replace("tile-", "")); t.remove(); }
+      else { const av = t.querySelector(".t-ava"); if (av) av.style.display = ""; }
+    });
+  }
   async function startCall(video) {
     if (!active) return; const c = chats.get(active); if (call.active) endCall();
     const LK = window.LivekitClient; if (!LK) return toast("Call library not loaded");
     const { ok, data } = await api("/api/livekit/token?room=" + encodeURIComponent(active), null, "GET");
     if (!ok || !data.enabled) return toast("Calls are not configured");
     const room = new LK.Room({ adaptiveStream: true, dynacast: true });
-    call.room = room; call.active = true; call.key = active; call.camOn = !!video;
+    call.room = room; call.active = true; call.key = active; call.micOn = true; call.camOn = !!video; call.screenOn = false; call.deaf = false;
     const E = LK.RoomEvent;
     room.on(E.TrackSubscribed, attachTrack).on(E.TrackUnsubscribed, detachTrack)
       .on(E.ParticipantConnected, (p) => ensureTile(p.identity, p.name || p.identity, false))
-      .on(E.ParticipantDisconnected, (p) => { const el = tiles.get(p.identity); if (el) el.remove(); tiles.delete(p.identity); })
+      .on(E.ParticipantDisconnected, (p) => { ["", "-screen"].forEach((suf) => { const el = tiles.get(p.identity + suf); if (el) el.remove(); tiles.delete(p.identity + suf); }); })
       .on(E.ActiveSpeakersChanged, (sp) => { const ids = new Set(sp.map((s) => s.isLocal ? "me" : s.identity)); $$("#tiles .tile").forEach((t) => t.classList.toggle("speaking", ids.has(t.id.replace("tile-", "")))); })
-      .on(E.LocalTrackPublished, (pub) => { if (pub.track.kind === "video") { const tile = ensureTile(me.login, me.name, true); const v = pub.track.attach(); tile.appendChild(v); const av = tile.querySelector(".t-ava"); if (av) av.style.display = "none"; } })
+      .on(E.LocalTrackPublished, (pub) => { if (pub.track && pub.track.kind === "video") { const screen = isScreen(pub, pub.track); const tile = ensureTile(me.login, me.name, true, screen); const v = pub.track.attach(); v.playsInline = true; v.muted = true; tile.appendChild(v); const av = tile.querySelector(".t-ava"); if (av) av.style.display = "none"; } })
+      .on(E.LocalTrackUnpublished, (pub) => { if (pub.track) pub.track.detach().forEach((el) => el.remove()); cleanupTiles(); })
       .on(E.Disconnected, () => { if (call.active) endCall(); });
     $("#call-title").textContent = c.name; $("#tiles").innerHTML = ""; tiles.clear(); ensureTile(me.login, me.name, true);
-    $("#call").classList.remove("hidden");
+    $("#call").classList.remove("hidden"); updateCallBtns();
     try {
       await room.connect(data.url, data.token);
       await room.localParticipant.setMicrophoneEnabled(true);
@@ -671,13 +684,15 @@
   function endCall() {
     if (call.room) { try { call.room.disconnect(); } catch {} }
     if (call.active) socket.emit("call-leave");
-    clearInterval(call.timer); call.active = false; call.room = null; tiles.clear();
-    $("#call").classList.add("hidden"); $("#tiles").innerHTML = ""; $("#call-timer").textContent = "00:00";
-    $$("audio").forEach((a) => { if (!a.controls) a.remove(); });
+    clearInterval(call.timer); call.active = false; call.room = null; call.screenOn = false; call.deaf = false; tiles.clear();
+    $("#call").classList.remove("big"); $("#call").classList.add("hidden"); $("#tiles").innerHTML = ""; $("#call-timer").textContent = "00:00";
+    $$("audio[data-remote-audio]").forEach((a) => a.remove());
   }
   function updateCallBtns() {
-    $("#cb-mic").classList.toggle("off", !call.micOn); $("#cb-mic").dataset.ic = call.micOn ? "mic" : "mic";
-    $("#cb-cam").classList.toggle("off", !call.camOn);
+    const mic = $("#cb-mic"); mic.classList.toggle("off", !call.micOn); setIc(mic, call.micOn ? "mic" : "micOff");
+    const cam = $("#cb-cam"); cam.classList.toggle("off", !call.camOn); setIc(cam, "video");
+    const sc = $("#cb-screen"); sc.classList.toggle("active", !!call.screenOn); setIc(sc, call.screenOn ? "screenOff" : "screen");
+    const df = $("#cb-deaf"); df.classList.toggle("off", !!call.deaf); setIc(df, call.deaf ? "headphonesOff" : "headphones");
   }
   $("#c-call").onclick = () => startCall(false);
   $("#c-video").onclick = () => startCall(true);
@@ -685,6 +700,18 @@
   $("#cb-hang").onclick = endCall;
   $("#cb-mic").onclick = async () => { if (!call.room) return; call.micOn = !call.micOn; await call.room.localParticipant.setMicrophoneEnabled(call.micOn); updateCallBtns(); };
   $("#cb-cam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; await call.room.localParticipant.setCameraEnabled(call.camOn); if (!call.camOn) { const tile = tiles.get("me"); if (tile) { tile.querySelectorAll("video").forEach((v) => v.remove()); const av = tile.querySelector(".t-ava"); if (av) av.style.display = ""; } } updateCallBtns(); };
+  $("#cb-screen").onclick = async () => {
+    if (!call.room) return;
+    try { call.screenOn = !call.screenOn; await call.room.localParticipant.setScreenShareEnabled(call.screenOn); }
+    catch (e) { call.screenOn = false; toast("Screen share cancelled"); cleanupTiles(); }
+    updateCallBtns();
+  };
+  $("#cb-deaf").onclick = async () => {
+    if (!call.room) return; call.deaf = !call.deaf;
+    $$("audio[data-remote-audio]").forEach((a) => a.muted = call.deaf);
+    if (call.deaf && call.micOn) { call.micOn = false; try { await call.room.localParticipant.setMicrophoneEnabled(false); } catch {} }
+    updateCallBtns();
+  };
 
   /* incoming */
   let incRoom = null;
@@ -698,4 +725,5 @@
   function hideIncoming() { $("#incoming").classList.add("hidden"); incRoom = null; }
   $("#inc-accept").onclick = () => { const r = incRoom; hideIncoming(); if (!r) return; const c = chats.get(r); if (c) { openChat(c); setTimeout(() => startCall(false), 400); } };
   $("#inc-decline").onclick = hideIncoming;
+  $("#inc-dnd").onclick = () => { hideIncoming(); me.status = "dnd"; socket.emit("set-status", "dnd"); api("/api/profile", { status: "dnd" }); toast("Declined · set to Do Not Disturb"); };
 })();

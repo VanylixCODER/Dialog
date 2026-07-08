@@ -369,3 +369,10 @@ input[type="color"] { width: 46px; height: 34px; border: 1px solid rgba(255,255,
 .link-preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
 .lp-meta { min-width: 0; } .lp-site { font-size: 11px; } .lp-title { font-weight: 700; font-size: 13px; margin: 1px 0; }
 .lp-desc { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ══════════ Batch D: screen share · deafen · decline&dnd ══════════ */
+.call-btn.active { background: rgba(var(--g), .2); color: var(--color-primary); }
+.tile.screen { grid-column: 1 / -1; }
+.call.big .tile.screen { grid-row: span 2; }
+.tile.screen video { object-fit: contain; background: #000; }
+.inc-b.dnd { background: var(--color-warning); color: #1a1200; }
