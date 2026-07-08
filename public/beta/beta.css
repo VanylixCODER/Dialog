@@ -165,8 +165,8 @@ svg { width: 1em; height: 1em; display: block; }
   .list { border-right: 0; padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
   /* old-Dialog-style mobile: list is the home screen, chat slides fully over it */
   .chat { position: fixed; inset: 0; z-index: 45; transform: translateX(100%); transition: transform .26s cubic-bezier(.16,1,.3,1); background: var(--color-base-100); }
-  .app.in-chat .chat { transform: none; }
-  .app.in-chat .dock { display: none; }
+  #app.in-chat .chat { transform: none; }
+  #app.in-chat .dock { display: none; }
   .list-head { padding-top: max(14px, env(safe-area-inset-top)); }
   .conv-head { padding-top: max(11px, env(safe-area-inset-top)); }
   .m { max-width: 88%; }
