@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dialog">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Dialog · 1.1.0 (beta)</title>
+  <meta name="theme-color" content="#00ff5a" />
+  <link rel="icon" href="/src/lil_dialog.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.6.14/daisyui.css" />
+  <link rel="stylesheet" href="/beta/beta.css" />
+</head>
+<body>
+  <div id="matrix-bg"></div>
+
+  <!-- ░░ LOGIN ░░ -->
+  <section id="login" class="login-wrap">
+    <div class="card login-card">
+      <div class="brand"><img src="/src/lil_dialog.webp" alt="" /><div><b>Dialog</b><span class="badge badge-sm badge-primary">1.1.0 beta</span></div></div>
+      <p class="muted">The next Dialog — rebuilt from scratch.</p>
+      <div id="loginForm" class="stack-form">
+        <label class="ipt"><span data-ic="user"></span><input id="li-login" placeholder="Login or email" autocomplete="username" /></label>
+        <label class="ipt"><span data-ic="lock"></span><input id="li-pass" type="password" placeholder="Password" autocomplete="current-password" /><button id="li-eye" class="eye" type="button" data-ic="eye"></button></label>
+        <div id="li-err" class="err"></div>
+        <button id="li-go" class="btn btn-primary btn-block">Sign in</button>
+        <a href="/login" class="link muted sm">Use the classic app →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ APP ░░ -->
+  <main id="app" class="shell hidden">
+    <!-- rail -->
+    <nav class="rail">
+      <img class="rail-logo" src="/src/lil_dialog.webp" alt="" />
+      <button class="rail-btn active" data-nav="chats" data-ic="chat" data-tip="Chats"></button>
+      <button class="rail-btn" data-nav="contacts" data-ic="users" data-tip="Contacts"></button>
+      <button class="rail-btn" data-nav="theme" data-ic="palette" data-tip="Themes"></button>
+      <span class="rail-sp"></span>
+      <button class="rail-btn" data-nav="settings" data-ic="gear" data-tip="Settings"></button>
+      <button class="rail-me avatar" id="me-ava"></button>
+    </nav>
+
+    <!-- list column -->
+    <aside class="list">
+      <header class="list-head">
+        <label class="search ipt"><span data-ic="search"></span><input id="q" placeholder="Search people & chats…" /></label>
+      </header>
+      <div class="filters" id="filters">
+        <button class="chip active" data-f="all">All</button>
+        <button class="chip" data-f="dm">DMs</button>
+        <button class="chip" data-f="online">Online</button>
+        <button class="chip" data-f="group">Groups</button>
+      </div>
+      <ul id="chats" class="rows"></ul>
+      <div id="suggest" class="suggest hidden"></div>
+    </aside>
+
+    <!-- chat column -->
+    <section class="chat">
+      <div id="empty" class="empty">
+        <img src="/src/dialoglogo.webp" alt="" />
+        <p class="muted">Pick a conversation</p>
+      </div>
+      <div id="conv" class="conv hidden">
+        <header class="conv-head">
+          <button class="icon-btn only-mobile" id="c-back" data-ic="back"></button>
+          <button class="avatar" id="c-ava"></button>
+          <div class="c-meta"><b id="c-name">—</b><small id="c-sub" class="muted"></small></div>
+          <button class="icon-btn" id="c-call" data-ic="phone" data-tip="Call"></button>
+          <button class="icon-btn" id="c-info" data-ic="dots"></button>
+        </header>
+        <div id="msgs" class="msgs"></div>
+        <footer class="composer">
+          <button class="icon-btn" id="c-attach" data-ic="clip" data-tip="Attach"></button>
+          <input id="c-input" class="c-input" placeholder="Message…" autocomplete="off" />
+          <button class="icon-btn send" id="c-send" data-ic="send"></button>
+        </footer>
+        <div id="tray" class="file-tray hidden"></div>
+      </div>
+    </section>
+
+    <!-- mobile dock -->
+    <nav class="dock only-mobile">
+      <button class="dock-btn active" data-nav="chats" data-ic="chat"><span>Chats</span></button>
+      <button class="dock-btn" data-nav="contacts" data-ic="users"><span>People</span></button>
+      <button class="dock-btn" data-nav="theme" data-ic="palette"><span>Theme</span></button>
+      <button class="dock-btn" data-nav="settings" data-ic="gear"><span>You</span></button>
+    </nav>
+  </main>
+
+  <input id="filepick" type="file" accept="*/*" multiple hidden />
+  <div id="toasts" class="toast toast-top toast-end"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/beta/icons.js"></script>
+  <script src="/beta/beta.js"></script>
+</body>
+</html>

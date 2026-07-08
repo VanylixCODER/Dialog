@@ -3,7 +3,7 @@
 // hosted as GitHub Releases on the public Dialog repo, so links hit GitHub's
 // CDN directly.
 (function () {
-  const VERSION = "1.0.5";
+  const VERSION = "1.1.0";
   const BASE =
     "https://github.com/VanylixCODER/Dialog/releases/download/v" +
     VERSION +
