@@ -350,3 +350,22 @@ input[type="color"] { width: 46px; height: 34px; border: 1px solid rgba(255,255,
 .gnew-item .av-wrap { width: 32px; height: 32px; } .gnew-item .avatar { width: 32px; height: 32px; }
 .set-input { width: 100%; background: var(--color-base-300); border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius-field); color: inherit; font: inherit; font-size: 14px; padding: 10px 12px; outline: none; }
 .set-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(var(--g), .16); }
+
+/* ══════════ Batch C: emoji · GIF · voice · link preview ══════════ */
+.gif-btn { height: 42px; padding: 0 10px; border: 0; border-radius: 12px; background: transparent; color: color-mix(in oklab, var(--color-base-content) 60%, transparent); font-weight: 800; font-size: 12px; letter-spacing: .5px; cursor: pointer; transition: .15s; }
+.gif-btn:hover { background: rgba(var(--g), .1); color: var(--color-primary); }
+#c-mic.recording { color: #fff; background: var(--color-error); animation: recpulse 1s infinite; }
+@keyframes recpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,91,91,.5); } 50% { box-shadow: 0 0 0 7px rgba(255,91,91,0); } }
+.pop { position: fixed; z-index: 92; background: var(--color-base-200); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.5); padding: 8px; animation: pop .13s ease; }
+.emoji-pop { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-width: 320px; }
+.emoji-pop button { font-size: 20px; width: 36px; height: 36px; border: 0; background: none; border-radius: 8px; cursor: pointer; }
+.emoji-pop button:hover { background: var(--color-base-300); transform: scale(1.15); }
+.gif-pop { width: min(360px, 92vw); display: flex; flex-direction: column; gap: 8px; }
+.gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; background: var(--color-base-300); min-height: 60px; }
+.gif-grid img:hover { outline: 2px solid var(--color-primary); }
+.in-link { color: var(--color-primary); text-decoration: underline; word-break: break-all; }
+.link-preview { display: flex; gap: 10px; margin-top: 6px; padding: 8px; border-radius: 12px; background: var(--color-base-300); border-left: 3px solid var(--color-primary); text-decoration: none; color: inherit; max-width: 340px; }
+.link-preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.lp-meta { min-width: 0; } .lp-site { font-size: 11px; } .lp-title { font-weight: 700; font-size: 13px; margin: 1px 0; }
+.lp-desc { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
