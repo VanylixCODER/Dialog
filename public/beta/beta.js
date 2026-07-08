@@ -32,7 +32,6 @@
     b.classList.toggle("dense", localStorage.getItem("dialog_ap_density") === "dense");
     b.classList.remove("motion-off", "motion-subtle"); const mo = localStorage.getItem("dialog_ap_motion"); if (mo === "off" || mo === "subtle") b.classList.add("motion-" + mo);
   }
-  applyTheme(localStorage.getItem("dialog_beta_theme") || "dialog"); applyAppearance();
 
   // Matrix rain on #matrix-bg (for the matrix theme)
   let mtx = null;
@@ -47,6 +46,7 @@
     mtx = { raf: 0, resize, tick: () => { draw(); mtx.raf = requestAnimationFrame(mtx.tick); } }; mtx.tick();
   }
   function stopMatrix() { if (!mtx) return; cancelAnimationFrame(mtx.raf); removeEventListener("resize", mtx.resize); const cv = $("#matrix-bg"); if (cv) cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); mtx = null; }
+  applyTheme(localStorage.getItem("dialog_beta_theme") || "dialog"); applyAppearance();
 
   /* ---------- auth ---------- */
   applyIcons();
