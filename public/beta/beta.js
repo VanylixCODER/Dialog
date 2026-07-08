@@ -7,6 +7,10 @@
   const chats = new Map(), presence = new Map();
   let active = null, filter = "all", localId = 0, typingT = 0;
   const pendingFiles = []; const MAX_FILES = 5, MAX_TOTAL = 75 * 1024 * 1024;
+  const CHUNK = 25; // must equal server HISTORY_LIMIT
+  const REACT_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "👎"];
+  const watermarks = new Map(); // login -> { delivered, seen } for the active room
+  let oldestId = 0, reachedTop = false, loadingMore = false, wmApplied = false, relationsLoaded = false;
 
   const api = async (p, b, m) => {
     const r = await fetch(p, { method: m || (b ? "POST" : "GET"), headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: b ? JSON.stringify(b) : undefined });
@@ -82,6 +86,19 @@
   if (token) boot(); else show("login");
   function show(which) { $("#login").classList.toggle("hidden", which !== "login"); $("#app").classList.toggle("hidden", which !== "app"); }
 
+  // registration
+  $("#to-reg").onclick = () => { $("#li-form").classList.add("hidden"); $("#rg-form").classList.remove("hidden"); };
+  $("#to-li").onclick = () => { $("#rg-form").classList.add("hidden"); $("#li-form").classList.remove("hidden"); };
+  $("#rg-go").onclick = register;
+  $("#rg-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") register(); });
+  async function register() {
+    const login = $("#rg-login").value.trim().toLowerCase(), name = $("#rg-name").value.trim(), email = $("#rg-email").value.trim(), password = $("#rg-pass").value;
+    if (!login || !name || !email || !password) { $("#rg-err").textContent = "Fill in all fields"; return; }
+    const { ok, data } = await api("/api/register", { login, name, password, email });
+    if (!ok) { $("#rg-err").textContent = (data.error || "Registration failed").replace(/_/g, " "); return; }
+    token = data.token; localStorage.setItem("dialog_token", token); boot();
+  }
+
   async function boot() {
     const { ok, data } = await api("/api/me");
     if (!ok) { localStorage.removeItem("dialog_token"); token = null; show("login"); return; }
@@ -105,7 +122,38 @@
     socket.on("call-ring", onIncoming);
     socket.on("call-cancelled", () => hideIncoming());
     socket.on("call-state", ({ room, count }) => { const c = chats.get(room); if (c) { c._call = count > 0; if (room !== active) renderList(); } });
+    socket.on("more-messages", onMoreMessages);
+    socket.on("msg-deleted", ({ id }) => { const el = $(`.m[data-id="${id}"]`); if (el) el.remove(); });
+    socket.on("msg-edited", ({ id, text }) => { const el = $(`.m[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bub"); if (b) b.textContent = text; if (!el.querySelector(".edited-tag")) { const t = el.querySelector(".m-time"); if (t) t.insertAdjacentHTML("afterbegin", '<span class="edited-tag">edited</span> '); } });
+    socket.on("msg-reaction", ({ id, reactions }) => { const el = $(`.m[data-id="${id}"]`); if (el) renderReactions(el, reactions); });
+    socket.on("watermark", ({ updates }) => applyWatermark(updates || []));
+    socket.on("rate-limited", ({ reason }) => toast(reason === "flood" ? "Slow down a bit" : "Message not sent (" + (reason || "rate limited") + ")"));
+    socket.on("dm-blocked", (p) => { toast(p.status === "request" || p.status === "pending" ? "Not friends yet — request sent" : "You can't message this user"); });
+    socket.on("file-rejected", ({ reason, maxMb }) => toast(reason === "file_too_big" ? "File too big (max " + (maxMb || 75) + " MB)" : "Upload failed"));
+    socket.on("banned", (p) => { alert("You have been banned" + (p && p.reason ? ": " + p.reason : "")); localStorage.removeItem("dialog_token"); location.reload(); });
+    socket.on("force-logout", () => { localStorage.removeItem("dialog_token"); location.reload(); });
+    socket.on("call-replaced", () => { if (call.active) endCall(); toast("Call taken over on another device"); });
+    socket.on("call-auto-end", ({ reason } = {}) => { if (call.active) endCall(); toast(reason === "no_answer" ? "No answer" : "Call ended"); });
+    socket.on("dm-ping", onDmPing);
+    socket.on("relations-changed", () => { if (relationsLoaded) loadRelations(); refreshBadges(); });
+    socket.on("group-updated", () => refreshGroups());
+    socket.on("profile-updated", ({ login, name, avatarChanged }) => onProfileUpdated(login, name, avatarChanged));
   }
+  function onDmPing({ room }) {
+    const c = chats.get(room); if (!c) { refreshGroups(); return; }
+    if (room !== active) { c.unread = (c.unread || 0) + 1; c.ts = Date.now(); renderList(); }
+  }
+  async function refreshGroups() {
+    const grps = await api("/api/groups");
+    if (grps.ok && grps.data.groups) { grps.data.groups.forEach((g) => { const key = "@grp:" + g.id; if (!chats.has(key)) chats.set(key, { key, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0 }); else chats.get(key).name = g.name; }); renderList(); }
+  }
+  function onProfileUpdated(login, name, avatarChanged) {
+    const dm = chats.get(dmKey(login)); if (dm && name) dm.name = name;
+    if (avatarChanged) $$(`.avatar[data-login="${login}"] img, .t-ava[data-login="${login}"] img`).forEach((img) => { img.src = avaUrl(login) + "?t=" + Date.now(); });
+    renderList();
+  }
+  function refreshBadges() {}
+  function loadRelations() {} // implemented in the contacts batch
   async function refreshPresence() {
     const logins = [...chats.values()].filter((c) => c.type === "dm").map((c) => c.login); if (!logins.length) return;
     const { ok, data } = await api("/api/presence", { logins });
@@ -156,48 +204,154 @@
   /* ---------- open + chat ---------- */
   async function openDM(login, name) { const key = dmKey(login); if (!chats.has(key)) chats.set(key, { key, type: "dm", login, name: name || login, last: "", ts: Date.now(), unread: 0 }); $("#q").value = ""; closeSheets(); renderList(); openChat(chats.get(key)); }
   function openChat(c) {
-    active = c.key; c.unread = 0; socket.emit("join", { token, room: c.key });
+    active = c.key; c.unread = 0; oldestId = 0; reachedTop = false; loadingMore = false; wmApplied = false; watermarks.clear();
+    socket.emit("join", { token, room: c.key });
     $("#empty").classList.add("hidden"); $("#conv").classList.remove("hidden");
     $("#c-name").textContent = c.name; $("#c-sub").textContent = c.type === "group" ? "Group" : (presence.get(c.login) || "offline");
     $("#c-ava").innerHTML = `<img src="${avaUrl(c.login)}" onerror="this.remove()">${esc(initials(c.name))}`;
     $("#c-ava").onclick = () => { if (c.type === "dm") openMP(c.login); };
+    $("#c-call").style.display = $("#c-video").style.display = ""; // (group calls allowed too)
     $("#msgs").innerHTML = '<div class="skeleton" style="height:40px;border-radius:12px;margin:8px 0"></div>';
     $("#app").classList.add("in-chat"); renderList();
   }
   $("#c-back").onclick = () => { $("#app").classList.remove("in-chat"); active = null; };
-  function renderHistory(list) {
-    const box = $("#msgs"); box.innerHTML = "";
-    if (!list.length) { box.innerHTML = '<div class="empty muted" style="flex:1">No messages yet — say hi 👋</div>'; return; }
-    list.forEach((m) => addMsg(m, false)); box.scrollTop = box.scrollHeight;
-    const c = chats.get(active), last = list[list.length - 1]; if (c && last) { c.last = preview(last); c.ts = last.ts; renderList(); }
-  }
-  function onMessage(m) {
-    if (active) addMsg(m, true);
-    const room = m.room || active, c = chats.get(room);
-    if (c) { c.last = preview(m); c.ts = m.ts || Date.now(); if (room !== active) c.unread = (c.unread || 0) + 1; renderList(); }
-  }
-  const preview = (m) => m.type === "text" ? m.text : m.type === "image" || m.type === "gif" ? "🖼 Photo" : m.type === "video" ? "🎬 Video" : m.type === "audio" ? "🎤 Voice" : "📎 " + (m.mediaName || "File");
+
+  const SYS = ["call_started", "call_ended", "call_missed", "join", "leave"];
+  const sysText = (m) => ({ call_started: "📞 Call started", call_ended: "📞 Call ended" + (m.text ? " · " + m.text : ""), call_missed: "📞 Missed call" + (m.text ? " · " + m.text : ""), join: (m.name || "Someone") + " joined", leave: (m.name || "Someone") + " left" }[m.type] || m.type);
+  const preview = (m) => SYS.includes(m.type) ? sysText(m) : m.type === "text" ? m.text : m.type === "image" || m.type === "gif" ? "🖼 Photo" : m.type === "video" ? "🎬 Video" : m.type === "audio" ? "🎤 Voice" : "📎 " + (m.mediaName || "File");
   function bodyHTML(m) {
     if (m.type === "text") return `<div class="bub">${esc(m.text)}</div>`;
-    if (m.type === "image" || m.type === "gif") return `<div class="bub"><img src="${m.media}" alt=""></div>`;
-    if (m.type === "video") return `<div class="bub"><video src="${m.media}" controls></video></div>`;
-    if (m.type === "audio") return `<div class="bub m-file">🎤 <audio controls src="${m.media}"></audio></div>`;
+    if (m.type === "image" || m.type === "gif") return `<div class="bub bub-media"><img src="${m.media}" alt="" loading="lazy"></div>`;
+    if (m.type === "video") return `<div class="bub bub-media"><video src="${m.media}" controls></video></div>`;
+    if (m.type === "audio") return `<div class="bub m-file"><span data-ic="mic"></span><audio controls src="${m.media}"></audio></div>`;
     return `<a class="bub m-file" href="${m.media}" download="${esc(m.mediaName || "file")}"><span data-ic="clip"></span>${esc(m.mediaName || "file")}</a>`;
   }
-  function addMsg(m, animate) {
-    const mine = me && m.fromLogin === me.login; const el = document.createElement("div");
-    el.className = "m" + (mine ? " me" : ""); if (m.localId != null) el.dataset.local = m.localId; if (m.id != null) el.dataset.id = m.id;
-    if (!animate) el.style.animation = "none";
+  function buildMsg(m) {
+    const el = document.createElement("div");
+    if (SYS.includes(m.type)) { el.className = "sys-line"; if (m.id != null) el.dataset.id = m.id; el.innerHTML = `<span>${esc(sysText(m))}</span>`; return el; }
+    const mine = me && m.fromLogin === me.login;
+    el.className = "m" + (mine ? " me" : ""); el.dataset.type = m.type;
+    if (m.localId != null) el.dataset.local = m.localId; if (m.id != null) el.dataset.id = m.id;
     const who = (!mine && chats.get(active)?.type === "group") ? `<div class="who">${esc(m.name)}</div>` : "";
-    el.innerHTML = (mine ? "" : avaHTML(m.fromLogin, m.name)) + `<div>${who}${bodyHTML(m)}<div class="m-time">${fmtTime(m.ts)}</div></div>`;
-    const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
-    box.appendChild(el); applyIcons(el); if (atBottom || mine) box.scrollTop = box.scrollHeight;
+    const tick = mine ? '<span class="m-ticks" data-st="sent">✓</span>' : "";
+    const editTag = m.edited ? '<span class="edited-tag">edited</span> ' : "";
+    el.innerHTML = (mine ? "" : avaHTML(m.fromLogin, m.name)) + `<div class="m-body">${who}${bodyHTML(m)}<div class="reactions"></div><div class="m-time">${editTag}${fmtTime(m.ts)}${tick}</div></div>`;
+    applyIcons(el);
+    if (m.reactions) renderReactions(el, m.reactions);
+    el.addEventListener("contextmenu", (e) => openMsgMenu(e, el));
+    let lp; el.addEventListener("touchstart", (e) => { lp = setTimeout(() => openMsgMenu(e, el), 450); }, { passive: true });
+    ["touchend", "touchmove", "touchcancel"].forEach((ev) => el.addEventListener(ev, () => clearTimeout(lp)));
+    return el;
+  }
+  function addMsg(m, animate) {
+    const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
+    const el = buildMsg(m); if (!animate) el.style.animation = "none";
+    box.appendChild(el); const mine = me && m.fromLogin === me.login; if (atBottom || mine) box.scrollTop = box.scrollHeight;
+    return el;
+  }
+  function renderHistory(list) {
+    const box = $("#msgs"); box.innerHTML = "";
+    reachedTop = list.length < CHUNK;
+    if (!list.length) { box.innerHTML = '<div class="empty muted" style="flex:1">No messages yet — say hi 👋</div>'; return; }
+    oldestId = list[0].id || 0;
+    list.forEach((m) => addMsg(m, false)); box.scrollTop = box.scrollHeight;
+    refreshOutgoingStatuses();
+    const c = chats.get(active), last = list[list.length - 1]; if (c && last) { c.last = preview(last); c.ts = last.ts; renderList(); }
+    ackReceipts(list);
+  }
+  function onMoreMessages({ msgs, before }) {
+    loadingMore = false; const box = $("#msgs");
+    if (!msgs || !msgs.length) { reachedTop = true; return; }
+    if (msgs.length < CHUNK) reachedTop = true;
+    oldestId = msgs[0].id || oldestId;
+    const prevH = box.scrollHeight, anchor = box.firstChild;
+    msgs.forEach((m) => box.insertBefore(buildMsg(m), anchor));
+    box.scrollTop += box.scrollHeight - prevH;
+    refreshOutgoingStatuses();
+  }
+  $("#msgs").addEventListener("scroll", () => {
+    const box = $("#msgs");
+    if (box.scrollTop < 60 && !reachedTop && !loadingMore && oldestId) { loadingMore = true; socket.emit("load-more", { before: oldestId }); }
+  });
+  function onMessage(m) {
+    const room = m.room || active, c = chats.get(room);
+    if (room === active || !m.room) { addMsg(m, true); refreshOutgoingStatuses(); ackReceipts([m]); }
+    if (c) { c.last = preview(m); c.ts = m.ts || Date.now(); if (room !== active) c.unread = (c.unread || 0) + 1; renderList(); }
   }
   function sendText() {
     const inp = $("#c-input"), text = inp.value.trim(); if (!text || !active) return;
     const lid = ++localId; addMsg({ localId: lid, fromLogin: me.login, name: me.name, ts: Date.now(), type: "text", text }, true);
     socket.emit("message", { type: "text", text, localId: lid }); inp.value = ""; socket.emit("typing", false);
   }
+
+  /* ---------- reactions ---------- */
+  function renderReactions(el, reactions) {
+    const bar = el.querySelector(".reactions"); if (!bar) return; bar.innerHTML = "";
+    for (const [emoji, logins] of Object.entries(reactions || {})) {
+      if (!logins || !logins.length) continue;
+      const mineR = me && logins.includes(me.login);
+      const chip = document.createElement("button"); chip.className = "reaction" + (mineR ? " mine" : "");
+      chip.textContent = emoji + " " + logins.length;
+      chip.onclick = () => socket.emit("msg-react", { id: +el.dataset.id, emoji });
+      bar.appendChild(chip);
+    }
+  }
+
+  /* ---------- read receipts (ticks + watermark) ---------- */
+  function ackReceipts(list) {
+    const ids = list.map((m) => +m.id).filter(Boolean); if (!ids.length) return;
+    const maxId = Math.max(...ids);
+    socket.emit("delivery", { maxId });
+    if (document.visibilityState === "visible" && active && me && me.prefReadReceipts !== false) socket.emit("seen", { maxId });
+  }
+  function sendSeen() {
+    if (document.visibilityState !== "visible" || !active || !me || me.prefReadReceipts === false) return;
+    const ids = $$("#msgs .m[data-id]").map((e) => +e.dataset.id).filter(Boolean); if (ids.length) socket.emit("seen", { maxId: Math.max(...ids) });
+  }
+  document.addEventListener("visibilitychange", sendSeen); addEventListener("focus", sendSeen);
+  function applyWatermark(updates) {
+    let advanced = !wmApplied;
+    updates.forEach((u) => { if (u.login === me.login) return; const cur = watermarks.get(u.login) || { delivered: 0, seen: 0 }; const nd = Math.max(cur.delivered, +u.delivered || 0), ns = Math.max(cur.seen, +u.seen || 0); if (nd > cur.delivered || ns > cur.seen) advanced = true; watermarks.set(u.login, { delivered: nd, seen: ns }); });
+    wmApplied = true; if (advanced) refreshOutgoingStatuses();
+  }
+  function refreshOutgoingStatuses() {
+    if (!watermarks.size) return;
+    let minD = Infinity, minS = Infinity;
+    watermarks.forEach((w) => { if (w.delivered < minD) minD = w.delivered; if (w.seen < minS) minS = w.seen; });
+    if (minD === Infinity) { minD = 0; minS = 0; }
+    $$("#msgs .m.me[data-id]").forEach((el) => {
+      const id = +el.dataset.id, t = el.querySelector(".m-ticks"); if (!t) return;
+      const st = minS >= id ? "read" : minD >= id ? "delivered" : "sent";
+      t.dataset.st = st; t.textContent = st === "sent" ? "✓" : "✓✓";
+    });
+  }
+
+  /* ---------- message context menu ---------- */
+  function openMsgMenu(e, el) {
+    e.preventDefault();
+    const menu = $("#msg-menu"), mine = el.classList.contains("me"), id = el.dataset.id, type = el.dataset.type;
+    menu._el = el;
+    const showOwn = mine && id;
+    menu.querySelector('[data-act="edit"]').style.display = showOwn && type === "text" ? "" : "none";
+    menu.querySelector('[data-act="delete"]').style.display = showOwn ? "" : "none";
+    menu.querySelector('[data-act="copy"]').style.display = type === "text" ? "" : "none";
+    const rr = $("#react-row"); rr.innerHTML = REACT_EMOJIS.map((em) => `<button data-em="${em}">${em}</button>`).join("");
+    $$("#react-row button").forEach((b) => b.onclick = () => { if (id) socket.emit("msg-react", { id: +id, emoji: b.dataset.em }); closeMsgMenu(); });
+    menu.classList.remove("hidden");
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    let x = e.touches ? e.touches[0].clientX : e.clientX, y = e.touches ? e.touches[0].clientY : e.clientY;
+    menu.style.left = Math.max(8, Math.min(x, innerWidth - mw - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, innerHeight - mh - 8)) + "px";
+  }
+  function closeMsgMenu() { $("#msg-menu").classList.add("hidden"); }
+  $$("#msg-menu .mm-item").forEach((b) => b.onclick = () => {
+    const menu = $("#msg-menu"), el = menu._el; if (!el) return; const id = el.dataset.id, act = b.dataset.act;
+    if (act === "copy") { navigator.clipboard && navigator.clipboard.writeText(el.querySelector(".bub")?.textContent || ""); toast("Copied"); }
+    else if (act === "edit") { const cur = el.querySelector(".bub")?.textContent || ""; const nt = prompt("Edit message", cur); if (nt != null && nt.trim() && id) socket.emit("msg-edit", { id: +id, text: nt.trim() }); }
+    else if (act === "delete") { if (id && confirm("Delete this message?")) socket.emit("msg-delete", { id: +id }); }
+    closeMsgMenu();
+  });
+  document.addEventListener("click", (e) => { if (!$("#msg-menu").contains(e.target)) closeMsgMenu(); });
   $("#c-send").onclick = sendText;
   $("#c-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
   $("#c-input").addEventListener("input", () => { if (!active) return; socket.emit("typing", true); clearTimeout(typingT); typingT = setTimeout(() => socket.emit("typing", false), 2000); });
