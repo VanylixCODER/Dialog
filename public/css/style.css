@@ -4163,3 +4163,33 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 .ts-thumb .tt-bub.out { align-self: flex-end; width: 46%; border-style: solid; border-width: 1px; }
 .ts-thumb .tt-status { display: flex; gap: 4px; position: absolute; right: 8px; bottom: 7px; }
 .ts-thumb .tt-status i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+
+/* ============================================================
+   Batch 1 — one uniform logic for button icons + labels + bubbles.
+   Icons render as blocks (so they sit dead-center instead of on the
+   inline text baseline — the long-standing off-center look), icon+
+   label buttons lay out as a contained flex row, and long text can
+   never escape a button or a chat bubble.
+   ============================================================ */
+
+/* Every control icon as a centered block. */
+.icon-btn > svg, .hicon-btn > svg, .ma-btn > svg, .btn-primary > svg, .btn-ghost > svg,
+.ci-btn > svg, .cm-item > svg, .chat-menu button > svg, .account-menu button > svg,
+.me-status-menu button > svg, .row-menu button > svg, .msg-menu button > svg,
+.input-menu button > svg, .tile-expand > svg, .call-btn > svg, .toggle-eye > svg,
+.tile-ctrl button > svg { display: block; }
+
+/* Icon-only buttons: perfectly centered box. */
+.icon-btn, .hicon-btn, .ma-btn, .tile-expand, .call-btn, .ci-btn { display: grid; place-items: center; }
+
+/* Icon + label buttons: centered, contained flex row. */
+.btn-primary, .btn-ghost { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.cm-item, .chat-menu button, .account-menu button, .me-status-menu button { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.btn-primary > span, .btn-ghost > span, .cm-item > span, .chat-menu button > span,
+.account-menu button > span, .me-status-menu button > span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Bubbles: text always wraps inside; long words/URLs break instead of spilling out. */
+.bubble { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+.bubble a { overflow-wrap: anywhere; word-break: break-word; }

@@ -1,0 +1,73 @@
+# Dialog — Classic UI patch pass (task tracker)
+
+Working checklist for the UI patches on the rolled-back header-based design. Ship batch by
+batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in progress · `[x]` done.
+
+## Locked decisions
+- **Matrix rain:** ON by default only for the Matrix theme (behind chat, ~0.8 opacity + light
+  blur, messages readable). Global toggle, OFF by default on all other themes; exposes speed +
+  character color. A user custom background hides the rain.
+- **Flashbang:** KEEP the name AND the "you're about to get blinded" easter-egg + confirm popup
+  (user loves it). Only restyle the resulting light theme to look clean/professional.
+- **No global dark/white switch anywhere.**
+- **Appearances:** a new tab in the main Settings overlay with subtabs (Themes = defaults +
+  workshop favorites; Appearance = glow + custom borders + matrix toggle + call visualizer toggle).
+- **Glow slider:** shown 0–100%, maps to real 0–50% (`--glow-strength` 0–0.5).
+- **Voice:** send+mic merged (empty input ⇒ mic). Mobile: hold-record, swipe-up lock, tap-send,
+  swipe-left cancel, live timer, 60s cap. PC: click start / click stop+send.
+- **Calls:** remake incoming-call buttons; Cava-style per-tile voice visualizer (bottom of each
+  tile, full width, amplitude-reactive per participant) + keep the speaking glow; toggleable in
+  Appearances. Incoming-card bars are ambient (not ringtone-driven).
+
+## Files in play
+`public/index.html` · `public/app.js` · `public/css/style.css` · `public/js/matrix.js` · `public/js/i18n.js`
+
+---
+
+## Batch 1 — Labels escaping bubbles/buttons + off-center icons  [x]
+- [x] Control icons render as blocks (`… > svg { display:block }`) so they center instead of sitting on the baseline.
+- [x] Icon-only buttons centered: `.icon-btn`, `.hicon-btn`, `.ma-btn`, `.tile-expand`, `.call-btn`, `.ci-btn` → grid/place-items:center.
+- [x] Icon+label buttons (`.btn-primary`/`.btn-ghost` → flex center; `.cm-item`, `.chat-menu/.account-menu/.me-status-menu button` → flex) with label spans `overflow:hidden; ellipsis; min-width:0`.
+- [x] Bubbles: `min-width:0; word-break:break-word; overflow-wrap:anywhere`; links break too.
+- [~] Deploy + verify (long unbroken message, open menus, icons centered).
+
+## Batch 2 — Flat minimalist themes + flashbang restyle  [ ]
+- [ ] Remove `linear-gradient` fills (buttons/panels/shimmer) → flat solids.
+- [ ] Kill green accent border: drop ambient `0 0 0 1px rgba(primary)` rings + accent borders on cards/inputs → `1px solid var(--border-1)`; keep `:focus-visible` rings only.
+- [ ] Remove `inset 0 -2px 0` 3D bevels; keep soft `--shadow-*` for 2D depth.
+- [ ] Introduce `--glow-strength` (0–0.5, default low); redefine `--glow-sm/md/lg` off it.
+- [ ] Restyle `[data-theme="flashbang"]` light theme to clean/professional (KEEP easter egg + confirm popup + name).
+- [ ] Deploy + verify (cycle themes; flat, no green ring; flashbang clean but flash gag intact).
+
+## Batch 3 — Settings → Appearances tab (subtabs)  [ ]
+- [ ] Convert Settings `data-pane="themes"` → `appearance`, relabel tab "Appearances"; add subtab nav.
+- [ ] Themes subtab: `#themeGrid` + Favorites list (localStorage of workshop/my themes) + Theme Studio button.
+- [ ] Appearance subtab: Glow slider (0–100% → `--glow-strength`), custom border color+width (`--ui-border-*`), matrix toggle (+ speed + color), call-visualizer toggle.
+- [ ] `applyAppearance()` persists + applies on load.
+- [ ] Deploy + verify.
+
+## Batch 4 — WhatsApp-style voice composer  [ ]
+- [ ] Context-aware `#sendBtn` (empty ⇒ mic, text ⇒ send); retire standalone mic; keep emoji/gif/attach in mobile ⋮.
+- [ ] Recording overlay (timer, slide-to-cancel, lock indicator, stop/send).
+- [ ] Mobile: hold-record, swipe-up lock, tap-send, swipe-left cancel, 60s cap.
+- [ ] Desktop: click start / click stop+send; Esc cancel.
+- [ ] Reuse MediaRecorder→`socket.emit(audio)`; generalize `resetVoice()`.
+- [ ] Deploy + verify on phone + desktop.
+
+## Batch 5 — Matrix-rain chat background  [ ]
+- [ ] Refactor `matrix.js` into reusable renderer (`mount/setOptions/start/stop`); keep login instance.
+- [ ] Canvas behind chat; show on Matrix theme (default) or global toggle; ~0.8 opacity + light blur; hide when custom bg set.
+- [ ] Speed + character color from Appearances.
+- [ ] Deploy + verify.
+
+## Batch 6 — Calls: incoming buttons + Cava voice visualizer  [ ]
+- [ ] Remake incoming-call buttons (`#toastJoin`/`#toastClose` `.ci-btn`) — flat, centered icons.
+- [ ] Ambient Cava bar background on the incoming card.
+- [ ] Per-tile voice visualizer: AnalyserNode per participant (in `attachTrack`) + local mic for "me"; bottom-of-tile full-width bars; keep `.speaking` glow.
+- [ ] Wire the Appearances toggle to enable/disable it.
+- [ ] Deploy + verify a real call.
+
+---
+
+## Log
+- (start) Rolled back remake (9ae0d7b). Plan approved. Starting Batch 1.
