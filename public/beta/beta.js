@@ -111,6 +111,7 @@
     if (dms.ok && Array.isArray(dms.data)) dms.data.forEach((c) => chats.set(c.key, c));
     if (grps.ok && grps.data.groups) grps.data.groups.forEach((g) => chats.set("@grp:" + g.id, { key: "@grp:" + g.id, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0 }));
     await loadPins(); refreshPresence(); renderList(); loadRelations();
+    api("/api/prefs").then(({ ok, data }) => { if (ok) me.prefReadReceipts = data.readReceipts !== false; });
   }
   function connect() {
     socket = io();
@@ -561,15 +562,20 @@
     else if (relations.incoming.includes(login)) { add.textContent = "Accept request"; add.onclick = async () => { await api("/api/friend", { target: login, action: "accept" }); done("You're now friends"); }; }
     else if (relations.sent.includes(login)) { add.textContent = "Requested"; add.disabled = true; }
     else { add.textContent = "Add friend"; add.onclick = async () => { const { ok, data: d } = await api("/api/friend", { target: login, action: "request" }); ok ? done("Friend request sent") : toast(d.error === "req_blocked" ? "They don't accept requests" : "Couldn't send request"); }; }
+    $("#mp-report").onclick = () => openReport(login);
     $("#mp").classList.remove("hidden");
   }
   $("#mp-close").onclick = () => $("#mp").classList.add("hidden");
   $("#mp").onclick = (e) => { if (e.target.id === "mp") $("#mp").classList.add("hidden"); };
 
   /* ---------- settings ---------- */
-  function openSettings() {
+  const REPORT_REASONS = [["harassment", "Harassment"], ["hate", "Hate speech"], ["threats", "Threats / violence"], ["nsfw", "NSFW content"], ["spam", "Spam"], ["doxxing", "Doxxing"], ["illegal", "Illegal content"], ["impersonation", "Impersonation"], ["selfharm", "Self-harm"], ["other", "Other"]];
+  async function openSettings() {
     $("#set-title").textContent = "Settings";
     const st = me.status || "online";
+    const prefs = (await api("/api/prefs")).data || { friendReq: "everyone", groupAdd: true, readReceipts: true };
+    me.prefReadReceipts = prefs.readReceipts !== false;
+    const verified = me.accountStatus === "stable" || me.email_verified;
     $("#set-body").innerHTML = `
       <div class="set-row"><div class="lbl"><b>${esc(me.name)}</b><small>@${esc(me.login)}</small></div>${avaHTML(me.login, me.name)}</div>
       <div class="set-sec">Profile</div>
@@ -578,6 +584,15 @@
       <button class="btn btn-primary btn-sm" id="s-save" style="align-self:flex-start">Save profile</button>
       <div class="set-sec">Status</div>
       <div class="seg" id="s-status">${["online", "dnd", "invisible"].map((k) => `<button data-s="${k}" class="${st === k ? "active" : ""}">${k}</button>`).join("")}</div>
+      <div class="set-sec">Account</div>
+      <div class="row-inline"><input class="set-input" id="a-email" type="email" placeholder="Add an email" value="${esc(me.email || "")}"><button class="btn btn-sm" id="a-email-save">Save</button></div>
+      <div class="sm ${verified ? "ok-txt" : "muted"}" id="a-email-status">${me.email ? (verified ? "✓ Email verified" : "Email not verified · <a class='link' id='a-resend'>resend</a>") : "No email on file"}</div>
+      <input class="set-input" id="a-cur" type="password" autocomplete="current-password" placeholder="Current password" />
+      <div class="row-inline"><input class="set-input" id="a-new" type="password" autocomplete="new-password" placeholder="New password" /><button class="btn btn-sm" id="a-pw-save">Update</button></div>
+      <div class="set-sec">Privacy</div>
+      <div class="set-row"><div class="lbl"><b>Friend requests</b></div><div class="seg" id="p-fr">${[["everyone", "Everyone"], ["fof", "Friends of friends"], ["nobody", "Nobody"]].map(([v, l]) => `<button data-v="${v}" class="${prefs.friendReq === v ? "active" : ""}">${l}</button>`).join("")}</div></div>
+      <label class="set-row toggle-row"><div class="lbl"><b>Allow adding me to groups</b></div><input type="checkbox" class="tgl" id="p-ga" ${prefs.groupAdd !== false ? "checked" : ""}></label>
+      <label class="set-row toggle-row"><div class="lbl"><b>Read receipts</b></div><input type="checkbox" class="tgl" id="p-rr" ${prefs.readReceipts !== false ? "checked" : ""}></label>
       <div class="set-sec">Appearance</div>
       <div class="set-row"><div class="lbl"><b>Roundness</b></div><input type="range" class="rng" id="s-radius" min="0" max="180" value="${+localStorage.getItem("dialog_ap_radius") || 100}"></div>
       <div class="set-row"><div class="lbl"><b>Density</b></div><div class="seg" id="s-density">${["comfortable", "dense"].map((k) => `<button data-d="${k}" class="${(localStorage.getItem("dialog_ap_density") || "comfortable") === k ? "active" : ""}">${k === "dense" ? "Compact" : "Comfortable"}</button>`).join("")}</div></div>
@@ -593,8 +608,39 @@
     $$("#s-motion button").forEach((b) => b.onclick = () => { $$("#s-motion button").forEach((x) => x.classList.toggle("active", x === b)); localStorage.setItem("dialog_ap_motion", b.dataset.m); applyAppearance(); });
     $$("#s-scale button").forEach((b) => b.onclick = () => { $$("#s-scale button").forEach((x) => x.classList.toggle("active", x === b)); localStorage.setItem("dialog_ap_scale", b.dataset.sc); applyAppearance(); });
     $("#s-logout").onclick = async () => { await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); };
+    // account
+    $("#a-email-save").onclick = async () => {
+      const email = $("#a-email").value.trim(); if (!email) return;
+      const { ok, data } = await api("/api/account/email", { email });
+      if (ok) { me.email = email; me.email_verified = false; me.accountStatus = "unverified"; toast(data.mailSent ? "Verification email sent" : "Email saved"); openSettings(); }
+      else toast(data.error === "cooldown" ? "Changed too recently — try later" : data.error === "same_email" ? "That's already your email" : (data.error || "Couldn't save email"));
+    };
+    const resend = $("#a-resend"); if (resend) resend.onclick = async () => { const { ok } = await api("/api/account/resend-verify"); toast(ok ? "Verification email sent" : "Couldn't resend"); };
+    $("#a-pw-save").onclick = async () => {
+      const current = $("#a-cur").value, password = $("#a-new").value; if (!current || !password) return toast("Enter current and new password");
+      const { ok, data } = await api("/api/account/password", { current, password });
+      if (ok) { toast("Password updated"); $("#a-cur").value = ""; $("#a-new").value = ""; }
+      else toast(data.error === "wrong_current" ? "Current password is wrong" : data.error === "cooldown" ? "Changed too recently" : (data.error || "Couldn't update password"));
+    };
+    // privacy
+    $$("#p-fr button").forEach((b) => b.onclick = () => { $$("#p-fr button").forEach((x) => x.classList.toggle("active", x === b)); api("/api/prefs", { friendReq: b.dataset.v }); });
+    $("#p-ga").onchange = (e) => api("/api/prefs", { groupAdd: e.target.checked });
+    $("#p-rr").onchange = (e) => { me.prefReadReceipts = e.target.checked; api("/api/prefs", { readReceipts: e.target.checked }); };
     $("#settings").classList.remove("hidden");
   }
+  /* ---------- report ---------- */
+  function openReport(login) {
+    $("#mp").classList.add("hidden");
+    $("#report-body").innerHTML = `<p class="muted sm">Reporting @${esc(login)} to the moderators. False reports may affect your account.</p>
+      <div class="set-sec">Reason</div>
+      <select class="set-input" id="rp-reason">${REPORT_REASONS.map((r) => `<option value="${r[0]}">${r[1]}</option>`).join("")}</select>
+      <textarea class="set-input" id="rp-desc" rows="3" placeholder="What happened? (optional)" style="height:auto;padding:10px 12px"></textarea>
+      <button class="btn btn-error btn-sm" id="rp-send" style="align-self:flex-start">Submit report</button>`;
+    $("#rp-send").onclick = async () => { const { ok } = await api("/api/report", { target: login, reason: $("#rp-reason").value, description: $("#rp-desc").value.trim(), room: active || "" }); toast(ok ? "Report submitted — thank you" : "Couldn't submit report"); $("#report").classList.add("hidden"); };
+    $("#report").classList.remove("hidden");
+  }
+  $("#report-close").onclick = () => $("#report").classList.add("hidden");
+  $("#report").onclick = (e) => { if (e.target.id === "report") $("#report").classList.add("hidden"); };
   function openThemes() {
     $("#set-title").textContent = "Themes";
     const cur = localStorage.getItem("dialog_beta_theme") || "dialog"; const tk = getCustom();
@@ -617,7 +663,7 @@
   }
   $("#set-close").onclick = () => $("#settings").classList.add("hidden");
   $("#settings").onclick = (e) => { if (e.target.id === "settings") $("#settings").classList.add("hidden"); };
-  function closeSheets() { $("#settings").classList.add("hidden"); $("#mp").classList.add("hidden"); $("#gnew").classList.add("hidden"); }
+  function closeSheets() { ["#settings", "#mp", "#gnew", "#report"].forEach((s) => $(s).classList.add("hidden")); }
 
   /* ---------- nav ---------- */
   $$("[data-nav]").forEach((b) => b.onclick = () => {

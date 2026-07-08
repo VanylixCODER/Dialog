@@ -376,3 +376,15 @@ input[type="color"] { width: 46px; height: 34px; border: 1px solid rgba(255,255,
 .call.big .tile.screen { grid-row: span 2; }
 .tile.screen video { object-fit: contain; background: #000; }
 .inc-b.dnd { background: var(--color-warning); color: #1a1200; }
+
+/* ══════════ Batch E: account · privacy · report ══════════ */
+.row-inline { display: flex; gap: 8px; align-items: center; }
+.row-inline .set-input { flex: 1; }
+.ok-txt { color: var(--color-success); }
+.toggle-row { cursor: pointer; }
+.tgl { appearance: none; width: 42px; height: 24px; border-radius: 999px; background: var(--color-base-300); border: 1px solid rgba(255,255,255,.12); position: relative; cursor: pointer; flex-shrink: 0; transition: .18s; }
+.tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .18s; }
+.tgl:checked { background: var(--color-primary); border-color: transparent; }
+.tgl:checked::after { transform: translateX(18px); }
+.mp-report { color: var(--color-error) !important; margin-left: auto; }
+#rp-reason { cursor: pointer; }
