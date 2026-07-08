@@ -4293,3 +4293,31 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .chat-matrix { position: absolute; inset: 0; z-index: -1; pointer-events: none; display: none; opacity: 0; }
 .chat-matrix.on { display: block; opacity: 0.8; filter: blur(2px); }
 .chat.has-wallpaper .chat-matrix { display: none; }
+
+/* ============================================================
+   Batch 4 — WhatsApp-style voice composer (mic on the send button
+   + a recording overlay bar).
+   ============================================================ */
+.composer { position: relative; }
+.icon-btn.send.mic-mode { color: var(--accent-300); }
+.rec-bar { position: absolute; inset: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--bg-2); z-index: 5; }
+.rec-bar.hidden { display: none; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: recPulse 1s infinite; flex-shrink: 0; }
+@keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-strong); min-width: 44px; }
+.rec-hint { color: var(--text-dim); font-size: 12.5px; flex: 1; }
+.rec-actions { display: none; align-items: center; gap: 8px; margin-left: auto; }
+.rec-bar.locked .rec-hint { display: none; }
+.rec-bar.locked .rec-actions { display: flex; }
+.rec-cancel { background: none; border: none; color: var(--danger); font-weight: 700; cursor: pointer; font-size: 13px; padding: 8px 10px; border-radius: var(--r-2); }
+.rec-cancel:hover { background: rgba(255,82,82,.12); }
+.rec-send { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent-400); color: #04140a; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
+.rec-send > svg { width: 18px; height: 18px; display: block; }
+
+/* ============================================================
+   Batch 6 — flat incoming-call buttons + per-tile voice visualizer
+   ============================================================ */
+.ci-btn.accept { background: var(--accent-400); color: #04140a; }
+.ci-btn.decline { background: var(--danger); color: #fff; }
+.tile { position: relative; }
+.tile-cava { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; pointer-events: none; opacity: 0.75; z-index: 1; }

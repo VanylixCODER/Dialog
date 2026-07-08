@@ -47,13 +47,13 @@ batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in pro
 - [~] matrix toggle + call-visualizer toggle live here too — added in Batch 5 / 6.
 - [~] Deploy + verify.
 
-## Batch 4 — WhatsApp-style voice composer  [ ]
-- [ ] Context-aware `#sendBtn` (empty ⇒ mic, text ⇒ send); retire standalone mic; keep emoji/gif/attach in mobile ⋮.
-- [ ] Recording overlay (timer, slide-to-cancel, lock indicator, stop/send).
-- [ ] Mobile: hold-record, swipe-up lock, tap-send, swipe-left cancel, 60s cap.
-- [ ] Desktop: click start / click stop+send; Esc cancel.
-- [ ] Reuse MediaRecorder→`socket.emit(audio)`; generalize `resetVoice()`.
-- [ ] Deploy + verify on phone + desktop.
+## Batch 4 — WhatsApp-style voice composer  [x]
+- [x] Context-aware `#sendBtn` (`updateSendMode()`: empty ⇒ mic, text ⇒ send); standalone `#voiceBtn` + mobile voice menu item removed; emoji/gif/attach kept in mobile ⋮.
+- [x] Recording overlay `#recBar` (pulsing dot + timer + hint; locked shows Cancel + Send).
+- [x] Mobile: pointer hold-record, swipe-up (>55px) locks hands-free, release sends (≥600ms) else cancels, swipe-left (>70px) cancels; 60s cap.
+- [x] Desktop: click start / click stop+send; Esc cancels.
+- [x] Reuses MediaRecorder → `socket.emit(audio)`.
+- [~] Deploy + verify on phone + desktop.
 
 ## Batch 5 — Matrix-rain chat background  [x]
 - [x] `#chatMatrix` canvas behind messages (z-index:-1 inside isolated `.chat`); ~0.8 opacity + blur(2px).
@@ -62,12 +62,11 @@ batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in pro
 - [x] Appearance subtab: matrix toggle + speed + character-color, persisted; en+ru strings.
 - [~] Deploy + verify.
 
-## Batch 6 — Calls: incoming buttons + Cava voice visualizer  [ ]
-- [ ] Remake incoming-call buttons (`#toastJoin`/`#toastClose` `.ci-btn`) — flat, centered icons.
-- [ ] Ambient Cava bar background on the incoming card.
-- [ ] Per-tile voice visualizer: AnalyserNode per participant (in `attachTrack`) + local mic for "me"; bottom-of-tile full-width bars; keep `.speaking` glow.
-- [ ] Wire the Appearances toggle to enable/disable it.
-- [ ] Deploy + verify a real call.
+## Batch 6 — Calls: incoming buttons + Cava voice visualizer  [x]
+- [x] Incoming-call buttons flattened (`.ci-btn` accept/decline — solid fills, no gradient; icons already centered by Batch 1). Incoming card already had a `#cavaCanvas` + `startCava()` (kept).
+- [x] Per-tile voice visualizer: AnalyserNode per participant's mic (remote in `attachTrack`, local in `LocalTrackPublished`) → `#tile-cava` canvas bars, single RAF loop; cleaned up on detach / leave / endCall. `.speaking` glow kept.
+- [x] Appearances toggle `apCallViz` (default on, `dialog_ap_callviz`); loop reads it live.
+- [~] Deploy + verify a real call.
 
 ---
 

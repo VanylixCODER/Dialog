@@ -499,6 +499,8 @@ function initAppearanceControls() {
     mxs.oninput = () => { $("apMatrixSpeedV").textContent = "×" + mxs.value; localStorage.setItem("dialog_ap_matrix_speed", mxs.value); updateChatMatrix(); };
     mxc.oninput = () => { localStorage.setItem("dialog_ap_matrix_color", mxc.value); updateChatMatrix(); };
   }
+  const cv = $("apCallViz");
+  if (cv) { cv.checked = callVizOn(); cv.onchange = () => localStorage.setItem("dialog_ap_callviz", cv.checked ? "on" : "off"); }
   renderFavThemes();
 }
 // Favorite themes (installed from the Workshop) — stored client-side, shown in the Themes subtab.
@@ -2575,12 +2577,12 @@ function sendText() {
   };
   renderMessage(m, true, false);
   socket.emit("message", { type: "text", text, localId });
-  input.value = ""; input.style.height = "auto"; socket.emit("typing", false);
+  input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode();
 }
-$("sendBtn").onclick = sendText;
+// sendBtn click is wired in wireComposerSend() below (text send + voice record).
 $("msgInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
 let typingTimer;
-$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
+$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; updateSendMode(); socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
 // ---------- Input right-click menu ----------
 let inputMenu;
 $("msgInput").addEventListener("contextmenu", (e) => {
@@ -2822,24 +2824,68 @@ socket.on("file-rejected", ({ reason, maxMb } = {}) => {
   if (reason === "save_failed") notify(t("file_rejected_size", { mb: MAX_FILE_SIZE_MB }));
   else notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
 });
+// ---------- Voice messages (WhatsApp-style: mic lives on the send button) ----------
+// Empty input ⇒ the send button is a mic. Mobile: hold to record, slide up to lock
+// hands-free (tap ▶ to send), slide left to cancel. Desktop: click to start, click to
+// stop+send; Esc cancels. Live timer, 60s cap.
 let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0;
-$("voiceBtn").onclick = async () => {
-  if (!myRoom) return;
-  if (mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); return; }
-  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { alert(t("err_mic_voice")); return; }
-  mediaRecorder = new MediaRecorder(recStream); recChunks = []; recSec = 0;
-  mediaRecorder.ondataavailable = (e) => recChunks.push(e.data);
+let recState = "idle"; // idle | recording | locked
+let recCancelled = false, recStartTs = 0, recPtr = null, recHold = false, recSuppressClick = false;
+function isMicMode() { return $("sendBtn").classList.contains("mic-mode"); }
+function updateSendMode() {
+  if (recState !== "idle") return;
+  const b = $("sendBtn"); if (!b) return;
+  const has = (($("msgInput") || {}).value || "").trim().length > 0;
+  b.classList.toggle("mic-mode", !has);
+  b.innerHTML = has ? window.ICON.send : window.ICON.mic;
+}
+const fmtRec = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+function updateRecOverlay() { const bar = $("recBar"); if (!bar) return; bar.classList.toggle("locked", recState === "locked"); const tm = $("recTime"); if (tm) tm.textContent = fmtRec(recSec); }
+async function startRec(locked) {
+  if (!myRoom || recState !== "idle") return;
+  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { alert(t("err_mic_voice")); recState = "idle"; return; }
+  recChunks = []; recSec = 0; recCancelled = false; recStartTs = Date.now();
+  mediaRecorder = new MediaRecorder(recStream);
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
-    clearInterval(recTimer); recStream.getTracks().forEach((t) => t.stop()); resetVoice();
+    clearInterval(recTimer); try { recStream.getTracks().forEach((t) => t.stop()); } catch {}
+    const cancelled = recCancelled; recState = "idle"; const bar = $("recBar"); if (bar) bar.classList.add("hidden"); updateSendMode();
+    if (cancelled) return;
     const blob = new Blob(recChunks, { type: "audio/webm" });
     if (blob.size < 600 || blob.size > 20 * 1024 * 1024) return;
     const r = new FileReader(); r.onload = () => socket.emit("message", { type: "audio", media: r.result, mediaName: "voice" }); r.readAsDataURL(blob);
   };
   mediaRecorder.start();
-  $("voiceBtn").classList.add("recording"); $("voiceBtn").innerHTML = window.ICON.stop;
-  recTimer = setInterval(() => { if (++recSec >= 120) mediaRecorder.stop(); }, 1000);
-};
-function resetVoice() { $("voiceBtn").classList.remove("recording"); $("voiceBtn").innerHTML = window.ICON.mic; mediaRecorder = null; }
+  recState = locked ? "locked" : "recording";
+  const bar = $("recBar"); if (bar) bar.classList.remove("hidden"); updateRecOverlay();
+  recTimer = setInterval(() => { recSec++; updateRecOverlay(); if (recSec >= 60) stopRec(true); }, 1000);
+}
+function stopRec(send) { if (recState === "idle" || !mediaRecorder) return; recCancelled = !send; try { mediaRecorder.stop(); } catch {} }
+function cancelRec() { stopRec(false); }
+(function wireComposerSend() {
+  const b = $("sendBtn"); if (!b) return;
+  const rs = $("recSend"); if (rs) rs.innerHTML = window.ICON.send;
+  b.addEventListener("pointerdown", (e) => {
+    if (!isMicMode() || !myRoom) return;
+    if (e.pointerType === "touch") { recHold = true; recPtr = { x: e.clientX, y: e.clientY }; recSuppressClick = true; startRec(false); try { b.setPointerCapture(e.pointerId); } catch {} }
+  });
+  b.addEventListener("pointermove", (e) => {
+    if (!recHold || recState === "idle") return;
+    const dy = recPtr.y - e.clientY, dx = recPtr.x - e.clientX;
+    if (recState === "recording") { if (dx > 70) { cancelRec(); recHold = false; } else if (dy > 55) { recState = "locked"; updateRecOverlay(); } }
+  });
+  b.addEventListener("pointerup", (e) => {
+    if (e.pointerType === "touch" && recHold) { recHold = false; if (recState === "recording") { (Date.now() - recStartTs >= 600) ? stopRec(true) : cancelRec(); } }
+  });
+  b.addEventListener("click", () => {
+    if (recSuppressClick) { recSuppressClick = false; return; }
+    if (!isMicMode()) { sendText(); return; }
+    if (recState === "idle") startRec(true); else stopRec(true);
+  });
+  $("recCancel") && ($("recCancel").onclick = cancelRec);
+  $("recSend") && ($("recSend").onclick = () => stopRec(true));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && recState !== "idle") cancelRec(); });
+})();
 
 // Лайтбокс
 const lb = $("lightbox"), lbImg = $("lightboxImg");
@@ -2892,7 +2938,6 @@ if (moreBtn && moreDropdown) {
       if (action === "emoji") $("emojiBtn").click();
       else if (action === "gif") $("gifBtn").click();
       else if (action === "attach") $("fileInput").click();
-      else if (action === "voice") $("voiceBtn").click();
     };
   });
   document.addEventListener("click", (e) => { if (!moreDropdown.contains(e.target) && e.target !== moreBtn) moreDropdown.classList.add("hidden"); });
@@ -2998,7 +3043,7 @@ function applyTileVol(identity) {
 }
 
 function removeParticipant(identity) {
-  const id = lkTile(identity); removeTile(id); removeTile("screen-" + id);
+  const id = lkTile(identity); removeTileCava(id); removeTile(id); removeTile("screen-" + id);
   const a = audioEls.get(identity); if (a) { a.srcObject = null; a.remove(); audioEls.delete(identity); }
   const sa = screenAudioEls.get(identity); if (sa) { sa.srcObject = null; sa.remove(); screenAudioEls.delete(identity); }
   updateCallCount();
@@ -3129,6 +3174,7 @@ function attachTrack(track, pub, participant) {
       let a = audioEls.get(identity); if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(identity, a); }
       track.attach(a); applySinkId(a); a.muted = call.deaf;
       setMicIndicator(lkTile(identity), pub.isMuted);
+      try { addTileCava(lkTile(identity), track.mediaStreamTrack); } catch {}
     }
   }
 }
@@ -3138,8 +3184,57 @@ function detachTrack(track, pub, participant) {
   else if (track.kind === "audio") {
     track.detach();
     if (pub.source === "screen_share_audio") { const sa = screenAudioEls.get(identity); if (sa) { sa.srcObject = null; sa.remove(); screenAudioEls.delete(identity); } }
+    else removeTileCava(lkTile(identity));
   }
 }
+// ---------- Per-tile voice visualizer (Cava-style bars, Batch 6) ----------
+// One AnalyserNode per participant's mic track; a single RAF draws bottom-anchored
+// frequency bars on each tile's canvas. Toggle in Settings → Appearances.
+const cavaNodes = new Map(); // tileId -> { analyser, data, canvas, src }
+let cavaLoopRaf = 0;
+const callVizOn = () => localStorage.getItem("dialog_ap_callviz") !== "off";
+function addTileCava(tileId, mst) {
+  if (!mst) return; const ctx = ensureAudioCtx(); if (!ctx) return;
+  removeTileCava(tileId);
+  let src; try { src = ctx.createMediaStreamSource(new MediaStream([mst])); } catch { return; }
+  const analyser = ctx.createAnalyser(); analyser.fftSize = 64; analyser.smoothingTimeConstant = 0.75; src.connect(analyser);
+  const tile = $("tile-" + tileId); if (!tile) { try { src.disconnect(); } catch {} return; }
+  let canvas = tile.querySelector(".tile-cava");
+  if (!canvas) { canvas = document.createElement("canvas"); canvas.className = "tile-cava"; canvas.setAttribute("aria-hidden", "true"); tile.appendChild(canvas); }
+  cavaNodes.set(tileId, { analyser, data: new Uint8Array(analyser.frequencyBinCount), canvas, src });
+  startCavaLoop();
+}
+function removeTileCava(tileId) {
+  const n = cavaNodes.get(tileId); if (!n) return;
+  try { n.src.disconnect(); n.analyser.disconnect(); } catch {}
+  if (n.canvas) n.canvas.remove();
+  cavaNodes.delete(tileId);
+}
+function clearAllCava() { [...cavaNodes.keys()].forEach(removeTileCava); cancelAnimationFrame(cavaLoopRaf); cavaLoopRaf = 0; }
+function startCavaLoop() {
+  if (cavaLoopRaf) return;
+  const tick = () => {
+    if (!call.active || !cavaNodes.size) { cavaLoopRaf = 0; return; }
+    cavaLoopRaf = requestAnimationFrame(tick);
+    if (document.hidden) return;
+    const show = callVizOn();
+    const accent = (getComputedStyle(document.documentElement).getPropertyValue("--accent-400").trim() || "#00ff5a");
+    cavaNodes.forEach((n) => {
+      const c = n.canvas; if (!c) return;
+      if (!show) { if (c.style.display !== "none") c.style.display = "none"; return; }
+      if (c.style.display === "none") c.style.display = "";
+      if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; }
+      n.analyser.getByteFrequencyData(n.data);
+      const cx = c.getContext("2d"), w = c.width, h = c.height, N = n.data.length; if (!cx) return;
+      cx.clearRect(0, 0, w, h); const bw = w / N; let sum = 0;
+      cx.fillStyle = accent;
+      for (let i = 0; i < N; i++) { const v = n.data[i] / 255; sum += v; const bh = Math.max(2, v * h * 0.9); cx.fillRect(i * bw + bw * 0.18, h - bh, bw * 0.64, bh); }
+      const tile = c.parentElement; if (tile) tile.classList.toggle("cava-live", sum / N > 0.05);
+    });
+  };
+  cavaLoopRaf = requestAnimationFrame(tick);
+}
+
 function wireRoom(room, LK) {
   const E = LK.RoomEvent;
   room.on(E.TrackSubscribed, attachTrack);
@@ -3154,6 +3249,8 @@ function wireRoom(room, LK) {
     if (pub.track.kind === "video") {
       if (pub.source === "screen_share") addScreenTile("me", myName + " " + t("you_suffix"), pub.track);
       else attachLocalCamera(pub.track);
+    } else if (pub.track.kind === "audio" && pub.source !== "screen_share_audio") {
+      try { addTileCava("me", pub.track.mediaStreamTrack); } catch {}
     }
   });
   room.on(E.LocalTrackUnpublished, (pub) => {
@@ -3309,6 +3406,7 @@ function endCall() {
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
+  clearAllCava();
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   for (const a of screenAudioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } screenAudioEls.clear();
   vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
@@ -4343,7 +4441,7 @@ $("chatFilters").addEventListener("click", (e) => {
 });
 
 // ---------- Старт ----------
-loadSavedTheme(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); checkSession();
+loadSavedTheme(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
 window.addEventListener("popstate", onPopState);
 
 // ---------- PWA Install ----------
