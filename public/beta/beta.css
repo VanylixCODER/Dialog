@@ -335,3 +335,18 @@ input[type="color"] { width: 46px; height: 34px; border: 1px solid rgba(255,255,
 .mm-item span[data-ic] { width: 17px; height: 17px; display: inline-grid; } .mm-item svg { width: 17px; height: 17px; }
 .mm-item:hover { background: var(--color-base-300); }
 .mm-item.danger { color: var(--color-error); }
+
+/* ══════════ Batch B: contacts · groups · pins · badges ══════════ */
+.nav-badge { position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--color-error); color: #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; border: 2px solid var(--color-base-200); }
+.prow-acts { flex-direction: row !important; gap: 6px; align-items: center; }
+.sm-ib { width: 34px; height: 34px; font-size: 17px; }
+.pin-ic { color: var(--color-primary); font-size: 13px; display: inline-grid; opacity: .8; } .pin-ic svg { width: 13px; height: 13px; }
+.gnew-cta { align-self: stretch; justify-content: center; margin: 2px 4px 8px; }
+.gnew-cta span[data-ic], .gnew-cta svg { width: 16px; height: 16px; }
+.gnew-list { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
+.gnew-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; cursor: pointer; }
+.gnew-item:hover { background: var(--color-base-300); }
+.gnew-item input { width: 18px; height: 18px; accent-color: var(--color-primary); }
+.gnew-item .av-wrap { width: 32px; height: 32px; } .gnew-item .avatar { width: 32px; height: 32px; }
+.set-input { width: 100%; background: var(--color-base-300); border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius-field); color: inherit; font: inherit; font-size: 14px; padding: 10px 12px; outline: none; }
+.set-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(var(--g), .16); }
