@@ -28,6 +28,12 @@
     smile: s('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 13.5a4 4 0 0 0 7 0"/><circle cx="9" cy="9.5" r=".6"/><circle cx="15" cy="9.5" r=".6"/>'),
     expand: s('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>'),
     lock2: s('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+    screen: s('<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20.5h6M12 16.5v4"/><path d="m10 8.5 4 2.5-4 2.5z"/>'),
+    screenOff: s('<path d="M3 4.6A2 2 0 0 1 5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-.5 1.3M3.2 6.9v7.6a2 2 0 0 0 2 2H16"/><path d="M9 20.5h6M12 16.5v4"/><path d="M3 3l18 18"/>'),
+    headphones: s('<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4" height="6.5" rx="1.6"/><rect x="17" y="13.5" width="4" height="6.5" rx="1.6"/>'),
+    headphonesOff: s('<path d="M4 14v-2a8 8 0 0 1 12.5-6.6M20 12v2"/><rect x="17" y="13.5" width="4" height="6.5" rx="1.6"/><path d="M3 13.6A1.6 1.6 0 0 1 4.6 13.5H7v6.5H5.6A1.6 1.6 0 0 1 4 18.4V14"/><path d="M3 3l18 18"/>'),
+    micOff: s('<path d="M9 9v-.5a3 3 0 0 1 6 0V11m0 3.5a3 3 0 0 1-4.5 1"/><path d="M5.5 11a6.5 6.5 0 0 0 10 5.4M18.5 11a6.4 6.4 0 0 1-.3 2M12 17.5V21"/><path d="M3 3l18 18"/>'),
+    moon: s('<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>'),
   };
   window.BIC = BIC;
   window.applyIcons = function (root) {
