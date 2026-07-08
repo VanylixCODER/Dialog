@@ -3104,25 +3104,28 @@ body[data-theme="dracula"] .msg-status[data-status="read"] { color: #50fa7b; }
 /* Nord — официальная палитра Nord (https://www.nordtheme.com). Polar Night для фона,
    Frost для акцентов. primary = Frost-3 #88c0d0 (тёплый ледяной циан). */
 body[data-theme="flashbang"] {
-  --primary-rgb: 22, 163, 74;                     /* fresh green — primary #16a34a (Tailwind green-600) */
-  --accent-100: #111827; --accent-200: #1f2937; --accent-300: #1f2937;
+  /* Redesigned into a clean, professional light theme: layered off-white/grey
+     surfaces (gentle 2D depth, not flat pure white), neutral borders, a single
+     green accent, soft shadows. (The blinding easter-egg + confirm popup are
+     untouched — they live in app.js.) */
+  --primary-rgb: 22, 163, 74;                     /* green accent #16a34a */
+  --accent-100: #111827; --accent-200: #1f2937; --accent-300: #374151;
   --accent-400: #16a34a; --accent-500: #15803d; --accent-600: #166534;
-  --accent-glow: rgba(var(--primary-rgb), 0.3); --accent-soft: rgba(var(--primary-rgb), 0.14);
-  --accent-faint: rgba(var(--primary-rgb), 0.07);
-  --bg-0: #ffffff; --bg-1: #ffffff; --bg-2: #ffffff; --bg-3: #ffffff; --bg-4: #f5f5f5;
-  --surface-1: rgba(var(--primary-rgb), 0.04); --surface-2: rgba(var(--primary-rgb), 0.08);
-  --surface-3: rgba(var(--primary-rgb), 0.14);
-  --border-1: rgba(17, 24, 39, 0.10); --border-2: rgba(17, 24, 39, 0.18); --border-3: rgba(17, 24, 39, 0.32);
-  --text: #1f2937; --text-strong: #111827; --text-dim: #6b7280;
-  --glow-sm: 0 0 0 1px rgba(var(--primary-rgb), 0.18);
-  --glow-md: 0 0 0 1px rgba(var(--primary-rgb), 0.22);
-  --glow-lg: 0 0 0 1px rgba(var(--primary-rgb), 0.28);
+  --accent-glow: rgba(var(--primary-rgb), 0.22); --accent-soft: rgba(var(--primary-rgb), 0.12);
+  --accent-faint: rgba(var(--primary-rgb), 0.06);
+  --bg-0: #e7eaef; --bg-1: #ffffff; --bg-2: #f4f5f7; --bg-3: #eceef2; --bg-4: #e3e7ec;
+  --surface-1: rgba(17, 24, 39, 0.03); --surface-2: rgba(17, 24, 39, 0.05);
+  --surface-3: rgba(17, 24, 39, 0.09);
+  --border-1: rgba(17, 24, 39, 0.09); --border-2: rgba(17, 24, 39, 0.15); --border-3: rgba(17, 24, 39, 0.26);
+  --text: #363c47; --text-strong: #12151b; --text-dim: #767c88;
+  --glow-strength: 0;
+  --glow-sm: none; --glow-md: none; --glow-lg: none;
   --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06), 0 2px 6px rgba(17, 24, 39, 0.04);
   --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.08), 0 2px 4px rgba(17, 24, 39, 0.04);
   --shadow-lg: 0 18px 46px rgba(17, 24, 39, 0.12), 0 6px 16px rgba(17, 24, 39, 0.06);
   --cyan-300: #0891b2;
   --danger: #dc2626;
-  background: var(--bg-1);
+  background: var(--bg-0);
   background-image: none;
   color: var(--text);
   text-shadow: none;
@@ -4193,3 +4196,59 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 /* Bubbles: text always wraps inside; long words/URLs break instead of spilling out. */
 .bubble { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
 .bubble a { overflow-wrap: anywhere; word-break: break-word; }
+
+/* ============================================================
+   Batch 2 — flat, minimalist "2D depth, not 3D".
+   Kills the pervasive green border (tinted borders + tinted shadow
+   inset-rings), removes glossy gradients + bevels, and gates all
+   green glow behind an opt-in --glow-strength (0 by default; the
+   Appearances glow slider raises it 0..0.5). Reversible: delete
+   this block to restore the old look.
+   ============================================================ */
+:root {
+  /* opt-in glow (Appearances slider sets this 0..0.5; shown as 0..100%) */
+  --glow-strength: 0;
+  /* neutral borders — no more green-tinted lines everywhere */
+  --border-1: rgba(255, 255, 255, 0.09);
+  --border-2: rgba(255, 255, 255, 0.16);
+  --border-3: rgba(255, 255, 255, 0.30);
+  /* flat drop shadows — the green inset ring is gone */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55);
+  /* glow scales from the opt-in strength */
+  --glow-sm: 0 0 6px rgba(var(--primary-rgb), calc(0.9 * var(--glow-strength)));
+  --glow-md: 0 0 14px rgba(var(--primary-rgb), calc(0.7 * var(--glow-strength)));
+  --glow-lg: 0 0 22px rgba(var(--primary-rgb), calc(0.9 * var(--glow-strength)));
+}
+
+/* Primary button: flat accent fill, no gradient / bevel / shimmer sweep. */
+.btn-primary {
+  background: var(--accent-400); color: #04140a;
+  text-transform: none; letter-spacing: 0.3px; font-weight: 700;
+  box-shadow: none;
+}
+.btn-primary::after { display: none !important; }
+.btn-primary:hover { transform: none; filter: brightness(1.07); box-shadow: 0 3px 12px rgba(var(--primary-rgb), calc(0.18 + var(--glow-strength))); }
+.btn-primary:active { filter: brightness(0.95); }
+
+/* Inputs: neutral border, subtle accent ring only on focus (no ambient glow). */
+.field:focus, select.field:focus, textarea.field:focus {
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.16);
+  background: var(--bg-3);
+}
+
+/* Active chat row: flat highlight + a clean accent bar (no green ring / gradient). */
+.chat-item.active {
+  background: var(--surface-2);
+  border-left-color: var(--accent-400);
+  box-shadow: none;
+}
+
+/* My bubble: neutral border, no green glow (still subtly raised via --bg-4). */
+.msg.me .bubble { border-color: var(--border-2); box-shadow: none; }
+
+/* Flatten the chat-list surface + drop the decorative neon top strip. */
+.chatlist { background: var(--bg-1); }
+.chatlist::before { display: none; }
