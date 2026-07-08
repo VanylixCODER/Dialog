@@ -37,14 +37,15 @@ batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in pro
 - [x] `--glow-strength` (default 0) gates `--glow-sm/md/lg`; Appearances slider will raise it (Batch 3).
 - [x] Flattened `.chat-item.active` (accent bar, no ring/gradient), `.msg.me .bubble` (neutral border, no glow), `.field:focus` (subtle 2px ring), `.chatlist` (flat, no neon strip).
 - [x] Flashbang restyled to a professional layered light theme (off-white/grey depth). Name + easter-egg + confirm popup untouched (they live in app.js).
-- [~] Deploy + verify.
+- [x] Deploy + verify — live.
 
-## Batch 3 — Settings → Appearances tab (subtabs)  [ ]
-- [ ] Convert Settings `data-pane="themes"` → `appearance`, relabel tab "Appearances"; add subtab nav.
-- [ ] Themes subtab: `#themeGrid` + Favorites list (localStorage of workshop/my themes) + Theme Studio button.
-- [ ] Appearance subtab: Glow slider (0–100% → `--glow-strength`), custom border color+width (`--ui-border-*`), matrix toggle (+ speed + color), call-visualizer toggle.
-- [ ] `applyAppearance()` persists + applies on load.
-- [ ] Deploy + verify.
+## Batch 3 — Settings → Appearances tab (subtabs)  [x]
+- [x] Relabel Settings "Themes" tab → "Appearances"; added subtab nav (Themes / Appearance).
+- [x] Themes subtab: `#themeGrid` + Favorites list (localStorage `dialog_fav_themes`, populated on Workshop apply) + Theme Studio + background section.
+- [x] Appearance subtab: Glow slider (0–100% → `--glow-strength` 0–0.5), custom border color+width (`--ui-border-*` + `body.custom-border`).
+- [x] `applyAppearance()` + `initAppearanceControls()` run on load; persisted to localStorage.
+- [~] matrix toggle + call-visualizer toggle live here too — added in Batch 5 / 6.
+- [~] Deploy + verify.
 
 ## Batch 4 — WhatsApp-style voice composer  [ ]
 - [ ] Context-aware `#sendBtn` (empty ⇒ mic, text ⇒ send); retire standalone mic; keep emoji/gif/attach in mobile ⋮.

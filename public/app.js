@@ -425,6 +425,70 @@ function renderThemes() {
 
 
 
+// ---------- Appearance (Settings → Appearances) ----------
+// Glow (0..100% shown → 0..0.5 real via --glow-strength) + optional custom borders.
+function applyAppearance() {
+  const R = document.documentElement.style;
+  const glow = Math.max(0, Math.min(100, Number(localStorage.getItem("dialog_ap_glow") ?? 0)));
+  R.setProperty("--glow-strength", (glow / 200).toFixed(3));
+  const borderOn = localStorage.getItem("dialog_ap_border_on") === "1";
+  document.body.classList.toggle("custom-border", borderOn);
+  if (borderOn) {
+    R.setProperty("--ui-border-color", localStorage.getItem("dialog_ap_border_color") || "#00ff5a");
+    R.setProperty("--ui-border-width", (localStorage.getItem("dialog_ap_border_w") || "1") + "px");
+  } else { R.removeProperty("--ui-border-color"); R.removeProperty("--ui-border-width"); }
+}
+function initAppearanceControls() {
+  const subtabs = $("apSubtabs");
+  if (subtabs) subtabs.querySelectorAll(".settings-subtab").forEach((b) => b.onclick = () => {
+    subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
+    document.querySelectorAll(".ap-subpane").forEach((p) => p.classList.toggle("active", p.dataset.apsubpane === b.dataset.apsub));
+  });
+  const glow = $("apGlow");
+  if (glow) {
+    glow.value = localStorage.getItem("dialog_ap_glow") ?? 0;
+    const upd = () => { $("apGlowV").textContent = glow.value + "%"; localStorage.setItem("dialog_ap_glow", glow.value); applyAppearance(); };
+    glow.oninput = upd; $("apGlowV").textContent = glow.value + "%";
+  }
+  const bOn = $("apBorderOn"), bColor = $("apBorderColor"), bW = $("apBorderW");
+  if (bOn && bColor && bW) {
+    bOn.checked = localStorage.getItem("dialog_ap_border_on") === "1";
+    bColor.value = localStorage.getItem("dialog_ap_border_color") || "#00ff5a";
+    bW.value = localStorage.getItem("dialog_ap_border_w") || "1";
+    $("apBorderWV").textContent = bW.value + "px";
+    $("apBorderCtrls").classList.toggle("hidden", !bOn.checked);
+    bOn.onchange = () => { localStorage.setItem("dialog_ap_border_on", bOn.checked ? "1" : "0"); $("apBorderCtrls").classList.toggle("hidden", !bOn.checked); applyAppearance(); };
+    bColor.oninput = () => { localStorage.setItem("dialog_ap_border_color", bColor.value); applyAppearance(); };
+    bW.oninput = () => { $("apBorderWV").textContent = bW.value + "px"; localStorage.setItem("dialog_ap_border_w", bW.value); applyAppearance(); };
+  }
+  renderFavThemes();
+}
+// Favorite themes (installed from the Workshop) — stored client-side, shown in the Themes subtab.
+function getFavThemes() { try { return JSON.parse(localStorage.getItem("dialog_fav_themes") || "[]"); } catch { return []; } }
+function addFavTheme(name, tokens) {
+  if (!tokens) return;
+  const favs = getFavThemes();
+  if (favs.some((f) => f.name === name)) return;
+  favs.push({ name: name || "Theme", tokens });
+  localStorage.setItem("dialog_fav_themes", JSON.stringify(favs.slice(-24)));
+  renderFavThemes();
+}
+function renderFavThemes() {
+  const box = $("favThemes"); if (!box) return;
+  const favs = getFavThemes();
+  const title = $("favTitle"); if (title) title.classList.toggle("hidden", !favs.length);
+  box.innerHTML = favs.map((f, i) => {
+    const tk = f.tokens || {};
+    const sw = [tk.primary || "#00ff5a", tk.secondary || "#3df58a", tk.bg || "#000604", tk.online || "#3fb950"];
+    return `<button class="theme-opt fav-opt" data-fav="${i}" type="button"><div class="theme-swatch">${sw.map((c) => `<span style="background:${escapeHtml(String(c))}"></span>`).join("")}</div><span class="theme-name">${escapeHtml(f.name)}</span><span class="fav-remove" data-favdel="${i}" title="Remove">✕</span></button>`;
+  }).join("");
+  box.querySelectorAll(".fav-opt").forEach((el) => el.onclick = (e) => {
+    const del = e.target.closest(".fav-remove");
+    if (del) { const favs2 = getFavThemes(); favs2.splice(Number(del.dataset.favdel), 1); localStorage.setItem("dialog_fav_themes", JSON.stringify(favs2)); renderFavThemes(); return; }
+    const f = getFavThemes()[Number(el.dataset.fav)]; if (f) applyUserTheme({ ...DEFAULT_TOKENS, ...f.tokens });
+  });
+}
+
 // ---------- Язык ----------
 function initLang() {
   const v = window.getLang();
@@ -4241,7 +4305,7 @@ $("chatFilters").addEventListener("click", (e) => {
 });
 
 // ---------- Старт ----------
-loadSavedTheme(); initLang(); setIcons(); checkSession();
+loadSavedTheme(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); checkSession();
 window.addEventListener("popstate", onPopState);
 
 // ---------- PWA Install ----------
@@ -4667,7 +4731,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
   async function wsAction(a, th) {
     const { ok, data } = await api(`/api/themes/${th.id}/install`, {});
     const tokens = (ok && data.theme && data.theme.tokens) ? data.theme.tokens : th.tokens;
-    if (a === "apply") { cur = { ...DEFAULT_TOKENS, ...tokens }; curId = null; applyUserTheme(cur); notify(t("ts_applied")); }
+    if (a === "apply") { cur = { ...DEFAULT_TOKENS, ...tokens }; curId = null; applyUserTheme(cur); addFavTheme(th.name, tokens); notify(t("ts_applied")); }
     else if (a === "copy") {
       const r = await api("/api/themes", { name: (th.name || "Theme") + " *", tokens: { ...DEFAULT_TOKENS, ...tokens } });
       notify(r.ok ? t("ts_copied") : ((r.data && r.data.error) === "too_many" ? t("ts_too_many") : t("err_generic")));
