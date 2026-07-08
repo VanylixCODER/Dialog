@@ -19,12 +19,22 @@
     <div class="card login-card">
       <div class="brand"><img src="/src/lil_dialog.webp" alt="" /><div><b>Dialog</b><span class="badge badge-sm badge-primary">1.1.0 beta</span></div></div>
       <p class="muted">The next Dialog — rebuilt from scratch.</p>
-      <div class="stack-form">
+      <div class="stack-form" id="li-form">
         <label class="ipt"><span data-ic="user"></span><input id="li-login" placeholder="Login or email" autocomplete="username" /></label>
         <label class="ipt"><span data-ic="lock"></span><input id="li-pass" type="password" placeholder="Password" autocomplete="current-password" /><button id="li-eye" class="eye" type="button" data-ic="eye"></button></label>
         <div id="li-err" class="err"></div>
         <button id="li-go" class="btn btn-primary btn-block">Sign in</button>
+        <a id="to-reg" class="link muted sm">Create an account →</a>
         <a href="/login" class="link muted sm">Use the classic app →</a>
+      </div>
+      <div class="stack-form hidden" id="rg-form">
+        <label class="ipt"><span data-ic="user"></span><input id="rg-login" placeholder="Login (letters, digits, _)" autocomplete="username" /></label>
+        <label class="ipt"><span data-ic="smile"></span><input id="rg-name" placeholder="Display name" /></label>
+        <label class="ipt"><span data-ic="send"></span><input id="rg-email" type="email" placeholder="Email" autocomplete="email" /></label>
+        <label class="ipt"><span data-ic="lock"></span><input id="rg-pass" type="password" placeholder="Password" autocomplete="new-password" /></label>
+        <div id="rg-err" class="err"></div>
+        <button id="rg-go" class="btn btn-primary btn-block">Create account</button>
+        <a id="to-li" class="link muted sm">← Back to sign in</a>
       </div>
     </div>
   </section>
@@ -136,6 +146,14 @@
       <button class="call-btn" id="cb-cam" data-ic="video" data-tip="Camera"></button>
       <button class="call-btn hang" id="cb-hang" data-ic="phoneOff" data-tip="Leave"></button>
     </footer>
+  </div>
+
+  <!-- Message context menu + reaction picker -->
+  <div id="msg-menu" class="msg-menu hidden">
+    <div class="react-row" id="react-row"></div>
+    <button class="mm-item" data-act="copy"><span data-ic="clip"></span> Copy text</button>
+    <button class="mm-item own" data-act="edit"><span data-ic="gear"></span> Edit</button>
+    <button class="mm-item own danger" data-act="delete"><span data-ic="x"></span> Delete</button>
   </div>
 
   <input id="filepick" type="file" accept="*/*" multiple hidden />
