@@ -11,6 +11,8 @@
   const REACT_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "👎"];
   const watermarks = new Map(); // login -> { delivered, seen } for the active room
   let oldestId = 0, reachedTop = false, loadingMore = false, wmApplied = false, relationsLoaded = false;
+  let relations = { friends: [], incoming: [], sent: [], blocked: [], blockedBy: [] };
+  let listMode = "chats"; const pins = new Set();
 
   const api = async (p, b, m) => {
     const r = await fetch(p, { method: m || (b ? "POST" : "GET"), headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: b ? JSON.stringify(b) : undefined });
@@ -108,7 +110,7 @@
     const [dms, grps] = await Promise.all([api("/api/dms"), api("/api/groups")]);
     if (dms.ok && Array.isArray(dms.data)) dms.data.forEach((c) => chats.set(c.key, c));
     if (grps.ok && grps.data.groups) grps.data.groups.forEach((g) => chats.set("@grp:" + g.id, { key: "@grp:" + g.id, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0 }));
-    refreshPresence(); renderList();
+    await loadPins(); refreshPresence(); renderList(); loadRelations();
   }
   function connect() {
     socket = io();
@@ -152,8 +154,99 @@
     if (avatarChanged) $$(`.avatar[data-login="${login}"] img, .t-ava[data-login="${login}"] img`).forEach((img) => { img.src = avaUrl(login) + "?t=" + Date.now(); });
     renderList();
   }
-  function refreshBadges() {}
-  function loadRelations() {} // implemented in the contacts batch
+  function refreshBadges() {
+    const n = relations.incoming.length;
+    $$('[data-nav="contacts"]').forEach((btn) => {
+      let b = btn.querySelector(".nav-badge");
+      if (n) { if (!b) { b = document.createElement("span"); b.className = "nav-badge"; btn.style.position = "relative"; btn.appendChild(b); } b.textContent = n > 9 ? "9+" : n; b.style.display = ""; }
+      else if (b) b.style.display = "none";
+    });
+  }
+  async function loadRelations() {
+    const { ok, data } = await api("/api/relations"); if (!ok) return;
+    relations = { friends: data.friends || [], incoming: data.incoming || [], sent: data.sent || [], blocked: data.blocked || [], blockedBy: data.blockedBy || [] };
+    relationsLoaded = true; refreshBadges(); if (listMode === "people") renderPeople();
+  }
+
+  /* ---------- generic popup menu ---------- */
+  function popMenu(e, items) {
+    e.preventDefault(); e.stopPropagation(); const menu = $("#ctx-menu");
+    menu.innerHTML = items.map((it, i) => `<button class="mm-item ${it.danger ? "danger" : ""}" data-i="${i}">${it.ic ? `<span data-ic="${it.ic}"></span>` : ""}${esc(it.label)}</button>`).join("");
+    applyIcons(menu);
+    $$(".mm-item", menu).forEach((b) => b.onclick = () => { menu.classList.add("hidden"); items[+b.dataset.i].fn(); });
+    menu.classList.remove("hidden");
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    const x = e.touches ? e.touches[0].clientX : e.clientX, y = e.touches ? e.touches[0].clientY : e.clientY;
+    menu.style.left = Math.max(8, Math.min(x, innerWidth - mw - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, innerHeight - mh - 8)) + "px";
+  }
+  document.addEventListener("click", (e) => { if (!$("#ctx-menu").contains(e.target)) $("#ctx-menu").classList.add("hidden"); });
+
+  /* ---------- contacts / people ---------- */
+  function setListMode(mode) {
+    listMode = mode;
+    $("#chats").classList.toggle("hidden", mode !== "chats");
+    $("#filters").classList.toggle("hidden", mode !== "chats");
+    $("#people").classList.toggle("hidden", mode !== "people");
+    if (mode === "people") { renderPeople(); loadRelations(); } else renderList();
+  }
+  function renderPeople() {
+    const box = $("#people"); const sec = (t) => `<div class="set-sec">${esc(t)}</div>`;
+    const frow = (login, acts) => `<div class="row" data-login="${esc(login)}"><div class="av-wrap">${avaHTML(login, login)}</div><div class="r-mid"><div class="r-name">@${esc(login)}</div></div><div class="r-right prow-acts">${acts}</div></div>`;
+    let html = `<button class="btn btn-primary btn-sm gnew-cta" id="ppl-newgroup"><span data-ic="plus"></span> New group</button>`;
+    if (relations.incoming.length) { html += sec("Friend requests (" + relations.incoming.length + ")"); relations.incoming.forEach((l) => html += frow(l, `<button class="btn btn-xs btn-primary" data-acc="${esc(l)}">Accept</button><button class="btn btn-xs btn-ghost" data-dec="${esc(l)}">Decline</button>`)); }
+    html += sec("Friends (" + relations.friends.length + ")");
+    if (!relations.friends.length) html += `<div class="muted sm" style="padding:6px 12px">No friends yet — search people above and hit Add.</div>`;
+    relations.friends.forEach((l) => html += frow(l, `<button class="icon-btn sm-ib" data-msg="${esc(l)}" data-ic="chat" data-tip="Message"></button><button class="icon-btn sm-ib" data-grp="${esc(l)}" data-ic="plus" data-tip="New group"></button><button class="icon-btn sm-ib" data-more="${esc(l)}" data-ic="dots"></button>`));
+    if (relations.sent.length) { html += sec("Sent requests"); relations.sent.forEach((l) => html += frow(l, `<button class="btn btn-xs btn-ghost" data-cancel="${esc(l)}">Cancel</button>`)); }
+    if (relations.blocked.length) { html += sec("Blocked"); relations.blocked.forEach((l) => html += frow(l, `<button class="btn btn-xs btn-ghost" data-unblock="${esc(l)}">Unblock</button>`)); }
+    box.innerHTML = html; applyIcons(box);
+    $("#ppl-newgroup").onclick = () => openGroupNew(null);
+    const rel = async (target, action, ep) => { await api(ep || "/api/friend", { target, action }); loadRelations(); };
+    $$("[data-acc]", box).forEach((b) => b.onclick = () => rel(b.dataset.acc, "accept"));
+    $$("[data-dec]", box).forEach((b) => b.onclick = () => rel(b.dataset.dec, "decline"));
+    $$("[data-cancel]", box).forEach((b) => b.onclick = () => rel(b.dataset.cancel, "remove"));
+    $$("[data-unblock]", box).forEach((b) => b.onclick = () => rel(b.dataset.unblock, "unblock", "/api/relations"));
+    $$("[data-msg]", box).forEach((b) => b.onclick = () => openDM(b.dataset.msg));
+    $$("[data-grp]", box).forEach((b) => b.onclick = (e) => openGroupNew(b.dataset.grp));
+    $$("[data-more]", box).forEach((b) => b.onclick = (e) => popMenu(e, [
+      { label: "Remove friend", ic: "x", danger: true, fn: () => rel(b.dataset.more, "remove") },
+      { label: "Block", ic: "lock2", danger: true, fn: () => rel(b.dataset.more, "block", "/api/relations") },
+    ]));
+    $$(".row", box).forEach((r) => r.addEventListener("click", (e) => { if (e.target.closest("button")) return; openMP(r.dataset.login); }));
+  }
+
+  /* ---------- group creation from a contact ---------- */
+  async function openGroupNew(seed) {
+    if (!relationsLoaded) await loadRelations();
+    const picks = seed ? [seed] : [];
+    $("#gnew-body").innerHTML = `<input id="gnew-name" class="set-input" placeholder="Group name" maxlength="64">
+      <div class="set-sec">Add members</div>
+      <div class="gnew-list">${relations.friends.length ? relations.friends.map((l) => `<label class="gnew-item"><input type="checkbox" data-l="${esc(l)}" ${picks.includes(l) ? "checked" : ""}><span class="av-wrap">${avaHTML(l, l)}</span><span>@${esc(l)}</span></label>`).join("") : '<div class="muted sm">Add some friends first to invite them.</div>'}</div>
+      <button class="btn btn-primary btn-sm" id="gnew-create" style="align-self:flex-start">Create group</button>`;
+    applyIcons($("#gnew-body"));
+    $("#gnew-create").onclick = async () => {
+      const name = $("#gnew-name").value.trim(); if (!name) return toast("Enter a group name");
+      const members = $$("#gnew-body input[type=checkbox]:checked").map((c) => c.dataset.l);
+      const { ok, data } = await api("/api/groups", { name, members: members.join(",") });
+      if (ok && data.id) { const key = "@grp:" + data.id; chats.set(key, { key, type: "group", id: data.id, name, last: "", ts: Date.now(), unread: 0 }); $("#gnew").classList.add("hidden"); setListMode("chats"); openChat(chats.get(key)); toast("Group created"); }
+      else toast(data.error ? data.error.replace(/_/g, " ") : "Couldn't create group");
+    };
+    $("#gnew").classList.remove("hidden");
+  }
+  $("#gnew-close").onclick = () => $("#gnew").classList.add("hidden");
+  $("#gnew").onclick = (e) => { if (e.target.id === "gnew") $("#gnew").classList.add("hidden"); };
+
+  /* ---------- pins ---------- */
+  async function loadPins() { const { ok, data } = await api("/api/pins"); if (ok && Array.isArray(data)) { pins.clear(); data.forEach((k) => pins.add(k)); } }
+  const savePins = () => api("/api/pins", { keys: [...pins] });
+  function openRowMenu(e, c) {
+    const pinned = pins.has(c.key);
+    popMenu(e, [
+      { label: pinned ? "Unpin" : "Pin to top", ic: "check", fn: () => { pinned ? pins.delete(c.key) : pins.add(c.key); savePins(); renderList(); } },
+      { label: "Mark as read", ic: "check", fn: () => { c.unread = 0; renderList(); } },
+    ]);
+  }
   async function refreshPresence() {
     const logins = [...chats.values()].filter((c) => c.type === "dm").map((c) => c.login); if (!logins.length) return;
     const { ok, data } = await api("/api/presence", { logins });
@@ -168,18 +261,24 @@
       if (q && !(c.name || "").toLowerCase().includes(q) && !(c.login || "").toLowerCase().includes(q)) return false;
       if (filter === "dm") return c.type === "dm"; if (filter === "group") return c.type === "group";
       if (filter === "online") return c.type === "dm" && ["online", "dnd"].includes(presence.get(c.login)); return true;
-    }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    }).sort((a, b) => (pins.has(b.key) - pins.has(a.key)) || ((b.ts || 0) - (a.ts || 0)));
     for (const c of list) {
       const li = document.createElement("li"); li.className = "row" + (c.key === active ? " active" : ""); li.dataset.key = c.key;
       if (c.type === "dm") li.dataset.login = c.login;
+      const ava = c.type === "group" ? `<div class="avatar" data-gid="${c.id}"><img src="/api/group-avatar/${c.id}" onerror="this.remove()">${esc(initials(c.name))}</div>` : avaHTML(c.login, c.name);
       const st = c.type === "dm" ? `<span class="dot ${presence.get(c.login) || "offline"}" style="right:-2px;bottom:-2px"></span>` : "";
-      li.innerHTML = `<div class="av-wrap">${avaHTML(c.login, c.name)}${st}</div>
+      const pin = pins.has(c.key) ? '<span class="pin-ic" data-ic="check"></span>' : "";
+      li.innerHTML = `<div class="av-wrap">${ava}${st}</div>
         <div class="r-mid"><div class="r-name">${esc(c.name)}${c._call ? ' <span class="badge badge-success badge-xs">call</span>' : ""}</div><div class="r-last">${esc(c.last || (c.type === "group" ? "Group" : ""))}</div></div>
-        <div class="r-right">${c.ts ? `<span class="r-time">${fmtTime(c.ts)}</span>` : ""}${c.unread ? `<span class="badge badge-primary badge-sm">${c.unread}</span>` : ""}</div>`;
+        <div class="r-right">${pin}${c.ts ? `<span class="r-time">${fmtTime(c.ts)}</span>` : ""}${c.unread ? `<span class="badge badge-primary badge-sm">${c.unread}</span>` : ""}</div>`;
       li.onclick = () => openChat(c);
+      li.addEventListener("contextmenu", (e) => openRowMenu(e, c));
+      let lp; li.addEventListener("touchstart", (e) => { lp = setTimeout(() => openRowMenu(e, c), 500); }, { passive: true });
+      ["touchend", "touchmove", "touchcancel"].forEach((ev) => li.addEventListener(ev, () => clearTimeout(lp)));
       li.querySelector(".avatar").onclick = (e) => { if (c.type === "dm") { e.stopPropagation(); openMP(c.login); } };
       ul.appendChild(li);
     }
+    if (listMode === "chats") applyIcons(ul);
     suggestFromSearch(q);
   }
   let suggestT;
@@ -378,8 +477,13 @@
     $("#mp-name").textContent = data.name; $("#mp-tag").textContent = "@" + data.login;
     const st = presence.get(login) || data.status || "offline"; $("#mp-status").innerHTML = `<span class="dot ${st}" style="position:static;display:inline-block;margin-right:6px"></span>${st}`;
     $("#mp-desc").textContent = data.description || "No description."; $("#mp-joined").textContent = data.created_at ? "Joined " + new Date(data.created_at).toLocaleDateString() : "";
-    $("#mp-msg").onclick = () => openDM(login, data.name);
-    $("#mp-add").onclick = async () => { await api("/api/friend", { target: login, action: "request" }); toast("Friend request sent"); };
+    $("#mp-msg").onclick = () => { $("#mp").classList.add("hidden"); openDM(login, data.name); };
+    const add = $("#mp-add"); add.disabled = false; add.onclick = null;
+    const done = (msg) => { loadRelations(); toast(msg); $("#mp").classList.add("hidden"); };
+    if (relations.friends.includes(login)) { add.textContent = "Friends ✓"; add.disabled = true; }
+    else if (relations.incoming.includes(login)) { add.textContent = "Accept request"; add.onclick = async () => { await api("/api/friend", { target: login, action: "accept" }); done("You're now friends"); }; }
+    else if (relations.sent.includes(login)) { add.textContent = "Requested"; add.disabled = true; }
+    else { add.textContent = "Add friend"; add.onclick = async () => { const { ok, data: d } = await api("/api/friend", { target: login, action: "request" }); ok ? done("Friend request sent") : toast(d.error === "req_blocked" ? "They don't accept requests" : "Couldn't send request"); }; }
     $("#mp").classList.remove("hidden");
   }
   $("#mp-close").onclick = () => $("#mp").classList.add("hidden");
@@ -436,14 +540,14 @@
   }
   $("#set-close").onclick = () => $("#settings").classList.add("hidden");
   $("#settings").onclick = (e) => { if (e.target.id === "settings") $("#settings").classList.add("hidden"); };
-  function closeSheets() { $("#settings").classList.add("hidden"); $("#mp").classList.add("hidden"); }
+  function closeSheets() { $("#settings").classList.add("hidden"); $("#mp").classList.add("hidden"); $("#gnew").classList.add("hidden"); }
 
   /* ---------- nav ---------- */
   $$("[data-nav]").forEach((b) => b.onclick = () => {
     const n = b.dataset.nav; $$(".rail-btn, .dock-btn").forEach((x) => x.classList.toggle("active", x.dataset.nav === n && (n === "chats" || n === "contacts")));
     if (n === "settings") openSettings(); else if (n === "theme") openThemes();
-    else if (n === "contacts") { filter = "dm"; $$("#filters .chip").forEach((x) => x.classList.toggle("active", x.dataset.f === "dm")); renderList(); }
-    else if (n === "chats") { filter = "all"; $$("#filters .chip").forEach((x) => x.classList.toggle("active", x.dataset.f === "all")); renderList(); }
+    else if (n === "contacts") setListMode("people");
+    else if (n === "chats") { filter = "all"; $$("#filters .chip").forEach((x) => x.classList.toggle("active", x.dataset.f === "all")); setListMode("chats"); }
   });
 
   /* ================= CALLS (LiveKit) ================= */

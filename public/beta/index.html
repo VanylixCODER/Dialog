@@ -62,6 +62,7 @@
         <button class="chip" data-f="group">Groups</button>
       </div>
       <ul id="chats" class="rows"></ul>
+      <div id="people" class="rows hidden"></div>
       <div id="suggest" class="suggest hidden"></div>
     </aside>
 
@@ -147,6 +148,17 @@
       <button class="call-btn hang" id="cb-hang" data-ic="phoneOff" data-tip="Leave"></button>
     </footer>
   </div>
+
+  <!-- New group -->
+  <div id="gnew" class="sheet hidden">
+    <div class="sheet-card">
+      <header class="sheet-head"><b>New group</b><button class="icon-btn" id="gnew-close" data-ic="x"></button></header>
+      <div class="sheet-body" id="gnew-body"></div>
+    </div>
+  </div>
+
+  <!-- Generic popup menu (contacts / chat rows) -->
+  <div id="ctx-menu" class="msg-menu hidden"></div>
 
   <!-- Message context menu + reaction picker -->
   <div id="msg-menu" class="msg-menu hidden">
