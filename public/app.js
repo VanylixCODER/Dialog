@@ -3921,17 +3921,7 @@ function dayLabel(dayStr) {
 }
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
-function notify(text, room) {
-  let el = $("notifyToast");
-  if (!el) {
-    el = document.createElement("div"); el.id = "notifyToast";
-    el.className = "toast toast-top toast-end nt";
-    el.innerHTML = '<div class="alert alert-info"><span class="nt-text"></span></div>';
-    document.body.appendChild(el);
-  }
-  el.querySelector(".nt-text").textContent = text; el.dataset.room = room || "";
-  el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500);
-}
+function notify(text, room) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.dataset.room = room || ""; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
 function dismissNotif(room) {
   const el = $("notifyToast");
   if (el && el.dataset.room === room) { el.classList.remove("show"); clearTimeout(el._t); }
@@ -4098,7 +4088,6 @@ function refreshPrefsPane() {
   if ($("prefGroupAdd")) $("prefGroupAdd").checked = profile.prefGroupAdd !== false;
   if ($("prefReadReceipts")) $("prefReadReceipts").checked = profile.prefReadReceipts !== false;
   if ($("prefMsg")) $("prefMsg").textContent = "";
-  refreshAppearancePane();
 }
 async function savePref(patch) {
   const { ok, data } = await api("/api/prefs", patch);
@@ -4115,47 +4104,12 @@ $("prefFriendReq") && ($("prefFriendReq").onchange = (e) => savePref({ friendReq
 $("prefGroupAdd") && ($("prefGroupAdd").onchange = (e) => savePref({ groupAdd: e.target.checked }));
 $("prefReadReceipts") && ($("prefReadReceipts").onchange = (e) => savePref({ readReceipts: e.target.checked }));
 
-// ---------- Appearance knobs (roundness / density / animation / UI size) ----------
-// Global, per-device (localStorage) — applied to <html>/<body>, independent of theme.
-const AP = {
-  radius: () => localStorage.getItem("dialog_ap_radius"),
-  density: () => localStorage.getItem("dialog_ap_density") || "comfortable",
-  motion: () => localStorage.getItem("dialog_ap_motion") || "full",
-  scale: () => localStorage.getItem("dialog_ap_scale") || "1",
-};
-function applyAppearance() {
-  try {
-    const root = document.documentElement, b = document.body;
-    const radius = AP.radius() == null ? 100 : Number(AP.radius());
-    root.style.setProperty("--radius-scale", (radius / 100).toFixed(2));
-    root.style.setProperty("--ui-scale", String(Number(AP.scale()) || 1));
-    b.classList.toggle("dense", AP.density() === "dense");
-    b.classList.remove("motion-off", "motion-subtle", "motion-full");
-    const m = AP.motion(); if (m === "off" || m === "subtle") b.classList.add("motion-" + m);
-  } catch {}
-}
-applyAppearance(); // apply immediately (no flash)
-function refreshAppearancePane() {
-  const r = AP.radius() == null ? 100 : Number(AP.radius());
-  if ($("apRadius")) { $("apRadius").value = r; if ($("apRadiusV")) $("apRadiusV").textContent = r + "%"; }
-  if ($("apDensity")) $("apDensity").value = AP.density();
-  if ($("apMotion")) $("apMotion").value = AP.motion();
-  if ($("apScale")) $("apScale").value = String(Number(AP.scale()) || 1);
-}
-$("apRadius") && ($("apRadius").oninput = (e) => { localStorage.setItem("dialog_ap_radius", e.target.value); if ($("apRadiusV")) $("apRadiusV").textContent = e.target.value + "%"; applyAppearance(); });
-$("apDensity") && ($("apDensity").onchange = (e) => { localStorage.setItem("dialog_ap_density", e.target.value); applyAppearance(); });
-$("apMotion") && ($("apMotion").onchange = (e) => { localStorage.setItem("dialog_ap_motion", e.target.value); applyAppearance(); });
-$("apScale") && ($("apScale").onchange = (e) => { localStorage.setItem("dialog_ap_scale", e.target.value); applyAppearance(); });
-
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
 // он живой и в HTML, и в логике; зато аватар/profileSave/logoutBtn и т.д. обёрнуты
 // в `&&` гард по тому же шаблону: разметка может их удалить, и тогда $() вернёт null,
 // а .onclick на null роняет весь дальнейший init (один такой баг уже сломал скрипт после
 // рефакторинга «new start for groups» — кнопки в settings и темах не открывались).
 $("contactsBtn").onclick = () => openSettings("contacts");
-// Rail: settings + theme-studio shortcuts (moved action buttons keep their handlers by id).
-$("railSettings") && ($("railSettings").onclick = () => openSettings("profile"));
-$("railTheme") && ($("railTheme").onclick = () => { const b = $("openThemeStudio"); if (b) b.click(); else openSettings("themes"); });
 
 // Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
@@ -4266,7 +4220,7 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", newGroupBtn: "plus", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", installBtn: "download", railTheme: "palette", railSettings: "settings", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
