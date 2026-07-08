@@ -31,13 +31,13 @@ batch; deploy + verify each before moving on. Status: `[ ]` todo · `[~]` in pro
 - [x] Bubbles: `min-width:0; word-break:break-word; overflow-wrap:anywhere`; links break too.
 - [~] Deploy + verify (long unbroken message, open menus, icons centered).
 
-## Batch 2 — Flat minimalist themes + flashbang restyle  [ ]
-- [ ] Remove `linear-gradient` fills (buttons/panels/shimmer) → flat solids.
-- [ ] Kill green accent border: drop ambient `0 0 0 1px rgba(primary)` rings + accent borders on cards/inputs → `1px solid var(--border-1)`; keep `:focus-visible` rings only.
-- [ ] Remove `inset 0 -2px 0` 3D bevels; keep soft `--shadow-*` for 2D depth.
-- [ ] Introduce `--glow-strength` (0–0.5, default low); redefine `--glow-sm/md/lg` off it.
-- [ ] Restyle `[data-theme="flashbang"]` light theme to clean/professional (KEEP easter egg + confirm popup + name).
-- [ ] Deploy + verify (cycle themes; flat, no green ring; flashbang clean but flash gag intact).
+## Batch 2 — Flat minimalist themes + flashbang restyle  [x]
+- [x] Root cause of "green border everywhere" = `--border-*` and `--shadow-*` inset-rings were primary-tinted. Redefined `--border-1/2/3` neutral white + `--shadow-*` to plain drop shadows (no green inset ring).
+- [x] `.btn-primary` flattened: flat accent fill, no gradient/bevel/shimmer sweep; subtle hover shadow.
+- [x] `--glow-strength` (default 0) gates `--glow-sm/md/lg`; Appearances slider will raise it (Batch 3).
+- [x] Flattened `.chat-item.active` (accent bar, no ring/gradient), `.msg.me .bubble` (neutral border, no glow), `.field:focus` (subtle 2px ring), `.chatlist` (flat, no neon strip).
+- [x] Flashbang restyled to a professional layered light theme (off-white/grey depth). Name + easter-egg + confirm popup untouched (they live in app.js).
+- [~] Deploy + verify.
 
 ## Batch 3 — Settings → Appearances tab (subtabs)  [ ]
 - [ ] Convert Settings `data-pane="themes"` → `appearance`, relabel tab "Appearances"; add subtab nav.
