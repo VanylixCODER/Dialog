@@ -24,7 +24,27 @@
 
   /* ---------- theme + appearance ---------- */
   const THEMES = [["dialog", "Dialog", ["#00ff5a", "#0a1211", "#12201b"]], ["matrix", "Matrix", ["#00ff66", "#010502", "#031a0c"]], ["dracula", "Dracula", ["#bd93f9", "#282a36", "#ff79c6"]], ["midnight", "Midnight", ["#5a8aff", "#0a0e1a", "#1a2140"]], ["mono", "Mono", ["#ffffff", "#000000", "#1a1a1a"]]];
-  function applyTheme(k) { document.documentElement.dataset.theme = k; localStorage.setItem("dialog_beta_theme", k); if (k === "matrix") startMatrix(); else stopMatrix(); }
+  const DEFCUSTOM = { primary: "#00e0ff", bg: "#070a12", text: "#e8f6ff", secondary: "#7a5cff", blur: 0, glow: 40 };
+  const hx = (h) => { h = String(h).replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const shade = (h, p) => { const [r, g, b] = hx(h), f = p / 100, a = (c) => Math.max(0, Math.min(255, Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f))); return `rgb(${a(r)},${a(g)},${a(b)})`; };
+  function getCustom() { try { return { ...DEFCUSTOM, ...JSON.parse(localStorage.getItem("dialog_beta_custom") || "{}") }; } catch { return { ...DEFCUSTOM }; } }
+  const R = document.documentElement.style;
+  function applyCustom(tk) {
+    document.documentElement.dataset.theme = "custom"; stopMatrix();
+    R.setProperty("--color-primary", tk.primary); R.setProperty("--color-primary-content", "#04140a");
+    R.setProperty("--color-accent", tk.primary); R.setProperty("--color-secondary", tk.secondary);
+    R.setProperty("--color-base-100", tk.bg); R.setProperty("--color-base-200", shade(tk.bg, 8)); R.setProperty("--color-base-300", shade(tk.bg, 16));
+    R.setProperty("--color-base-content", tk.text); R.setProperty("--g", hx(tk.primary).join(","));
+    document.body.classList.toggle("glass", +tk.blur > 0); R.setProperty("--cblur", (+tk.blur || 0) + "px");
+    R.setProperty("--cglow", ((+tk.glow || 0) / 100).toFixed(2));
+  }
+  function applyTheme(k) {
+    localStorage.setItem("dialog_beta_theme", k);
+    if (k === "custom") { applyCustom(getCustom()); return; }
+    ["--color-primary", "--color-primary-content", "--color-accent", "--color-secondary", "--color-base-100", "--color-base-200", "--color-base-300", "--color-base-content", "--g"].forEach((v) => R.removeProperty(v));
+    document.body.classList.remove("glass");
+    document.documentElement.dataset.theme = k; if (k === "matrix") startMatrix(); else stopMatrix();
+  }
   function applyAppearance() {
     const r = document.documentElement, b = document.body;
     r.style.setProperty("--radius-scale", ((+localStorage.getItem("dialog_ap_radius") || 100) / 100).toFixed(2));
@@ -242,10 +262,22 @@
   }
   function openThemes() {
     $("#set-title").textContent = "Themes";
-    const cur = document.documentElement.dataset.theme;
-    $("#set-body").innerHTML = `<div class="theme-grid">${THEMES.map(([k, name, sw]) => `<div class="theme-card ${cur === k ? "active" : ""}" data-t="${k}"><div class="theme-sw">${sw.map((c) => `<i style="background:${c}"></i>`).join("")}</div><b>${name}${k === "matrix" ? " ⛶" : ""}</b></div>`).join("")}</div>
-      <p class="muted sm" style="margin-top:10px">Full theme builder (blur · glow · animated background · fonts) lands in the next drop.</p>`;
+    const cur = localStorage.getItem("dialog_beta_theme") || "dialog"; const tk = getCustom();
+    $("#set-body").innerHTML = `<div class="theme-grid">${THEMES.map(([k, name, sw]) => `<div class="theme-card ${cur === k ? "active" : ""}" data-t="${k}"><div class="theme-sw">${sw.map((c) => `<i style="background:${c}"></i>`).join("")}</div><b>${name}${k === "matrix" ? " ⛶" : ""}</b></div>`).join("")}
+        <div class="theme-card ${cur === "custom" ? "active" : ""}" data-t="custom"><div class="theme-sw"><i style="background:${tk.primary}"></i><i style="background:${tk.bg}"></i><i style="background:${tk.secondary}"></i></div><b>Custom ✎</b></div></div>
+      <div class="set-sec">Theme builder</div>
+      <div class="set-row"><div class="lbl"><b>Primary</b></div><input type="color" id="b-primary" value="${tk.primary}"></div>
+      <div class="set-row"><div class="lbl"><b>Secondary</b></div><input type="color" id="b-secondary" value="${tk.secondary}"></div>
+      <div class="set-row"><div class="lbl"><b>Background</b></div><input type="color" id="b-bg" value="${tk.bg}"></div>
+      <div class="set-row"><div class="lbl"><b>Text</b></div><input type="color" id="b-text" value="${tk.text}"></div>
+      <div class="set-row"><div class="lbl"><b>Transparency / blur</b></div><input type="range" class="rng" id="b-blur" min="0" max="24" value="${tk.blur}"></div>
+      <div class="set-row"><div class="lbl"><b>Glow</b></div><input type="range" class="rng" id="b-glow" min="0" max="100" value="${tk.glow}"></div>
+      <button class="btn btn-primary btn-sm" id="b-apply" style="align-self:flex-start">Apply custom theme</button>`;
     $$(".theme-card").forEach((c) => c.onclick = () => { applyTheme(c.dataset.t); $$(".theme-card").forEach((x) => x.classList.toggle("active", x === c)); });
+    const readB = () => ({ primary: $("#b-primary").value, secondary: $("#b-secondary").value, bg: $("#b-bg").value, text: $("#b-text").value, blur: +$("#b-blur").value, glow: +$("#b-glow").value });
+    const liveB = () => { const t = readB(); localStorage.setItem("dialog_beta_custom", JSON.stringify(t)); applyCustom(t); $$(".theme-card").forEach((x) => x.classList.toggle("active", x.dataset.t === "custom")); };
+    ["b-primary", "b-secondary", "b-bg", "b-text", "b-blur", "b-glow"].forEach((id) => $("#" + id).addEventListener("input", liveB));
+    $("#b-apply").onclick = () => { liveB(); localStorage.setItem("dialog_beta_theme", "custom"); toast("Custom theme applied"); };
     $("#settings").classList.remove("hidden");
   }
   $("#set-close").onclick = () => $("#settings").classList.add("hidden");
@@ -314,6 +346,7 @@
   }
   $("#c-call").onclick = () => startCall(false);
   $("#c-video").onclick = () => startCall(true);
+  $("#call-fs").onclick = () => $("#call").classList.toggle("big"); // side-dock ⇄ big screen
   $("#cb-hang").onclick = endCall;
   $("#cb-mic").onclick = async () => { if (!call.room) return; call.micOn = !call.micOn; await call.room.localParticipant.setMicrophoneEnabled(call.micOn); updateCallBtns(); };
   $("#cb-cam").onclick = async () => { if (!call.room) return; call.camOn = !call.camOn; await call.room.localParticipant.setCameraEnabled(call.camOn); if (!call.camOn) { const tile = tiles.get("me"); if (tile) { tile.querySelectorAll("video").forEach((v) => v.remove()); const av = tile.querySelector(".t-ava"); if (av) av.style.display = ""; } } updateCallBtns(); };
