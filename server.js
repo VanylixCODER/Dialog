@@ -170,10 +170,6 @@ app.get(["/guidelines", "/dcg", "/rules"], (_req, res) =>
 app.get(["/invite/:code", "/join/:code"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "invite.html"))
 );
-// Dialog 1.1.0 — new-stack preview (parallel to the classic app at /login).
-app.get(["/beta", "/beta/"], (_req, res) =>
-  res.sendFile(join(__dirname, "public", "beta", "index.html"))
-);
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 async function authUser(req) { return auth.userByToken(bearer(req)); }
