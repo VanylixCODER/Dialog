@@ -80,7 +80,10 @@
         <div id="typing" class="typing muted hidden"></div>
         <footer class="composer">
           <button class="icon-btn" id="c-attach" data-ic="clip" data-tip="Attach"></button>
+          <button class="icon-btn" id="c-emoji" data-ic="smile" data-tip="Emoji"></button>
+          <button class="gif-btn" id="c-gif" data-tip="GIF">GIF</button>
           <input id="c-input" class="c-input" placeholder="Message…" autocomplete="off" />
+          <button class="icon-btn" id="c-mic" data-ic="mic" data-tip="Voice message"></button>
           <button class="icon-btn send" id="c-send" data-ic="send"></button>
         </footer>
         <div id="tray" class="file-tray hidden"></div>
@@ -159,6 +162,13 @@
 
   <!-- Generic popup menu (contacts / chat rows) -->
   <div id="ctx-menu" class="msg-menu hidden"></div>
+
+  <!-- Emoji + GIF pickers -->
+  <div id="emoji-pop" class="pop emoji-pop hidden"></div>
+  <div id="gif-pop" class="pop gif-pop hidden">
+    <input id="gif-q" class="set-input" placeholder="Search GIFs…" />
+    <div id="gif-grid" class="gif-grid"></div>
+  </div>
 
   <!-- Message context menu + reaction picker -->
   <div id="msg-menu" class="msg-menu hidden">

@@ -318,8 +318,10 @@
   const SYS = ["call_started", "call_ended", "call_missed", "join", "leave"];
   const sysText = (m) => ({ call_started: "📞 Call started", call_ended: "📞 Call ended" + (m.text ? " · " + m.text : ""), call_missed: "📞 Missed call" + (m.text ? " · " + m.text : ""), join: (m.name || "Someone") + " joined", leave: (m.name || "Someone") + " left" }[m.type] || m.type);
   const preview = (m) => SYS.includes(m.type) ? sysText(m) : m.type === "text" ? m.text : m.type === "image" || m.type === "gif" ? "🖼 Photo" : m.type === "video" ? "🎬 Video" : m.type === "audio" ? "🎤 Voice" : "📎 " + (m.mediaName || "File");
+  const URL_RE = /(https?:\/\/[^\s]+)/i;
+  const textHTML = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" class="in-link">${u}</a>`);
   function bodyHTML(m) {
-    if (m.type === "text") return `<div class="bub">${esc(m.text)}</div>`;
+    if (m.type === "text") return `<div class="bub">${textHTML(m.text)}</div>`;
     if (m.type === "image" || m.type === "gif") return `<div class="bub bub-media"><img src="${m.media}" alt="" loading="lazy"></div>`;
     if (m.type === "video") return `<div class="bub bub-media"><video src="${m.media}" controls></video></div>`;
     if (m.type === "audio") return `<div class="bub m-file"><span data-ic="mic"></span><audio controls src="${m.media}"></audio></div>`;
@@ -337,6 +339,7 @@
     el.innerHTML = (mine ? "" : avaHTML(m.fromLogin, m.name)) + `<div class="m-body">${who}${bodyHTML(m)}<div class="reactions"></div><div class="m-time">${editTag}${fmtTime(m.ts)}${tick}</div></div>`;
     applyIcons(el);
     if (m.reactions) renderReactions(el, m.reactions);
+    if (m.type === "text" && URL_RE.test(m.text)) maybeLinkPreview(el, m.text);
     el.addEventListener("contextmenu", (e) => openMsgMenu(e, el));
     let lp; el.addEventListener("touchstart", (e) => { lp = setTimeout(() => openMsgMenu(e, el), 450); }, { passive: true });
     ["touchend", "touchmove", "touchcancel"].forEach((ev) => el.addEventListener(ev, () => clearTimeout(lp)));
@@ -468,6 +471,80 @@
     $$(".ft-x", tray).forEach((b) => b.onclick = () => { pendingFiles.splice(+b.dataset.i, 1); renderTray(); });
     $("#ft-send").onclick = () => { if (trayTotal() > MAX_TOTAL || !active) return; pendingFiles.forEach((f) => { const type = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "file"; const r = new FileReader(); r.onload = () => socket.emit("message", { type, media: r.result, mediaName: f.name, localId: ++localId }); r.readAsDataURL(f); }); pendingFiles.length = 0; renderTray(); };
   }
+
+  /* ---------- link previews ---------- */
+  function maybeLinkPreview(el, text) {
+    const m = text && text.match(URL_RE); if (!m) return; const url = m[1];
+    api("/api/link-preview?url=" + encodeURIComponent(url)).then(({ ok, data }) => {
+      if (!ok || !data || (!data.title && !data.image)) return;
+      const body = el.querySelector(".m-body"); if (!body || body.querySelector(".link-preview")) return;
+      const a = document.createElement("a"); a.className = "link-preview"; a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.innerHTML = `${data.image ? `<img src="${esc(data.image)}" onerror="this.remove()">` : ""}<div class="lp-meta"><div class="lp-site muted">${esc(data.site || "")}</div><div class="lp-title">${esc(data.title || "")}</div><div class="lp-desc muted">${esc(data.description || "")}</div></div>`;
+      body.insertBefore(a, body.querySelector(".reactions"));
+    });
+  }
+
+  /* ---------- emoji · GIF · voice ---------- */
+  const EMOJI = "😀 😁 😂 🤣 😊 😍 😘 😎 🤗 🤔 😐 😴 😭 😡 🥺 😅 😬 🤯 🥳 😇 🤩 😤 👍 👎 👏 🙏 💪 🔥 ✨ 🎉 ❤️ 🧡 💛 💚 💙 💜 💔 ⭐ ✅ ❌ ⚡ 👀 💯 🙌 🤝 🎁 📌 ☕ 🍕 🚀".split(" ");
+  function positionPop(p, anchor) {
+    p.classList.remove("hidden"); const ar = anchor.getBoundingClientRect(), pw = p.offsetWidth, ph = p.offsetHeight;
+    let left = Math.max(8, Math.min(ar.left, innerWidth - pw - 8)), top = ar.top - ph - 8; if (top < 8) top = ar.bottom + 8;
+    p.style.left = left + "px"; p.style.top = top + "px";
+  }
+  function insertAtCaret(inp, txt) {
+    const s = inp.selectionStart ?? inp.value.length, e = inp.selectionEnd ?? inp.value.length;
+    inp.value = inp.value.slice(0, s) + txt + inp.value.slice(e); inp.selectionStart = inp.selectionEnd = s + txt.length; inp.focus();
+  }
+  $("#c-emoji").onclick = (ev) => {
+    ev.stopPropagation(); const p = $("#emoji-pop"); if (!p.classList.contains("hidden")) return p.classList.add("hidden");
+    $("#gif-pop").classList.add("hidden");
+    p.innerHTML = EMOJI.map((e) => `<button type="button">${e}</button>`).join("");
+    $$("#emoji-pop button").forEach((b) => b.onclick = () => insertAtCaret($("#c-input"), b.textContent));
+    positionPop(p, $("#c-emoji"));
+  };
+  let gifT;
+  $("#c-gif").onclick = (ev) => {
+    ev.stopPropagation(); const p = $("#gif-pop"); if (!p.classList.contains("hidden")) return p.classList.add("hidden");
+    $("#emoji-pop").classList.add("hidden"); positionPop(p, $("#c-gif")); $("#gif-q").value = ""; loadGifs(""); setTimeout(() => $("#gif-q").focus(), 30);
+  };
+  $("#gif-q").oninput = (e) => { clearTimeout(gifT); const q = e.target.value; gifT = setTimeout(() => loadGifs(q), 300); };
+  $("#gif-q").onclick = (e) => e.stopPropagation();
+  async function loadGifs(q) {
+    const grid = $("#gif-grid"); grid.innerHTML = '<div class="muted sm" style="padding:8px">Loading…</div>';
+    const { ok, data } = await api("/api/gif?q=" + encodeURIComponent(q));
+    if (!ok) return (grid.innerHTML = '<div class="muted sm" style="padding:8px">Failed to load</div>');
+    if (data.nokey) return (grid.innerHTML = '<div class="muted sm" style="padding:8px">GIFs aren\'t configured on this server</div>');
+    const res = data.results || [];
+    grid.innerHTML = res.length ? res.map((g) => `<img src="${esc(g.preview)}" data-url="${esc(g.url)}" loading="lazy">`).join("") : '<div class="muted sm" style="padding:8px">No results</div>';
+    $$("#gif-grid img").forEach((im) => im.onclick = () => sendGif(im.dataset.url));
+  }
+  function sendGif(url) {
+    if (!active) return; const lid = ++localId;
+    addMsg({ localId: lid, fromLogin: me.login, name: me.name, ts: Date.now(), type: "gif", media: url }, true);
+    socket.emit("message", { type: "gif", media: url, localId: lid }); $("#gif-pop").classList.add("hidden");
+  }
+  document.addEventListener("click", (e) => {
+    if (!$("#emoji-pop").contains(e.target) && e.target !== $("#c-emoji") && !$("#c-emoji").contains(e.target)) $("#emoji-pop").classList.add("hidden");
+    if (!$("#gif-pop").contains(e.target) && e.target !== $("#c-gif") && !$("#c-gif").contains(e.target)) $("#gif-pop").classList.add("hidden");
+  });
+
+  let rec = null, recChunks = [];
+  $("#c-mic").onclick = async () => {
+    if (rec) { rec.stop(); return; }
+    if (!active) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) return toast("Voice not supported here");
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return toast("Microphone blocked"); }
+    recChunks = []; rec = new MediaRecorder(stream);
+    rec.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop()); $("#c-mic").classList.remove("recording");
+      const blob = new Blob(recChunks, { type: (rec && rec.mimeType) || "audio/webm" }); rec = null;
+      if (!blob.size) return;
+      if (blob.size > MAX_TOTAL) return toast("Recording too large");
+      const r = new FileReader(); r.onload = () => { const lid = ++localId; addMsg({ localId: lid, fromLogin: me.login, name: me.name, ts: Date.now(), type: "audio", media: r.result, mediaName: "voice message" }, true); socket.emit("message", { type: "audio", media: r.result, mediaName: "voice message", localId: lid }); }; r.readAsDataURL(blob);
+    };
+    rec.start(); $("#c-mic").classList.add("recording"); toast("Recording… tap the mic again to send");
+  };
 
   /* ---------- mini-profile (right-mirrored) + group-from-contact ---------- */
   async function openMP(login) {
