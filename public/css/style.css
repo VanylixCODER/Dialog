@@ -56,12 +56,11 @@
   --shadow-md: 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset, 0 12px 38px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 0 0 1px rgba(var(--primary-rgb), 0.16) inset, 0 22px 64px rgba(0, 0, 0, 0.6);
 
-  /* Радиусы — scaled by the "corner roundness" appearance knob (--radius-scale). */
-  --radius-scale: 1;
-  --r-1: calc(4px * var(--radius-scale));
-  --r-2: calc(6px * var(--radius-scale));
-  --r-3: calc(10px * var(--radius-scale));
-  --r-4: calc(14px * var(--radius-scale));
+  /* Радиусы */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --r-4: 14px;
   --r-pill: 999px;
 
   /* Тайминги */
@@ -74,35 +73,6 @@
   /* Шрифты (UI Inter fallback для читабельности; mono для акцентов) */
   --font-ui: "Segoe UI", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
   --display: "Segoe UI", "Segoe UI Variable Display", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
-}
-
-/* ── DaisyUI bridge ───────────────────────────────────────────────
-   DaisyUI 5 is loaded fully @layer-scoped, so these unlayered mappings win and
-   make its component variables follow Dialog's existing theme tokens. Every
-   built-in theme + Theme Studio theme already sets --accent-* / --bg-* / --danger,
-   so this single rule themes all DaisyUI components automatically (green-terminal),
-   and --radius-* tracks the roundness scale. */
-body {
-  --color-base-100: var(--bg-1);
-  --color-base-200: var(--bg-2);
-  --color-base-300: var(--bg-3);
-  --color-base-content: var(--text-strong, #e9ffec);
-  --color-primary: var(--accent-400);
-  --color-primary-content: #04140a;
-  --color-secondary: var(--accent-300);
-  --color-secondary-content: #04140a;
-  --color-accent: var(--accent-500);
-  --color-accent-content: #04140a;
-  --color-neutral: var(--bg-3);
-  --color-neutral-content: var(--text-strong, #e9ffec);
-  --color-info: var(--accent-300);
-  --color-success: #3fb950;   --color-success-content: #04140a;
-  --color-warning: #e0b34a;   --color-warning-content: #1a1200;
-  --color-error: var(--danger, #ff5252);   --color-error-content: #ffffff;
-  --radius-box: var(--r-4);
-  --radius-field: var(--r-2);
-  --radius-selector: var(--r-2);
-  --border: 1px;
 }
 
 /* Базовый сброс -------------------------------------------------- */
@@ -504,31 +474,8 @@ a:focus-visible {
 .lang-row > span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
 
 /* ============ App grid (Telegram-style) ============ */
-.app { display: grid; grid-template-columns: 64px 340px 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
-.app:has(#infoPanel:not(.hidden)) { grid-template-columns: 64px 340px 1fr 280px; }
-
-/* ── Icon rail (primary nav) ─────────────────────────────────── */
-.app-rail {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 12px 0; background: var(--bg-2); border-right: 1px solid var(--border-1);
-  z-index: 6;
-}
-.rail-brand { width: 30px; height: 30px; margin-bottom: 10px; opacity: .95; }
-.rail-brand img { width: 100%; height: 100%; object-fit: contain; }
-.rail-group { display: flex; flex-direction: column; gap: 6px; }
-.rail-spacer { flex: 1; }
-.rail-btn {
-  width: 46px; height: 46px; display: grid; place-items: center; flex-shrink: 0;
-  border-radius: var(--r-3); background: transparent; border: 1px solid transparent;
-  color: var(--text-dim); cursor: pointer; font-size: 18px; position: relative;
-  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
-}
-.rail-btn:hover { color: var(--accent-200); background: var(--accent-faint); }
-.rail-btn:active { transform: scale(0.9); }
-.rail-btn.active { color: var(--accent-300); background: var(--surface-2); border-color: var(--border-1); }
-.rail-btn svg { width: 21px; height: 21px; }
-/* cleaner simplified header (buttons moved to the rail) */
-.cl-head { gap: 12px; }
+.app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
+.app:has(#infoPanel:not(.hidden)) { grid-template-columns: 340px 1fr 280px; }
 
 .chatlist {
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
@@ -2874,18 +2821,7 @@ a:focus-visible {
 
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
-  /* Rail becomes a bottom tab bar on the chat-list screen; hidden inside a chat. */
-  .app-rail {
-    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 60;
-    flex-direction: row; justify-content: space-around; align-items: center; gap: 4px;
-    height: calc(58px + env(safe-area-inset-bottom)); padding: 4px 8px env(safe-area-inset-bottom);
-    border-right: 0; border-top: 1px solid var(--border-1);
-    background: rgba(2, 10, 4, 0.94); backdrop-filter: blur(12px) saturate(140%);
-  }
-  .app-rail .rail-brand, .app-rail .rail-spacer { display: none; }
-  .app-rail .rail-group { flex-direction: row; gap: 4px; flex: 1; justify-content: space-around; }
-  .app.in-chat .app-rail { display: none; }
-  .chatlist { display: flex; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .chatlist { display: flex; }
   .app.in-chat .chatlist { display: none; }
   .chat { display: none; }
   .app.in-chat .chat { display: flex; }
@@ -4227,119 +4163,3 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 .ts-thumb .tt-bub.out { align-self: flex-end; width: 46%; border-style: solid; border-width: 1px; }
 .ts-thumb .tt-status { display: flex; gap: 4px; position: absolute; right: 8px; bottom: 7px; }
 .ts-thumb .tt-status i { width: 6px; height: 6px; border-radius: 50%; display: block; }
-
-/* ===================== Appearance knobs ===================== */
-/* Font / UI size — scales the whole interface (Chromium/WebKit zoom). */
-#app { zoom: var(--ui-scale, 1); }
-
-/* Density — "compact" trims the roomy paddings on the busiest surfaces. */
-body.dense .chat-item { padding-top: 6px; padding-bottom: 6px; }
-body.dense .bubble { padding: 6px 12px; }
-body.dense .msg { margin-top: 4px; }
-body.dense .composer { padding: 8px 16px; }
-body.dense .settings-pane, body.dense .ts-pane, body.dense .admin-pane { gap: 9px; }
-body.dense .contact-row, body.dense .member { padding-top: 6px; padding-bottom: 6px; }
-
-/* Animation level — default (no class) = full. Subtle shortens; Off disables. */
-body.motion-subtle { --t-fast: 80ms; --t-base: 130ms; --t-slow: 200ms; }
-body.motion-off, body.motion-off *, body.motion-off *::before, body.motion-off *::after {
-  animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important; scroll-behavior: auto !important;
-}
-.ap-range { width: 160px; max-width: 50%; accent-color: var(--accent-400); cursor: pointer; }
-.pref-label small em { color: var(--accent-300); font-style: normal; font-weight: 700; }
-
-/* ===================== Motion layer (gated by the animation knob) ===================== */
-@keyframes slideInRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
-@keyframes railPop { from { opacity: 0; transform: translateY(6px) scale(.9); } to { opacity: 1; transform: none; } }
-@media (max-width: 720px) {
-  .app.in-chat .chat { animation: slideInRight 0.26s var(--ease-out); }
-  .app-rail .rail-btn { animation: railPop 0.3s var(--ease-out) backwards; }
-  .app-rail .rail-group .rail-btn:nth-child(2) { animation-delay: .03s; }
-  .app-rail .rail-group .rail-btn:nth-child(3) { animation-delay: .06s; }
-  .app-rail .rail-group .rail-btn:nth-child(4) { animation-delay: .09s; }
-}
-/* subtle chat-row hover nudge + smoother transitions */
-.chat-item { transition: background var(--t-fast) var(--ease), transform var(--t-base) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease); }
-.chat-item:hover { transform: translateX(3px); }
-.rail-btn:hover { transform: translateY(-1px); }
-.rail-btn:active { transform: scale(0.9); }
-
-/* ===================== DaisyUI migration ===================== */
-/* Batch 1 — feedback. Toast fade (DaisyUI .toast/.alert do positioning + card). */
-.nt { opacity: 0; pointer-events: none; transition: opacity 0.22s var(--ease); }
-.nt.show { opacity: 1; }
-.nt .alert { box-shadow: var(--shadow-md); }
-/* Old .notify-toast / .lds-dot rules are now unused (kept in-file as legacy archive). */
-
-/* ===================== DaisyUI restyle (batches 2–6) =====================
-   Appended override rules that put the app's shared components onto DaisyUI's
-   design tokens (radius/colors from the bridge) + a cleaner, softer aesthetic.
-   Unlayered + later-in-file, so they win over the base component CSS without any
-   markup changes (fully reversible — delete this section to restore). Widths /
-   structure are preserved so form + chat layouts don't shift. */
-
-/* ── Buttons (btn) ── */
-.btn-primary, .btn-ghost, .btn-danger {
-  border-radius: var(--radius-field, var(--r-2));
-  text-transform: none; letter-spacing: .2px; font-weight: 600;
-  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease), background var(--t-fast) var(--ease), filter var(--t-fast) var(--ease);
-}
-.btn-primary { background: var(--color-primary); color: var(--color-primary-content); box-shadow: 0 2px 10px rgba(var(--primary-rgb), .25); }
-.btn-primary::after { display: none; }
-.btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(var(--primary-rgb), .4); }
-.btn-ghost { background: transparent; border: 1px solid var(--border-1); color: var(--text); }
-.btn-ghost:hover { border-color: var(--accent-400); color: var(--accent-200); background: var(--accent-faint); }
-.btn-danger { background: var(--color-error); color: #fff; }
-
-/* ── Inputs / selects / textareas (input) ── */
-.field, .lang-select, select.field {
-  border-radius: var(--radius-field, var(--r-2));
-  border: 1px solid var(--border-1); background: var(--bg-3);
-  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease), background var(--t-fast) var(--ease);
-}
-.field:focus, select.field:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .18); outline: none; }
-
-/* ── Badges (badge) ── */
-.ci-bot .badge, .badge {
-  border-radius: var(--r-pill); background: var(--color-primary); color: var(--color-primary-content);
-  font-weight: 700; box-shadow: 0 1px 4px rgba(var(--primary-rgb), .3);
-}
-
-/* ── Cards / modals (modal-box, card) ── */
-.modal-card, .settings-card, .ts-card, .admin-card, .mp-card, .fb-confirm-card {
-  border-radius: var(--radius-box, var(--r-4));
-  border: 1px solid var(--border-2);
-  box-shadow: 0 24px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(var(--primary-rgb), .08);
-}
-.modal { backdrop-filter: blur(6px) saturate(120%); }
-
-/* ── Menus / dropdowns (menu, dropdown) ── */
-.chat-menu, .account-menu, .row-menu, .call-dropdown, .react-picker {
-  border-radius: var(--radius-box, var(--r-3));
-  border: 1px solid var(--border-2); box-shadow: var(--shadow-lg);
-}
-.chat-menu button { border-radius: var(--radius-field, var(--r-2)); margin: 1px 4px; }
-
-/* ── Divider (divider) ── */
-.modal-sep { position: relative; text-align: center; color: var(--text-dim); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; margin: 14px 0 8px; }
-.modal-sep::before, .modal-sep::after { content: ""; position: absolute; top: 50%; width: 38%; height: 1px; background: var(--border-1); }
-.modal-sep::before { left: 0; } .modal-sep::after { right: 0; }
-
-/* ── Chat bubbles (chat / chat-bubble) ── */
-.bubble { border-radius: 16px; }
-.msg:not(.me) .bubble { border-bottom-left-radius: 5px; background: var(--color-base-200); }
-.msg.me .bubble { border-bottom-right-radius: 5px; background: color-mix(in oklab, var(--color-primary) 16%, var(--bg-2)); border: 1px solid rgba(var(--primary-rgb), .35); }
-
-/* ── Skeleton (skeleton) ── */
-.msg-skel .sk-bubble, .skeleton {
-  background: linear-gradient(90deg, var(--bg-3) 25%, var(--bg-4) 37%, var(--bg-3) 63%);
-  background-size: 400% 100%; animation: skFlow 1.4s ease-in-out infinite; border-radius: var(--r-3);
-}
-@keyframes skFlow { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
-
-/* ── Range slider (range) ── */
-input[type="range"], .ap-range { accent-color: var(--color-primary); }
-
-/* ── Toggle/checkbox already close; give it DaisyUI radius ── */
-.switch-track { border-radius: var(--r-pill); }

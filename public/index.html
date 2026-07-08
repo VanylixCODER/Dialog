@@ -17,12 +17,6 @@
        (used as the web fallback everywhere Segoe UI isn't installed, and as the face
        for the Frutiger Aero theme). -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Open+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <!-- Cascade-layer order: "legacy" (archived/old component CSS) sits BELOW DaisyUI's
-       layers, so migrating a component = demote its old rules into @layer legacy and
-       DaisyUI takes over. Unlayered CSS still beats everything (untouched components). -->
-  <style>@layer legacy, base, utilities, daisyui;</style>
-  <!-- DaisyUI 5 (component + theme layer). Our themes drive its CSS variables. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.6.14/daisyui.css" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -35,7 +29,7 @@
     <div class="login-card">
       <!-- Loading state — visible on page load until we know the auth status -->
       <div id="loginLoading" class="login-loading">
-        <span class="loading loading-dots loading-lg" style="color:var(--accent-400)"></span>
+        <div class="lds-dot"><span></span><span></span><span></span></div>
         <p data-i18n="connecting">Connecting…</p>
       </div>
       <!-- Auth forms — shown only when we need the user to sign in -->
@@ -86,21 +80,6 @@
 
   <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="app hidden">
-    <!-- Slim icon rail (primary navigation). Buttons keep their ids so existing
-         handlers stay wired; a couple are new (theme / settings). -->
-    <nav class="app-rail" id="appRail" aria-label="Main">
-      <div class="rail-brand"><img src="/src/lil_dialog.webp" alt="Dialog" /></div>
-      <div class="rail-group">
-        <button id="newGroupBtn" class="rail-btn" data-i18n-title="new_group" title="New group">＋</button>
-        <button id="contactsBtn" class="rail-btn" data-i18n-title="contacts" title="Contacts">👥</button>
-        <button id="accountBtn" class="rail-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
-        <button id="railTheme" class="rail-btn" data-i18n-title="ts_title" title="Theme Studio">🎨</button>
-        <button id="adminBtn" class="rail-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
-        <button id="installBtn" class="rail-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
-      </div>
-      <div class="rail-spacer"></div>
-      <button id="railSettings" class="rail-btn" data-i18n-title="settings" title="Settings">⚙</button>
-    </nav>
     <aside class="chatlist">
       <div class="cl-head">
         <div class="avatar me-trigger" id="myAvatar" tabindex="0" role="button" data-i18n-title="open_profile" title="Open profile" aria-label="Open profile">?</div>
@@ -109,6 +88,11 @@
           <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
+        <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
+        <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
+        <button id="adminBtn" class="hicon-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
+        <button id="accountBtn" class="hicon-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
+        <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
         <div class="vb-info" id="vbInfo"><span class="vb-dot"></span><span class="vb-label"></span></div>
@@ -325,35 +309,6 @@
             <label class="switch"><input type="checkbox" id="prefReadReceipts" /><span class="switch-track"></span></label>
           </div>
           <div class="form-error" id="prefMsg"></div>
-
-          <div class="uppercase-tag" data-i18n="ap_title" style="margin-top:8px">Appearance</div>
-          <div class="pref-row">
-            <div class="pref-label"><b data-i18n="ap_radius">Corner roundness</b><small><em id="apRadiusV"></em></small></div>
-            <input type="range" id="apRadius" class="ap-range" min="0" max="180" step="10" />
-          </div>
-          <div class="pref-row">
-            <div class="pref-label"><b data-i18n="ap_density">Density</b><small data-i18n="ap_density_d">Comfortable or compact spacing</small></div>
-            <select id="apDensity" class="field pref-select">
-              <option value="comfortable" data-i18n="ap_comfortable">Comfortable</option>
-              <option value="dense" data-i18n="ap_compact">Compact</option>
-            </select>
-          </div>
-          <div class="pref-row">
-            <div class="pref-label"><b data-i18n="ap_motion">Animations</b><small data-i18n="ap_motion_d">How much the UI moves</small></div>
-            <select id="apMotion" class="field pref-select">
-              <option value="full" data-i18n="ap_motion_full">Full</option>
-              <option value="subtle" data-i18n="ap_motion_subtle">Subtle</option>
-              <option value="off" data-i18n="ap_motion_off">Off</option>
-            </select>
-          </div>
-          <div class="pref-row">
-            <div class="pref-label"><b data-i18n="ap_size">Interface size</b><small data-i18n="ap_size_d">Scale the whole UI</small></div>
-            <select id="apScale" class="field pref-select">
-              <option value="0.9" data-i18n="ap_small">Small</option>
-              <option value="1" data-i18n="ap_normal">Normal</option>
-              <option value="1.1" data-i18n="ap_large">Large</option>
-            </select>
-          </div>
         </section>
         <!-- Contacts -->
         <section class="settings-pane" data-pane="contacts" role="tabpanel">
