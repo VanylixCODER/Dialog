@@ -235,7 +235,7 @@
         <button class="settings-tab"        data-tab="account"    data-i18n="tab_account"    role="tab">Account</button>
         <button class="settings-tab"        data-tab="prefs"      data-i18n="tab_prefs"      role="tab">Preferences</button>
         <button class="settings-tab"        data-tab="contacts"   data-i18n="tab_contacts"   role="tab">Contacts</button>
-        <button class="settings-tab"        data-tab="themes"     data-i18n="tab_themes"     role="tab">Themes</button>
+        <button class="settings-tab"        data-tab="themes"     data-i18n="tab_appearance" role="tab">Appearances</button>
         <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
         <button class="settings-tab"        data-tab="devices"    data-i18n="tab_devices"    role="tab">Voice & Video</button>
       </nav>
@@ -328,19 +328,42 @@
         </section>
         <!-- Themes -->
         <section class="settings-pane" data-pane="themes" role="tabpanel">
-          <h3 data-i18n="theme_choose">Choose theme</h3>
-          <div class="theme-grid" id="themeGrid"></div>
-          <button id="openThemeStudio" type="button" class="btn-primary ts-open" data-i18n="ts_open">🎨 Theme Studio — create your own</button>
-          <div class="bg-section">
-            <h4 data-i18n="bg_section_title">Background image</h4>
-            <p class="bg-status" id="bgGlobalStatus" data-i18n="bg_status_none">No custom background — using theme defaults</p>
-            <div class="bg-preview" id="bgGlobalPreview"></div>
-            <input id="bgFileGlobal" type="file" accept="image/*" hidden />
-            <div class="bg-actions">
-              <button type="button" id="bgChooseGlobal" class="btn-ghost" data-i18n="bg_choose">Choose image</button>
-              <button type="button" id="bgRemoveGlobal" class="btn-ghost" data-i18n="bg_remove">Remove</button>
+          <nav class="settings-subtabs" id="apSubtabs" role="tablist">
+            <button class="settings-subtab active" data-apsub="themes" type="button" data-i18n="ap_sub_themes">Themes</button>
+            <button class="settings-subtab" data-apsub="appearance" type="button" data-i18n="ap_sub_appearance">Appearance</button>
+          </nav>
+
+          <div class="ap-subpane active" data-apsubpane="themes">
+            <h3 data-i18n="theme_choose">Choose theme</h3>
+            <div class="theme-grid" id="themeGrid"></div>
+            <h4 class="fav-title hidden" id="favTitle" data-i18n="ap_favorites">Favorites</h4>
+            <div class="theme-grid fav-grid" id="favThemes"></div>
+            <button id="openThemeStudio" type="button" class="btn-primary ts-open" data-i18n="ts_open">🎨 Theme Studio — create your own</button>
+            <div class="bg-section">
+              <h4 data-i18n="bg_section_title">Background image</h4>
+              <p class="bg-status" id="bgGlobalStatus" data-i18n="bg_status_none">No custom background — using theme defaults</p>
+              <div class="bg-preview" id="bgGlobalPreview"></div>
+              <input id="bgFileGlobal" type="file" accept="image/*" hidden />
+              <div class="bg-actions">
+                <button type="button" id="bgChooseGlobal" class="btn-ghost" data-i18n="bg_choose">Choose image</button>
+                <button type="button" id="bgRemoveGlobal" class="btn-ghost" data-i18n="bg_remove">Remove</button>
+              </div>
+              <div id="bgGlobalError" class="form-error"></div>
             </div>
-            <div id="bgGlobalError" class="form-error"></div>
+          </div>
+
+          <div class="ap-subpane" data-apsubpane="appearance">
+            <h3 data-i18n="ap_appearance">Appearance</h3>
+            <label class="ap-row ap-slider"><span><span data-i18n="ap_glow">Glow</span> <em id="apGlowV"></em></span><input type="range" id="apGlow" min="0" max="100" step="1" /></label>
+            <p class="ap-hint" data-i18n="ap_glow_d">How much the accent colour glows around the UI.</p>
+            <div class="ap-row ap-toggle-row">
+              <div class="ap-label"><b data-i18n="ap_border">Custom borders</b><small data-i18n="ap_border_d">Override the default border colour &amp; width</small></div>
+              <label class="switch"><input type="checkbox" id="apBorderOn" /><span class="switch-track"></span></label>
+            </div>
+            <div id="apBorderCtrls" class="ap-border-ctrls hidden">
+              <label class="ap-row"><span data-i18n="ap_border_color">Border color</span><input type="color" id="apBorderColor" /></label>
+              <label class="ap-row ap-slider"><span><span data-i18n="ap_border_width">Border width</span> <em id="apBorderWV"></em></span><input type="range" id="apBorderW" min="1" max="4" step="1" /></label>
+            </div>
           </div>
         </section>
         <!-- Group (заполняется в openGroupSettings()) -->
