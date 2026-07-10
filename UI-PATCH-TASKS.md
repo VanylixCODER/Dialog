@@ -11,13 +11,13 @@ Ship batch by batch; deploy + verify each. `[ ]` todo · `[~]` in progress · `[
 - [x] 6 — calls: flat incoming buttons + per-tile Cava voice visualizer
 
 ## Batch 7 — polish + theme creator  [~]
-- [ ] §1 Composer: `#msgInput` min-height 40px, aligned on one line with the buttons.
-- [ ] §2 `.msg-actions` outside the bubble on the inward side (own→left `right:100%`, others→right `left:100%`); clamp inside `.messages`; general label-overflow pass.
-- [ ] §6 Fix matrix rain (doesn't appear): `matrixEffective()` treat unset theme as "matrix".
-- [ ] §5 Theme creator: auto-contrast text (bg luminance) + fix hardcoded-dark surfaces; border token (built-ins = primary color, flashbang grey); transparency 25–100%; blur→toggle(~9px); live preview; REMOVE glow + Batch-3 Appearances custom-border rows.
-- [ ] §3 Universal send-preview tray (files + voice): image/video/audio/file/text preview, multi-file, Send/Discard; GIF stays instant.
-- [ ] §4 Voice: tap-to-record on all platforms (drop hold/swipe); on stop → preview tray.
-- [ ] Deploy + verify each group.
+- [x] §1 Composer input aligned on one line (min-height 40px + align-items center).
+- [x] §2 `.msg-actions` outside the bubble on the inward side (own→left, others→right), centred, never off-canvas.
+- [x] §6 Matrix rain fix (`matrixEffective()` treats unset theme as "matrix").
+- [x] §5 Theme creator: auto-contrast text + fix hardcoded-dark surfaces for light themes; border token (built-ins = primary color, flashbang grey); transparency 25–100%; blur→toggle; live preview; glow + Appearances custom-border rows removed. [part-1 deployed]
+- [x] §3 Universal send-preview tray (files+voice): image/video/audio/gif/file preview, multi-file, Send/Discard; file input + drag-drop routed through it; GIF picker instant.
+- [x] §4 Voice tap-to-record (desktop+mobile), on stop → preview tray; Esc cancel, 60s cap.
+- [~] Deploy + verify (part 1 live; part 2 = preview/voice pushing now).
 
 ## Notes
 - Deploy = push `main` → webhook rebuilds `app` (~2–4 min). Rapid pushes can skip a build;
