@@ -361,16 +361,6 @@
 
           <div class="ap-subpane" data-apsubpane="appearance">
             <h3 data-i18n="ap_appearance">Appearance</h3>
-            <label class="ap-row ap-slider"><span><span data-i18n="ap_glow">Glow</span> <em id="apGlowV"></em></span><input type="range" id="apGlow" min="0" max="100" step="1" /></label>
-            <p class="ap-hint" data-i18n="ap_glow_d">How much the accent colour glows around the UI.</p>
-            <div class="ap-row ap-toggle-row">
-              <div class="ap-label"><b data-i18n="ap_border">Custom borders</b><small data-i18n="ap_border_d">Override the default border colour &amp; width</small></div>
-              <label class="switch"><input type="checkbox" id="apBorderOn" /><span class="switch-track"></span></label>
-            </div>
-            <div id="apBorderCtrls" class="ap-border-ctrls hidden">
-              <label class="ap-row"><span data-i18n="ap_border_color">Border color</span><input type="color" id="apBorderColor" /></label>
-              <label class="ap-row ap-slider"><span><span data-i18n="ap_border_width">Border width</span> <em id="apBorderWV"></em></span><input type="range" id="apBorderW" min="1" max="4" step="1" /></label>
-            </div>
             <div class="ap-row ap-toggle-row">
               <div class="ap-label"><b data-i18n="ap_matrix">Matrix rain background</b><small data-i18n="ap_matrix_d">On by default for the Matrix theme; a custom background hides it.</small></div>
               <label class="switch"><input type="checkbox" id="apMatrix" /><span class="switch-track"></span></label>
@@ -707,13 +697,20 @@
             <label class="ts-color"><input type="color" id="tsPrimary" /><span data-i18n="ts_primary">Primary</span></label>
             <label class="ts-color"><input type="color" id="tsSecondary" /><span data-i18n="ts_secondary">Secondary</span></label>
             <label class="ts-color"><input type="color" id="tsBg" /><span data-i18n="ts_bg">Background</span></label>
+            <label class="ts-color"><input type="color" id="tsBorder" /><span data-i18n="ts_border">Border</span></label>
             <label class="ts-color"><input type="color" id="tsOnline" /><span data-i18n="ts_online">Online</span></label>
             <label class="ts-color"><input type="color" id="tsDnd" /><span data-i18n="ts_dnd">Do not disturb</span></label>
             <label class="ts-color"><input type="color" id="tsOffline" /><span data-i18n="ts_offline">Offline</span></label>
           </div>
           <div class="ts-sub" data-i18n="ts_glass">Glass</div>
-          <label class="ts-row ts-slider"><span><span data-i18n="ts_transparency">Transparency</span> <em id="tsAlphaV"></em></span><input type="range" id="tsAlpha" min="20" max="100" step="1" /></label>
-          <label class="ts-row ts-slider"><span><span data-i18n="ts_blur">Blur</span> <em id="tsBlurV"></em></span><input type="range" id="tsBlur" min="0" max="30" step="1" /></label>
+          <label class="ts-row ts-slider"><span><span data-i18n="ts_transparency">Transparency</span> <em id="tsAlphaV"></em></span><input type="range" id="tsAlpha" min="25" max="100" step="1" /></label>
+          <div class="ts-row"><span data-i18n="ts_blur">Blur (30%)</span><label class="switch"><input type="checkbox" id="tsBlur" /><span class="switch-track"></span></label></div>
+          <div class="ts-sub" data-i18n="ts_preview">Preview</div>
+          <div class="ts-preview" id="tsPreview" aria-hidden="true">
+            <div class="tsp-row"><span class="tsp-ava"></span><div class="tsp-bub in">How's this theme?</div></div>
+            <div class="tsp-row out"><div class="tsp-bub out">Looks great 🎨</div></div>
+            <div class="tsp-input"><span data-i18n="ph_message">Write a message…</span></div>
+          </div>
           <div class="ts-sub" data-i18n="ts_typography">Typography</div>
           <label class="ts-row"><span data-i18n="ts_font">Google Font</span>
             <select id="tsFont" class="field">

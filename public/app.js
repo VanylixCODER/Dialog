@@ -131,7 +131,7 @@ function applyWallpaper() {
 // On by default for the Matrix theme; a global toggle (off elsewhere) with speed +
 // character-colour controls; a custom background image hides it.
 let chatMatrixRaf = 0;
-function matrixEffective() { const s = localStorage.getItem("dialog_ap_matrix"); return s === "on" ? true : s === "off" ? false : (document.body.dataset.theme === "matrix"); }
+function matrixEffective() { const s = localStorage.getItem("dialog_ap_matrix"); const th = document.body.dataset.theme || "matrix"; return s === "on" ? true : s === "off" ? false : (th === "matrix"); }
 function updateChatMatrix() {
   const c = $("chatMatrix"); if (!c) return;
   const show = matrixEffective() && !!myRoom && !resolveBgForChat(myRoom);
@@ -291,7 +291,7 @@ function applyTheme(key) {
 const DEFAULT_TOKENS = {
   name: "My Theme", primary: "#00ff5a", secondary: "#3df58a", bg: "#000604",
   online: "#3fb950", dnd: "#ff5252", offline: "#6e7681",
-  alpha: 0.92, blur: 6, font: "", bgImage: "",
+  alpha: 0.92, blur: 0, font: "", bgImage: "", border: "",
 };
 function hexToRgb(hex) {
   hex = String(hex || "").trim().replace("#", "");
@@ -309,17 +309,31 @@ function shade(hex, pct) {
 function themeCss(tk) {
   const t = { ...DEFAULT_TOKENS, ...(tk || {}) };
   const p = rgbStr(t.primary);
-  const bg = hexToRgb(t.bg).join(", ");
-  const alpha = Math.max(0.2, Math.min(1, Number(t.alpha)));
+  const bgRgb = hexToRgb(t.bg);
+  const bg = bgRgb.join(", ");
+  // Auto-contrast: pick text + surface direction from the background luminance so a light
+  // background becomes a proper light theme (dark text) and a dark one a dark theme.
+  const lum = (0.2126 * bgRgb[0] + 0.7152 * bgRgb[1] + 0.0722 * bgRgb[2]) / 255;
+  const light = lum > 0.55;
+  const d = light ? -1 : 1; // raised surfaces get darker on light themes, lighter on dark
+  const alpha = Math.max(0.25, Math.min(1, Number(t.alpha)));
   const blur = Math.max(0, Math.min(40, Number(t.blur)));
+  const bc = rgbStr(t.border || t.primary);
+  const a100 = light ? shade(t.primary, -55) : shade(t.primary, 72);
+  const a200 = light ? shade(t.primary, -40) : shade(t.primary, 46);
+  const a300 = light ? shade(t.primary, -25) : shade(t.primary, 22);
+  const text = light ? "#22262e" : shade(t.primary, 34);
+  const textStrong = light ? "#0f1218" : shade(t.primary, 74);
+  const textDim = light ? "#6b7280" : shade(t.primary, -18);
   const s = 'body[data-theme="user"]';
   let css = `${s}{
     --primary-rgb:${p};
-    --accent-100:${shade(t.primary, 72)};--accent-200:${shade(t.primary, 46)};--accent-300:${shade(t.primary, 22)};
+    --accent-100:${a100};--accent-200:${a200};--accent-300:${a300};
     --accent-400:${t.primary};--accent-500:${shade(t.primary, -26)};--accent-600:${shade(t.primary, -46)};
-    --text:${shade(t.primary, 22)};--text-strong:${shade(t.primary, 72)};--text-dim:${shade(t.primary, -26)};
+    --text:${text};--text-strong:${textStrong};--text-dim:${textDim};
     --secondary-rgb:${rgbStr(t.secondary)};
-    --bg-0:${shade(t.bg, -34)};--bg-1:${t.bg};--bg-2:${shade(t.bg, 7)};--bg-3:${shade(t.bg, 15)};--bg-4:${shade(t.bg, 26)};
+    --bg-0:${shade(t.bg, light ? -8 : -34)};--bg-1:${t.bg};--bg-2:${shade(t.bg, d * 6)};--bg-3:${shade(t.bg, d * 12)};--bg-4:${shade(t.bg, d * 20)};
+    --border-1:rgba(${bc},.22);--border-2:rgba(${bc},.38);--border-3:rgba(${bc},.6);
     ${t.font ? `font-family:'${t.font.replace(/[^\w \-]/g, "")}', ui-sans-serif, system-ui, sans-serif;` : ""}
   }
   ${s} .st-online{background:${t.online} !important;box-shadow:0 0 0 2px rgba(${hexToRgb(t.online).join(",")},.25) !important;}
@@ -327,6 +341,11 @@ function themeCss(tk) {
   ${s} .st-offline{background:${t.offline} !important;opacity:.85;}
   ${s} .msg.me .bubble{border-color:rgba(var(--secondary-rgb),.55);}
   ${s} a{color:rgba(var(--secondary-rgb),1);}`;
+  // Light custom themes: the menus/pickers/action bars use hardcoded dark backgrounds
+  // in the base CSS — repaint them with theme surfaces so black text stays readable.
+  if (light) {
+    css += `\n${s} .msg-actions, ${s} .chat-menu, ${s} .account-menu, ${s} .react-picker, ${s} .composer-more, ${s} .emoji-picker, ${s} .gif-panel, ${s} .me-status-menu, ${s} .row-menu, ${s} .msg-menu, ${s} .input-menu{background:var(--bg-1) !important;color:var(--text) !important;border-color:var(--border-2) !important;}`;
+  }
   if (alpha < 0.999 || blur > 0) {
     const surf = ".chatlist, .chat-head, .composer, .settings-card, .admin-card, .chat-menu, .account-menu, .call-actions, .cl-head";
     css += `\n${s} :is(${surf}){background-color:rgba(${bg}, ${alpha});${blur ? `backdrop-filter:blur(${blur}px) saturate(130%);-webkit-backdrop-filter:blur(${blur}px) saturate(130%);` : ""}}`;
@@ -453,17 +472,10 @@ function renderThemes() {
 
 
 // ---------- Appearance (Settings → Appearances) ----------
-// Glow (0..100% shown → 0..0.5 real via --glow-strength) + optional custom borders.
+// Glow was removed (kept at 0). Borders now live in the Theme Studio, not here.
 function applyAppearance() {
-  const R = document.documentElement.style;
-  const glow = Math.max(0, Math.min(100, Number(localStorage.getItem("dialog_ap_glow") ?? 0)));
-  R.setProperty("--glow-strength", (glow / 200).toFixed(3));
-  const borderOn = localStorage.getItem("dialog_ap_border_on") === "1";
-  document.body.classList.toggle("custom-border", borderOn);
-  if (borderOn) {
-    R.setProperty("--ui-border-color", localStorage.getItem("dialog_ap_border_color") || "#00ff5a");
-    R.setProperty("--ui-border-width", (localStorage.getItem("dialog_ap_border_w") || "1") + "px");
-  } else { R.removeProperty("--ui-border-color"); R.removeProperty("--ui-border-width"); }
+  document.documentElement.style.setProperty("--glow-strength", "0");
+  document.body.classList.remove("custom-border");
 }
 function initAppearanceControls() {
   const subtabs = $("apSubtabs");
@@ -471,23 +483,6 @@ function initAppearanceControls() {
     subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".ap-subpane").forEach((p) => p.classList.toggle("active", p.dataset.apsubpane === b.dataset.apsub));
   });
-  const glow = $("apGlow");
-  if (glow) {
-    glow.value = localStorage.getItem("dialog_ap_glow") ?? 0;
-    const upd = () => { $("apGlowV").textContent = glow.value + "%"; localStorage.setItem("dialog_ap_glow", glow.value); applyAppearance(); };
-    glow.oninput = upd; $("apGlowV").textContent = glow.value + "%";
-  }
-  const bOn = $("apBorderOn"), bColor = $("apBorderColor"), bW = $("apBorderW");
-  if (bOn && bColor && bW) {
-    bOn.checked = localStorage.getItem("dialog_ap_border_on") === "1";
-    bColor.value = localStorage.getItem("dialog_ap_border_color") || "#00ff5a";
-    bW.value = localStorage.getItem("dialog_ap_border_w") || "1";
-    $("apBorderWV").textContent = bW.value + "px";
-    $("apBorderCtrls").classList.toggle("hidden", !bOn.checked);
-    bOn.onchange = () => { localStorage.setItem("dialog_ap_border_on", bOn.checked ? "1" : "0"); $("apBorderCtrls").classList.toggle("hidden", !bOn.checked); applyAppearance(); };
-    bColor.oninput = () => { localStorage.setItem("dialog_ap_border_color", bColor.value); applyAppearance(); };
-    bW.oninput = () => { $("apBorderWV").textContent = bW.value + "px"; localStorage.setItem("dialog_ap_border_w", bW.value); applyAppearance(); };
-  }
   const mx = $("apMatrix"), mxs = $("apMatrixSpeed"), mxc = $("apMatrixColor");
   if (mx && mxs && mxc) {
     mx.checked = matrixEffective();
@@ -4730,35 +4725,36 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
 
   // ---- editor controls ----
   const C = {
-    name: $("tsName"), primary: $("tsPrimary"), secondary: $("tsSecondary"), bg: $("tsBg"),
+    name: $("tsName"), primary: $("tsPrimary"), secondary: $("tsSecondary"), bg: $("tsBg"), border: $("tsBorder"),
     online: $("tsOnline"), dnd: $("tsDnd"), offline: $("tsOffline"),
     alpha: $("tsAlpha"), blur: $("tsBlur"), font: $("tsFont"), fontCustom: $("tsFontCustom"), bgUrl: $("tsBgUrl"),
   };
   function writeControls(tk) {
     C.name.value = tk.name || "My Theme";
     C.primary.value = tk.primary; C.secondary.value = tk.secondary; C.bg.value = tk.bg;
+    C.border.value = tk.border || tk.primary || "#00ff5a";
     C.online.value = tk.online; C.dnd.value = tk.dnd; C.offline.value = tk.offline;
-    C.alpha.value = Math.round((tk.alpha ?? 0.92) * 100); C.blur.value = tk.blur ?? 6;
+    C.alpha.value = Math.max(25, Math.round((tk.alpha ?? 0.92) * 100)); C.blur.checked = Number(tk.blur) > 0;
     const presets = [...C.font.options].map((o) => o.value);
     if (tk.font && !presets.includes(tk.font)) { C.font.value = "__custom"; C.fontCustom.classList.remove("hidden"); C.fontCustom.value = tk.font; }
     else { C.font.value = tk.font || ""; C.fontCustom.classList.add("hidden"); C.fontCustom.value = ""; }
     C.bgUrl.value = tk.bgImage || "";
-    $("tsAlphaV").textContent = C.alpha.value + "%"; $("tsBlurV").textContent = C.blur.value + "px";
+    $("tsAlphaV").textContent = C.alpha.value + "%";
   }
   function readControls() {
     const font = C.font.value === "__custom" ? (C.fontCustom.value || "").trim() : C.font.value;
     return {
       name: (C.name.value || "My Theme").trim(), primary: C.primary.value, secondary: C.secondary.value, bg: C.bg.value,
-      online: C.online.value, dnd: C.dnd.value, offline: C.offline.value,
-      alpha: Number(C.alpha.value) / 100, blur: Number(C.blur.value), font, bgImage: (C.bgUrl.value || "").trim(),
+      border: C.border.value, online: C.online.value, dnd: C.dnd.value, offline: C.offline.value,
+      alpha: Number(C.alpha.value) / 100, blur: C.blur.checked ? 9 : 0, font, bgImage: (C.bgUrl.value || "").trim(),
     };
   }
   function livePreview() {
     cur = readControls();
-    $("tsAlphaV").textContent = C.alpha.value + "%"; $("tsBlurV").textContent = C.blur.value + "px";
+    $("tsAlphaV").textContent = C.alpha.value + "%";
     applyUserTheme(cur, { preview: true });
   }
-  Object.values(C).forEach((el) => { if (el) el.addEventListener("input", livePreview); });
+  Object.values(C).forEach((el) => { if (el) { el.addEventListener("input", livePreview); el.addEventListener("change", livePreview); } });
   C.font.addEventListener("change", () => { C.fontCustom.classList.toggle("hidden", C.font.value !== "__custom"); livePreview(); });
   $("tsBgUpload") && ($("tsBgUpload").onclick = () => $("tsBgFile").click());
   $("tsBgFile") && ($("tsBgFile").onchange = (e) => {

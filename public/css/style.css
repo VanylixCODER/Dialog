@@ -4208,10 +4208,10 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 :root {
   /* opt-in glow (Appearances slider sets this 0..0.5; shown as 0..100%) */
   --glow-strength: 0;
-  /* neutral borders — no more green-tinted lines everywhere */
-  --border-1: rgba(255, 255, 255, 0.09);
-  --border-2: rgba(255, 255, 255, 0.16);
-  --border-3: rgba(255, 255, 255, 0.30);
+  /* subtle borders in each theme's own primary color (flashbang overrides to grey) */
+  --border-1: rgba(var(--primary-rgb), 0.20);
+  --border-2: rgba(var(--primary-rgb), 0.34);
+  --border-3: rgba(var(--primary-rgb), 0.52);
   /* flat drop shadows — the green inset ring is gone */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.45);
@@ -4321,3 +4321,30 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .ci-btn.decline { background: var(--danger); color: #fff; }
 .tile { position: relative; }
 .tile-cava { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; pointer-events: none; opacity: 0.75; z-index: 1; }
+
+/* ============================================================
+   Batch 7 — composer alignment + message-action repositioning
+   ============================================================ */
+/* §1 input sits on one line with the buttons */
+.composer { align-items: center; }
+#msgInput { min-height: 40px; padding: 10px 14px; }
+
+/* §2 react/edit/delete toolbar sits OUTSIDE the bubble on the inward side so it
+   never leaves the chat area, even for a 1-character message. Own -> left,
+   others -> right, vertically centred. */
+.msg-actions { top: 50%; bottom: auto; transform: translateY(-50%); }
+.msg.me .msg-actions { left: auto; right: 100%; margin-right: 6px; }
+.msg:not(.me) .msg-actions { right: auto; left: 100%; margin-left: 6px; }
+.msg:hover .msg-actions { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
+
+/* ============================================================
+   Batch 7 — Theme Studio live preview (reflects the previewed theme vars)
+   ============================================================ */
+.ts-preview { border: 1px solid var(--border-2); border-radius: var(--r-3); padding: 10px; background: var(--bg-1); display: flex; flex-direction: column; gap: 6px; }
+.tsp-row { display: flex; gap: 6px; align-items: flex-end; }
+.tsp-row.out { justify-content: flex-end; }
+.tsp-ava { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-400); flex-shrink: 0; }
+.tsp-bub { padding: 7px 11px; border-radius: 12px; font-size: 12.5px; max-width: 74%; border: 1px solid var(--border-1); }
+.tsp-bub.in { background: var(--bg-2); color: var(--text); }
+.tsp-bub.out { background: color-mix(in oklab, var(--accent-400) 18%, var(--bg-2)); color: var(--text-strong); border-color: var(--border-2); }
+.tsp-input { margin-top: 2px; padding: 8px 11px; border-radius: var(--r-2); background: var(--bg-3); border: 1px solid var(--border-1); color: var(--text-dim); font-size: 12px; }
