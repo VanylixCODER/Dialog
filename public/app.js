@@ -270,6 +270,16 @@ const THEMES = [
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
   { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"], beta: true },
 ];
+// Contrast colour for anything painted on the accent (buttons, active tabs, badges): white
+// text on a dark accent, near-black on a light one. Computed from the live --primary-rgb so
+// it's correct for every built-in AND custom theme.
+function relLumRgb(r, g, b) { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); }
+function refreshOnAccent() {
+  const rgb = getComputedStyle(document.body).getPropertyValue("--primary-rgb").trim();
+  let lum = 0.5;
+  if (rgb) { const p = rgb.split(",").map((n) => Number(n.trim())); if (p.length === 3 && p.every((x) => !isNaN(x))) lum = relLumRgb(p[0], p[1], p[2]); }
+  document.documentElement.style.setProperty("--on-accent", lum > 0.42 ? "#0a1512" : "#ffffff");
+}
 function applyTheme(key) {
   // Legacy "contrast"/"high_contrast" → matrix (migration for users with old localStorage);
   // unknown keys → matrix. Custom themes no longer exist, so we don't try to remap those.
@@ -279,6 +289,7 @@ function applyTheme(key) {
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
   if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+  refreshOnAccent();
   // Themes can change the default chat wallpaper (e.g. aero → aerobg.png), so repaint
   // the open chat's background immediately instead of waiting for the next chat open.
   try { applyWallpaper(); } catch {}
@@ -377,6 +388,7 @@ function applyUserTheme(tk, opts = {}) {
     try { localStorage.setItem("dialog_user_theme", JSON.stringify(tk)); localStorage.setItem("dialog_theme", "user"); } catch {}
     const grid = $("themeGrid"); if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.remove("active"));
   }
+  refreshOnAccent();
   try { updateChatMatrix(); } catch {}
 }
 function clearThemePreview() {
@@ -4460,7 +4472,7 @@ $("chatFilters").addEventListener("click", (e) => {
 });
 
 // ---------- Старт ----------
-loadSavedTheme(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
+loadSavedTheme(); refreshOnAccent(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
 window.addEventListener("popstate", onPopState);
 
 // ---------- PWA Install ----------
