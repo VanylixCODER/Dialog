@@ -146,7 +146,7 @@ function updateChatMatrix() {
     if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; cols = Math.max(1, Math.floor(c.width / 16)); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
     ctx.fillStyle = "rgba(0,7,0,0.08)"; ctx.fillRect(0, 0, c.width, c.height); ctx.font = "14px monospace";
     const col = localStorage.getItem("dialog_ap_matrix_color") || "#00ff5a";
-    const sp = Math.max(1, Math.min(10, Number(localStorage.getItem("dialog_ap_matrix_speed") || 4))) / 4;
+    const sp = Math.max(1, Math.min(10, Number(localStorage.getItem("dialog_ap_matrix_speed") || 4))) / 12;
     for (let i = 0; i < cols; i++) { ctx.fillStyle = Math.random() > 0.98 ? "#ffffff" : col; ctx.fillText(chars[(Math.random() * chars.length) | 0], i * 16, drops[i] * 16); if (drops[i] * 16 > c.height && Math.random() > 0.975) drops[i] = 0; drops[i] += sp; }
   };
   cancelAnimationFrame(chatMatrixRaf); frame();
