@@ -2751,7 +2751,7 @@ $("attachBtn").onclick = () => {
 $("fileInput").addEventListener("change", (e) => {
   const files = Array.from(e.target.files || []); if (!files.length) return;
   if (!myRoom) return; // без активного чата — молча игнорируем (file picker закрывается)
-  files.forEach(sendFile);
+  queueFiles(files); // preview before sending
   e.target.value = "";
 });
 
@@ -2796,11 +2796,12 @@ function handleDrop(e) {
   if (!myRoom) { notify(t("drop_no_room")); return; }
   const files = Array.from(e.dataTransfer.files || []);
   if (!files.length) return;
-  let rejected = 0;
+  let rejected = 0; const ok = [];
   for (const f of files) {
     if (f.size > MAX_FILE_BYTES) { rejected++; continue; }
-    sendFile(f);
+    ok.push(f);
   }
+  if (ok.length) queueFiles(ok); // preview before sending
   if (rejected) notify(t("drop_some_too_big", { n: rejected, mb: MAX_FILE_SIZE_MB }));
 }
 function wireDragAndDrop() {
@@ -2824,8 +2825,8 @@ socket.on("file-rejected", ({ reason, maxMb } = {}) => {
 // hands-free (tap ▶ to send), slide left to cancel. Desktop: click to start, click to
 // stop+send; Esc cancels. Live timer, 60s cap.
 let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0;
-let recState = "idle"; // idle | recording | locked
-let recCancelled = false, recStartTs = 0, recPtr = null, recHold = false, recSuppressClick = false;
+let recState = "idle"; // idle | recording
+let recCancelled = false;
 function isMicMode() { return $("sendBtn").classList.contains("mic-mode"); }
 function updateSendMode() {
   if (recState !== "idle") return;
@@ -2835,11 +2836,13 @@ function updateSendMode() {
   b.innerHTML = has ? window.ICON.send : window.ICON.mic;
 }
 const fmtRec = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
-function updateRecOverlay() { const bar = $("recBar"); if (!bar) return; bar.classList.toggle("locked", recState === "locked"); const tm = $("recTime"); if (tm) tm.textContent = fmtRec(recSec); }
-async function startRec(locked) {
+function updateRecOverlay() { const tm = $("recTime"); if (tm) tm.textContent = fmtRec(recSec); }
+// Tap to start, tap to stop (same on desktop and mobile). On stop the clip goes to the
+// send-preview tray so you hear it before sending. Esc cancels.
+async function startRec() {
   if (!myRoom || recState !== "idle") return;
   try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { alert(t("err_mic_voice")); recState = "idle"; return; }
-  recChunks = []; recSec = 0; recCancelled = false; recStartTs = Date.now();
+  recChunks = []; recSec = 0; recCancelled = false;
   mediaRecorder = new MediaRecorder(recStream);
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
@@ -2848,39 +2851,60 @@ async function startRec(locked) {
     if (cancelled) return;
     const blob = new Blob(recChunks, { type: "audio/webm" });
     if (blob.size < 600 || blob.size > 20 * 1024 * 1024) return;
-    const r = new FileReader(); r.onload = () => socket.emit("message", { type: "audio", media: r.result, mediaName: "voice" }); r.readAsDataURL(blob);
+    addPending({ kind: "voice", blob, type: "audio", url: URL.createObjectURL(blob), name: "voice" });
   };
-  mediaRecorder.start();
-  recState = locked ? "locked" : "recording";
-  const bar = $("recBar"); if (bar) bar.classList.remove("hidden"); updateRecOverlay();
+  mediaRecorder.start(); recState = "recording";
+  const bar = $("recBar"); if (bar) { bar.classList.remove("hidden"); bar.classList.add("recording"); } updateRecOverlay();
   recTimer = setInterval(() => { recSec++; updateRecOverlay(); if (recSec >= 60) stopRec(true); }, 1000);
 }
 function stopRec(send) { if (recState === "idle" || !mediaRecorder) return; recCancelled = !send; try { mediaRecorder.stop(); } catch {} }
 function cancelRec() { stopRec(false); }
 (function wireComposerSend() {
   const b = $("sendBtn"); if (!b) return;
-  const rs = $("recSend"); if (rs) rs.innerHTML = window.ICON.send;
-  b.addEventListener("pointerdown", (e) => {
-    if (!isMicMode() || !myRoom) return;
-    if (e.pointerType === "touch") { recHold = true; recPtr = { x: e.clientX, y: e.clientY }; recSuppressClick = true; startRec(false); try { b.setPointerCapture(e.pointerId); } catch {} }
-  });
-  b.addEventListener("pointermove", (e) => {
-    if (!recHold || recState === "idle") return;
-    const dy = recPtr.y - e.clientY, dx = recPtr.x - e.clientX;
-    if (recState === "recording") { if (dx > 70) { cancelRec(); recHold = false; } else if (dy > 55) { recState = "locked"; updateRecOverlay(); } }
-  });
-  b.addEventListener("pointerup", (e) => {
-    if (e.pointerType === "touch" && recHold) { recHold = false; if (recState === "recording") { (Date.now() - recStartTs >= 600) ? stopRec(true) : cancelRec(); } }
-  });
+  const rs = $("recSend"); if (rs) rs.innerHTML = window.ICON.check || window.ICON.send;
   b.addEventListener("click", () => {
-    if (recSuppressClick) { recSuppressClick = false; return; }
     if (!isMicMode()) { sendText(); return; }
-    if (recState === "idle") startRec(true); else stopRec(true);
+    if (recState === "idle") startRec(); else stopRec(true);
   });
   $("recCancel") && ($("recCancel").onclick = cancelRec);
   $("recSend") && ($("recSend").onclick = () => stopRec(true));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && recState !== "idle") cancelRec(); });
 })();
+
+// ---------- Universal send-preview tray (files + voice) ----------
+let pendingSend = [];
+function addPending(item) { pendingSend.push(item); renderSendPreview(); }
+function queueFiles(files) {
+  files.forEach((f) => { if (!f || !f.size) return; addPending({ kind: "file", file: f, type: pickMediaType(f), url: URL.createObjectURL(f), name: f.name }); });
+}
+function spItemHTML(it, i) {
+  let inner;
+  if (it.type === "image" || it.type === "gif") inner = `<img src="${it.url}" alt="">`;
+  else if (it.type === "video") inner = `<video src="${it.url}" controls></video>`;
+  else if (it.type === "audio") inner = `<audio controls src="${it.url}"></audio>`;
+  else inner = `<div class="sp-file"><span class="sp-ic">${window.ICON.attach || ""}</span><div class="sp-meta"><div class="sp-name">${escapeHtml(it.name || "file")}</div><div class="sp-size">${it.file ? formatFileSize(it.file.size) : ""}</div></div></div>`;
+  return `<div class="sp-item">${inner}<button class="sp-x" data-i="${i}" title="${t("remove") || "Remove"}">✕</button></div>`;
+}
+function renderSendPreview() {
+  const wrap = $("sendPreview"), box = $("spItems"); if (!wrap || !box) return;
+  if (!pendingSend.length) { wrap.classList.add("hidden"); box.innerHTML = ""; return; }
+  wrap.classList.remove("hidden");
+  box.innerHTML = pendingSend.map((it, i) => spItemHTML(it, i)).join("");
+  applyI18n(wrap);
+  box.querySelectorAll(".sp-x").forEach((x) => x.onclick = () => { const it = pendingSend[+x.dataset.i]; if (it && it.url) URL.revokeObjectURL(it.url); pendingSend.splice(+x.dataset.i, 1); renderSendPreview(); });
+}
+function clearPending() { pendingSend.forEach((it) => it.url && URL.revokeObjectURL(it.url)); pendingSend = []; renderSendPreview(); }
+function sendPending() {
+  if (!myRoom) { clearPending(); return; }
+  pendingSend.forEach((it) => {
+    if (it.kind === "voice") { const r = new FileReader(); r.onload = () => socket.emit("message", { type: "audio", media: r.result, mediaName: "voice" }); r.readAsDataURL(it.blob); }
+    else sendFile(it.file);
+    if (it.url) URL.revokeObjectURL(it.url);
+  });
+  pendingSend = []; renderSendPreview();
+}
+$("spSend") && ($("spSend").onclick = sendPending);
+$("spDiscard") && ($("spDiscard").onclick = clearPending);
 
 // Лайтбокс
 const lb = $("lightbox"), lbImg = $("lightboxImg");
