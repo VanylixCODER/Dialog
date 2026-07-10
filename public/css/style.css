@@ -4289,7 +4289,7 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
    ~0.8 opacity + slight blur keeps bubbles readable.
    ============================================================ */
 .chat-matrix { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; display: none; opacity: 0; }
-.chat-matrix.on { display: block; opacity: 0.8; }
+.chat-matrix.on { display: block; opacity: 0.94; background: #04070a; }
 .chat.has-wallpaper .chat-matrix { display: none; }
 
 /* ============================================================
