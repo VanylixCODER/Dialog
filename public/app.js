@@ -4514,7 +4514,15 @@ function setIcons() {
   const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
-  for (const [id, key] of Object.entries(tips)) { const el = $(id); if (el) el.setAttribute("data-tip", t(key)); }
+  // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
+  // ALSO pop its own tooltip (that's the "two overlapping" doubling). EXCEPT inside
+  // .chat-head, which is overflow:hidden (for its scan-beam) and would clip the pill —
+  // there we leave the native title so a tooltip is still shown.
+  for (const [id, key] of Object.entries(tips)) {
+    const el = $(id); if (!el) continue;
+    if (el.closest(".chat-head")) continue;
+    el.setAttribute("data-tip", t(key)); el.removeAttribute("title");
+  }
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
   // чтобы [data-tip]::after не дублировал ту же подпись при наведении).
   const toastJoin = $("toastJoin"), toastClose = $("toastClose");

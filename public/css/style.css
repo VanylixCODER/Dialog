@@ -2831,6 +2831,13 @@ a:focus-visible {
   z-index: 999;
 }
 [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0) scale(1); }
+/* The chat-list header sits flush against the top of the window, so a tooltip above the
+   button clips off-screen. Flip those to appear BELOW the button instead. */
+.cl-head [data-tip]::after { bottom: auto; top: calc(100% + 6px); transform: translate(-50%, -4px) scale(0.96); }
+.cl-head [data-tip]:hover::after { transform: translate(-50%, 0) scale(1); }
+/* Keep the last (right-most) header button's tooltip from spilling past the window edge. */
+.cl-head > [data-tip]:last-child::after { left: auto; right: 0; transform: translate(0, -4px) scale(0.96); }
+.cl-head > [data-tip]:last-child:hover::after { transform: translate(0, 0) scale(1); }
 
 /* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
 @media (max-width: 720px) {
