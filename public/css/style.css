@@ -3037,27 +3037,38 @@ a:focus-visible {
   margin: 0;
 }
 .settings-tabs {
-  display: flex; gap: 4px; padding: 8px 22px;
+  position: relative; /* anchor for the sliding indicator */
+  display: flex; gap: 2px; padding: 8px 22px;
   border-bottom: 1px solid var(--border-1);
   background: var(--bg-1);
 }
 .settings-tab {
-  padding: 9px 14px;
-  background: transparent; border: 1px solid transparent;
+  position: relative; z-index: 1; /* above the pill */
+  padding: 9px 15px;
+  background: transparent; border: 0;
   color: var(--text-dim);
-  font-weight: 700; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
-  cursor: pointer; border-radius: var(--r-2);
-  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  font-weight: 700; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; border-radius: var(--r-pill); white-space: nowrap;
+  transition: color 0.28s var(--ease);
 }
-.settings-tab:hover { color: var(--accent-300); background: var(--accent-faint); }
-.settings-tab.active {
-  background: linear-gradient(180deg, var(--accent-400), var(--accent-600));
-  color: var(--on-accent);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2), 0 4px 18px rgba(var(--primary-rgb), 0.18);
+.settings-tab:hover { color: var(--accent-200); }
+.settings-tab.active { color: var(--on-accent); background: transparent; box-shadow: none; }
+/* The pill: a single element JS slides + resizes to the active tab (a springy glide). */
+.settings-tab-ind {
+  position: absolute; top: 0; left: 0; z-index: 0;
+  height: 32px; border-radius: var(--r-pill);
+  background: var(--accent-400);
+  box-shadow: 0 4px 16px rgba(var(--primary-rgb), 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  opacity: 0; pointer-events: none;
+  transition: transform 0.44s cubic-bezier(0.34, 1.4, 0.5, 1), width 0.44s cubic-bezier(0.34, 1.4, 0.5, 1), height 0.2s var(--ease), opacity 0.2s var(--ease);
 }
+body.motion-off .settings-tab-ind { transition: none; }
 .settings-panes { overflow-y: auto; padding: 22px; min-height: 0; }
 .settings-pane { display: none; flex-direction: column; gap: 12px; }
-.settings-pane.active { display: flex; }
+@keyframes paneSwap { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.settings-pane.active, .ts-pane.active, .admin-pane.active { display: flex; }
+.settings-pane.active, .ts-pane.active { animation: paneSwap 0.34s var(--ease-out); }
+body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animation: none; }
 .settings-pane h3 {
   font-weight: 800; font-size: 13px; color: var(--accent-300);
   letter-spacing: 1.6px; text-transform: uppercase;
