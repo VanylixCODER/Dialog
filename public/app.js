@@ -4539,6 +4539,39 @@ $("chatFilters").addEventListener("click", (e) => {
   renderChatList($("searchInput").value);
 });
 
+// ---------- Sliding tab indicator (settings / theme studio / admin tab bars) ----------
+// One pill element per .settings-tabs that we translate + resize onto the active tab, so
+// switching tabs glides the highlight across instead of hard-cutting.
+function fitTabInd(bar) {
+  if (!bar) return;
+  let ind = bar.querySelector(":scope > .settings-tab-ind");
+  if (!ind) { ind = document.createElement("div"); ind.className = "settings-tab-ind"; bar.prepend(ind); }
+  const active = bar.querySelector(".settings-tab.active");
+  if (!active || !bar.offsetParent) { ind.style.opacity = "0"; return; } // bar hidden → hide pill
+  const firstShow = ind.style.opacity !== "1"; // snap into place the first time, glide after
+  if (firstShow) ind.style.transition = "none";
+  ind.style.width = active.offsetWidth + "px";
+  ind.style.height = active.offsetHeight + "px";
+  ind.style.transform = "translate(" + active.offsetLeft + "px," + active.offsetTop + "px)";
+  ind.style.opacity = "1";
+  if (firstShow) { void ind.offsetWidth; ind.style.transition = ""; }
+}
+function fitAllTabInds() { document.querySelectorAll(".settings-tabs").forEach(fitTabInd); }
+// A tab click flips .active through the app's own (target-phase) handler first; this
+// document-level (bubble-phase) listener then glides the pill to it.
+document.addEventListener("click", (e) => {
+  const bar = e.target.closest(".settings-tabs");
+  if (bar && e.target.closest(".settings-tab")) requestAnimationFrame(() => fitTabInd(bar));
+});
+// Re-fit when an overlay is shown (programmatic open), on resize, and after a language
+// swap (labels change width). MutationObserver keeps it generic across all three overlays.
+document.querySelectorAll(".settings-overlay").forEach((ov) => {
+  new MutationObserver(() => { if (!ov.classList.contains("hidden")) requestAnimationFrame(fitAllTabInds); })
+    .observe(ov, { attributes: true, attributeFilter: ["class"] });
+});
+window.addEventListener("resize", fitAllTabInds);
+window.addEventListener("langchange", () => setTimeout(fitAllTabInds, 40));
+
 // ---------- Старт ----------
 loadSavedTheme(); refreshOnAccent(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
 window.addEventListener("popstate", onPopState);
