@@ -4400,13 +4400,14 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .composer { align-items: center; }
 #msgInput { min-height: 40px; padding: 10px 14px; }
 
-/* §2 react/edit/delete toolbar sits OUTSIDE the bubble on the inward side so it
-   never leaves the chat area, even for a 1-character message. Own -> left,
-   others -> right, vertically centred. */
-.msg-actions { top: 50%; bottom: auto; transform: translateY(-50%); }
-.msg.me .msg-actions { left: auto; right: 100%; margin-right: 6px; }
-.msg:not(.me) .msg-actions { right: auto; left: 100%; margin-left: 6px; }
-.msg:hover .msg-actions { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
+/* §2 react/edit/delete toolbar: sits just ABOVE the bubble, anchored to its LEFT edge,
+   right next to the message. (Beside-the-bubble positioning threw it to the far right
+   for wide messages like voice notes, and there's no room beside a received message on
+   its left — above-left is close and always on-screen.) */
+.msg-actions { top: -14px; bottom: auto; left: 6px; right: auto; margin: 0; transform: translateY(4px); }
+.msg.me .msg-actions { left: 6px; right: auto; margin: 0; }
+.msg:not(.me) .msg-actions { left: 6px; right: auto; margin: 0; }
+.msg:hover .msg-actions { opacity: 1; pointer-events: auto; transform: translateY(0); }
 
 /* ============================================================
    Batch 7 — Theme Studio live preview (reflects the previewed theme vars)
