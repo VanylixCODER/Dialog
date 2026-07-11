@@ -1833,7 +1833,8 @@ async function openDM(login) {
 // Старые #profileModal / #contactsModal / #newChatModal / #groupSettingsModal удалены —
 // их кнопки перенаправлены на openSettings(tab) выше; формы живут как пейны в #settingsOverlay.
 let pendingAvatar = null;
-$("avaUploadBtn") && ($("avaUploadBtn").onclick = () => $("avaFile").click());
+// Click the avatar itself to change it (the camera overlay hints at it on hover).
+$("peAva") && ($("peAva").onclick = () => $("avaFile").click());
 $("avaFile") && ($("avaFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
   if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
@@ -1842,23 +1843,26 @@ $("avaFile") && ($("avaFile").onchange = (e) => {
   r.readAsDataURL(f);
   e.target.value = "";
 });
-// Banner: same upload pattern as the avatar. pendingBanner stays `undefined` while
+// Banner: click the banner strip to change it. pendingBanner stays `undefined` while
 // unchanged; an explicit "" (Remove banner) or a data URL (new upload) both flag a
 // real change so profileSave() knows to send it (an empty string is falsy but still
 // a deliberate edit, unlike leaving the field untouched).
 let pendingBanner;
-$("bannerUploadBtn") && ($("bannerUploadBtn").onclick = () => $("bannerFile").click());
+$("peBanner") && ($("peBanner").onclick = () => $("bannerFile").click());
 $("bannerFile") && ($("bannerFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
   if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
   const r = new FileReader();
-  r.onload = () => { pendingBanner = r.result; const img = $("profileBannerImg"); img.src = r.result; $("profileBannerWrap").classList.add("has-banner"); };
+  r.onload = () => { pendingBanner = r.result; $("profileBannerImg").src = r.result; $("peBanner").classList.add("has-banner"); $("bannerRemoveBtn").classList.remove("hidden"); };
   r.readAsDataURL(f);
   e.target.value = "";
 });
-$("bannerRemoveBtn") && ($("bannerRemoveBtn").onclick = () => {
-  pendingBanner = ""; $("profileBannerImg").src = ""; $("profileBannerWrap").classList.remove("has-banner");
+$("bannerRemoveBtn") && ($("bannerRemoveBtn").onclick = (e) => {
+  e.stopPropagation(); // don't also fire the banner's "change" click
+  pendingBanner = ""; $("profileBannerImg").removeAttribute("src"); $("peBanner").classList.remove("has-banner"); $("bannerRemoveBtn").classList.add("hidden");
 });
+// Live display-name preview in the profile header.
+$("profileName") && ($("profileName").oninput = () => { $("pePreviewName").textContent = ($("profileName").value || "").trim() || myName || "—"; });
 $("profileSave") && ($("profileSave").onclick = async () => {
   $("profileError").textContent = "";
   const body = { name: ($("profileName").value || "").trim(), description: $("profileDesc").value || "", activity: ($("profileActivity").value || "").trim() };
@@ -4279,14 +4283,17 @@ function refreshProfilePane() {
   $("profileName").value = myName || "";
   $("profileActivity").value = myActivity || "";
   $("profileDesc").value = myDesc || "";
+  $("pePreviewName").textContent = myName || "—";
+  $("peBannerCam").innerHTML = window.ICON.image || window.ICON.edit || "";
+  $("peAvaCam").innerHTML = window.ICON.image || window.ICON.edit || "";
   $("profileAvaImg").src = avaUrl(profile.login);
   $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
   $("profileAvaInit").textContent = initials(myName);
   pendingBanner = undefined;
-  const bImg = $("profileBannerImg"), bWrap = $("profileBannerWrap");
-  bImg.onerror = () => bWrap.classList.remove("has-banner");
-  bImg.onload = () => bWrap.classList.add("has-banner");
+  const bImg = $("profileBannerImg"), peBanner = $("peBanner"), bx = $("bannerRemoveBtn");
+  bImg.onerror = () => { peBanner.classList.remove("has-banner"); bx.classList.add("hidden"); };
+  bImg.onload = () => { peBanner.classList.add("has-banner"); bx.classList.remove("hidden"); };
   bImg.src = bannerUrl(profile.login);
   setFeedbackNote();
 }

@@ -257,36 +257,51 @@
         <!-- General -->
         <section class="settings-pane active" data-pane="profile" role="tabpanel">
           <h3 data-i18n="tab_general">General</h3>
-          <div class="lang-row">
-            <span data-i18n="language">Language</span>
-            <select id="settingsLang" class="lang-select"><option value="en">EN</option><option value="ru">RU</option></select>
-          </div>
-          <div class="profile-banner-wrap" id="profileBannerWrap">
-            <div class="profile-banner" id="profileBanner"><img id="profileBannerImg" alt="" /></div>
-            <div class="profile-ava avatar ava profile-ava-overlap" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
-          </div>
-          <div class="banner-actions">
-            <button id="bannerUploadBtn" class="btn-ghost" data-i18n="upload_banner">Upload banner</button>
-            <button id="bannerRemoveBtn" class="btn-ghost" data-i18n="remove_banner">Remove banner</button>
+
+          <!-- Profile header: click the banner or the avatar to change them -->
+          <div class="pe-card">
+            <button type="button" class="pe-banner" id="peBanner" data-i18n-title="edit_banner" title="Change banner">
+              <img id="profileBannerImg" alt="" />
+              <span class="pe-cam" id="peBannerCam" aria-hidden="true"></span>
+              <span class="pe-banner-x hidden" id="bannerRemoveBtn" role="button" data-i18n-title="remove_banner" title="Remove banner">✕</span>
+            </button>
+            <button type="button" class="pe-ava profile-ava avatar ava" id="peAva" data-i18n-title="upload_avatar" title="Change avatar">
+              <img id="profileAvaImg" alt="" />
+              <span class="ava-fallback" id="profileAvaInit">?</span>
+              <span class="pe-cam pe-ava-cam" id="peAvaCam" aria-hidden="true"></span>
+            </button>
+            <div class="pe-id">
+              <div class="pe-name" id="pePreviewName">—</div>
+              <div class="profile-login" id="profileLogin">login</div>
+            </div>
           </div>
           <input id="bannerFile" type="file" accept="image/*" hidden />
-          <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
           <input id="avaFile" type="file" accept="image/*" hidden />
-          <div class="profile-login" id="profileLogin">login</div>
-          <div class="field-wrap">
+
+          <div class="pe-field">
+            <label class="pe-label" for="profileName" data-i18n="ph_display_name">Display name</label>
             <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
           </div>
-          <div class="field-wrap">
+          <div class="pe-field">
+            <label class="pe-label" for="profileActivity" data-i18n="activity_label">Activity status</label>
             <input id="profileActivity" class="field" data-i18n-ph="ph_activity" maxlength="80" />
           </div>
-          <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
+          <div class="pe-field">
+            <label class="pe-label" for="profileDesc" data-i18n="about_label">About me</label>
+            <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
+          </div>
+          <div class="pe-field">
+            <label class="pe-label" for="settingsLang" data-i18n="language">Language</label>
+            <select id="settingsLang" class="field"><option value="en">English</option><option value="ru">Русский</option></select>
+          </div>
+
           <div class="form-error" id="profileError"></div>
-          <div class="modal-actions">
+          <div class="pe-actions">
             <button id="profileSave" class="btn-primary" data-i18n="save">Save</button>
-            <button id="logoutBtn" class="btn-ghost" data-i18n="btn_logout">Log out</button>
+            <button id="logoutBtn" class="btn-ghost pe-logout" data-i18n="btn_logout">Log out</button>
           </div>
           <p class="settings-feedback" id="feedbackNote"></p>
-          <div style="color:var(--text-dim);font-size:12px;line-height:1.4" data-i18n="esc_to_close">Esc / click outside to close</div>
+          <div class="pe-esc" data-i18n="esc_to_close">Esc / click outside to close</div>
         </section>
         <!-- Account -->
         <section class="settings-pane" data-pane="account" role="tabpanel">
