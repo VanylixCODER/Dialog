@@ -4400,13 +4400,13 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .composer { align-items: center; }
 #msgInput { min-height: 40px; padding: 10px 14px; }
 
-/* §2 react/edit/delete toolbar: sits just ABOVE the bubble, anchored to its LEFT edge,
-   right next to the message. (Beside-the-bubble positioning threw it to the far right
-   for wide messages like voice notes, and there's no room beside a received message on
-   its left — above-left is close and always on-screen.) */
-.msg-actions { top: -14px; bottom: auto; left: 6px; right: auto; margin: 0; transform: translateY(4px); }
-.msg.me .msg-actions { left: 6px; right: auto; margin: 0; }
-.msg:not(.me) .msg-actions { left: 6px; right: auto; margin: 0; }
+/* §2 react/edit/delete toolbar: sits just ABOVE the bubble, anchored to the bubble's
+   INWARD edge so it always extends into the chat and never clips off-screen — even for a
+   1-char bubble narrower than the toolbar. Received (left-aligned) anchors its left edge
+   and grows right; sent (right-aligned) anchors its right edge and grows left. */
+.msg-actions { top: -14px; bottom: auto; margin: 0; transform: translateY(4px); }
+.msg.me .msg-actions { right: 0; left: auto; }
+.msg:not(.me) .msg-actions { left: 0; right: auto; }
 .msg:hover .msg-actions { opacity: 1; pointer-events: auto; transform: translateY(0); }
 
 /* ============================================================
