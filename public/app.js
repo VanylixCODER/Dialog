@@ -26,7 +26,7 @@ let token = localStorage.getItem("dialog_token") || null;
 let profile = null, myName = "";
 let myRoom = "", curKind = "dm", curTitle = "", activeKey = "";
 let avaVer = Date.now();
-let myStatus = "online", myDesc = "";
+let myStatus = "online", myDesc = "", myActivity = "";
 const chats = new Map();             // key -> {key,type,name,login,id,last,ts,unread,pinned}
 let chatTypeFilter = "all";          // "all" | "dm" | "group"
 const peers = new Map();             // socketId -> {name, login}
@@ -856,7 +856,7 @@ async function checkSession() {
 
 function enterApp() {
   rememberAccount(profile, token); // keep the active account listed in the switcher
-  myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || "";
+  myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || ""; myActivity = profile.activity || "";
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
@@ -1666,6 +1666,7 @@ socket.on("room-cleared", ({ room }) => { clearedChats.set(room, Date.now()); pe
 
 // ---------- Аватары ----------
 function avaUrl(login) { return "/api/avatar/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
+function bannerUrl(login) { return "/api/banner/" + encodeURIComponent(login || "") + "?v=" + avaVer; }
 function initials(n) { 
   // Берём ПЕРВЫЙ непробельный символ имени; пустая/пробельная строка → "?", чтобы аватар никогда
   // не оказался пустым. Раньше было `(n || "?").trim().charAt(0)` — а при name=" " (truthy!)
@@ -1841,18 +1842,36 @@ $("avaFile") && ($("avaFile").onchange = (e) => {
   r.readAsDataURL(f);
   e.target.value = "";
 });
+// Banner: same upload pattern as the avatar. pendingBanner stays `undefined` while
+// unchanged; an explicit "" (Remove banner) or a data URL (new upload) both flag a
+// real change so profileSave() knows to send it (an empty string is falsy but still
+// a deliberate edit, unlike leaving the field untouched).
+let pendingBanner;
+$("bannerUploadBtn") && ($("bannerUploadBtn").onclick = () => $("bannerFile").click());
+$("bannerFile") && ($("bannerFile").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
+  const r = new FileReader();
+  r.onload = () => { pendingBanner = r.result; const img = $("profileBannerImg"); img.src = r.result; $("profileBannerWrap").classList.add("has-banner"); };
+  r.readAsDataURL(f);
+  e.target.value = "";
+});
+$("bannerRemoveBtn") && ($("bannerRemoveBtn").onclick = () => {
+  pendingBanner = ""; $("profileBannerImg").src = ""; $("profileBannerWrap").classList.remove("has-banner");
+});
 $("profileSave") && ($("profileSave").onclick = async () => {
   $("profileError").textContent = "";
-  const body = { name: ($("profileName").value || "").trim(), description: $("profileDesc").value || "" };
+  const body = { name: ($("profileName").value || "").trim(), description: $("profileDesc").value || "", activity: ($("profileActivity").value || "").trim() };
   if (pendingAvatar) body.avatar = pendingAvatar;
+  if (pendingBanner !== undefined) body.banner = pendingBanner;
   const { ok, data } = await api("/api/profile", body);
   if (!ok) { $("profileError").textContent = data.error || "Failed to save profile"; return; }
-  profile = data.profile; myName = profile.name; myDesc = body.description;
+  profile = data.profile; myName = profile.name; myDesc = body.description; myActivity = body.activity;
   // Тоже синхронизируем статус — раньше жил в #profileModal.status-opt и сохранялся здесь же.
   // Если статус-пилл в хедере уже поменял myStatus, отдаём его в payload, чтобы /api/profile
   // не «откатил» статус обратно к старому значению.
   if (profile.status && profile.status !== myStatus) { myStatus = profile.status; renderMeStatus(); }
-  avaVer = Date.now(); pendingAvatar = null;
+  avaVer = Date.now(); pendingAvatar = null; pendingBanner = undefined;
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   closeSettings(); renderChatList($("searchInput").value);
 });
@@ -1907,12 +1926,16 @@ async function block(target, action) { await api("/api/relations", { target, act
 // ---------- Мини-профиль ----------
 async function openMiniProfile(login) {
   if (!login || login === profile.login) return;
-  const { ok, data } = await api("/api/profile/" + login, null, "GET");
+  const [{ ok, data }] = await Promise.all([api("/api/profile/" + login, null, "GET"), loadRelations()]);
   if (!ok) return;
   $("mpModal").classList.remove("hidden");
   $("mpAva").setAttribute("data-login", login);
   $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
   $("mpName").textContent = data.name; $("mpLogin").textContent = data.login;
+  const banner = $("mpBanner"), bannerImg = $("mpBannerImg");
+  bannerImg.onload = () => banner.classList.remove("hidden");
+  bannerImg.onerror = () => banner.classList.add("hidden");
+  banner.classList.add("hidden"); bannerImg.src = bannerUrl(login);
   // "Unstable" moderation tag — a red block icon; hover reveals the reason + ban length.
   const tag = $("mpTag");
   if (tag) {
@@ -1924,10 +1947,33 @@ async function openMiniProfile(login) {
     }
   }
   $("mpStatus").textContent = t("status_" + (data.status === "offline" ? "offline" : data.status));
+  const act = $("mpActivity"); act.textContent = data.activity || ""; act.classList.toggle("hidden", !data.activity);
   $("mpDesc").textContent = data.description || "";
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
   $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
+  renderMpFriendButton(login);
+}
+// Add-friend button on the mini-profile: hidden once you're friends, "Accept request"
+// if they already asked you, disabled "Requested" if you already asked them, otherwise
+// a live "Add friend" button.
+function renderMpFriendButton(login) {
+  const btn = $("mpAddFriend"); if (!btn) return;
+  btn.classList.remove("hidden"); btn.disabled = false; btn.onclick = null;
+  if (relations.friends.includes(login)) { btn.classList.add("hidden"); return; }
+  if (relations.incoming.includes(login)) {
+    btn.textContent = t("accept_request");
+    btn.onclick = async () => { btn.disabled = true; await friend(login, "accept"); await refreshPresence(); renderMpFriendButton(login); };
+    return;
+  }
+  if (relations.sent.includes(login)) { btn.textContent = t("friend_requested"); btn.disabled = true; return; }
+  btn.textContent = t("add_friend");
+  btn.onclick = async () => {
+    btn.disabled = true;
+    const { ok: reqOk, data: reqData } = await api("/api/friend", { target: login, action: "request" });
+    if (!reqOk) { btn.disabled = false; notify((reqData && reqData.error) === "req_blocked" ? t("err_req_blocked") : t("err_generic")); return; }
+    await loadRelations(); renderMpFriendButton(login);
+  };
 }
 $("mpCancel").onclick = () => $("mpModal").classList.add("hidden");
 $("chatAva").onclick = () => {
@@ -2007,11 +2053,11 @@ window.__dialogReply = (room, text) => {
     setTimeout(() => { const inp = $("msgInput"); if (inp) { inp.value = text; sendText(); } }, 500);
   } catch (e) {}
 };
-socket.on("profile-updated", ({ login, name, avatarChanged }) => {
+socket.on("profile-updated", ({ login, name, avatarChanged, bannerChanged }) => {
   if (!login) return;
   if (profile && login === profile.login) {
     if (name && name !== myName) { myName = name; profile.name = name; const pn = $("profileName"); if (pn) pn.value = name; if (settingsOpen) renderChatList($("searchInput").value); }
-    if (avatarChanged) avaVer = Date.now();
+    if (avatarChanged || bannerChanged) avaVer = Date.now();
     return;
   }
   let changed = false;
@@ -2027,7 +2073,7 @@ socket.on("profile-updated", ({ login, name, avatarChanged }) => {
     if (curKind === "dm" && chats.get(myRoom)?.login === login) $("chatTitle").textContent = name;
     if (!$("infoPanel").classList.contains("hidden")) renderMembers();
   }
-  if (avatarChanged) avaVer = Date.now();
+  if (avatarChanged || bannerChanged) avaVer = Date.now();
   if (changed) { persistDMs(); renderChatList($("searchInput").value); }
 });
 
@@ -4231,11 +4277,17 @@ function refreshProfilePane() {
   $("profileError").textContent = "";
   $("profileLogin").textContent = profile.login;
   $("profileName").value = myName || "";
+  $("profileActivity").value = myActivity || "";
   $("profileDesc").value = myDesc || "";
   $("profileAvaImg").src = avaUrl(profile.login);
   $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
   $("profileAvaInit").textContent = initials(myName);
+  pendingBanner = undefined;
+  const bImg = $("profileBannerImg"), bWrap = $("profileBannerWrap");
+  bImg.onerror = () => bWrap.classList.remove("has-banner");
+  bImg.onload = () => bWrap.classList.add("has-banner");
+  bImg.src = bannerUrl(profile.login);
   setFeedbackNote();
 }
 

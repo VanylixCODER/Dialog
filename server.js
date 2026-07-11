@@ -36,7 +36,7 @@ import {
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
-  updateProfile, getAvatar, getProfileCard, getStatus, getUser,
+  updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend,
   getPrefs, setPrefs, bumpInviteUse,
@@ -398,19 +398,21 @@ app.post("/api/profile", async (req, res) => {
   try {
     const me = await authUser(req);
     if (!me) return res.status(401).json({ error: "unauth" });
-    const { name, avatar, description, status } = req.body || {};
+    const { name, avatar, banner, description, status, activity } = req.body || {};
     const patch = {};
     if (typeof name === "string" && name.trim()) patch.name = name.trim().slice(0, 64);
     if (typeof avatar === "string") patch.avatar = avatar.slice(0, 5_000_000);
+    if (typeof banner === "string") patch.banner = banner.slice(0, 5_000_000);
     if (typeof description === "string") patch.description = description.slice(0, 280);
+    if (typeof activity === "string") patch.activity = activity.trim().slice(0, 80);
     if (["online", "dnd", "invisible"].includes(status)) patch.status = status;
     await updateProfile(me.login, patch);
     if (patch.status) { userStatus.set(me.login, patch.status); broadcastPresence(me.login); }
-    // Broadcast name/avatar changes to friends and own devices in realtime
-    if (patch.name || patch.avatar) {
+    // Broadcast name/avatar/banner changes to friends and own devices in realtime
+    if (patch.name || "avatar" in patch || "banner" in patch) {
       try {
         const friends = await getFriendLogins(me.login);
-        const payload = { login: me.login, name: patch.name || me.name, avatarChanged: !!patch.avatar };
+        const payload = { login: me.login, name: patch.name || me.name, avatarChanged: "avatar" in patch, bannerChanged: "banner" in patch };
         for (const f of friends) notifyUser(f, "profile-updated", payload);
         notifyUser(me.login, "profile-updated", payload);
       } catch (e) { console.error("profile broadcast", e.message); }
@@ -448,6 +450,17 @@ app.get("/api/avatar/:login", async (req, res) => {
     res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
     res.send(Buffer.from(m[2], "base64"));
   } catch { sendPfpDefault(res); }
+});
+// Profile banner — no default image (unset = 404, client hides the banner strip).
+app.get("/api/banner/:login", async (req, res) => {
+  try {
+    const dataUrl = await getBanner(req.params.login.toLowerCase());
+    if (!dataUrl) return res.status(404).end();
+    const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl);
+    if (!m) return res.status(404).end();
+    res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
+    res.send(Buffer.from(m[2], "base64"));
+  } catch { res.status(404).end(); }
 });
 app.get("/api/group-avatar/:id", async (req, res) => {
   try {

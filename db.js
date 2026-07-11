@@ -89,6 +89,9 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_friend_req VARCHAR(12) NOT NULL DEFAULT 'everyone'"); } catch {} // everyone | fof | nobody
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_group_add TINYINT NOT NULL DEFAULT 1"); } catch {}          // friends can add me to groups
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_read_receipts TINYINT NOT NULL DEFAULT 1"); } catch {}       // send read receipts
+  // Profile banner (data URL, same shape as avatar) + a short "activity" status bubble.
+  try { await pool.query("ALTER TABLE users ADD COLUMN banner LONGTEXT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN activity VARCHAR(80) NULL"); } catch {}
   // UNIQUE index still allows multiple NULLs (existing users keep no email).
   try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
   // Single-use, hashed tokens for email verification + password reset.
@@ -272,12 +275,14 @@ export async function getEmailToken(tokenHash) {
   return r[0] || null;
 }
 export async function deleteEmailToken(tokenHash) { await execute("DELETE FROM email_tokens WHERE token_hash=?", [tokenHash]); }
-export async function updateProfile(login, { name, avatar, description, status }) {
+export async function updateProfile(login, { name, avatar, banner, description, status, activity }) {
   const sets = [], vals = [];
   if (name !== undefined) { sets.push("name=?"); vals.push(name); }
   if (avatar !== undefined) { sets.push("avatar=?"); vals.push(avatar); }
+  if (banner !== undefined) { sets.push("banner=?"); vals.push(banner); }
   if (description !== undefined) { sets.push("description=?"); vals.push(description); }
   if (status !== undefined) { sets.push("status=?"); vals.push(status); }
+  if (activity !== undefined) { sets.push("activity=?"); vals.push(activity); }
   if (!sets.length) return;
   vals.push(login);
   await execute(`UPDATE users SET ${sets.join(", ")} WHERE login=?`, vals);
@@ -286,15 +291,19 @@ export async function getAvatar(login) {
   const r = await query("SELECT avatar FROM users WHERE login=?", [login]);
   return r[0] ? r[0].avatar : null;
 }
+export async function getBanner(login) {
+  const r = await query("SELECT banner FROM users WHERE login=?", [login]);
+  return r[0] ? r[0].banner : null;
+}
 export async function getProfileCard(login) {
-  const r = await query("SELECT login, name, description, status, created_at, email_verified, report_reason, report_ban_until, report_ban_ms FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms FROM users WHERE login=?", [login]);
   const u = r[0];
   if (!u) return null;
   // "unstable" is a persistent guilty mark (report_reason set), independent of whether
   // the ban window has elapsed. Others see the red tag + reason/duration on hover.
   const unstable = !!u.report_reason;
   return {
-    login: u.login, name: u.name, description: u.description, status: u.status, created_at: u.created_at,
+    login: u.login, name: u.name, description: u.description, status: u.status, activity: u.activity || "", created_at: u.created_at,
     accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
     reportReason: unstable ? u.report_reason : null,
     reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
