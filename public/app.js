@@ -4286,6 +4286,7 @@ function refreshProfilePane() {
   $("pePreviewName").textContent = myName || "—";
   $("peBannerCam").innerHTML = window.ICON.image || window.ICON.edit || "";
   $("peAvaCam").innerHTML = window.ICON.image || window.ICON.edit || "";
+  $("logoutBtn").innerHTML = window.ICON.logout || "⎋"; // door-leaving icon, not text
   $("profileAvaImg").src = avaUrl(profile.login);
   $("profileAvaImg").onerror = () => { $("profileAvaImg").style.display = "none"; $("profileAvaInit").style.display = "block"; };
   $("profileAvaImg").style.display = "block"; $("profileAvaInit").style.display = "none";
