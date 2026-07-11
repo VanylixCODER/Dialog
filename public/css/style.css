@@ -1682,9 +1682,11 @@ a:focus-visible {
 .pe-field { display: flex; flex-direction: column; gap: 6px; }
 .pe-label { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-dim); }
 .pe-field .field { margin: 0; }
-.pe-actions { display: flex; gap: 8px; margin-top: 8px; }
-.pe-actions .btn-primary { flex: 1; }
-.pe-logout { color: var(--danger); }
+.pe-actions { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
+.pe-save { flex: 1; padding: 14px 16px; font-size: 14px; }
+/* Log out = a compact icon-only door-leaving button next to the big Save. */
+.pe-logout { flex: 0 0 auto; width: 52px; padding: 0; display: grid; place-items: center; color: var(--danger); }
+.pe-logout svg { width: 20px; height: 20px; }
 .pe-logout:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .pe-esc { color: var(--text-dim); font-size: 12px; line-height: 1.4; text-align: center; margin-top: 2px; }
 .status-pick { display: flex; flex-direction: column; gap: 4px; }
