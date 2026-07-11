@@ -261,12 +261,23 @@
             <span data-i18n="language">Language</span>
             <select id="settingsLang" class="lang-select"><option value="en">EN</option><option value="ru">RU</option></select>
           </div>
-          <div class="profile-ava avatar ava" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
+          <div class="profile-banner-wrap" id="profileBannerWrap">
+            <div class="profile-banner" id="profileBanner"><img id="profileBannerImg" alt="" /></div>
+            <div class="profile-ava avatar ava profile-ava-overlap" id="profileAva"><img id="profileAvaImg" alt="" /><span class="ava-fallback" id="profileAvaInit">?</span></div>
+          </div>
+          <div class="banner-actions">
+            <button id="bannerUploadBtn" class="btn-ghost" data-i18n="upload_banner">Upload banner</button>
+            <button id="bannerRemoveBtn" class="btn-ghost" data-i18n="remove_banner">Remove banner</button>
+          </div>
+          <input id="bannerFile" type="file" accept="image/*" hidden />
           <button id="avaUploadBtn" class="btn-ghost" data-i18n="upload_avatar">Upload avatar</button>
           <input id="avaFile" type="file" accept="image/*" hidden />
           <div class="profile-login" id="profileLogin">login</div>
           <div class="field-wrap">
             <input id="profileName" class="field" data-i18n-ph="ph_display_name" maxlength="32" />
+          </div>
+          <div class="field-wrap">
+            <input id="profileActivity" class="field" data-i18n-ph="ph_activity" maxlength="80" />
           </div>
           <textarea id="profileDesc" class="field" rows="3" data-i18n-ph="ph_description" maxlength="280"></textarea>
           <div class="form-error" id="profileError"></div>
@@ -469,15 +480,21 @@
 
   <!-- Мини-профиль -->
   <div id="mpModal" class="modal hidden"><div class="modal-card mp-card">
+    <div class="mp-banner hidden" id="mpBanner"><img id="mpBannerImg" alt="" /></div>
     <button id="mpCancel" class="hub-close">✕</button>
-    <div class="profile-ava avatar ava" id="mpAva"><span class="ava-fallback">?</span></div>
+    <div class="profile-ava avatar ava mp-ava-overlap" id="mpAva"><span class="ava-fallback">?</span></div>
     <div class="mp-name" id="mpName">—</div>
     <div class="unstable-tag hidden" id="mpTag" tabindex="0"><span class="ut-ic"></span><span data-i18n="unstable_tag">Unstable</span><span class="ut-tip" id="mpTagTip"></span></div>
     <div class="profile-login" id="mpLogin">login</div>
     <div class="mp-status" id="mpStatus"></div>
+    <div class="mp-activity hidden" id="mpActivity"></div>
     <div class="mp-desc" id="mpDesc"></div>
     <div class="mp-joined" id="mpJoined"></div>
-    <div class="modal-actions"><button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button><button id="mpReport" class="btn-ghost mp-report" data-i18n="report_user">Report</button></div>
+    <div class="modal-actions">
+      <button id="mpAddFriend" class="btn-primary hidden" data-i18n="add_friend">Add friend</button>
+      <button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button>
+      <button id="mpReport" class="btn-ghost mp-report" data-i18n="report_user">Report</button>
+    </div>
   </div></div>
 
   <!-- Add members (mini-modal, group-owner only). Отдельный от settings overlay — пользователь после
