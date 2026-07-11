@@ -4364,3 +4364,9 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .sp-actions .btn-primary, .sp-actions .btn-ghost { width: auto; padding: 9px 20px; }
 .rec-bar.recording .rec-hint { display: none; }
 .rec-bar.recording .rec-actions { display: flex; }
+
+/* The Batch-1 icon-centering rule (.icon-btn{display:grid}) accidentally revived
+   .mobile-only icon buttons on desktop (the composer "+" #moreBtn). Re-assert the
+   visibility helper so it wins, and keep #moreBtn shown on mobile. */
+.mobile-only { display: none; }
+@media (max-width: 720px) { #moreBtn.mobile-only { display: grid; } }
