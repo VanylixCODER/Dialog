@@ -4455,3 +4455,79 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
    visibility helper so it wins, and keep #moreBtn shown on mobile. */
 .mobile-only { display: none; }
 @media (max-width: 720px) { #moreBtn.mobile-only { display: grid; } }
+
+/* ---------- Developer / My Bots (Telegram-style bot integration) ---------- */
+/* Small inline button sizes (the settings panes lay buttons out at full width by
+   default; bot cards need compact auto-width actions). */
+.btn-primary.btn-sm, .btn-ghost.btn-sm { width: auto; padding: 9px 18px; font-size: 13px; }
+.btn-primary.btn-xs, .btn-ghost.btn-xs { width: auto; padding: 6px 12px; font-size: 12px; }
+
+.dev-intro { color: var(--text-dim); font-size: 13px; line-height: 1.5; margin: 0 0 4px; }
+
+.bot-token-box {
+  border: 1px solid var(--accent-400); background: var(--accent-faint);
+  border-radius: var(--r-3); padding: 12px 14px; margin: 4px 0 8px;
+  animation: paneSwap var(--t-base) var(--ease);
+}
+.btb-label { font-size: 12px; font-weight: 700; color: var(--text-strong); margin-bottom: 8px; }
+.btb-row { display: flex; align-items: center; gap: 8px; }
+.btb-row code {
+  flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px;
+  background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--r-2);
+  padding: 8px 10px; color: var(--accent-200);
+}
+.btb-row .btn-ghost { flex: none; }
+.btb-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 8px; line-height: 1.45; }
+
+.dev-newform { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.dev-newform .field { margin: 0; }
+
+.dev-bots { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+.dev-empty { padding: 14px 4px; font-size: 13px; }
+
+.bot-card {
+  border: 1px solid var(--border-1); background: var(--bg-2);
+  border-radius: var(--r-3); padding: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.bot-card .field, .bot-card textarea.field { margin: 0; }
+.bot-card textarea.field { resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.5; }
+.bot-card .pe-label { margin-top: 4px; }
+
+.bot-head { display: flex; align-items: center; gap: 10px; }
+.bot-ava { width: 40px; height: 40px; flex: none; }
+.bot-meta { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.bot-meta > b { color: var(--text-strong); font-size: 15px; }
+.bot-meta .profile-login { width: 100%; margin: 0; font-size: 12px; }
+.bot-head .bot-regen { flex: none; align-self: flex-start; }
+
+.bot-badge {
+  display: inline-block; vertical-align: middle;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px;
+  padding: 2px 6px; border-radius: 5px; line-height: 1;
+  color: var(--on-accent); background: linear-gradient(180deg, var(--accent-400), var(--accent-600));
+}
+
+.bot-priv { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; margin-top: 2px; }
+.bot-priv input { margin-top: 2px; flex: none; }
+.bot-err { min-height: 0; }
+.bot-err:not(:empty) { min-height: 14px; }
+.bot-actions { display: flex; gap: 8px; margin-top: 2px; }
+.bot-del.danger { color: var(--danger); border-color: rgba(255, 82, 82, 0.32); }
+
+/* Composer "/" command button + the popup menu it opens */
+#botCmdBtn { font-weight: 800; font-size: 18px; }
+.bot-cmd-menu {
+  position: fixed; z-index: 60; min-width: 200px; max-width: 320px; max-height: 300px; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: var(--r-3);
+  box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  animation: paneSwap var(--t-fast) var(--ease);
+}
+.bot-cmd-menu button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; text-align: left; padding: 8px 10px; border: none; background: transparent;
+  border-radius: var(--r-2); cursor: pointer; color: var(--text);
+}
+.bot-cmd-menu button:hover { background: var(--accent-faint); }
+.bot-cmd-menu button b { color: var(--accent-200); font-size: 13.5px; font-weight: 700; }
+.bot-cmd-menu button span { font-size: 12px; color: var(--text-dim); }

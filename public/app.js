@@ -1221,6 +1221,7 @@ function openChat(c) {
   // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
   // по факту смены чата, а не через data-i18n-title.
   $("chatAva").title = t(c.type === "group" ? "group_settings" : "open_profile");
+  updateBotCmds(c);
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
   syncBlockComposer();
   $("app").classList.add("in-chat");
@@ -1935,7 +1936,7 @@ async function openMiniProfile(login) {
   $("mpModal").classList.remove("hidden");
   $("mpAva").setAttribute("data-login", login);
   $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
-  $("mpName").textContent = data.name; $("mpLogin").textContent = data.login;
+  $("mpName").innerHTML = escapeHtml(data.name) + (data.isBot ? ' <span class="bot-badge">BOT</span>' : ""); $("mpLogin").textContent = data.login;
   const banner = $("mpBanner"), bannerImg = $("mpBannerImg");
   bannerImg.onload = () => banner.classList.remove("hidden");
   bannerImg.onerror = () => banner.classList.add("hidden");
@@ -1956,7 +1957,9 @@ async function openMiniProfile(login) {
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
   $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
-  renderMpFriendButton(login);
+  // Bots can't be friended (they auto-accept DMs) — hide the add-friend button for them.
+  if (data.isBot) { const b = $("mpAddFriend"); if (b) b.classList.add("hidden"); }
+  else renderMpFriendButton(login);
 }
 // Add-friend button on the mini-profile: hidden once you're friends, "Accept request"
 // if they already asked you, disabled "Requested" if you already asked them, otherwise
@@ -4217,7 +4220,7 @@ function dismissNotif(room) {
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "account", "prefs", "contacts", "themes", "groups", "devices"];
+const SETTINGS_TABS = ["profile", "account", "prefs", "contacts", "themes", "groups", "devices", "dev"];
 function openSettings(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
@@ -4274,8 +4277,122 @@ function hydratePane(tab) {
     return;
   }
   else if (tab === "devices") populateDeviceSettings();
+  else if (tab === "dev") refreshDevPane();
   // themes: один раз через renderThemes() + _themesRendered guard
 }
+
+// ---------- Bot command menu (shown in the composer for bot DMs) ----------
+let curBotCommands = [];
+function updateBotCmds(c) {
+  const btn = $("botCmdBtn"); if (!btn) return;
+  curBotCommands = []; btn.classList.add("hidden");
+  if (!c || c.type !== "dm") return;
+  const key = c.key;
+  api("/api/profile/" + c.login, null, "GET").then(({ ok, data }) => {
+    if (!ok || !data.isBot || myRoom !== key) return;
+    curBotCommands = data.commands || [];
+    btn.classList.toggle("hidden", !curBotCommands.length);
+  });
+}
+$("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
+  e.stopPropagation();
+  if (!curBotCommands.length) return;
+  let menu = $("botCmdMenu");
+  if (!menu) { menu = document.createElement("div"); menu.id = "botCmdMenu"; menu.className = "bot-cmd-menu hidden"; document.body.appendChild(menu); }
+  menu.innerHTML = curBotCommands.map((c) => `<button data-cmd="${escapeHtml(c.command)}"><b>/${escapeHtml(c.command)}</b>${c.description ? `<span>${escapeHtml(c.description)}</span>` : ""}</button>`).join("");
+  menu.querySelectorAll("button").forEach((b) => b.onclick = () => { const i = $("msgInput"); i.value = "/" + b.dataset.cmd + " "; i.focus(); menu.classList.add("hidden"); });
+  const r = $("botCmdBtn").getBoundingClientRect();
+  menu.classList.remove("hidden");
+  menu.style.left = r.left + "px"; menu.style.bottom = (window.innerHeight - r.top + 8) + "px";
+});
+document.addEventListener("click", (e) => { const m = $("botCmdMenu"); if (m && !m.contains(e.target) && e.target !== $("botCmdBtn")) m.classList.add("hidden"); });
+
+// ---------- Developer / My Bots (Telegram-style bot management) ----------
+let devCap = 10;
+function fmtCmds(cmds) { return (cmds || []).map((c) => "/" + c.command + (c.description ? " - " + c.description : "")).join("\n"); }
+function parseCmds(text) {
+  return String(text || "").split("\n").map((line) => {
+    const m = line.trim().replace(/^\//, "").match(/^([a-z0-9_]{1,32})\s*(?:[-–:]\s*(.*))?$/i);
+    return m ? { command: m[1].toLowerCase(), description: (m[2] || "").trim() } : null;
+  }).filter(Boolean);
+}
+function showBotToken(token) {
+  const box = $("botTokenBox"); if (!box) return;
+  $("botTokenVal").textContent = token; box.classList.remove("hidden");
+  $("botTokenCopy").onclick = async () => { await copyToClipboard(token); notify(t("copied") || "Copied"); };
+}
+async function refreshDevPane() {
+  const box = $("devBots"); if (!box) return;
+  $("botTokenBox") && $("botTokenBox").classList.add("hidden");
+  $("devNewForm") && $("devNewForm").classList.add("hidden");
+  box.innerHTML = `<div class="muted" style="padding:8px">${t("loading") || "Loading…"}</div>`;
+  const { ok, data } = await api("/api/dev/bots", null, "GET");
+  if (!ok) { box.innerHTML = ""; return; }
+  devCap = data.cap || 10;
+  box.innerHTML = data.bots.length ? data.bots.map(botCardHTML).join("") : `<div class="dev-empty muted">${t("bot_none")}</div>`;
+  window.applyI18n && window.applyI18n(box);
+  data.bots.forEach(wireBotCard);
+  const nb = $("devNewBtn"); if (nb) { nb.disabled = data.bots.length >= devCap; nb.textContent = data.bots.length >= devCap ? t("bot_cap_reached", { cap: devCap }) : t("bot_new"); }
+}
+function botCardHTML(b) {
+  return `<div class="bot-card" data-login="${escapeHtml(b.login)}">
+    <div class="bot-head">
+      <div class="avatar bot-ava"><img src="${avaUrl(b.login)}" onerror="this.remove()"><span class="ava-fallback">${initials(b.name)}</span></div>
+      <div class="bot-meta"><b>${escapeHtml(b.name)}</b> <span class="bot-badge">BOT</span><div class="profile-login">${escapeHtml(b.login)}</div></div>
+      <button class="btn-ghost btn-xs bot-regen" data-i18n="bot_regen">Regenerate token</button>
+    </div>
+    <label class="pe-label" data-i18n="ph_display_name">Display name</label>
+    <input class="field bot-f-name" value="${escapeHtml(b.name)}" maxlength="64">
+    <label class="pe-label" data-i18n="about_label">About me</label>
+    <input class="field bot-f-desc" value="${escapeHtml(b.description || "")}" maxlength="280">
+    <label class="pe-label" data-i18n="bot_commands_label">Commands (one per line: command - description)</label>
+    <textarea class="field bot-f-cmds" rows="3">${escapeHtml(fmtCmds(b.commands))}</textarea>
+    <label class="pe-label" data-i18n="bot_webhook_label">Webhook URL (optional)</label>
+    <input class="field bot-f-webhook" value="${escapeHtml(b.webhook || "")}" placeholder="https://…">
+    <label class="bot-priv"><input type="checkbox" class="bot-f-privacy" ${b.privacy ? "checked" : ""}><span data-i18n="bot_privacy_label">Group privacy — only receive /commands or @mentions</span></label>
+    <div class="form-error bot-err"></div>
+    <div class="bot-actions"><button class="btn-primary btn-sm bot-save" data-i18n="save">Save</button><button class="btn-ghost btn-sm bot-del danger" data-i18n="bot_delete">Delete</button></div>
+  </div>`;
+}
+function wireBotCard(b) {
+  const card = document.querySelector(`.bot-card[data-login="${CSS.escape(b.login)}"]`); if (!card) return;
+  const err = card.querySelector(".bot-err");
+  card.querySelector(".bot-save").onclick = async () => {
+    err.textContent = "";
+    const body = {
+      name: card.querySelector(".bot-f-name").value.trim(),
+      description: card.querySelector(".bot-f-desc").value,
+      commands: parseCmds(card.querySelector(".bot-f-cmds").value),
+      webhook: card.querySelector(".bot-f-webhook").value.trim(),
+      privacy: card.querySelector(".bot-f-privacy").checked,
+    };
+    const { ok, data } = await api("/api/dev/bots/" + b.login, body);
+    if (!ok) { err.textContent = data.error === "bad_webhook" ? t("bot_bad_webhook") : (data.error || t("err_generic")); return; }
+    notify(t("saved") || "Saved"); refreshDevPane();
+  };
+  card.querySelector(".bot-regen").onclick = async () => {
+    if (!confirm(t("bot_regen_confirm"))) return;
+    const { ok, data } = await api("/api/dev/bots/" + b.login + "/token", {});
+    if (ok && data.token) { showBotToken(data.token); notify(t("bot_token_new")); }
+  };
+  card.querySelector(".bot-del").onclick = async () => {
+    if (!confirm(t("bot_del_confirm", { name: b.name }))) return;
+    await api("/api/dev/bots/" + b.login, null, "DELETE");
+    refreshDevPane();
+  };
+}
+$("devNewBtn") && ($("devNewBtn").onclick = () => { const f = $("devNewForm"); f.classList.remove("hidden"); $("botNewErr").textContent = ""; $("botNewName").value = ""; $("botNewLogin").value = ""; $("botNewName").focus(); });
+$("botNewCancel") && ($("botNewCancel").onclick = () => $("devNewForm").classList.add("hidden"));
+$("botCreate") && ($("botCreate").onclick = async () => {
+  const name = $("botNewName").value.trim(), login = $("botNewLogin").value.trim().toLowerCase();
+  const err = $("botNewErr");
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) { err.textContent = t("bot_bad_login"); return; }
+  const { ok, data } = await api("/api/dev/bots", { name, login });
+  if (!ok) { err.textContent = data.error === "login_taken" ? t("bot_login_taken") : data.error === "bot_cap" ? t("bot_cap_reached", { cap: data.cap }) : data.error === "bad_login" ? t("bot_bad_login") : t("err_generic"); return; }
+  $("devNewForm").classList.add("hidden");
+  await refreshDevPane();
+  showBotToken(data.token);
+});
 function refreshProfilePane() {
   if (!profile) return;
   $("profileError").textContent = "";
