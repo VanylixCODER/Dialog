@@ -168,6 +168,10 @@ app.get(["/privacy", "/privacy-policy"], (_req, res) =>
 app.get(["/guidelines", "/dcg", "/rules"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "guidelines.html"))
 );
+// Bot API documentation.
+app.get(["/bots", "/bot-api", "/docs", "/api-docs"], (_req, res) =>
+  res.sendFile(join(__dirname, "public", "bots.html"))
+);
 // Group-invite join page (a dedicated confirmation page, not the full app).
 app.get(["/invite/:code", "/join/:code"], (_req, res) =>
   res.sendFile(join(__dirname, "public", "invite.html"))
