@@ -1278,7 +1278,9 @@ async function botApi(req, res) {
   const token = req.botToken || bearer(req);
   const bot = token ? await getBotByTokenHash(botTokenHash(token)) : null;
   if (!bot) return res.status(401).json({ ok: false, error_code: 401, description: "Unauthorized" });
-  const body = req.body || {};
+  // Accept params from the JSON body OR the query string (Telegram allows both; the
+  // JSON body wins on conflict). Without this, GET ...?offset=&timeout= is ignored.
+  const body = { ...(req.query || {}), ...(req.body || {}) };
   const okr = (result) => res.json({ ok: true, result });
   const err = (code, desc) => res.status(code).json({ ok: false, error_code: code, description: desc });
   try {
