@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot API — Dialog</title>
+  <meta name="description" content="Build bots for Dialog with a Telegram-style HTTP API — send messages, receive updates via getUpdates or signed webhooks, register commands, and more." />
+  <meta name="theme-color" content="#00ff5a" />
+  <link rel="icon" href="/src/lil_dialog.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <style>
+    .docs { width: min(880px, 92vw); margin: 0 auto; padding: 40px 0 90px; }
+    .docs h1 { color: #fff; font-size: clamp(30px, 5vw, 46px); margin-bottom: 10px; }
+    .docs .lede { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 680px; margin-bottom: 26px; }
+    .docs .lede strong { color: var(--text); }
+    .doc-cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 36px; }
+    .doc-cta a { padding: 11px 18px; border-radius: 9px; font-size: 14px; font-weight: 600; border: 1px solid var(--line); color: var(--text); transition: all .2s; display: inline-flex; align-items: center; gap: 8px; }
+    .doc-cta a.primary { background: var(--green); color: #001b0c; border-color: var(--green); box-shadow: 0 0 22px rgba(0,255,90,.3); }
+    .doc-cta a:hover { border-color: var(--green); color: var(--green); }
+    .doc-cta a.primary:hover { color: #001b0c; box-shadow: 0 0 30px rgba(0,255,90,.5); }
+
+    .toc { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 16px 20px; margin-bottom: 40px; }
+    .toc b { color: var(--green); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; display: block; margin-bottom: 10px; }
+    .toc ol { columns: 2; column-gap: 28px; margin: 0; padding-left: 18px; }
+    .toc li { color: var(--text); font-size: 14px; line-height: 1.9; }
+    .toc a { color: var(--text); }
+    .toc a:hover { color: var(--green); }
+
+    .docs h2 { color: var(--green); font-size: 22px; margin: 46px 0 12px; scroll-margin-top: 80px; }
+    .docs h3 { color: #fff; font-size: 17px; margin: 26px 0 8px; }
+    .docs p, .docs li { color: var(--text); font-size: 15px; line-height: 1.75; }
+    .docs ul { margin: 8px 0 8px 22px; }
+    .docs li { margin-bottom: 6px; }
+    .docs a { color: var(--green); border-bottom: 1px dashed var(--green-dim); }
+    .docs strong { color: #fff; }
+    .docs .muted { color: var(--muted); }
+
+    code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,255,90,.08); color: var(--green-2); padding: 2px 6px; border-radius: 5px; }
+    pre { background: var(--bg-1); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 14px 0; }
+    pre code { background: none; color: var(--text); padding: 0; font-size: 12.5px; line-height: 1.65; white-space: pre; }
+    pre code .k { color: var(--green); }      /* method / keyword     */
+    pre code .s { color: #9fe6bd; }            /* strings              */
+    pre code .c { color: var(--muted); }       /* comments             */
+
+    .note { border-left: 2px solid var(--green-dim); padding: 10px 16px; background: var(--card); border-radius: 6px; margin: 16px 0; font-size: 14px; color: var(--text); }
+    .note strong { color: var(--green); }
+
+    .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+    table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 13.5px; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--green); font-weight: 600; }
+    td { color: var(--text); }
+    td code { font-size: 12px; }
+
+    .card-preview { border: 1px solid var(--green-dim); border-radius: 12px; background: var(--bg-1); padding: 18px 20px; margin: 16px 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text); }
+
+    .back { margin-top: 40px; }
+    @media (max-width: 640px) { .toc ol { columns: 1; } }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-grid"></div>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/download">Download</a>
+        <a href="/bots" style="color:var(--green)">Bot API</a>
+        <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
+        <a class="nav-cta" href="/login">Open Dialog</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="docs">
+    <h1>Dialog Bot API</h1>
+    <p class="lede">Dialog has a <strong>Telegram-style HTTP bot API</strong>. A bot is a Dialog
+      account you own, driven by an external program that holds a secret token. Your program calls an
+      HTTP API to send messages, and receives incoming messages by <strong>long-polling</strong>
+      (<code>getUpdates</code>) or via a signed <strong>webhook</strong>. If you've used the Telegram
+      Bot API, this will feel immediately familiar.</p>
+
+    <div class="doc-cta">
+      <a class="primary" href="/login">Create a bot →</a>
+      <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">★ View source on GitHub</a>
+      <a href="https://github.com/VanylixCODER/Dialog/blob/main/docs/bots.md" target="_blank" rel="noopener">Markdown reference</a>
+    </div>
+
+    <div class="toc">
+      <b>On this page</b>
+      <ol>
+        <li><a href="#create">Create a bot</a></li>
+        <li><a href="#auth">Authentication</a></li>
+        <li><a href="#chatid">chat_id format</a></li>
+        <li><a href="#receiving">Receiving messages</a></li>
+        <li><a href="#sending">Sending messages</a></li>
+        <li><a href="#update">The update object</a></li>
+        <li><a href="#commands">Commands</a></li>
+        <li><a href="#groups">Groups &amp; privacy</a></li>
+        <li><a href="#methods">Method reference</a></li>
+        <li><a href="#examples">Examples</a></li>
+      </ol>
+    </div>
+
+    <p class="muted"><strong style="color:var(--text)">Base URL:</strong> <code>https://dialogmsg.xyz</code>
+      &nbsp;·&nbsp; Everything is a bot user (DMable, addable to groups).
+      &nbsp;·&nbsp; Inline keyboards / <code>callback_query</code> are out of v1.</p>
+
+    <h2 id="create">1. Create a bot</h2>
+    <p>Bots are self-serve — no approval needed.</p>
+    <ul>
+      <li>Open Dialog → <strong>Settings</strong> (gear) → <strong>Developer</strong>.</li>
+      <li>Click <strong>New bot</strong>, enter a <strong>display name</strong> and a
+        <strong>username</strong> (<code>3–24</code> chars, <code>a–z 0–9 _</code>; ending in
+        <code>_bot</code> is a nice convention).</li>
+      <li>You'll get a token like <code>dlg_XXXXXXXXXXXXXXXXXXXXXXXX</code>.
+        <strong>Copy it now — it is shown only once.</strong></li>
+      <li>The same pane lets you set <strong>commands</strong>, a <strong>webhook</strong>, and
+        <strong>group privacy</strong>, or regenerate the token / delete the bot.</li>
+    </ul>
+    <div class="note"><strong>Limit:</strong> 10 bots per account. Bot accounts cannot log in with a
+      password. Regenerating a token invalidates the previous one instantly.</div>
+
+    <h2 id="auth">2. Authentication</h2>
+    <p>Pass the token one of two ways:</p>
+    <pre><code><span class="c"># A) Token in the path (point any Telegram library's base URL here):</span>
+curl https://dialogmsg.xyz/bot&lt;token&gt;/getMe
+
+<span class="c"># B) Bearer header, via the /api/bot/&lt;method&gt; route:</span>
+curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;"</code></pre>
+    <p>Parameters may be sent as a <strong>JSON body</strong> (<code>Content-Type: application/json</code>)
+      <strong>or</strong> as a <strong>query string</strong> — the JSON body wins on conflict. Every
+      response is <code>{ "ok": true, "result": … }</code> or
+      <code>{ "ok": false, "error_code": …, "description": … }</code>.</p>
+
+    <h2 id="chatid">3. <code>chat_id</code> — how chats are addressed</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Chat</th><th>Format</th><th>Example</th></tr>
+      <tr><td>Direct message</td><td><code>@dm:&lt;a&gt;~&lt;b&gt;</code> — the two logins <strong>sorted alphabetically</strong></td><td><code>@dm:demo_bot~vnx</code></td></tr>
+      <tr><td>Group</td><td><code>@grp:&lt;id&gt;</code></td><td><code>@grp:8f3a1c</code></td></tr>
+    </table></div>
+    <p>Usually you just read <code>chat.id</code> off an incoming update and reply to it. A bot can
+      only send to a chat it participates in, otherwise <code>sendMessage</code> returns <code>403</code>.</p>
+
+    <h2 id="receiving">4. Receiving messages</h2>
+    <h3>Option A — <code>getUpdates</code> (long-polling)</h3>
+    <pre><code>curl "https://dialogmsg.xyz/bot&lt;token&gt;/getUpdates?offset=0&amp;timeout=30"</code></pre>
+    <ul>
+      <li><code>offset</code> — pass <code>&lt;highest update_id handled&gt; + 1</code> to acknowledge everything below it (acknowledged updates are deleted). Start at <code>0</code>.</li>
+      <li><code>timeout</code> — seconds to hold the connection open (<code>0</code>–<code>30</code>). Use ~<code>30</code> for efficient polling.</li>
+      <li><code>limit</code> — max updates to return (default <code>100</code>).</li>
+    </ul>
+    <h3>Option B — Webhook</h3>
+    <pre><code>curl -X POST "https://dialogmsg.xyz/bot&lt;token&gt;/setWebhook" \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://your.app/dialog/hook","secret":"my-shared-secret"}'</code></pre>
+    <ul>
+      <li>URL must be <strong>HTTPS</strong> + a <strong>public</strong> host (loopback / private ranges rejected — SSRF guard).</li>
+      <li>Each delivery is signed: header <code>X-Dialog-Signature: sha256=&lt;hex&gt;</code> where
+        <code>hex = HMAC_SHA256(secret, rawBody)</code>. <strong>Verify it</strong> before trusting the payload.</li>
+      <li>While a webhook is set, updates go to it and are <strong>not</strong> queued for <code>getUpdates</code>. Failed deliveries are dropped (no retry in v1).</li>
+    </ul>
+
+    <h2 id="sending">5. Sending &amp; managing messages</h2>
+    <pre><code>curl -X POST "https://dialogmsg.xyz/bot&lt;token&gt;/sendMessage" \
+  -H 'Content-Type: application/json' \
+  -d '{"chat_id":"@dm:demo_bot~vnx","text":"Hello 👋"}'</code></pre>
+    <p>Media methods — <code>sendPhoto</code> / <code>sendVideo</code> / <code>sendAudio</code> /
+      <code>sendDocument</code> — take the media as a <code>data:</code> URL or a public
+      <code>https:</code> URL (field name any of <code>media</code>, <code>photo</code>,
+      <code>document</code>, <code>video</code>, <code>audio</code>, <code>url</code>), plus optional
+      <code>caption</code> and <code>filename</code>. Max <strong>75&nbsp;MB</strong>. You can also
+      <code>editMessageText</code> and <code>deleteMessage</code> your own messages, and send a typing
+      indicator with <code>sendChatAction</code>.</p>
+
+    <h2 id="update">6. The update object</h2>
+    <p>Each item from <code>getUpdates</code> (and each webhook POST body) looks like:</p>
+    <pre><code>{
+  <span class="s">"update_id"</span>: 137,
+  <span class="s">"message"</span>: {
+    <span class="s">"message_id"</span>: 684,
+    <span class="s">"from"</span>:  { <span class="s">"login"</span>: <span class="s">"vnx"</span>, <span class="s">"name"</span>: <span class="s">"Vanylix"</span>, <span class="s">"is_bot"</span>: false },
+    <span class="s">"chat"</span>:  { <span class="s">"id"</span>: <span class="s">"@dm:demo_bot~vnx"</span>, <span class="s">"type"</span>: <span class="s">"private"</span> },
+    <span class="s">"date"</span>:  1783923794,
+    <span class="s">"text"</span>:  <span class="s">"/start"</span>,
+    <span class="s">"media_type"</span>: <span class="s">"image"</span>,
+    <span class="s">"media"</span>: <span class="s">"https://…"</span>,
+    <span class="s">"media_name"</span>: <span class="s">"cat.png"</span>
+  }
+}</code></pre>
+    <p><code>chat.type</code> is <code>"private"</code> or <code>"group"</code>. <code>text</code> is
+      present for text; <code>media_type</code> ∈ <code>image · video · audio · file</code> for media.
+      <code>update_id</code> is the acknowledgement cursor for <code>getUpdates</code>.</p>
+
+    <h2 id="commands">7. Commands</h2>
+    <p>Register slash-commands — they power the <strong>/ command menu</strong> that appears in the
+      composer when a user chats with your bot.</p>
+    <pre><code>curl -X POST .../setMyCommands -H 'Content-Type: application/json' -d '{
+  "commands": [
+    { "command": "start", "description": "Say hello" },
+    { "command": "ping",  "description": "Check the bot is alive" }
+  ]
+}'</code></pre>
+
+    <h2 id="groups">8. Behavior in groups — privacy</h2>
+    <p>Bots are added to groups through the normal member picker. By default a bot has
+      <strong>group privacy ON</strong>: inside a group it only receives messages that start with a
+      slash command (<code>/…</code>) or <code>@mention</code> the bot. Turn privacy <strong>off</strong>
+      to receive every group message. Privacy never affects DMs.</p>
+
+    <h2 id="methods">9. Method reference</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Method</th><th>Params</th><th>Result</th></tr>
+      <tr><td><code>getMe</code></td><td>—</td><td>bot identity</td></tr>
+      <tr><td><code>getMyCommands</code></td><td>—</td><td><code>[{command, description}]</code></td></tr>
+      <tr><td><code>setMyCommands</code></td><td><code>commands</code></td><td><code>true</code></td></tr>
+      <tr><td><code>setWebhook</code></td><td><code>url</code>, <code>secret?</code></td><td><code>true</code></td></tr>
+      <tr><td><code>deleteWebhook</code></td><td>—</td><td><code>true</code></td></tr>
+      <tr><td><code>getUpdates</code></td><td><code>offset?</code>, <code>limit?</code>, <code>timeout?</code></td><td><code>[update, …]</code></td></tr>
+      <tr><td><code>sendMessage</code></td><td><code>chat_id</code>, <code>text</code></td><td>sent message</td></tr>
+      <tr><td><code>sendPhoto</code> / <code>Video</code> / <code>Audio</code> / <code>Document</code></td><td><code>chat_id</code>, media, <code>caption?</code>, <code>filename?</code></td><td>sent message</td></tr>
+      <tr><td><code>editMessageText</code></td><td><code>message_id</code>, <code>text</code></td><td><code>true</code></td></tr>
+      <tr><td><code>deleteMessage</code></td><td><code>message_id</code></td><td><code>true</code></td></tr>
+      <tr><td><code>sendChatAction</code></td><td><code>chat_id</code>, <code>action</code></td><td><code>true</code></td></tr>
+    </table></div>
+
+    <h2 id="examples">10. Example — a polling echo bot (Node.js, zero deps)</h2>
+    <pre><code><span class="k">const</span> TOKEN = process.env.DIALOG_TOKEN;               <span class="c">// dlg_…</span>
+<span class="k">const</span> BASE  = `https://dialogmsg.xyz/bot${TOKEN}`;
+
+<span class="k">async function</span> call(method, params = {}) {
+  <span class="k">const</span> r = <span class="k">await</span> fetch(`${BASE}/${method}`, {
+    method: <span class="s">"POST"</span>, headers: { <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span> },
+    body: JSON.stringify(params),
+  });
+  <span class="k">return</span> r.json();
+}
+
+<span class="k">let</span> offset = 0;
+<span class="k">await</span> call(<span class="s">"setMyCommands"</span>, { commands: [{ command: <span class="s">"start"</span>, description: <span class="s">"Say hi"</span> }] });
+
+<span class="k">while</span> (true) {
+  <span class="k">const</span> { result: updates } = <span class="k">await</span> call(<span class="s">"getUpdates"</span>, { offset, timeout: 30 });
+  <span class="k">for</span> (<span class="k">const</span> u <span class="k">of</span> updates) {
+    offset = u.update_id + 1;
+    <span class="k">const</span> msg = u.message;
+    <span class="k">if</span> (!msg?.text) <span class="k">continue</span>;
+    <span class="k">const</span> reply = msg.text === <span class="s">"/start"</span> ? <span class="s">"👋 Hi!"</span> : `You said: ${msg.text}`;
+    <span class="k">await</span> call(<span class="s">"sendMessage"</span>, { chat_id: msg.chat.id, text: reply });
+  }
+}</code></pre>
+    <p class="muted">Run: <code>DIALOG_TOKEN=dlg_… node bot.mjs</code> (Node 18+ for built-in
+      <code>fetch</code>). The full webhook example and every detail live in the
+      <a href="https://github.com/VanylixCODER/Dialog/blob/main/docs/bots.md" target="_blank" rel="noopener">Markdown reference on GitHub</a>.</p>
+
+    <div class="card-preview">☁️  Arezzo · Tuscany, Italy
+━━━━━━━━━━━━━━━━━━━━
+
+      🌡️  25°C
+      feels like 27°C
+
+☁️  Overcast
+💧  Humidity   54%
+🌬️  Wind       2 km/h
+
+😎 Lovely out there.
+
+🕐  08:44 · Europe/Rome</div>
+    <p class="muted">↑ A real bot built on this API in ~90 lines — see the polling example above.</p>
+
+    <p class="back"><a href="/login">← Back to Dialog</a></p>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>© <span id="yr"></span> Dialog</span>
+      <div style="display:flex; gap:18px;">
+        <a href="/bots">Bot API</a>
+        <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/login">Sign in</a>
+      </div>
+    </div>
+  </footer>
+  <script>document.getElementById("yr").textContent = new Date().getFullYear();</script>
+</body>
+</html>
