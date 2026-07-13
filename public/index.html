@@ -186,6 +186,7 @@
         </div>
       </div>
       <div class="composer hidden" id="composer">
+        <button class="icon-btn hidden" id="botCmdBtn" data-i18n-title="bot_commands">/</button>
         <button class="icon-btn desktop-only" id="emojiBtn" data-i18n-title="t_emoji">😊</button>
         <button class="icon-btn desktop-only" id="gifBtn" data-i18n-title="gif">GIF</button>
         <button class="icon-btn desktop-only" id="attachBtn" data-i18n-title="t_attach">📎</button>
@@ -252,6 +253,7 @@
         <button class="settings-tab"        data-tab="themes"     data-i18n="tab_appearance" role="tab">Appearances</button>
         <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
         <button class="settings-tab"        data-tab="devices"    data-i18n="tab_devices"    role="tab">Voice & Video</button>
+        <button class="settings-tab"        data-tab="dev"        data-i18n="tab_dev"        role="tab">Developer</button>
       </nav>
       <div class="settings-panes" id="settingsPanes">
         <!-- General -->
@@ -475,6 +477,24 @@
             <span data-i18n="noise_suppression">Noise suppression</span>
             <span class="dd-toggle on" id="settingsNoiseToggle"></span>
           </div>
+        </section>
+        <!-- Developer / My Bots -->
+        <section class="settings-pane" data-pane="dev" role="tabpanel">
+          <h3 data-i18n="tab_dev">Developer</h3>
+          <p class="dev-intro" data-i18n="dev_intro">Create bots that talk to Dialog over a Telegram-style HTTP API. Each bot is a user account you own.</p>
+          <div id="botTokenBox" class="bot-token-box hidden">
+            <div class="btb-label" data-i18n="bot_token_once">Bot token — copy it now, it won't be shown again:</div>
+            <div class="btb-row"><code id="botTokenVal"></code><button id="botTokenCopy" class="btn-ghost btn-sm" data-i18n="copy">Copy</button></div>
+            <div class="btb-hint" data-i18n="bot_token_hint">Point a Telegram-style library's base URL at https://dialogmsg.xyz and call /bot&lt;token&gt;/METHOD.</div>
+          </div>
+          <div id="devNewForm" class="dev-newform hidden">
+            <input id="botNewName" class="field" data-i18n-ph="bot_name_ph" maxlength="64" />
+            <input id="botNewLogin" class="field" data-i18n-ph="bot_login_ph" maxlength="24" />
+            <div class="form-error" id="botNewErr"></div>
+            <div class="bot-actions"><button id="botCreate" class="btn-primary btn-sm" data-i18n="bot_create">Create bot</button><button id="botNewCancel" class="btn-ghost btn-sm" data-i18n="cancel">Cancel</button></div>
+          </div>
+          <div id="devBots" class="dev-bots"></div>
+          <button id="devNewBtn" class="btn-primary" data-i18n="bot_new">New bot</button>
         </section>
       </div>
     </div>
