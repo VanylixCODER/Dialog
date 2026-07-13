@@ -92,6 +92,23 @@ export async function initSchema() {
   // Profile banner (data URL, same shape as avatar) + a short "activity" status bubble.
   try { await pool.query("ALTER TABLE users ADD COLUMN banner LONGTEXT NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN activity VARCHAR(80) NULL"); } catch {}
+  // Bots — a bot is a normal user with is_bot=1, owned by its creator. Telegram-style.
+  try { await pool.query("ALTER TABLE users ADD COLUMN is_bot TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_owner VARCHAR(24) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_token_hash CHAR(64) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_webhook VARCHAR(300) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_webhook_secret CHAR(32) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_commands TEXT NULL"); } catch {}       // JSON [{command,description}]
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_privacy TINYINT NOT NULL DEFAULT 1"); } catch {} // 1 = only commands/@mentions in groups
+  try { await pool.query("CREATE INDEX idx_users_bot_token ON users (bot_token_hash)"); } catch {}
+  // Pending updates for bots that long-poll getUpdates (id doubles as Telegram update_id).
+  await pool.query(`CREATE TABLE IF NOT EXISTS bot_updates (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    bot_login VARCHAR(24) NOT NULL,
+    update_json MEDIUMTEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    KEY idx_bu_login (bot_login, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
   // UNIQUE index still allows multiple NULLs (existing users keep no email).
   try { await pool.query("CREATE UNIQUE INDEX idx_users_email ON users (email)"); } catch {}
   // Single-use, hashed tokens for email verification + password reset.
@@ -245,6 +262,62 @@ export async function initSchema() {
 export async function createUser(login, name, salt, hash, email = null) {
   await execute("INSERT INTO users (login, name, salt, hash, email) VALUES (?,?,?,?,?)", [login, name, salt, hash, email]);
 }
+
+// ---------- Bots (a bot is a user with is_bot=1, owned by bot_owner) ----------
+export async function createBot(login, name, ownerLogin, tokenHash, salt, hash) {
+  await execute(
+    "INSERT INTO users (login, name, salt, hash, email, is_bot, bot_owner, bot_token_hash) VALUES (?,?,?,?,NULL,1,?,?)",
+    [login, name, salt, hash, ownerLogin, tokenHash]
+  );
+}
+export async function isBot(login) {
+  const r = await query("SELECT is_bot FROM users WHERE login=?", [login]);
+  return !!(r[0] && r[0].is_bot);
+}
+export async function getBotByTokenHash(hash) {
+  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy FROM users WHERE bot_token_hash=? AND is_bot=1", [hash]);
+  return r[0] || null;
+}
+export async function getBot(login) {
+  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy, created_at FROM users WHERE login=? AND is_bot=1", [login]);
+  return r[0] || null;
+}
+export async function listBotsByOwner(owner) {
+  return await query("SELECT login, name, description, bot_webhook, bot_commands, bot_privacy, created_at FROM users WHERE is_bot=1 AND bot_owner=? ORDER BY created_at DESC", [owner]);
+}
+export async function countBotsByOwner(owner) {
+  const r = await query("SELECT COUNT(*) n FROM users WHERE is_bot=1 AND bot_owner=?", [owner]);
+  return Number(r[0] ? r[0].n : 0);
+}
+export async function updateBot(login, patch) {
+  const map = { name: "name", description: "description", webhook: "bot_webhook", webhookSecret: "bot_webhook_secret", commands: "bot_commands", privacy: "bot_privacy" };
+  const sets = [], vals = [];
+  for (const [k, col] of Object.entries(map)) if (patch[k] !== undefined) { sets.push(col + "=?"); vals.push(patch[k]); }
+  if (!sets.length) return;
+  vals.push(login);
+  await execute(`UPDATE users SET ${sets.join(", ")} WHERE login=? AND is_bot=1`, vals);
+}
+export async function setBotTokenHash(login, hash) {
+  await execute("UPDATE users SET bot_token_hash=? WHERE login=? AND is_bot=1", [hash, login]);
+}
+export async function deleteBot(login, owner) {
+  const r = await execute("DELETE FROM users WHERE login=? AND is_bot=1 AND bot_owner=?", [login, owner]);
+  await execute("DELETE FROM bot_updates WHERE bot_login=?", [login]);
+  return r.affectedRows > 0;
+}
+export async function queueBotUpdate(botLogin, updateJson) {
+  const r = await execute("INSERT INTO bot_updates (bot_login, update_json, created_at) VALUES (?,?,?)", [botLogin, updateJson, Date.now()]);
+  return r.insertId;
+}
+export async function getBotUpdates(botLogin, offset, limit = 100) {
+  return await query("SELECT id, update_json FROM bot_updates WHERE bot_login=? AND id>=? ORDER BY id ASC LIMIT ?", [botLogin, Number(offset) || 0, Math.min(100, (limit | 0) || 100)]);
+}
+export async function deleteBotUpdatesBelow(botLogin, offset) {
+  await execute("DELETE FROM bot_updates WHERE bot_login=? AND id<?", [botLogin, Number(offset) || 0]);
+}
+export async function pruneBotUpdates(maxAgeMs = 86400000) {
+  await execute("DELETE FROM bot_updates WHERE created_at < ?", [Date.now() - maxAgeMs]);
+}
 export async function getUser(login) {
   const r = await query("SELECT login, name, salt, hash, description, status, created_at, email, email_verified, nag_dismissed, pw_changed_at, banned, last_ip, report_ban_until, report_reason, report_ban_ms, stream_protect, email_changed_at, pref_friend_req, pref_group_add, pref_read_receipts FROM users WHERE login=?", [login]);
   return r[0] || null;
@@ -296,14 +369,17 @@ export async function getBanner(login) {
   return r[0] ? r[0].banner : null;
 }
 export async function getProfileCard(login) {
-  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms, is_bot, bot_commands FROM users WHERE login=?", [login]);
   const u = r[0];
   if (!u) return null;
   // "unstable" is a persistent guilty mark (report_reason set), independent of whether
   // the ban window has elapsed. Others see the red tag + reason/duration on hover.
   const unstable = !!u.report_reason;
+  let commands = [];
+  if (u.is_bot && u.bot_commands) { try { commands = JSON.parse(u.bot_commands) || []; } catch {} }
   return {
     login: u.login, name: u.name, description: u.description, status: u.status, activity: u.activity || "", created_at: u.created_at,
+    isBot: !!u.is_bot, commands,
     accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
     reportReason: unstable ? u.report_reason : null,
     reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
