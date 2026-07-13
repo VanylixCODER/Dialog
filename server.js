@@ -37,6 +37,8 @@ import {
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser,
+  createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
+  queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend,
   getPrefs, setPrefs, bumpInviteUse,
@@ -1202,6 +1204,156 @@ app.post("/api/room/:room/delete", async (req, res) => {
   } catch (e) { console.error("room delete", e.message); res.status(500).json({ error: "server error" }); }
 });
 
+// ================= Bots =================
+const BOT_CAP = 10;
+const botLoginOk = (l) => /^[a-z0-9_]{3,24}$/.test(l);
+const newBotToken = () => "dlg_" + crypto.randomBytes(24).toString("base64url");
+const botTokenHash = (tok) => crypto.createHash("sha256").update(String(tok)).digest("hex");
+const safeJson = (s) => { try { return JSON.parse(s) || []; } catch { return []; } };
+const cleanCommands = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 50)
+  .map((c) => ({ command: String(c.command || "").replace(/[^a-z0-9_]/gi, "").slice(0, 32).toLowerCase(), description: String(c.description || "").slice(0, 120) }))
+  .filter((c) => c.command);
+
+// ---- Owner management (authenticated with the user's session, NOT a bot token) ----
+app.get("/api/dev/bots", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const bots = await listBotsByOwner(me.login);
+  res.json({ ok: true, cap: BOT_CAP, bots: bots.map((b) => ({ login: b.login, name: b.name, description: b.description || "", webhook: b.bot_webhook || "", privacy: !!b.bot_privacy, commands: safeJson(b.bot_commands), created_at: b.created_at })) });
+});
+app.post("/api/dev/bots", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const login = String(req.body.login || "").trim().toLowerCase();
+  const name = String(req.body.name || "").trim().slice(0, 64) || login;
+  if (!botLoginOk(login)) return res.status(400).json({ error: "bad_login" });
+  if (await getUser(login)) return res.status(400).json({ error: "login_taken" });
+  if (await countBotsByOwner(me.login) >= BOT_CAP) return res.status(400).json({ error: "bot_cap", cap: BOT_CAP });
+  const token = newBotToken();
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.randomBytes(64).toString("hex"); // random → bots can't password-login
+  try { await createBot(login, name, me.login, botTokenHash(token), salt, hash); }
+  catch (e) { console.error("createBot", e.message); return res.status(500).json({ error: "server error" }); }
+  res.json({ ok: true, login, name, token });
+});
+app.post("/api/dev/bots/:login", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const bot = await getBot(String(req.params.login).toLowerCase());
+  if (!bot || bot.bot_owner !== me.login) return res.status(404).json({ error: "not_found" });
+  const patch = {};
+  if (typeof req.body.name === "string" && req.body.name.trim()) patch.name = req.body.name.trim().slice(0, 64);
+  if (typeof req.body.description === "string") patch.description = req.body.description.slice(0, 280);
+  if (typeof req.body.privacy === "boolean") patch.privacy = req.body.privacy ? 1 : 0;
+  if ("webhook" in req.body) {
+    const url = String(req.body.webhook || "").trim();
+    if (url && !safeHttpUrl(url)) return res.status(400).json({ error: "bad_webhook" });
+    patch.webhook = url || null;
+    if (url && !bot.bot_webhook_secret) patch.webhookSecret = crypto.randomBytes(16).toString("hex");
+  }
+  if (Array.isArray(req.body.commands)) patch.commands = JSON.stringify(cleanCommands(req.body.commands));
+  await updateBot(bot.login, patch);
+  if (patch.name) { try { notifyUser(me.login, "profile-updated", { login: bot.login, name: patch.name }); } catch {} }
+  res.json({ ok: true, webhookSecret: patch.webhookSecret || bot.bot_webhook_secret || null });
+});
+app.post("/api/dev/bots/:login/token", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const bot = await getBot(String(req.params.login).toLowerCase());
+  if (!bot || bot.bot_owner !== me.login) return res.status(404).json({ error: "not_found" });
+  const token = newBotToken();
+  await setBotTokenHash(bot.login, botTokenHash(token));
+  res.json({ ok: true, token });
+});
+app.delete("/api/dev/bots/:login", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  res.json({ ok: await deleteBot(String(req.params.login).toLowerCase(), me.login) });
+});
+
+// ---- Telegram-style bot HTTP API (authenticated with the bot token) ----
+async function botInRoom(botLogin, room) {
+  if (!room || typeof room !== "string") return false;
+  if (room.startsWith("@dm:")) return room.slice(4).split("~").includes(botLogin);
+  if (room.startsWith("@grp:")) { const gid = room.slice(5); return /^\d+$/.test(gid) && await isGroupMember(gid, botLogin); }
+  return false;
+}
+async function botApi(req, res) {
+  const method = req.botMethod || req.params.method;
+  const token = req.botToken || bearer(req);
+  const bot = token ? await getBotByTokenHash(botTokenHash(token)) : null;
+  if (!bot) return res.status(401).json({ ok: false, error_code: 401, description: "Unauthorized" });
+  const body = req.body || {};
+  const okr = (result) => res.json({ ok: true, result });
+  const err = (code, desc) => res.status(code).json({ ok: false, error_code: code, description: desc });
+  try {
+    switch (method) {
+      case "getMe": return okr({ id: bot.login, login: bot.login, name: bot.name, is_bot: true, description: bot.description || "" });
+      case "getMyCommands": return okr(safeJson(bot.bot_commands));
+      case "setMyCommands": await updateBot(bot.login, { commands: JSON.stringify(cleanCommands(body.commands)) }); return okr(true);
+      case "setWebhook": {
+        const url = String(body.url || "").trim();
+        if (url && !safeHttpUrl(url)) return err(400, "bad url (https + public host required)");
+        const patch = { webhook: url || null };
+        if (url) patch.webhookSecret = String(body.secret || "").slice(0, 32) || crypto.randomBytes(16).toString("hex");
+        await updateBot(bot.login, patch); return okr(true);
+      }
+      case "deleteWebhook": await updateBot(bot.login, { webhook: null }); return okr(true);
+      case "getUpdates": return botGetUpdates(bot, body, res);
+      case "sendMessage": case "sendPhoto": case "sendDocument": case "sendVideo": case "sendAudio":
+        return botSend(bot, method, body, okr, err);
+      case "editMessageText": {
+        const id = Number(body.message_id) || 0, text = String(body.text || "").trim().slice(0, 4000);
+        if (!id || !text) return err(400, "message_id and text required");
+        const room = await editMessage(id, bot.login, text);
+        if (!room) return err(400, "message not editable"); io.to(room).emit("msg-edited", { id, text }); return okr(true);
+      }
+      case "deleteMessage": {
+        const id = Number(body.message_id) || 0; if (!id) return err(400, "message_id required");
+        const room = await deleteMessage(id, bot.login);
+        if (!room) return err(400, "message not found"); io.to(room).emit("msg-deleted", { id }); return okr(true);
+      }
+      case "sendChatAction": {
+        const room = String(body.chat_id || "");
+        if (await botInRoom(bot.login, room)) io.to(room).emit("typing", { id: "bot:" + bot.login, name: bot.name, isTyping: body.action !== "cancel" });
+        return okr(true);
+      }
+      default: return err(404, "Unknown method: " + method);
+    }
+  } catch (e) { console.error("botApi " + method, e.message); return err(500, "server error"); }
+}
+async function botSend(bot, method, body, okr, err) {
+  const room = String(body.chat_id || "");
+  if (!(await botInRoom(bot.login, room))) return err(403, "bot is not a participant of this chat");
+  let type = "text", media = null, mediaName = "", text = String(body.text || body.caption || "");
+  if (method !== "sendMessage") {
+    media = body.media || body.photo || body.document || body.video || body.audio || body.url;
+    if (!media || typeof media !== "string") return err(400, "media required (data: URL or https URL)");
+    if (media.startsWith("data:")) { const c = media.indexOf(","); const b64 = c >= 0 ? media.length - c - 1 : media.length; if (Math.floor(b64 * 3 / 4) > MAX_FILE_BYTES) return err(400, "file_too_big"); }
+    type = method === "sendPhoto" ? "image" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "file";
+    mediaName = String(body.filename || body.media_name || "file").slice(0, 255); text = "";
+  } else if (!text.trim()) return err(400, "text required");
+  const payload = await deliverMessage({ room, fromLogin: bot.login, name: bot.name, from: "bot:" + bot.login, type, text, media, mediaName });
+  if (!payload) return err(500, "could not send");
+  return okr({ message_id: payload.id, chat: { id: room }, date: Math.floor(payload.ts / 1000), text: payload.text, from: { login: bot.login, name: bot.name, is_bot: true } });
+}
+function botGetUpdates(bot, body, res) {
+  const offset = Number(body.offset) || 0;
+  if (offset > 0) deleteBotUpdatesBelow(bot.login, offset).catch(() => {});
+  const timeout = Math.min(30, Math.max(0, Number(body.timeout) || 0));
+  const deadline = Date.now() + timeout * 1000;
+  const poll = async () => {
+    let rows = [];
+    try { rows = await getBotUpdates(bot.login, offset, Number(body.limit) || 100); } catch {}
+    if (rows.length || Date.now() >= deadline) {
+      return res.json({ ok: true, result: rows.map((r) => { let u = {}; try { u = JSON.parse(r.update_json); } catch {} u.update_id = r.id; return u; }) });
+    }
+    setTimeout(poll, 1000);
+  };
+  poll();
+}
+// /bot<token>/<method> (Telegram-compatible) + /api/bot/<method> (Bearer). Registered BEFORE
+// the SPA fallback so they aren't swallowed by it.
+app.all(/^\/bot([A-Za-z0-9_-]+)\/([A-Za-z]+)$/, (req, res) => { req.botToken = req.params[0]; req.botMethod = req.params[1]; botApi(req, res); });
+app.all("/api/bot/:method", botApi);
+// Housekeeping: drop stale queued updates hourly.
+setInterval(() => { pruneBotUpdates().catch(() => {}); }, 3600 * 1000);
+
 // ---------- GitHub webhook (auto-deploy) ----------
 app.post("/webhook", (req, res) => {
   const event = req.headers["x-github-event"];
@@ -1294,6 +1446,95 @@ async function saveSystemMessage(room, fromLogin, name, type, text) {
   } catch (e) { console.error("saveSystemMessage", e.message); return; }
   if (!payload.id) return;
   io.to(room).emit("message", payload);
+}
+
+// Save + broadcast + notify a message into a room, then fan out to any bot participants.
+// Shared by the socket "message" handler and the bot HTTP API. Returns the saved payload
+// (with .id) or null if the DB rejected it. Never throws.
+async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId }) {
+  const payload = {
+    from: from || fromLogin, fromLogin, name, ts: Date.now(),
+    type: media ? (type || "file") : "text",
+    text: media ? "" : String(text || "").slice(0, 4000),
+    media: media || null, mediaName: (mediaName || "").slice(0, 255),
+    localId: localId || null,
+  };
+  try { payload.id = await saveMessage({ room, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
+  if (!payload.id) return null;
+  io.to(room).emit("message", payload);
+  const preview = payload.type === "text" ? payload.text.slice(0, 120)
+    : payload.type === "image" || payload.type === "gif" ? "🖼 Photo"
+    : payload.type === "video" ? "🎬 Video"
+    : payload.type === "audio" ? "🎤 Voice" : "📎 " + (payload.mediaName || "File");
+  let recips = [];
+  const dmTo = dmPartner(room, fromLogin);
+  if (dmTo) recips = [dmTo];
+  else if (room.startsWith("@grp:")) { try { recips = await getGroupMembers(room.slice(5)); } catch {} }
+  for (const login of recips) {
+    if (login === fromLogin) continue;
+    notifyUser(login, "dm-ping", { room, fromLogin, fromName: name });
+    if (!isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: preview, room });
+  }
+  maybeDeliverToBots(room, payload).catch((e) => console.error("bot fanout", e.message));
+  return payload;
+}
+
+// ---------- Bot fan-out (deliver incoming messages to bot participants) ----------
+async function maybeDeliverToBots(room, payload) {
+  if (payload.fromLogin && await isBot(payload.fromLogin)) return; // don't echo a bot's own msg back
+  // Which bots are in this chat?
+  let botLogins = [];
+  const dmTo = dmPartner(room, payload.fromLogin);
+  if (dmTo) { if (await isBot(dmTo)) botLogins = [dmTo]; }
+  else if (room.startsWith("@grp:")) {
+    try { const members = await getGroupMembers(room.slice(5)); for (const m of members) if (m !== payload.fromLogin && await isBot(m)) botLogins.push(m); } catch {}
+  }
+  if (!botLogins.length) return;
+  const isGroup = room.startsWith("@grp:");
+  const text = payload.type === "text" ? (payload.text || "") : "";
+  for (const botLogin of botLogins) {
+    const bot = await getBot(botLogin);
+    if (!bot) continue;
+    // Group privacy: unless privacy is off, only deliver commands (/…) or @mentions of the bot.
+    if (isGroup && bot.bot_privacy) {
+      const mentioned = new RegExp("(^|\\s)@" + botLogin.replace(/[^a-z0-9_]/gi, "") + "\\b", "i").test(text);
+      if (!(text.trim().startsWith("/") || mentioned)) continue;
+    }
+    const update = {
+      // update_id is assigned per transport: the DB row id for getUpdates, a timestamp for webhooks
+      message: {
+        message_id: payload.id,
+        from: { login: payload.fromLogin, name: payload.name, is_bot: false },
+        chat: { id: room, type: isGroup ? "group" : "private" },
+        date: Math.floor(payload.ts / 1000),
+        text: payload.type === "text" ? payload.text : undefined,
+        media_type: payload.type !== "text" ? payload.type : undefined,
+        media: payload.media || undefined,
+        media_name: payload.mediaName || undefined,
+      },
+    };
+    if (bot.bot_webhook) {
+      const body = JSON.stringify({ ...update, update_id: Date.now() });
+      postBotWebhook(bot, body);
+    } else {
+      try { await queueBotUpdate(botLogin, JSON.stringify(update)); } catch (e) { console.error("queueBotUpdate", e.message); }
+    }
+  }
+}
+function postBotWebhook(bot, body) {
+  const url = bot.bot_webhook;
+  if (!safeHttpUrl(url)) return;
+  const sig = crypto.createHmac("sha256", bot.bot_webhook_secret || "").update(body).digest("hex");
+  const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 8000);
+  fetch(url, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", "X-Dialog-Signature": "sha256=" + sig, "User-Agent": "DialogBot/1.0" }, body })
+    .catch((e) => { /* webhook errors never affect human delivery */ })
+    .finally(() => clearTimeout(tm));
+}
+// Block internal/loopback targets (SSRF guard, mirrors the link-preview check).
+function safeHttpUrl(u) {
+  if (!/^https:\/\//i.test(u)) return false;
+  if (/\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(u)) return false;
+  return true;
 }
 
 const getPeers = (room) => { if (!rooms.has(room)) rooms.set(room, new Map()); return rooms.get(room); };
@@ -1462,7 +1703,7 @@ io.on("connection", (socket) => {
     const spam = spamReason(socket, msg.text, !!msg.media);
     if (spam) { socket.emit("rate-limited", { reason: spam, localId: msg.localId || null }); return; }
     const dmTo = dmPartner(currentRoom, userLogin);
-    if (dmTo) { // гейтинг ЛС
+    if (dmTo && !(await isBot(dmTo))) { // гейтинг ЛС (боты авто-принимают ЛС — гейт пропускаем)
       if (await isBlockedBy(userLogin, dmTo)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_by_recipient" }); return; }
       if (await isBlockedBy(dmTo, userLogin)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_sender" }); return; }
       const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo));
@@ -1495,38 +1736,15 @@ io.on("connection", (socket) => {
         media = null; mediaName = "";
       }
     }
-    const payload = {
-      from: socket.id, fromLogin: userLogin, name: userName, ts: Date.now(),
-      type: media ? (msg.type || "file") : "text",
-      text: media ? "" : (msg.text || "").slice(0, 4000),
-      media, mediaName,
-      localId: msg.localId || null,
-    };
-    try { payload.id = await saveMessage({ room: currentRoom, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
+    const payload = await deliverMessage({
+      room: currentRoom, fromLogin: userLogin, name: userName, from: socket.id,
+      type: msg.type, text: msg.text, media, mediaName, localId: msg.localId,
+    });
     // Сообщаем только после успешного сохранения: если БД не приняла медиа (max_allowed_packet),
     // не шлём ни broadcast, ни ACK, и отправляем отправителю ошибку.
-    if (!payload.id) {
-      socket.emit("file-rejected", { reason: "save_failed" });
-      return;
-    }
-    io.to(currentRoom).emit("message", payload);
+    if (!payload) { socket.emit("file-rejected", { reason: "save_failed" }); return; }
     // Возвращаем автору ACK с id, чтобы клиент снял статус «отправляется».
     socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
-
-    // ЛС-пинг + push (тем, кто не в этой комнате)
-    let recips = [];
-    if (dmTo) recips = [dmTo];
-    else if (currentRoom.startsWith("@grp:")) { try { recips = await getGroupMembers(currentRoom.slice(5)); } catch {} }
-    const preview = payload.type === "text" ? payload.text.slice(0, 120)
-      : payload.type === "image" || payload.type === "gif" ? "🖼 Photo"
-      : payload.type === "video" ? "🎬 Video"
-      : payload.type === "audio" ? "🎤 Voice"
-      : "📎 " + (payload.mediaName || "File");
-    for (const login of recips) {
-      if (login === userLogin) continue;
-      notifyUser(login, "dm-ping", { room: currentRoom, fromLogin: userLogin, fromName: userName });
-      if (!isUserInRoom(login, currentRoom)) sendPush(login, { kind: "msg", title: userName, body: preview, room: currentRoom });
-    }
   });
 
   socket.on("typing", (isTyping) => { if (currentRoom) socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping }); });
