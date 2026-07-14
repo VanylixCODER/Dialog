@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dialog Mini App — Demo</title>
+  <script src="/js/dialog-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--dialog-bg-color, #0b0f0d);
+      --text: var(--dialog-text-color, #eafff2);
+      --hint: var(--dialog-hint-color, #8aa397);
+      --btn: var(--dialog-button-color, #00c853);
+      --btn-text: var(--dialog-button-text-color, #00120a);
+      --link: var(--dialog-link-color, #5affa0);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; padding: 32px 22px; text-align: center;
+    }
+    .badge { font-size: 44px; }
+    h1 { margin: 0; font-size: 22px; }
+    p { margin: 0; color: var(--hint); font-size: 14px; line-height: 1.6; max-width: 320px; }
+    .who { color: var(--text); font-weight: 700; }
+    .row { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; margin-top: 6px; }
+    button {
+      appearance: none; border: none; cursor: pointer; font-size: 15px; font-weight: 600;
+      padding: 13px 16px; border-radius: 12px; background: var(--btn); color: var(--btn-text);
+    }
+    button.ghost { background: transparent; color: var(--link); border: 1px solid var(--hint); }
+    button:active { transform: scale(0.98); }
+    .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 26px 22px; width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    code { color: var(--link); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">🚀</div>
+    <h1>Dialog Mini App</h1>
+    <p id="greeting">Connecting to Dialog…</p>
+    <div class="row">
+      <button id="send">Send data to the bot</button>
+      <button id="close" class="ghost">Close</button>
+    </div>
+    <p>This page runs inside Dialog via <code>DialogWebApp</code>. It reads your name, follows the app theme, and can send data back to the bot.</p>
+  </div>
+
+  <script>
+    var wa = window.DialogWebApp;
+    function paint() {
+      var u = wa.initDataUnsafe && wa.initDataUnsafe.user;
+      document.getElementById("greeting").innerHTML = u
+        ? 'Hello, <span class="who">' + (u.name || u.login) + '</span> 👋'
+        : "Hello! (running standalone — open me from a bot chat)";
+    }
+    wa.onEvent("ready", paint);
+    wa.ready();
+    paint();
+    document.getElementById("send").onclick = function () {
+      wa.sendData("Hello from the Mini App! 🚀 (sent " + new Date().toLocaleTimeString() + ")");
+    };
+    document.getElementById("close").onclick = function () { wa.close(); };
+  </script>
+</body>
+</html>
