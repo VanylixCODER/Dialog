@@ -870,7 +870,8 @@ app.post("/api/friend", async (req, res) => {
   if (!target || target === me.login) return res.status(400).json({ error: "bad target" });
   if (action === "request") {
     if (!(await getUser(target))) return res.status(404).json({ error: "not found" });
-    if (!(await canFriendRequest(me.login, target))) return res.status(403).json({ error: "req_blocked" });
+    // Bots skip the privacy gate and auto-accept (handled in sendFriendRequest).
+    if (!(await isBot(target)) && !(await canFriendRequest(me.login, target))) return res.status(403).json({ error: "req_blocked" });
     await sendFriendRequest(me.login, target);
   }
   else if (action === "accept") await acceptFriend(me.login, target);
@@ -1232,7 +1233,7 @@ const cleanCommands = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 50)
 app.get("/api/dev/bots", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const bots = await listBotsByOwner(me.login);
-  res.json({ ok: true, cap: BOT_CAP, bots: bots.map((b) => ({ login: b.login, name: b.name, description: b.description || "", webhook: b.bot_webhook || "", privacy: !!b.bot_privacy, commands: safeJson(b.bot_commands), created_at: b.created_at })) });
+  res.json({ ok: true, cap: BOT_CAP, bots: bots.map((b) => ({ login: b.login, name: b.name, description: b.description || "", webhook: b.bot_webhook || "", miniapp: b.bot_miniapp || "", privacy: !!b.bot_privacy, commands: safeJson(b.bot_commands), created_at: b.created_at })) });
 });
 app.post("/api/dev/bots", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
@@ -1263,6 +1264,11 @@ app.post("/api/dev/bots/:login", async (req, res) => {
     if (url && !bot.bot_webhook_secret) patch.webhookSecret = crypto.randomBytes(16).toString("hex");
   }
   if (Array.isArray(req.body.commands)) patch.commands = JSON.stringify(cleanCommands(req.body.commands));
+  if ("miniapp" in req.body) {
+    const url = String(req.body.miniapp || "").trim();
+    if (url && !/^https:\/\/.+/i.test(url)) return res.status(400).json({ error: "bad_miniapp" });
+    patch.miniapp = url ? url.slice(0, 300) : null;
+  }
   await updateBot(bot.login, patch);
   if (patch.name) { try { notifyUser(me.login, "profile-updated", { login: bot.login, name: patch.name }); } catch {} }
   res.json({ ok: true, webhookSecret: patch.webhookSecret || bot.bot_webhook_secret || null });
@@ -1299,7 +1305,12 @@ async function botApi(req, res) {
   const err = (code, desc) => res.status(code).json({ ok: false, error_code: code, description: desc });
   try {
     switch (method) {
-      case "getMe": return okr({ id: bot.login, login: bot.login, name: bot.name, is_bot: true, description: bot.description || "" });
+      case "getMe": return okr({ id: bot.login, login: bot.login, name: bot.name, is_bot: true, description: bot.description || "", miniapp: bot.bot_miniapp || "" });
+      case "setMiniApp": {
+        const url = String(body.url || "").trim();
+        if (url && !/^https:\/\/.+/i.test(url)) return err(400, "bad url (https required)");
+        await updateBot(bot.login, { miniapp: url ? url.slice(0, 300) : null }); return okr(true);
+      }
       case "getMyCommands": return okr(safeJson(bot.bot_commands));
       case "setMyCommands": await updateBot(bot.login, { commands: JSON.stringify(cleanCommands(body.commands)) }); return okr(true);
       case "setWebhook": {

@@ -4531,3 +4531,30 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 .bot-cmd-menu button:hover { background: var(--accent-faint); }
 .bot-cmd-menu button b { color: var(--accent-200); font-size: 13.5px; font-weight: 700; }
 .bot-cmd-menu button span { font-size: 12px; color: var(--text-dim); }
+
+/* ---------- Bot Mini App (Telegram-style webview overlay) ---------- */
+.miniapp-overlay {
+  position: fixed; inset: 0; z-index: 120; display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(4px);
+  animation: paneSwap var(--t-base) var(--ease);
+}
+.miniapp-frame {
+  display: flex; flex-direction: column; overflow: hidden;
+  width: min(460px, 96vw); height: min(820px, 92vh);
+  background: var(--bg-1); border: 1px solid var(--border-2);
+  border-radius: 18px; box-shadow: var(--shadow-lg);
+}
+.miniapp-head {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 10px 12px; border-bottom: 1px solid var(--border-1); background: var(--bg-2);
+}
+.miniapp-id { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.miniapp-ava { width: 30px; height: 30px; flex: none; font-size: 13px; }
+.miniapp-title { font-weight: 700; color: var(--text-strong); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.miniapp-close { flex: none; }
+.miniapp-iframe { flex: 1; width: 100%; border: none; background: #fff; }
+body.miniapp-open { overflow: hidden; }
+@media (max-width: 560px) {
+  .miniapp-overlay { backdrop-filter: none; }
+  .miniapp-frame { width: 100vw; height: 100vh; height: 100dvh; border: none; border-radius: 0; }
+}

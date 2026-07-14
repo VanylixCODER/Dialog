@@ -227,6 +227,38 @@ direct messages.
 
 ---
 
+## 8b. Mini Apps (webview)
+
+A bot can have a **Mini App** — a web page that opens as a Telegram-style webview
+inside Dialog. Set its URL in **Settings → Developer** (the "Mini App URL" field) or
+via the bot API:
+
+```bash
+curl -X POST .../setMiniApp -d '{"url":"https://your.app"}'   # https only
+```
+
+When a bot has a Mini App, an **app button** appears in the chat header of its DM.
+Tapping it opens your page in a sandboxed iframe. Add our SDK to talk to Dialog:
+
+```html
+<script src="https://dialogmsg.xyz/js/dialog-web-app.js"></script>
+<script>
+  const wa = window.DialogWebApp;
+  wa.onEvent("ready", () => console.log("user:", wa.initDataUnsafe.user)); // { login, name }
+  wa.ready();
+  // wa.themeParams → { bg_color, text_color, button_color, … } (also set as
+  // CSS vars --dialog-bg-color, --dialog-text-color, …)
+  // wa.sendData("payload")  → delivers "payload" to the bot as a message, then closes
+  // wa.close()              → closes the webview
+  // wa.openLink("https://…")→ opens a link in a new tab
+</script>
+```
+
+`getMe` includes the bot's `miniapp` URL. Calls are disabled in bot DMs, and bots
+auto-accept friend requests.
+
+---
+
 ## 9. Method reference
 
 | Method | Params | Result |
@@ -236,6 +268,7 @@ direct messages.
 | `setMyCommands` | `commands: [{command, description}]` | `true` |
 | `setWebhook` | `url`, `secret?` | `true` |
 | `deleteWebhook` | — | `true` |
+| `setMiniApp` | `url` (https, or empty to clear) | `true` |
 | `getUpdates` | `offset?`, `limit?`, `timeout?` | `[update, …]` |
 | `sendMessage` | `chat_id`, `text` | sent message |
 | `sendPhoto` / `sendVideo` / `sendAudio` / `sendDocument` | `chat_id`, media (`media`/`photo`/…/`url`), `caption?`, `filename?` | sent message |

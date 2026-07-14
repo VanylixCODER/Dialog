@@ -1983,9 +1983,9 @@ async function openMiniProfile(login) {
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
   $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
-  // Bots can't be friended (they auto-accept DMs) — hide the add-friend button for them.
-  if (data.isBot) { const b = $("mpAddFriend"); if (b) b.classList.add("hidden"); }
-  else renderMpFriendButton(login);
+  // Bots can be friended too — they auto-accept instantly (server side), so the button
+  // just flips straight to "friends".
+  renderMpFriendButton(login);
 }
 // Add-friend button on the mini-profile: hidden once you're friends, "Accept request"
 // if they already asked you, disabled "Requested" if you already asked them, otherwise
@@ -4332,17 +4332,23 @@ function hydratePane(tab) {
   // themes: один раз через renderThemes() + _themesRendered guard
 }
 
-// ---------- Bot command menu (shown in the composer for bot DMs) ----------
+// ---------- Bot chat chrome: command menu, no-call, Mini App button ----------
 let curBotCommands = [];
+let curMiniApp = null; // { url, name, login } for the open bot DM, or null
 function updateBotCmds(c) {
-  const btn = $("botCmdBtn"); if (!btn) return;
-  curBotCommands = []; btn.classList.add("hidden");
+  const btn = $("botCmdBtn"); const call = $("startCallBtn"); const mab = $("miniAppBtn");
+  curBotCommands = []; curMiniApp = null;
+  if (btn) btn.classList.add("hidden");
+  if (mab) mab.classList.add("hidden");
+  if (call) call.classList.remove("hidden"); // default: calls allowed
   if (!c || c.type !== "dm") return;
   const key = c.key;
   api("/api/profile/" + c.login, null, "GET").then(({ ok, data }) => {
     if (!ok || !data.isBot || myRoom !== key) return;
     curBotCommands = data.commands || [];
-    btn.classList.toggle("hidden", !curBotCommands.length);
+    if (btn) btn.classList.toggle("hidden", !curBotCommands.length);
+    if (call) call.classList.add("hidden");     // no calling a bot
+    if (data.miniApp) { curMiniApp = { url: data.miniApp, name: data.name || c.login, login: c.login }; if (mab) mab.classList.remove("hidden"); }
   });
 }
 $("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
@@ -4357,6 +4363,53 @@ $("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
   menu.style.left = r.left + "px"; menu.style.bottom = (window.innerHeight - r.top + 8) + "px";
 });
 document.addEventListener("click", (e) => { const m = $("botCmdMenu"); if (m && !m.contains(e.target) && e.target !== $("botCmdBtn")) m.classList.add("hidden"); });
+
+// ---------- Bot Mini Apps (Telegram-style webview) ----------
+function miniAppTheme() {
+  const cs = getComputedStyle(document.body);
+  const pick = (v, f) => (cs.getPropertyValue(v).trim() || f);
+  return {
+    bg_color: pick("--bg-1", "#0b0f0d"), text_color: pick("--text-strong", "#eafff2"),
+    hint_color: pick("--text-dim", "#8aa397"), button_color: pick("--accent-500", "#00c853"),
+    button_text_color: pick("--on-accent", "#00120a"), link_color: pick("--accent-300", "#5affa0"),
+  };
+}
+function miniAppInitPayload() {
+  return { __dialogapp: 1, type: "init", user: { login: profile && profile.login, name: myName || (profile && profile.login) }, theme: miniAppTheme() };
+}
+function postMiniAppInit() { const fr = $("miniAppFrame"); try { fr.contentWindow.postMessage(miniAppInitPayload(), "*"); } catch (e) {} }
+function openMiniApp(app) {
+  if (!app || !app.url) return;
+  const ov = $("miniAppOverlay"), fr = $("miniAppFrame");
+  $("miniAppTitle").textContent = app.name || app.login;
+  $("miniAppAva").innerHTML = `<img src="${avaUrl(app.login)}" onerror="this.remove()">${initials(app.name || app.login)}`;
+  ov.dataset.botLogin = app.login;
+  fr.onload = postMiniAppInit; // push user + theme once the app frame is ready
+  fr.src = app.url;
+  ov.classList.remove("hidden"); document.body.classList.add("miniapp-open");
+}
+function closeMiniApp() {
+  const ov = $("miniAppOverlay"), fr = $("miniAppFrame");
+  ov.classList.add("hidden"); document.body.classList.remove("miniapp-open");
+  fr.onload = null; fr.src = "about:blank"; ov.dataset.botLogin = "";
+}
+$("miniAppBtn") && ($("miniAppBtn").onclick = () => openMiniApp(curMiniApp));
+$("miniAppClose") && ($("miniAppClose").onclick = closeMiniApp);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("miniAppOverlay").classList.contains("hidden")) closeMiniApp(); });
+// Bridge: messages coming FROM the mini-app iframe (via /js/dialog-web-app.js).
+window.addEventListener("message", (e) => {
+  const d = e.data, fr = $("miniAppFrame");
+  if (!d || d.__dialogapp !== 1 || !fr || e.source !== fr.contentWindow) return; // trust only the open frame
+  if (d.type === "requestInit") postMiniAppInit();      // app's script loaded after our first push
+  else if (d.type === "close") closeMiniApp();
+  else if (d.type === "sendData") {
+    const login = $("miniAppOverlay").dataset.botLogin;
+    const text = String(d.data == null ? "" : d.data).slice(0, 4000);
+    if (login && text && myRoom === dmKey(login)) socket.emit("message", { type: "text", text });
+    closeMiniApp();
+  }
+  else if (d.type === "openLink" && typeof d.url === "string" && /^https?:\/\//i.test(d.url)) window.open(d.url, "_blank", "noopener");
+});
 
 // ---------- Developer / My Bots (Telegram-style bot management) ----------
 let devCap = 3;
@@ -4400,6 +4453,8 @@ function botCardHTML(b) {
     <textarea class="field bot-f-cmds" rows="3">${escapeHtml(fmtCmds(b.commands))}</textarea>
     <label class="pe-label" data-i18n="bot_webhook_label">Webhook URL (optional)</label>
     <input class="field bot-f-webhook" value="${escapeHtml(b.webhook || "")}" placeholder="https://…">
+    <label class="pe-label" data-i18n="bot_miniapp_label">Mini App URL (optional — opens as a webview)</label>
+    <input class="field bot-f-miniapp" value="${escapeHtml(b.miniapp || "")}" placeholder="https://…">
     <label class="bot-priv"><input type="checkbox" class="bot-f-privacy" ${b.privacy ? "checked" : ""}><span data-i18n="bot_privacy_label">Group privacy — only receive /commands or @mentions</span></label>
     <div class="form-error bot-err"></div>
     <div class="bot-actions"><button class="btn-primary btn-sm bot-save" data-i18n="save">Save</button><button class="btn-ghost btn-sm bot-del danger" data-i18n="bot_delete">Delete</button></div>
@@ -4415,10 +4470,11 @@ function wireBotCard(b) {
       description: card.querySelector(".bot-f-desc").value,
       commands: parseCmds(card.querySelector(".bot-f-cmds").value),
       webhook: card.querySelector(".bot-f-webhook").value.trim(),
+      miniapp: card.querySelector(".bot-f-miniapp").value.trim(),
       privacy: card.querySelector(".bot-f-privacy").checked,
     };
     const { ok, data } = await api("/api/dev/bots/" + b.login, body);
-    if (!ok) { err.textContent = data.error === "bad_webhook" ? t("bot_bad_webhook") : (data.error || t("err_generic")); return; }
+    if (!ok) { err.textContent = data.error === "bad_webhook" ? t("bot_bad_webhook") : data.error === "bad_miniapp" ? t("bot_bad_miniapp") : (data.error || t("err_generic")); return; }
     notify(t("saved") || "Saved"); refreshDevPane();
   };
   card.querySelector(".bot-regen").onclick = async () => {

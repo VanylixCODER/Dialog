@@ -120,6 +120,7 @@
           <div class="typing" id="typingIndicator"></div>
         </div>
         <button class="hicon-btn" id="muteBtn" data-i18n-title="mute_room" title="Mute">🔔</button>
+        <button class="hicon-btn hidden" id="miniAppBtn" data-i18n-title="miniapp_open" title="Open App"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></button>
         <button class="hicon-btn call-go" id="startCallBtn" data-i18n-title="t_call" title="Call">📞</button>
         <button class="hicon-btn" id="infoBtn" data-i18n-title="info" title="Info">ⓘ</button>
         <div class="chat-menu-wrap">
@@ -229,6 +230,20 @@
       <div class="info-head"><span id="infoTitle" data-i18n="info">Info</span><button id="infoAddBtn" class="hicon-btn info-add-btn hidden" data-i18n-title="add_member_btn" title="Add member">+</button><button id="infoClose" class="hicon-btn">✕</button></div>
       <ul id="members" class="members"></ul>
     </aside>
+  </div>
+
+  <!-- Bot Mini App (Telegram-style webview). Opens the bot's web app in a sandboxed
+       iframe; the app talks back via /js/dialog-web-app.js (postMessage bridge). -->
+  <div id="miniAppOverlay" class="miniapp-overlay hidden">
+    <div class="miniapp-frame">
+      <div class="miniapp-head">
+        <div class="miniapp-id"><div class="avatar miniapp-ava" id="miniAppAva"></div><span id="miniAppTitle" class="miniapp-title"></span></div>
+        <button id="miniAppClose" class="hicon-btn miniapp-close" title="Close">✕</button>
+      </div>
+      <iframe id="miniAppFrame" class="miniapp-iframe" title="Mini App"
+        allow="clipboard-write; encrypted-media; fullscreen; autoplay"
+        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-same-origin"></iframe>
+    </div>
   </div>
 
   <!-- Все формы (новый чат / настройки группы / контакты / профиль) теперь живут внутри #settingsOverlay.
