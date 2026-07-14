@@ -1219,7 +1219,7 @@ app.post("/api/room/:room/delete", async (req, res) => {
 });
 
 // ================= Bots =================
-const BOT_CAP = 10;
+const BOT_CAP = 3;
 const botLoginOk = (l) => /^[a-z0-9_]{3,24}$/.test(l);
 const newBotToken = () => "dlg_" + crypto.randomBytes(24).toString("base64url");
 const botTokenHash = (tok) => crypto.createHash("sha256").update(String(tok)).digest("hex");

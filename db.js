@@ -502,7 +502,7 @@ export async function getGroupAvatar(id) { const r = await query("SELECT avatar 
 // Участники с именами/статусами (для боковой панели и настроек)
 export async function getGroupMembersDetailed(id) {
   return await query(
-    `SELECT u.login, u.name, u.status FROM group_members m JOIN users u ON u.login=m.login WHERE m.group_id=? ORDER BY u.name`, [id]
+    `SELECT u.login, u.name, u.status, u.is_bot FROM group_members m JOIN users u ON u.login=m.login WHERE m.group_id=? ORDER BY u.name`, [id]
   );
 }
 export async function addGroupMembers(id, logins) {

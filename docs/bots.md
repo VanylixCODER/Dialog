@@ -29,7 +29,7 @@ Bots are self-serve — no approval needed.
 > Lost the token? Open the bot's card → **Regenerate token**. The old token stops
 > working immediately.
 >
-> Limit: **10 bots per account.** Bot accounts cannot log in with a password.
+> Limit: **3 bots per account.** Bot accounts cannot log in with a password.
 
 ---
 
@@ -323,7 +323,7 @@ curl -X POST "https://dialogmsg.xyz/bot<token>/setWebhook" \
 
 ## 12. Limits & notes
 
-- **10 bots** per account; **75 MB** per media message.
+- **3 bots** per account; **75 MB** per media message.
 - Queued `getUpdates` messages are **pruned after ~24h** — poll regularly.
 - Webhooks: HTTPS + public host only, HMAC-signed, 8s delivery timeout, **no retries**.
 - Tokens are stored **hashed**; regeneration invalidates the previous token instantly.
