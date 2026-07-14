@@ -1136,27 +1136,53 @@ document.addEventListener("click", (e) => {
   if (Date.now() - (m._openedAt || 0) < 350) return; // ignore the same gesture that opened it
   if (!e.target.closest("#rowMenu")) m.classList.add("hidden");
 });
-// Search suggestions: when filtering, offer friends who aren't in the list yet
-// so a closed DM (or a never-opened one) can be reopened straight from search.
+// Search suggestions: when filtering, offer (1) friends not in the list yet so a
+// closed/never-opened DM reopens straight from search, and (2) ANY user on Dialog
+// (global search) so you can find whoever you want and open a DM with them.
+function suggestRow(login, name, sub) {
+  const li = document.createElement("li"); li.className = "chat-item chat-suggest";
+  li.innerHTML = `<div class="ava-wrap"><div class="avatar" data-login="${login}"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name || login)}</div><span class="st-dot ci-status st-${statusClass(presence.get(login))}"></span></div>
+    <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(name || login)}</span></div>
+    <div class="ci-bot"><span class="ci-last">${escapeHtml(sub)}</span></div></div>`;
+  li.onclick = () => { $("searchInput").value = ""; openDM(login); };
+  return li;
+}
 function renderChatSuggestions(filter, shownList) {
   const ul = $("chatList");
   if (!filter) return;
   const inList = new Set(shownList.filter((c) => c.type === "dm").map((c) => c.login));
-  const matches = (relations.friends || [])
+  const friendSet = new Set(relations.friends || []);
+  // (1) Friends not already shown as a chat.
+  const friendMatches = (relations.friends || [])
     .filter((login) => login && login !== profile.login && !inList.has(login) && login.toLowerCase().includes(filter))
     .slice(0, 8);
-  if (!matches.length) return;
-  const head = document.createElement("li"); head.className = "chat-suggest-head"; head.textContent = t("suggested_chats");
-  ul.appendChild(head);
-  for (const login of matches) {
-    const li = document.createElement("li"); li.className = "chat-item chat-suggest";
-    li.innerHTML = `<div class="ava-wrap"><div class="avatar" data-login="${login}"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div><span class="st-dot ci-status st-${statusClass(presence.get(login))}"></span></div>
-      <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(login)}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(t("dm_open"))}</span></div></div>`;
-    li.onclick = () => { $("searchInput").value = ""; openDM(login); };
-    ul.appendChild(li);
+  if (friendMatches.length) {
+    const head = document.createElement("li"); head.className = "chat-suggest-head"; head.textContent = t("suggested_chats");
+    ul.appendChild(head);
+    for (const login of friendMatches) ul.appendChild(suggestRow(login, login, t("dm_open")));
+  }
+  // (2) Everyone else on Dialog matching this query (results are fetched async and cached
+  //     in globalUsers for the current query; friends + open DMs are filtered out here).
+  const people = (globalUsersQ === filter ? globalUsers : [])
+    .filter((u) => u.login !== profile.login && !friendSet.has(u.login) && !inList.has(u.login))
+    .slice(0, 8);
+  if (people.length) {
+    const head = document.createElement("li"); head.className = "chat-suggest-head"; head.textContent = t("search_people");
+    ul.appendChild(head);
+    for (const u of people) ul.appendChild(suggestRow(u.login, u.name, "@" + u.login));
   }
 }
+// Global user search feeding the suggestions above. Debounced; re-renders the list when
+// results for the current query arrive.
+let globalUsers = [], globalUsersQ = "";
+const fetchGlobalUsers = debounce(async (raw) => {
+  const q = (raw || "").trim().toLowerCase();
+  if (q.length < 2) { globalUsers = []; globalUsersQ = ""; return; }
+  const { ok, data } = await api("/api/users/search?q=" + encodeURIComponent(q), null, "GET");
+  if (!ok) return;
+  globalUsers = data.users || []; globalUsersQ = q;
+  if (($("searchInput").value || "").trim().toLowerCase() === q) renderChatList($("searchInput").value);
+}, 250);
 function togglePin(c) {
   c.pinned = !c.pinned;
   savePins();
@@ -4646,7 +4672,7 @@ function setIcons() {
   if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; }
   if (toastClose) { toastClose.innerHTML = window.ICON.phoneOff + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
 }
-$("searchInput").addEventListener("input", (e) => renderChatList(e.target.value));
+$("searchInput").addEventListener("input", (e) => { fetchGlobalUsers(e.target.value); renderChatList(e.target.value); });
 $("chatFilters").addEventListener("click", (e) => {
   const btn = e.target.closest(".clf-btn");
   if (!btn) return;

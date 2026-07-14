@@ -36,7 +36,7 @@ import {
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
-  updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser,
+  updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser, searchUsers,
   createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
   queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
@@ -483,6 +483,16 @@ app.get("/api/user/:login", async (req, res) => {
     if (!u) return res.status(404).json({ error: "not found" });
     res.json({ ok: true, login: u.login, name: u.name });
   } catch (e) { console.error("user get", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Public user search (session-authed so anonymous clients can't scrape the roster).
+// Powers the "find anyone" chat-search suggestions.
+app.get("/api/users/search", async (req, res) => {
+  const me = await authUser(req);
+  if (!me) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const users = (await searchUsers(req.query.q, 8)).filter((u) => u.login !== me.login);
+    res.json({ ok: true, users });
+  } catch (e) { console.error("user search", e.message); res.status(500).json({ error: "server error" }); }
 });
 // Основные CRUD для групп: list / create / leave.
 // ВАЖНО: эти маршруты идут ПЕРВЫМИ — Express сопоставляет по порядку объявления. Если поставить их после , GET /api/groups уйдёт в POST с :id='', а POST /api/groups/:id/leave может перепутаться.

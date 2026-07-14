@@ -326,6 +326,19 @@ export async function getUserByEmail(email) {
   const r = await query("SELECT login, name, email, email_verified FROM users WHERE email=?", [String(email || "").toLowerCase()]);
   return r[0] || null;
 }
+// Public "find anyone" search: match login/name, prefix hits first. Excludes bots and
+// banned accounts. Used by the chat-search suggestions so any user can be DMed.
+export async function searchUsers(q, limit = 8) {
+  const s = String(q || "").trim().toLowerCase();
+  if (s.length < 2) return [];
+  const contains = "%" + s + "%", prefix = s + "%";
+  const r = await query(
+    "SELECT login, name FROM users WHERE banned=0 AND is_bot=0 AND (LOWER(login) LIKE ? OR LOWER(name) LIKE ?) " +
+    "ORDER BY (LOWER(login) LIKE ?) DESC, (LOWER(name) LIKE ?) DESC, LOWER(login) LIMIT ?",
+    [contains, contains, prefix, prefix, Math.min(20, (limit | 0) || 8)]
+  );
+  return r.map((u) => ({ login: u.login, name: u.name }));
+}
 export async function setUserEmail(login, email) {
   await execute("UPDATE users SET email=?, email_verified=0 WHERE login=?", [email, login]);
 }
