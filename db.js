@@ -99,6 +99,7 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_webhook VARCHAR(300) NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_webhook_secret CHAR(32) NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_commands TEXT NULL"); } catch {}       // JSON [{command,description}]
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_miniapp VARCHAR(300) NULL"); } catch {} // Telegram-style Mini App (webview) URL
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_privacy TINYINT NOT NULL DEFAULT 1"); } catch {} // 1 = only commands/@mentions in groups
   try { await pool.query("CREATE INDEX idx_users_bot_token ON users (bot_token_hash)"); } catch {}
   // Pending updates for bots that long-poll getUpdates (id doubles as Telegram update_id).
@@ -275,22 +276,22 @@ export async function isBot(login) {
   return !!(r[0] && r[0].is_bot);
 }
 export async function getBotByTokenHash(hash) {
-  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy FROM users WHERE bot_token_hash=? AND is_bot=1", [hash]);
+  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy, bot_miniapp FROM users WHERE bot_token_hash=? AND is_bot=1", [hash]);
   return r[0] || null;
 }
 export async function getBot(login) {
-  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy, created_at FROM users WHERE login=? AND is_bot=1", [login]);
+  const r = await query("SELECT login, name, description, bot_owner, bot_webhook, bot_webhook_secret, bot_commands, bot_privacy, bot_miniapp, created_at FROM users WHERE login=? AND is_bot=1", [login]);
   return r[0] || null;
 }
 export async function listBotsByOwner(owner) {
-  return await query("SELECT login, name, description, bot_webhook, bot_commands, bot_privacy, created_at FROM users WHERE is_bot=1 AND bot_owner=? ORDER BY created_at DESC", [owner]);
+  return await query("SELECT login, name, description, bot_webhook, bot_commands, bot_privacy, bot_miniapp, created_at FROM users WHERE is_bot=1 AND bot_owner=? ORDER BY created_at DESC", [owner]);
 }
 export async function countBotsByOwner(owner) {
   const r = await query("SELECT COUNT(*) n FROM users WHERE is_bot=1 AND bot_owner=?", [owner]);
   return Number(r[0] ? r[0].n : 0);
 }
 export async function updateBot(login, patch) {
-  const map = { name: "name", description: "description", webhook: "bot_webhook", webhookSecret: "bot_webhook_secret", commands: "bot_commands", privacy: "bot_privacy" };
+  const map = { name: "name", description: "description", webhook: "bot_webhook", webhookSecret: "bot_webhook_secret", commands: "bot_commands", privacy: "bot_privacy", miniapp: "bot_miniapp" };
   const sets = [], vals = [];
   for (const [k, col] of Object.entries(map)) if (patch[k] !== undefined) { sets.push(col + "=?"); vals.push(patch[k]); }
   if (!sets.length) return;
@@ -382,7 +383,7 @@ export async function getBanner(login) {
   return r[0] ? r[0].banner : null;
 }
 export async function getProfileCard(login) {
-  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms, is_bot, bot_commands FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms, is_bot, bot_commands, bot_miniapp FROM users WHERE login=?", [login]);
   const u = r[0];
   if (!u) return null;
   // "unstable" is a persistent guilty mark (report_reason set), independent of whether
@@ -392,7 +393,7 @@ export async function getProfileCard(login) {
   if (u.is_bot && u.bot_commands) { try { commands = JSON.parse(u.bot_commands) || []; } catch {} }
   return {
     login: u.login, name: u.name, description: u.description, status: u.status, activity: u.activity || "", created_at: u.created_at,
-    isBot: !!u.is_bot, commands,
+    isBot: !!u.is_bot, commands, miniApp: (u.is_bot && u.bot_miniapp) ? u.bot_miniapp : "",
     accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
     reportReason: unstable ? u.report_reason : null,
     reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
@@ -612,6 +613,8 @@ export async function isBlockedBy(a, b) { // a заблокирован поль
 }
 export async function sendFriendRequest(from, to) {
   if (await areFriends(from, to)) return "friend";
+  // Bots auto-accept friend requests — no pending state, they befriend instantly.
+  if (await isBot(to)) { await setRelation(from, to, "friend"); await setRelation(to, from, "friend"); return "friend"; }
   await execute("INSERT IGNORE INTO relations (login, target, type) VALUES (?,?, 'request')", [from, to]);
   return "request";
 }
