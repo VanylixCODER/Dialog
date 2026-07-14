@@ -2228,20 +2228,28 @@ const KEEP_CHUNKS = 3;       // max chunks kept in the DOM before older ones are
 let _moreLoading = false;
 let _moreHas = true;
 let _moreOldest = null;
-// While opening a chat we want it pinned to the newest message. Media (images) load
-// async and grow the layout AFTER the first scroll, which used to leave the view a
-// bit above the bottom. Keep re-pinning to the bottom as near-viewport media settles,
-// until the user scrolls up.
-let _stickBottom = false;
+// When a chat opens we want it pinned to the newest message — exactly where the
+// "jump to newest" button lands. But content keeps GROWING after the first scroll
+// (images decode, videos get their box, link previews fetch + insert) which used to
+// leave the view a bit above the bottom. So we keep re-pinning to the bottom as the
+// layout settles: a MutationObserver catches inserted nodes (link previews, etc.),
+// media 'load' catches image decode, and a couple of timed passes catch the rest.
+// It stops the instant the user scrolls up (the scroll handler calls releaseStick).
+let _stickBottom = false, _stickMO = null;
 function stickBottomDuringMedia() {
+  releaseStick();
   _stickBottom = true;
-  scrollDown();
+  const pin = () => { if (_stickBottom) scrollDown(); };
+  pin(); requestAnimationFrame(pin);
+  [60, 160, 320, 600, 1000].forEach((ms) => setTimeout(pin, ms));
+  _stickMO = new MutationObserver(pin);
+  _stickMO.observe(messagesEl, { childList: true, subtree: true });
   messagesEl.querySelectorAll(".msg img").forEach((img) => {
-    if (img.complete) return; // already loaded → no layout change coming
-    img.addEventListener("load", () => { if (_stickBottom) scrollDown(); }, { once: true });
+    if (!img.complete) img.addEventListener("load", pin, { once: true });
   });
-  setTimeout(() => { _stickBottom = false; }, 4000); // safety: never fight the user forever
+  setTimeout(releaseStick, 4000); // safety: never fight the user forever
 }
+function releaseStick() { _stickBottom = false; if (_stickMO) { _stickMO.disconnect(); _stickMO = null; } }
 // Newest message id currently in the DOM — so "jump to newest" knows whether we
 // already have the latest chunk or must re-fetch it from the server.
 let _newestId = null;
@@ -2325,7 +2333,7 @@ function jumpToNewest() { pruneOldChunks(); scrollDown(); updateJumpBtn(); }
 
 messagesEl.addEventListener("scroll", () => {
   updateJumpBtn();
-  if (_stickBottom && !atBottom()) _stickBottom = false; // user scrolled away → stop auto-pinning
+  if (_stickBottom && !atBottom()) releaseStick(); // user scrolled away → stop auto-pinning
   if (atBottom()) pruneOldChunks();
   // Prefetch the next older chunk WELL BEFORE the top (no debounce) so it's
   // already in place by the time the user scrolls up to it — seamless, no
