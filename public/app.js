@@ -2133,7 +2133,8 @@ function renderMembers() {
   const ul = $("members"); if (!ul) return; ul.innerHTML = "";
   const inCall = new Set((activeCalls.get(myRoom) || {}).logins || []);
   const byLogin = new Map();
-  if (curKind === "group") for (const m of groupMembers) byLogin.set(m.login, m.name); // все участники группы
+  const botLogins = new Set();
+  if (curKind === "group") for (const m of groupMembers) { byLogin.set(m.login, m.name); if (m.is_bot) botLogins.add(m.login); } // все участники группы
   for (const [, info] of peers) if (info.login) byLogin.set(info.login, info.name);    // + присутствующие
   inCall.forEach((l) => { if (!byLogin.has(l)) byLogin.set(l, l); });
   if (byLogin.size === 0) { ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`; return; }
@@ -2142,7 +2143,8 @@ function renderMembers() {
     const online = login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(login) || "offline");
     const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
     const crown = login === groupOwnerLogin ? `<span class="m-crown">👑</span>` : "";
-    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${crown}${escapeHtml(name)}</span>${callIcon}`;
+    const botTag = botLogins.has(login) ? ` <span class="bot-badge">BOT</span>` : "";
+    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${crown}${escapeHtml(name)}${botTag}</span>${callIcon}`;
     // Inline remove для овнера: раньше единственный путь «удалить участника» был Settings → Groups,
     // что далеко от списка, который сейчас у пользователя перед глазами. groupOwner уже учитывает
     // ds.owner === profile.login (см. loadGroupMembers) → self-сравнение login !== profile.login
@@ -2226,6 +2228,20 @@ const KEEP_CHUNKS = 3;       // max chunks kept in the DOM before older ones are
 let _moreLoading = false;
 let _moreHas = true;
 let _moreOldest = null;
+// While opening a chat we want it pinned to the newest message. Media (images) load
+// async and grow the layout AFTER the first scroll, which used to leave the view a
+// bit above the bottom. Keep re-pinning to the bottom as near-viewport media settles,
+// until the user scrolls up.
+let _stickBottom = false;
+function stickBottomDuringMedia() {
+  _stickBottom = true;
+  scrollDown();
+  messagesEl.querySelectorAll(".msg img").forEach((img) => {
+    if (img.complete) return; // already loaded → no layout change coming
+    img.addEventListener("load", () => { if (_stickBottom) scrollDown(); }, { once: true });
+  });
+  setTimeout(() => { _stickBottom = false; }, 4000); // safety: never fight the user forever
+}
 // Newest message id currently in the DOM — so "jump to newest" knows whether we
 // already have the latest chunk or must re-fetch it from the server.
 let _newestId = null;
@@ -2245,7 +2261,7 @@ socket.on("history", (list) => {
   chatEmptyNote(true); // "Chat is empty…" when there's genuinely no history
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
-  scrollDown();
+  stickBottomDuringMedia();
   updateJumpBtn();
   setTimeout(markDeliveredSeenUpToLast, 50);
 });
@@ -2309,6 +2325,7 @@ function jumpToNewest() { pruneOldChunks(); scrollDown(); updateJumpBtn(); }
 
 messagesEl.addEventListener("scroll", () => {
   updateJumpBtn();
+  if (_stickBottom && !atBottom()) _stickBottom = false; // user scrolled away → stop auto-pinning
   if (atBottom()) pruneOldChunks();
   // Prefetch the next older chunk WELL BEFORE the top (no debounce) so it's
   // already in place by the time the user scrolls up to it — seamless, no
@@ -2422,9 +2439,9 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   } else {
     if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
     if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
-    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt=""></div>`;
-    else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls></video></div>`;
-    else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}"></audio></div>`;
+    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="" loading="lazy" decoding="async"></div>`;
+    else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls preload="none"></video></div>`;
+    else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}" preload="none"></audio></div>`;
     else if (m.type === "file") {
       const safeName = escapeHtml(m.mediaName || t("file_untitled"));
       const sizeBytes = m.mediaSize || mediaBytesFromDataUrl(m.media);
@@ -4334,7 +4351,7 @@ $("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
 document.addEventListener("click", (e) => { const m = $("botCmdMenu"); if (m && !m.contains(e.target) && e.target !== $("botCmdBtn")) m.classList.add("hidden"); });
 
 // ---------- Developer / My Bots (Telegram-style bot management) ----------
-let devCap = 10;
+let devCap = 3;
 function fmtCmds(cmds) { return (cmds || []).map((c) => "/" + c.command + (c.description ? " - " + c.description : "")).join("\n"); }
 function parseCmds(text) {
   return String(text || "").split("\n").map((line) => {
@@ -4354,7 +4371,7 @@ async function refreshDevPane() {
   box.innerHTML = `<div class="muted" style="padding:8px">${t("loading") || "Loading…"}</div>`;
   const { ok, data } = await api("/api/dev/bots", null, "GET");
   if (!ok) { box.innerHTML = ""; return; }
-  devCap = data.cap || 10;
+  devCap = data.cap || 3;
   box.innerHTML = data.bots.length ? data.bots.map(botCardHTML).join("") : `<div class="dev-empty muted">${t("bot_none")}</div>`;
   window.applyI18n && window.applyI18n(box);
   data.bots.forEach(wireBotCard);
