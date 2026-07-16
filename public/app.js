@@ -3477,13 +3477,24 @@ function applyDock() {
 // Ресайз панели звонка (тянуть внутренний край)
 (function () {
   const rz = $("callResizer"), pane = $("chatPane"); let dr = false;
-  rz.addEventListener("pointerdown", (e) => { dr = true; rz.setPointerCapture(e.pointerId); e.preventDefault(); });
+  rz.addEventListener("pointerdown", (e) => {
+    dr = true; rz.classList.add("dragging"); document.body.classList.add("call-resizing");
+    rz.setPointerCapture(e.pointerId); e.preventDefault();
+  });
   rz.addEventListener("pointermove", (e) => {
     if (!dr) return; const r = pane.getBoundingClientRect();
-    if (callDock === "top") { let v = Math.max(15, Math.min(75, (e.clientY - r.top) / r.height * 100)); pane.style.setProperty("--call-h", v + "%"); localStorage.setItem("dialog_callh", v.toFixed(1)); }
+    if (callDock === "top") {
+      // Measure from the CALL's own top, not the pane's — the chat header sits
+      // above the call in dock-top, so pane.top would overstate the height.
+      const cs = $("callStage").getBoundingClientRect();
+      let v = Math.max(15, Math.min(75, (e.clientY - cs.top) / r.height * 100));
+      pane.style.setProperty("--call-h", v + "%"); localStorage.setItem("dialog_callh", v.toFixed(1));
+    }
     else { let v = callDock === "right" ? (r.right - e.clientX) / r.width * 100 : (e.clientX - r.left) / r.width * 100; v = Math.max(22, Math.min(70, v)); pane.style.setProperty("--call-w", v + "%"); localStorage.setItem("dialog_callw", v.toFixed(1)); }
   });
-  rz.addEventListener("pointerup", () => (dr = false));
+  const stopResize = () => { dr = false; rz.classList.remove("dragging"); document.body.classList.remove("call-resizing"); };
+  rz.addEventListener("pointerup", stopResize);
+  rz.addEventListener("pointercancel", stopResize);
 })();
 $("minBtn").onclick = () => { call.minimized = true; syncCallUI(); };
 (function () {

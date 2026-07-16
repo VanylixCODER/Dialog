@@ -1951,12 +1951,30 @@ a:focus-visible {
 
 .call-resizer {
   position: absolute; z-index: 4; display: none;
+  background: transparent; transition: background var(--t-fast) var(--ease);
 }
 .chat.has-call.dock-left > #callStage > .call-resizer,
 .chat.has-call.dock-right > #callStage > .call-resizer { display: none; } /* боковой док — фиксированный, без ресайза */
-.chat.has-call.dock-top > #callStage > .call-resizer { display: none; } /* верхний док — фиксированный, без ресайза */
-.call-resizer { background: transparent; transition: background var(--t-fast) var(--ease); }
-.call-resizer:hover { background: rgba(var(--primary-rgb), 0.45); }
+/* Top dock IS resizable: a grabbable divider along the call's bottom edge (the
+   boundary with the chat). It's exactly as tall as .call-bar's bottom padding,
+   so it never sits over a control button. */
+.chat.has-call.dock-top > #callStage > .call-resizer {
+  display: grid; place-items: center;
+  left: 0; right: 0; bottom: 0; height: 12px;
+  cursor: ns-resize; touch-action: none;
+}
+/* The visible grabber pill — the affordance that says "drag me". */
+.chat.has-call.dock-top > #callStage > .call-resizer::before {
+  content: ""; width: 44px; height: 4px; border-radius: 999px;
+  background: var(--border-3);
+  transition: background var(--t-fast) var(--ease), width var(--t-fast) var(--ease);
+}
+.call-resizer:hover { background: rgba(var(--primary-rgb), 0.10); }
+.call-resizer:hover::before { background: var(--accent-400); width: 76px; }
+.call-resizer.dragging { background: rgba(var(--primary-rgb), 0.18); }
+.call-resizer.dragging::before { background: var(--accent-300); width: 76px; }
+/* While dragging, keep the resize cursor everywhere and kill text selection. */
+body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-select: none !important; }
 
 /* Flexbox, NOT CSS grid: grid `auto` rows ignore an item's aspect-ratio when
    sizing the track and collapse to content height, so aspect-ratio tiles
