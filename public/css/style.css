@@ -761,7 +761,9 @@ a:focus-visible {
   position: relative; z-index: 3;
 }
 .chat-head .avatar.ch-ava {
-  width: 36px; height: 36px;
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  font-size: 19px;
   border-color: var(--border-2);
   cursor: pointer;
   transition: transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease);
@@ -1895,8 +1897,9 @@ a:focus-visible {
 }
 .chat.has-call.dock-top {
   grid-template-columns: 1fr;
-  grid-template-rows: clamp(140px, var(--call-h), 75%) auto 1fr auto;
-  grid-template-areas: "call" "head" "msgs" "comp";
+  /* Chat header stays ON TOP of the call — the call docks below the bar, not above it. */
+  grid-template-rows: auto clamp(140px, var(--call-h), 75%) 1fr auto;
+  grid-template-areas: "head" "call" "msgs" "comp";
 }
 .chat.has-call > #callStage { grid-area: call; max-height: none; height: 100%; border-bottom: none; min-height: 180px; }
 .chat.has-call.dock-left > #callStage { border-right: 1px solid var(--border-2); }
@@ -2898,7 +2901,7 @@ a:focus-visible {
   .emoji-picker, .gif-panel { width: calc(100vw - 28px); left: 14px; height: 60vh; }
   .messages, .composer { padding-left: 14px; padding-right: 14px; }
   .chat-head { padding-left: 8px; padding-right: 8px; gap: 6px; }
-  .chat-head .avatar.ch-ava { width: 36px; height: 36px; }
+  .chat-head .avatar.ch-ava { width: 44px; height: 44px; font-size: 17px; }
   .msg { max-width: 92%; }
   .desktop-only { display: none !important; }
   .back-btn.mobile-only { display: grid; }
