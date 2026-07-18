@@ -2,6 +2,9 @@ package xyz.dialogmsg.app
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
 import android.webkit.JavascriptInterface
 
 /**
@@ -62,6 +65,25 @@ class WebAppInterface(
         RingController.stop(context)
         notifications.cancelIncoming()
         CallService.stop(context)
+    }
+
+    // Route call audio to the loudspeaker or the earpiece. Mobile browsers don't
+    // implement setSinkId, so this native hop is the only way to switch output.
+    @JavascriptInterface
+    fun setSpeaker(on: Boolean) {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        try {
+            am.mode = AudioManager.MODE_IN_COMMUNICATION
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // isSpeakerphoneOn is deprecated on 31+; pick the device explicitly.
+                val target = if (on) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                val device = am.availableCommunicationDevices.firstOrNull { it.type == target }
+                if (device != null) am.setCommunicationDevice(device) else am.clearCommunicationDevice()
+            } else {
+                @Suppress("DEPRECATION")
+                am.isSpeakerphoneOn = on
+            }
+        } catch (_: Exception) { /* never let audio routing crash the call */ }
     }
 
     @JavascriptInterface

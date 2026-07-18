@@ -3520,6 +3520,7 @@ async function joinCall() {
   const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
+  applySpeaker(); // restore the saved loudspeaker/earpiece route (native mobile only)
   // Android: start the foreground service (keeps the call alive in the background + ongoing notification).
   if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
@@ -3822,6 +3823,27 @@ async function applyNoiseFilter(on) {
   } catch (e) { console.log("krisp:", e.message); }
 }
 function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
+
+// ---------- Mobile audio route: loudspeaker <-> earpiece ----------
+// Mobile browsers don't implement setSinkId, so routing is only actually possible
+// through the native Android bridge. We show the button when that bridge exposes
+// setSpeaker(); otherwise (desktop) the mic dropdown's speaker picker already covers it.
+let speakerOn = localStorage.getItem("dialog_speaker") !== "0";
+const nativeAudio = () => { try { return window.Android && typeof window.Android.setSpeaker === "function" ? window.Android : null; } catch (e) { return null; } };
+function applySpeaker() {
+  const btn = $("toggleSpeaker"); if (!btn) return;
+  const na = nativeAudio();
+  btn.classList.toggle("hidden", !na);           // no native routing → no button
+  if (!na) return;
+  btn.classList.toggle("off", !speakerOn);
+  btn.innerHTML = speakerOn ? window.ICON.speaker : window.ICON.earpiece;
+  const tip = t(speakerOn ? "t_speaker_on" : "t_speaker_off");
+  btn.title = tip; btn.setAttribute("data-tip", tip);
+  try { na.setSpeaker(speakerOn); } catch (e) {}
+}
+$("toggleSpeaker") && ($("toggleSpeaker").onclick = () => {
+  speakerOn = !speakerOn; localStorage.setItem("dialog_speaker", speakerOn ? "1" : "0"); applySpeaker();
+});
 async function populateDevices() {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
