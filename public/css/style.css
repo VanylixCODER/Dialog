@@ -753,7 +753,9 @@ a:focus-visible {
   padding-top: calc(14px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--border-1);
   background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
-  display: flex; align-items: center; gap: 12px; overflow: hidden;
+  /* overflow VISIBLE: .chat-title already ellipsises itself, and clipping here cut
+     off the presence dot (it sits at -3px outside the avatar). */
+  display: flex; align-items: center; gap: 12px; overflow: visible;
   /* z-index 3 — выше #messages (1) и #callStage (2). Без этого .chat-menu (внутри .chat-menu-wrap
      с isolation:isolate, z-index:1900) ловится стэкинг-контекстом .chat-head с z=1, и при
      DOM-тай-брейкере messages (тоже z=1, но позже в DOM) перекрывает чат-меню — кнопки меню
@@ -2694,6 +2696,9 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .notify-toast.show { transform: none; opacity: 1; }
 .notify-toast::before { content: "✉ "; color: var(--accent-300); }
 .conn-status {
+  /* visibility/pointer-events gate it when hidden — otherwise the off-screen banner
+     kept bleeding its red glow over the top edge and swallowing clicks. */
+  visibility: hidden; pointer-events: none;
   position: fixed; top: 0; left: 50%; transform: translate(-50%, -100%); z-index: 200;
   background: var(--bg-1);
   border: 1px solid var(--danger);
@@ -2704,7 +2709,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   text-transform: uppercase; letter-spacing: 1.6px;
   box-shadow: 0 6px 18px rgba(255, 82, 82, 0.25);
 }
-.conn-status.show { transform: translate(-50%, 0); }
+.conn-status.show { transform: translate(-50%, 0); visibility: visible; pointer-events: auto; }
 .conn-status::before { content: "◈ "; color: var(--danger); }
 
 /* Ping meter */
@@ -4578,4 +4583,57 @@ body.miniapp-open { overflow: hidden; }
 @media (max-width: 560px) {
   .miniapp-overlay { backdrop-filter: none; }
   .miniapp-frame { width: 100vw; height: 100vh; height: 100dvh; border: none; border-radius: 0; }
+}
+
+/* ============================================================================
+   UI polish: non-selectable chrome + motion
+   ========================================================================= */
+
+/* --- Nothing in the "chrome" should be selectable/draggable. Clicking a button,
+   a chat row or a member used to flash a blue text selection, which reads as
+   unpolished. Message text, inputs and code stay selectable on purpose. --- */
+button, .icon-btn, .hicon-btn, .call-btn, .call-drop, .ma-btn, .btn-primary, .btn-ghost,
+.chat-head, .chat-item, .chat-suggest, .chat-suggest-head, .member, .settings-tab,
+.settings-tabs, .avatar, .tile-avatar, .tile-name, .call-bar, .call-meta, .call-grip,
+.call-resizer, .chat-menu, .row-menu, .react-picker, .reaction, .bot-cmd-menu,
+.miniapp-head, .cl-head, .sidebar-head, .day-sep, .system-msg, .time, .who,
+.pe-label, .contacts-sec-title, .dd-label, .m-name, .ci-name, .ci-last, .ci-top,
+.bot-badge, .st-dot, .nav-links, .dock-hint, .jump-newer, label {
+  -webkit-user-select: none; user-select: none;
+}
+/* Kill the grey/blue tap flash on touch devices. */
+button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
+.avatar, .ma-btn, .reaction, .jump-newer, .chat-menu button, .bot-cmd-menu button {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Images/avatars shouldn't be draggable as ghost previews. */
+.avatar img, .tile-avatar img, .brand-row img, .ch-ava img { -webkit-user-drag: none; user-drag: none; }
+/* …but message content must stay selectable so people can copy it. */
+.bubble, .msg .bubble, .msg-text, .btb-row code, pre, code, input, textarea, .field {
+  -webkit-user-select: text; user-select: text;
+}
+
+/* --- Motion --- */
+@keyframes fadeUp   { from { opacity: 0; transform: translateY(18px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes callDown { from { opacity: 0; transform: translateY(-100%); }            to { opacity: 1; transform: translateY(0); } }
+@keyframes callUp   { from { opacity: 1; transform: translateY(0); }                to { opacity: 0; transform: translateY(-100%); } }
+@keyframes chatInR  { from { opacity: 0.4; transform: translateX(26px); }           to { opacity: 1; transform: translateX(0); } }
+
+/* Settings overlay: panel fades UP into place (the backdrop keeps its own fade). */
+.settings-overlay > .settings-card { animation: fadeUp 0.26s var(--ease-out) both; }
+
+/* Call stage slides in from out of bounds (above), and back out when the call ends. */
+#callStage:not(.hidden):not(.fs-call) { animation: callDown 0.3s var(--ease-out) both; }
+#callStage.call-closing { animation: callUp 0.26s var(--ease) both; pointer-events: none; }
+
+/* Mobile: opening a chat slides it in over the list. */
+@media (max-width: 720px) {
+  .app.in-chat .chat { animation: chatInR 0.24s var(--ease-out) both; }
+  .settings-overlay > .settings-card { animation-duration: 0.22s; }
+}
+
+/* Respect reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  #callStage:not(.hidden):not(.fs-call), #callStage.call-closing,
+  .app.in-chat .chat, .settings-overlay > .settings-card { animation: none !important; }
 }

@@ -3556,8 +3556,20 @@ function endCall() {
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
   for (const a of screenAudioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } screenAudioEls.clear();
   vGrid.innerHTML = ""; vGrid.classList.remove("pip-grid", "has-focus"); // сброс мобильного большого экрана
-  $("callStage").classList.add("hidden"); $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
-  $("chatPane").classList.remove("has-call", "fullscreen-call"); // убрать grid-колонку звонка — без неё была чёрная зона
+  // Slide the call stage back out of bounds before hiding it (see .call-closing).
+  // The grid column is dropped only after the animation so it doesn't snap away.
+  (function () {
+    const st = $("callStage");
+    if (st.classList.contains("hidden") || st.classList.contains("fs-call")) {
+      st.classList.add("hidden"); $("chatPane").classList.remove("has-call", "fullscreen-call"); return;
+    }
+    st.classList.add("call-closing");
+    setTimeout(() => {
+      st.classList.remove("call-closing"); st.classList.add("hidden");
+      $("chatPane").classList.remove("has-call", "fullscreen-call");
+    }, 260);
+  })();
+  $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
@@ -4211,7 +4223,12 @@ window.addEventListener("load", () => { const p = new URLSearchParams(location.s
 // ---------- Соединение ----------
 let connEl;
 socket.on("disconnect", () => { if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
-socket.io.on("reconnect", () => { if (connEl) connEl.classList.remove("show"); if (token) refreshPresence(); });
+// On reconnect, drop the banner out of the DOM entirely (not just off-screen) so it
+// can't bleed its glow over the top edge or intercept clicks while "hidden".
+socket.io.on("reconnect", () => {
+  if (connEl) { connEl.classList.remove("show"); const el = connEl; connEl = null; setTimeout(() => el.remove(), 400); }
+  if (token) refreshPresence();
+});
 
 // ---------- Ping meter (only during calls) ----------
 let serverRegion = "";
