@@ -1924,11 +1924,26 @@ async function loadRelations() {
   Object.assign(relations, data); blocked.clear(); blockedBy.clear(); (data.blocked || []).forEach((l) => blocked.add(l)); (data.blockedBy || []).forEach((l) => blockedBy.add(l));
   renderContacts(); renderChatList($("searchInput").value); syncBlockComposer();
 }
+// buttons: [label, fn, danger?, iconHTML?] — an icon turns it into a compact
+// icon-button (label becomes the tooltip) so rows don't wrap on narrow screens.
 function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
-  row.innerHTML = `<div class="avatar" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div><span class="c-name">${escapeHtml(login)}</span>`;
+  const st = presence.get(login) || "offline";
+  row.innerHTML =
+    `<div class="ava-wrap c-ava-wrap"><div class="avatar" data-login="${login}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div>` +
+    `<span class="st-dot c-status st-${statusClass(st)}"></span></div>` +
+    `<span class="c-name">${escapeHtml(login)}</span>`;
   row.onclick = (e) => { if (e.target.closest("button")) return; openDM(login); };
-  buttons.forEach(([label, fn, danger]) => { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.onclick = (e) => { e.stopPropagation(); fn(); }; row.appendChild(b); });
+  const acts = document.createElement("div"); acts.className = "c-actions";
+  buttons.forEach(([label, fn, danger, icon]) => {
+    const b = document.createElement("button");
+    if (icon) { b.innerHTML = icon; b.className = "c-icon-btn"; b.title = label; b.setAttribute("aria-label", label); }
+    else b.textContent = label;
+    if (danger) b.classList.add("danger");
+    b.onclick = (e) => { e.stopPropagation(); fn(); };
+    acts.appendChild(b);
+  });
+  row.appendChild(acts);
   return row;
 }
 // Бейдж со счётчиком входящих заявок на кнопке «Контакты» в шапке списка чатов.
@@ -1942,15 +1957,46 @@ function updateReqBadge() {
   badge.textContent = n > 99 ? "99+" : String(n);
   badge.classList.toggle("show", n > 0);
 }
+let contactFilter = "";
 function renderContacts() {
   updateReqBadge();
   const reqList = $("reqList"); if (!reqList) return;
-  reqList.innerHTML = ""; const fL = $("friendsListEl"); if (fL) fL.innerHTML = ""; const sL = $("sentList"); if (sL) sL.innerHTML = "";
-  const reqEmpty = $("reqEmpty"); if (reqEmpty) reqEmpty.classList.toggle("hidden", relations.incoming.length > 0);
-  relations.incoming.forEach((l) => reqList.appendChild(contactRow(l, [["✓", async () => { await friend(l, "accept"); await refreshPresence(); openDM(l); }], ["✕", () => friend(l, "decline"), true]])));
-  relations.friends.forEach((l) => fL.appendChild(contactRow(l, [[t("dm_open"), () => { openDM(l); }], [t("remove_friend"), () => friend(l, "remove"), true]])));
-  relations.sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
+  const fL = $("friendsListEl"), sL = $("sentList");
+  reqList.innerHTML = ""; if (fL) fL.innerHTML = ""; if (sL) sL.innerHTML = "";
+  const q = contactFilter.trim().toLowerCase();
+  const match = (l) => !q || l.toLowerCase().includes(q);
+  const friends = (relations.friends || []).filter(match);
+  const incoming = (relations.incoming || []).filter(match);
+  const sent = (relations.sent || []).filter(match);
+
+  incoming.forEach((l) => reqList.appendChild(contactRow(l, [
+    [t("accept_request"), async () => { await friend(l, "accept"); await refreshPresence(); openDM(l); }, false, window.ICON.check || "✓"],
+    [t("decline"), () => friend(l, "decline"), true, window.ICON.close || "✕"],
+  ])));
+  if (fL) friends.forEach((l) => fL.appendChild(contactRow(l, [
+    [t("dm_open"), () => openDM(l), false, window.ICON.send],
+    [t("remove_friend"), () => friend(l, "remove"), true, window.ICON.trash],
+  ])));
+  if (sL) sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
+
+  // Counts show the TRUE totals (not the filtered view) so the tabs stay stable.
+  const setN = (id, n) => { const e = $(id); if (e) { e.textContent = n; e.classList.toggle("zero", !n); } };
+  setN("cntFriends", (relations.friends || []).length);
+  setN("cntReq", (relations.incoming || []).length);
+  setN("cntSent", (relations.sent || []).length);
+  const setEmpty = (id, shown, none) => { const e = $(id); if (e) { e.classList.toggle("hidden", shown > 0); e.textContent = none ? t(id === "friendsEmpty" ? "no_friends" : id === "reqEmpty" ? "no_requests" : "no_sent") : t("contacts_no_match"); } };
+  setEmpty("friendsEmpty", friends.length, !(relations.friends || []).length);
+  setEmpty("reqEmpty", incoming.length, !(relations.incoming || []).length);
+  setEmpty("sentEmpty", sent.length, !(relations.sent || []).length);
 }
+// Contacts sub-tabs (Friends / Requests / Sent) + search filter.
+document.querySelectorAll("#contactsSubtabs .settings-subtab").forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll("#contactsSubtabs .settings-subtab").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".cont-subpane").forEach((p) => p.classList.toggle("active", p.dataset.csub === btn.dataset.csub));
+  };
+});
+$("contactSearch") && ($("contactSearch").addEventListener("input", (e) => { contactFilter = e.target.value; renderContacts(); }));
 async function friend(target, action) { await api("/api/friend", { target, action }); loadRelations(); }
 async function block(target, action) { await api("/api/relations", { target, action }); loadRelations(); }
 

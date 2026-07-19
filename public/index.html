@@ -376,13 +376,29 @@
             <button id="reqSendBtn" class="btn-primary" data-i18n="send_request">Send request</button>
           </div>
           <div class="form-error" id="reqError"></div>
-          <div class="contacts-sec-title" data-i18n="friend_requests">Friend requests</div>
-          <div id="reqList" class="contacts-list"></div>
-          <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
-          <div class="contacts-sec-title" data-i18n="friends_title">Friends</div>
-          <div id="friendsListEl" class="contacts-list"></div>
-          <div class="contacts-sec-title" data-i18n="sent_requests">Sent</div>
-          <div id="sentList" class="contacts-list"></div>
+
+          <!-- Friends / Requests / Sent as segmented sub-tabs (same pattern as the
+               Appearances tab) — one list at a time instead of three stacked ones,
+               so it stays usable with hundreds of contacts and on small screens. -->
+          <div class="settings-subtabs cont-subtabs" id="contactsSubtabs" role="tablist">
+            <button class="settings-subtab active" data-csub="friends" role="tab"><span data-i18n="friends_title">Friends</span><span class="cs-count" id="cntFriends">0</span></button>
+            <button class="settings-subtab" data-csub="requests" role="tab"><span data-i18n="friend_requests">Requests</span><span class="cs-count" id="cntReq">0</span></button>
+            <button class="settings-subtab" data-csub="sent" role="tab"><span data-i18n="sent_requests">Sent</span><span class="cs-count" id="cntSent">0</span></button>
+          </div>
+          <input id="contactSearch" class="field cont-search" data-i18n-ph="contacts_search" autocomplete="off" />
+
+          <div class="cont-subpane active" data-csub="friends">
+            <div id="friendsListEl" class="contacts-list"></div>
+            <div id="friendsEmpty" class="contacts-empty" data-i18n="no_friends">No friends yet</div>
+          </div>
+          <div class="cont-subpane" data-csub="requests">
+            <div id="reqList" class="contacts-list"></div>
+            <div id="reqEmpty" class="contacts-empty" data-i18n="no_requests">No requests</div>
+          </div>
+          <div class="cont-subpane" data-csub="sent">
+            <div id="sentList" class="contacts-list"></div>
+            <div id="sentEmpty" class="contacts-empty" data-i18n="no_sent">Nothing pending</div>
+          </div>
         </section>
         <!-- Themes -->
         <section class="settings-pane" data-pane="themes" role="tabpanel">
