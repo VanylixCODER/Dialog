@@ -41,7 +41,7 @@ import {
   queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
   sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend, mutualFriends, mutualCounts,
-  getPrefs, setPrefs, bumpInviteUse,
+  getPrefs, setPrefs, dmOpen, bumpInviteUse,
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
   getPinnedChats, savePinnedChats,
@@ -816,6 +816,7 @@ app.post("/api/prefs", async (req, res) => {
   if (["everyone", "fof", "nobody"].includes(req.body.friendReq)) patch.friendReq = req.body.friendReq;
   if (typeof req.body.groupAdd === "boolean") patch.groupAdd = req.body.groupAdd;
   if (typeof req.body.readReceipts === "boolean") patch.readReceipts = req.body.readReceipts;
+  if (typeof req.body.dmOpen === "boolean") patch.dmOpen = req.body.dmOpen;
   await setPrefs(me.login, patch);
   for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
   res.json({ ok: true, prefs: await getPrefs(me.login) });
@@ -1745,7 +1746,8 @@ io.on("connection", (socket) => {
     if (dmTo && !(await isBot(dmTo))) { // гейтинг ЛС (боты авто-принимают ЛС — гейт пропускаем)
       if (await isBlockedBy(userLogin, dmTo)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_by_recipient" }); return; }
       if (await isBlockedBy(dmTo, userLogin)) { socket.emit("dm-blocked", { partner: dmTo, reason: "blocked_sender" }); return; }
-      const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo));
+      // Recipient opted to accept DMs from anyone → let it straight through.
+      const allowed = (await areFriends(userLogin, dmTo)) || (await shareGroup(userLogin, dmTo)) || (await dmOpen(dmTo));
       if (!allowed) {
         // Respect the recipient's friend-request preference before auto-creating one.
         if (!(await canFriendRequest(userLogin, dmTo))) { socket.emit("dm-blocked", { partner: dmTo, status: "blocked" }); return; }

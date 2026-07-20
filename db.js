@@ -89,6 +89,7 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_friend_req VARCHAR(12) NOT NULL DEFAULT 'everyone'"); } catch {} // everyone | fof | nobody
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_group_add TINYINT NOT NULL DEFAULT 1"); } catch {}          // friends can add me to groups
   try { await pool.query("ALTER TABLE users ADD COLUMN pref_read_receipts TINYINT NOT NULL DEFAULT 1"); } catch {}       // send read receipts
+  try { await pool.query("ALTER TABLE users ADD COLUMN pref_dm_open TINYINT NOT NULL DEFAULT 0"); } catch {}            // allow DMs from non-friends
   // Profile banner (data URL, same shape as avatar) + a short "activity" status bubble.
   try { await pool.query("ALTER TABLE users ADD COLUMN banner LONGTEXT NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN activity VARCHAR(80) NULL"); } catch {}
@@ -383,7 +384,7 @@ export async function getBanner(login) {
   return r[0] ? r[0].banner : null;
 }
 export async function getProfileCard(login) {
-  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms, is_bot, bot_commands, bot_miniapp FROM users WHERE login=?", [login]);
+  const r = await query("SELECT login, name, description, status, activity, created_at, email_verified, report_reason, report_ban_until, report_ban_ms, is_bot, bot_commands, bot_miniapp, pref_dm_open FROM users WHERE login=?", [login]);
   const u = r[0];
   if (!u) return null;
   // "unstable" is a persistent guilty mark (report_reason set), independent of whether
@@ -393,7 +394,7 @@ export async function getProfileCard(login) {
   if (u.is_bot && u.bot_commands) { try { commands = JSON.parse(u.bot_commands) || []; } catch {} }
   return {
     login: u.login, name: u.name, description: u.description, status: u.status, activity: u.activity || "", created_at: u.created_at,
-    isBot: !!u.is_bot, commands, miniApp: (u.is_bot && u.bot_miniapp) ? u.bot_miniapp : "",
+    isBot: !!u.is_bot, commands, miniApp: (u.is_bot && u.bot_miniapp) ? u.bot_miniapp : "", dmOpen: !!u.pref_dm_open,
     accountStatus: unstable ? "unstable" : (u.email_verified ? "stable" : "unverified"),
     reportReason: unstable ? u.report_reason : null,
     reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
@@ -664,19 +665,26 @@ export async function mutualCounts(me) {
 
 // ---------- Privacy preferences ----------
 export async function getPrefs(login) {
-  const r = await query("SELECT pref_friend_req, pref_group_add, pref_read_receipts FROM users WHERE login=?", [login]);
+  const r = await query("SELECT pref_friend_req, pref_group_add, pref_read_receipts, pref_dm_open FROM users WHERE login=?", [login]);
   const u = r[0] || {};
   return {
     friendReq: u.pref_friend_req || "everyone",
     groupAdd: u.pref_group_add == null ? true : !!u.pref_group_add,
     readReceipts: u.pref_read_receipts == null ? true : !!u.pref_read_receipts,
+    dmOpen: !!u.pref_dm_open,
   };
+}
+// Does `login` accept DMs from non-friends?
+export async function dmOpen(login) {
+  const r = await query("SELECT pref_dm_open FROM users WHERE login=?", [login]);
+  return !!(r[0] && r[0].pref_dm_open);
 }
 export async function setPrefs(login, patch) {
   const sets = [], vals = [];
   if (patch.friendReq !== undefined) { sets.push("pref_friend_req=?"); vals.push(patch.friendReq); }
   if (patch.groupAdd !== undefined) { sets.push("pref_group_add=?"); vals.push(patch.groupAdd ? 1 : 0); }
   if (patch.readReceipts !== undefined) { sets.push("pref_read_receipts=?"); vals.push(patch.readReceipts ? 1 : 0); }
+  if (patch.dmOpen !== undefined) { sets.push("pref_dm_open=?"); vals.push(patch.dmOpen ? 1 : 0); }
   if (!sets.length) return;
   vals.push(login);
   await execute("UPDATE users SET " + sets.join(", ") + " WHERE login=?", vals);

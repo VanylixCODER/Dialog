@@ -1280,7 +1280,11 @@ function syncBlockComposer() {
   const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
   const isBlocked = partner && blocked.has(partner);
   const isBlockedBy = partner && blockedBy.has(partner);
-  const blockedMsg = isBlockedBy ? t("blocked_by_user") : isBlocked ? t("blocked_msg_send") : "";
+  // "Closed DMs": partner accepts DMs from friends only, and you aren't one → the
+  // composer reads as blocked (add them as a friend to reach them).
+  const dmClosed = partner && curPartner && curPartner.login === partner && !curPartner.isBot &&
+    !curPartner.dmOpen && !(relations.friends || []).includes(partner);
+  const blockedMsg = isBlockedBy ? t("blocked_by_user") : isBlocked ? t("blocked_msg_send") : dmClosed ? t("dm_closed_notice") : "";
   if (blockedMsg) {
     $("composer").classList.add("hidden");
     let bn = document.getElementById("blockNotice");
@@ -4461,20 +4465,25 @@ function hydratePane(tab) {
 // ---------- Bot chat chrome: command menu, no-call, Mini App button ----------
 let curBotCommands = [];
 let curMiniApp = null; // { url, name, login } for the open bot DM, or null
+let curPartner = null; // { login, isBot, dmOpen } for the open DM, or null
 function updateBotCmds(c) {
   const btn = $("botCmdBtn"); const call = $("startCallBtn"); const mab = $("miniAppBtn");
-  curBotCommands = []; curMiniApp = null;
+  curBotCommands = []; curMiniApp = null; curPartner = null;
   if (btn) btn.classList.add("hidden");
   if (mab) mab.classList.add("hidden");
   if (call) call.classList.remove("hidden"); // default: calls allowed
   if (!c || c.type !== "dm") return;
   const key = c.key;
   api("/api/profile/" + c.login, null, "GET").then(({ ok, data }) => {
-    if (!ok || !data.isBot || myRoom !== key) return;
-    curBotCommands = data.commands || [];
-    if (btn) btn.classList.toggle("hidden", !curBotCommands.length);
-    if (call) call.classList.add("hidden");     // no calling a bot
-    if (data.miniApp) { curMiniApp = { url: data.miniApp, name: data.name || c.login, login: c.login }; if (mab) mab.classList.remove("hidden"); }
+    if (!ok || myRoom !== key) return;
+    curPartner = { login: c.login, isBot: !!data.isBot, dmOpen: !!data.dmOpen };
+    if (data.isBot) {
+      curBotCommands = data.commands || [];
+      if (btn) btn.classList.toggle("hidden", !curBotCommands.length);
+      if (call) call.classList.add("hidden");     // no calling a bot
+      if (data.miniApp) { curMiniApp = { url: data.miniApp, name: data.name || c.login, login: c.login }; if (mab) mab.classList.remove("hidden"); }
+    }
+    syncBlockComposer(); // partner's dmOpen now known → re-evaluate the composer gate
   });
 }
 $("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
@@ -4723,11 +4732,17 @@ function setFeedbackNote() {
 }
 
 // ---------- Preferences tab ----------
-function refreshPrefsPane() {
+async function refreshPrefsPane() {
   if (!profile) return;
-  if ($("prefFriendReq")) $("prefFriendReq").value = profile.prefFriendReq || "everyone";
-  if ($("prefGroupAdd")) $("prefGroupAdd").checked = profile.prefGroupAdd !== false;
-  if ($("prefReadReceipts")) $("prefReadReceipts").checked = profile.prefReadReceipts !== false;
+  // Load the REAL saved prefs (previously the pane showed defaults until you toggled).
+  const { ok, data } = await api("/api/prefs", null, "GET");
+  const p = ok ? data : {};
+  profile.prefFriendReq = p.friendReq; profile.prefGroupAdd = p.groupAdd;
+  profile.prefReadReceipts = p.readReceipts; profile.prefDmOpen = p.dmOpen;
+  if ($("prefFriendReq")) $("prefFriendReq").value = p.friendReq || "everyone";
+  if ($("prefGroupAdd")) $("prefGroupAdd").checked = p.groupAdd !== false;
+  if ($("prefReadReceipts")) $("prefReadReceipts").checked = p.readReceipts !== false;
+  if ($("prefDmOpen")) $("prefDmOpen").checked = p.dmOpen === true;
   if ($("prefMsg")) $("prefMsg").textContent = "";
 }
 async function savePref(patch) {
@@ -4738,12 +4753,14 @@ async function savePref(patch) {
     profile.prefFriendReq = data.prefs.friendReq;
     profile.prefGroupAdd = data.prefs.groupAdd;
     profile.prefReadReceipts = data.prefs.readReceipts;
+    profile.prefDmOpen = data.prefs.dmOpen;
   }
   if (msg) { msg.className = "form-error ok"; msg.textContent = t("pref_saved"); setTimeout(() => { if (msg.textContent === t("pref_saved")) msg.textContent = ""; }, 1500); }
 }
 $("prefFriendReq") && ($("prefFriendReq").onchange = (e) => savePref({ friendReq: e.target.value }));
 $("prefGroupAdd") && ($("prefGroupAdd").onchange = (e) => savePref({ groupAdd: e.target.checked }));
 $("prefReadReceipts") && ($("prefReadReceipts").onchange = (e) => savePref({ readReceipts: e.target.checked }));
+$("prefDmOpen") && ($("prefDmOpen").onchange = (e) => savePref({ dmOpen: e.target.checked }));
 
 // Перенаправляем хедер-кнопки на settings overlay. Гард `&&` на contactsBtn не нужен —
 // он живой и в HTML, и в логике; зато аватар/profileSave/logoutBtn и т.д. обёрнуты
