@@ -86,5 +86,14 @@
             android:name=".ConnectionService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- FCM: receives data-only pushes so messages/calls arrive even when closed. -->
+        <service
+            android:name=".FcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

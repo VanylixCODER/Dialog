@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -67,4 +68,8 @@ dependencies {
     implementation("androidx.webkit:webkit:1.11.0")
     implementation("androidx.activity:activity-ktx:1.9.1")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    // Firebase Cloud Messaging — lets the server wake the app for messages/calls
+    // even when it's fully closed (no always-on background service needed).
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-messaging")
 }
