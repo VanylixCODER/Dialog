@@ -70,7 +70,7 @@ const I18N = {
     confirm_delete: "Delete this message?", edit_hint: "Enter — save · Esc — cancel",
     mic_device: "Microphone", spk_device: "Speaker", cam_device: "Camera",
     call_disabled: "Calls not configured (no LiveKit on server)",
-    t_deafen: "Deafen",
+    t_deafen: "Deafen", download: "Download", fullscreen: "Fullscreen",
     join_call: "Join call", return_call: "Return to call", in_call: "in call", call_ongoing: "Call ongoing",
     pick_members: "Pick members:", group_settings: "Group settings", add_members: "Add friends",
     add_member_btn: "Add member", add_members_title: "Add members", add_member_no_friends: "No friends to add — add friends via Contacts first.",
