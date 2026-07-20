@@ -863,6 +863,7 @@ function enterApp() {
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   socket.emit("identify", { token });
   applyBackgroundMode(); // native Android: keep the socket alive in the background
+  requestFcmToken();     // native Android: fetch + register the FCM push token
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
@@ -1925,7 +1926,7 @@ $("profileSave") && ($("profileSave").onclick = async () => {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   closeSettings(); renderChatList($("searchInput").value);
 });
-$("logoutBtn") && ($("logoutBtn").onclick = async () => { if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
+$("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Контакты / друзья ----------
 $("contactsBtn").onclick = () => openSettings("contacts");
@@ -4339,6 +4340,20 @@ function nativeCancelIncomingCall() { if (NATIVE && NATIVE.cancelIncomingCall) {
 // messages & calls arrive off-screen. Gated by a preference (default on); no-op on web/desktop.
 function bgModeOn() { return localStorage.getItem("dialog_bg") !== "0"; }
 function applyBackgroundMode() { if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(!!token && bgModeOn()); } catch (e) {} } }
+// FCM push (native Android): the app delivers its device token here; we register it
+// with the server so it can push messages/calls even when the app is fully closed.
+function registerFcm(fcmTk) {
+  fcmTk = String(fcmTk || "").trim();
+  if (!fcmTk || !token) return;
+  localStorage.setItem("dialog_fcm", fcmTk);
+  api("/api/push/fcm", { token: fcmTk }, "POST").catch(() => {});
+}
+window.dialogFcmToken = (tk) => { try { registerFcm(tk); } catch (e) {} };
+function requestFcmToken() { if (NATIVE && NATIVE.getFcmToken) { try { NATIVE.getFcmToken(); } catch (e) {} } }
+function unregisterFcm() {
+  const tk = localStorage.getItem("dialog_fcm");
+  if (tk) { api("/api/push/fcm/delete", { token: tk }, "POST").catch(() => {}); localStorage.removeItem("dialog_fcm"); }
+}
 // Native calls these back from the IncomingCallActivity buttons.
 window.__dialogCall = {
   answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },

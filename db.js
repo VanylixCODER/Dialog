@@ -158,6 +158,13 @@ export async function initSchema() {
     KEY idx_push_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // FCM device tokens (native Android app) — parallel to push_subs for the WebView,
+  // which can't receive Web Push. A device is one token; re-registering updates the owner.
+  await pool.query(`CREATE TABLE IF NOT EXISTS fcm_tokens (
+    token VARCHAR(255) PRIMARY KEY, login VARCHAR(24) NOT NULL, updated_at BIGINT,
+    KEY idx_fcm_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Курсоры доставки/просмотра для каждого участника каждой комнаты.
   // Запись идемпотентна: «доставлено до id X» / «просмотрено до id Y».
   // Это масштабируется лучше JSON-массивов per-message и не вызывает write amplification.
@@ -745,6 +752,19 @@ export async function getPushSubs(login) {
   return r.map((x) => { try { return JSON.parse(x.sub); } catch { return null; } }).filter(Boolean);
 }
 export async function deletePushSub(endpoint) { await execute("DELETE FROM push_subs WHERE endpoint=?", [endpoint.slice(0, 512)]); }
+
+// ---------- FCM device tokens (native Android push) ----------
+export async function saveFcmToken(login, token) {
+  await execute(
+    "INSERT INTO fcm_tokens (token, login, updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE login=VALUES(login), updated_at=VALUES(updated_at)",
+    [String(token).slice(0, 255), login, Date.now()]
+  );
+}
+export async function getFcmTokens(login) {
+  const r = await query("SELECT token FROM fcm_tokens WHERE login=?", [login]);
+  return r.map((x) => x.token);
+}
+export async function deleteFcmToken(token) { await execute("DELETE FROM fcm_tokens WHERE token=?", [String(token).slice(0, 255)]); }
 
 // ---------- DM список (серверная синхронизация) ----------
 export async function getUserDMs(login) {
