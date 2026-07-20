@@ -42,6 +42,16 @@ class WebAppInterface(
         else ConnectionService.stop(context)
     }
 
+    // The page asks for the FCM device token on login; we resolve it async and hand it
+    // back via window.dialogFcmToken(), which registers it with the server.
+    @JavascriptInterface
+    fun getFcmToken() {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { tk -> if (!tk.isNullOrBlank()) FcmService.pushTokenToWeb(tk) }
+        } catch (_: Exception) { /* Firebase not configured — push simply stays off */ }
+    }
+
     @JavascriptInterface
     fun notify(title: String, body: String, chatId: String) {
         notifications.show(title, body, chatId)

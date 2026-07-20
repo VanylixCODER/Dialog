@@ -32,6 +32,19 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # google-services.json is gitignored (secret), so materialise it from the repo
+      # secret — the google-services Gradle plugin fails the build without it.
+      - name: Firebase config
+        env:
+          GS_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -z "$GS_B64" ]; then
+            echo "::error::GOOGLE_SERVICES_JSON_B64 secret is missing — FCM build cannot proceed."
+            exit 1
+          fi
+          echo "$GS_B64" | base64 -d > android/app/google-services.json
+          echo "wrote android/app/google-services.json ($(wc -c < android/app/google-services.json) bytes)"
+
       - name: Prepare signing keystore
         id: ks
         run: |
