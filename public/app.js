@@ -970,7 +970,13 @@ function preview(m) {
   if (m.type === "video") return "🎬 " + t("pv_video");
   if (m.type === "audio") return "🎤 " + t("pv_voice");
   if (m.type === "file") return "📎 " + (m.mediaName || t("pv_file"));
-  return "media";
+  // System events (call/join/leave) were falling through to the literal "media".
+  if (m.type === "call_started") return "📞 " + t("call_started");
+  if (m.type === "call_ended")   return "📞 " + t("call_ended");
+  if (m.type === "call_missed")  return "📞 " + t("call_missed");
+  if (m.type === "join")  return "→ " + (m.name ? m.name + " " : "") + t("joined_chat");
+  if (m.type === "leave") return "← " + (m.name ? m.name + " " : "") + t("left_chat");
+  return "";
 }
 
 // ---------- Статусы доставки / просмотра ----------
@@ -1124,7 +1130,13 @@ function openChatMenu(c, x, y) {
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
   item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "close" : "check", () => togglePin(c));
-  item(t("delete_chat"), "trash", () => deleteChat(c), true);
+  if (c.type === "dm") {
+    // Turn a DM into a group with this contact already picked (they still confirm/join).
+    item(t("new_group_with", { name: c.name || c.login }), "users", () => openCreateGroup(c.login));
+    // Close the DM (hide it from the list) WITHOUT wiping the history — reopening restores it.
+    item(t("close_dm"), "close", () => closeDm(c));
+  }
+  item(c.type === "dm" ? t("delete_chat") : t("leave_group"), "trash", () => deleteChat(c), true);
   menu.classList.remove("hidden");
   menu._openedAt = Date.now();
   const mw = menu.offsetWidth || 180, mh = menu.offsetHeight || 140;
@@ -1710,9 +1722,10 @@ function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", p
 let cgPicked = new Set();    // логин → выбранный для новой группы
 let cgAvatar = null;          // dataURL или null (опциональный логотип)
 let cgFriends = [];           // отфильтрованный список при search
-function openCreateGroup() {
+function openCreateGroup(preselect) {
   if (!profile) return;
   cgPicked.clear(); cgAvatar = null; cgFriends = [];
+  if (preselect && preselect !== profile.login) cgPicked.add(preselect); // e.g. "New group with @x"
   const nameInp = $("cgName"); if (nameInp) nameInp.value = "";
   const search = $("cgSearch"); if (search) search.value = "";
   if (!relations.friends.length) loadRelations().then(() => renderCgPicker());
