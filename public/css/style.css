@@ -4705,3 +4705,27 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .lb-btn:hover { background: rgba(0,0,0,0.7); border-color: var(--accent-400); color: var(--accent-300); }
 .lb-btn svg { width: 20px; height: 20px; }
 .lightbox video.lb-media { max-width: 92vw; max-height: 84vh; border-radius: 6px; background: #000; }
+
+/* ===== Incoming-call screen: audio-reactive polish (#cavaCanvas drives --ring-level) ===== */
+.call-incoming { --ring-level: 0; }
+.cava { opacity: 0.85; }                    /* the visualizer is the hero backdrop now */
+/* Avatar breathes with the ringtone amplitude + a soft reactive halo. */
+.ci-ava {
+  transform: scale(calc(1 + var(--ring-level) * 0.07));
+  transition: transform 0.08s linear, box-shadow 0.12s linear;
+  box-shadow: 0 0 calc(26px + var(--ring-level) * 60px) rgba(var(--primary-rgb), calc(0.35 + var(--ring-level) * 0.4));
+}
+.ci-ava-wrap::before, .ci-ava-wrap::after { border-color: rgba(var(--primary-rgb), calc(0.5 + var(--ring-level) * 0.5)); }
+/* Button + label stacks (adds the "Accept / Decline" wording under the icons). */
+.ci-act { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.ci-act-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase; }
+/* A vignette so text stays readable over a lively visualizer. */
+.call-incoming::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0,4,0,0.72) 100%);
+}
+.ci-card { z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ci-ava { transform: none !important; }
+  .ci-ava-wrap::before, .ci-ava-wrap::after { animation: none; }
+}
