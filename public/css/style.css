@@ -4677,3 +4677,9 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
   .req-add { flex-wrap: wrap; }
   .req-add .btn-primary { width: 100%; padding: 11px 16px; }
 }
+
+/* Mutual-friends badge (contacts rows + mini-profile) */
+.c-mutual { display: inline-flex; align-items: center; gap: 3px; flex: none; font-size: 11px; font-weight: 700; color: var(--text-dim); margin-left: 2px; }
+.c-mutual svg { width: 13px; height: 13px; opacity: 0.8; }
+.mp-mutual { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
+.mp-mutual .mpm-ico svg { width: 15px; height: 15px; vertical-align: -3px; opacity: 0.85; }

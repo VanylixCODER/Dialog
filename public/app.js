@@ -1971,6 +1971,10 @@ function updateReqBadge() {
   badge.classList.toggle("show", n > 0);
 }
 let contactFilter = "";
+let mutualCountCache = {};
+function loadMutualCounts() {
+  api("/api/mutuals", null, "GET").then(({ ok, data }) => { if (ok) { mutualCountCache = data.counts || {}; renderContacts(); } });
+}
 function renderContacts() {
   updateReqBadge();
   const reqList = $("reqList"); if (!reqList) return;
@@ -1986,10 +1990,15 @@ function renderContacts() {
     [t("accept_request"), async () => { await friend(l, "accept"); await refreshPresence(); openDM(l); }, false, window.ICON.check || "✓"],
     [t("decline"), () => friend(l, "decline"), true, window.ICON.close || "✕"],
   ])));
-  if (fL) friends.forEach((l) => fL.appendChild(contactRow(l, [
-    [t("dm_open"), () => openDM(l), false, window.ICON.send],
-    [t("remove_friend"), () => friend(l, "remove"), true, window.ICON.trash],
-  ])));
+  if (fL) friends.forEach((l) => {
+    const row = contactRow(l, [
+      [t("dm_open"), () => openDM(l), false, window.ICON.send],
+      [t("remove_friend"), () => friend(l, "remove"), true, window.ICON.trash],
+    ]);
+    const mc = mutualCountCache[l] || 0;
+    if (mc > 0) { const s = row.querySelector(".c-name"); if (s) s.insertAdjacentHTML("afterend", `<span class="c-mutual" title="${t("mutual_friends", { n: mc })}">${window.ICON.users || ""}<span>${mc}</span></span>`); }
+    fL.appendChild(row);
+  });
   if (sL) sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
 
   // Counts show the TRUE totals (not the filtered view) so the tabs stay stable.
@@ -2040,6 +2049,14 @@ async function openMiniProfile(login) {
   const act = $("mpActivity"); act.textContent = data.activity || ""; act.classList.toggle("hidden", !data.activity);
   $("mpDesc").textContent = data.description || "";
   $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
+  // Mutual friends (skip self/bots — no meaningful overlap).
+  const mp = $("mpMutual"); if (mp) { mp.classList.add("hidden"); mp.textContent = ""; }
+  if (mp && !data.isBot) api("/api/mutual/" + login, null, "GET").then(({ ok, data: md }) => {
+    if (!ok || !md.mutual || !md.mutual.length) return;
+    const names = md.mutual.slice(0, 3).join(", ") + (md.mutual.length > 3 ? "…" : "");
+    mp.innerHTML = `<span class="mpm-ico">${window.ICON.users || ""}</span>${t("mutual_friends", { n: md.mutual.length })} · ${escapeHtml(names)}`;
+    mp.classList.remove("hidden");
+  });
   $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
   $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
   // Bots can be friended too — they auto-accept instantly (server side), so the button
@@ -4391,7 +4408,7 @@ function openSettings(tab) {
   switchTab(tab);
   applyI18n(ov); // обновить лейблы и плейсхолдеры (темы/табы называния)
   if (!ov._themesRendered) renderThemes();
-  if (tab === "contacts") loadRelations();
+  if (tab === "contacts") { loadRelations(); loadMutualCounts(); }
   if (tab === "profile") refreshProfilePane();
   if (tab === "account") refreshAccountPane();
   if (tab === "prefs") refreshPrefsPane();
@@ -4422,7 +4439,7 @@ function hydratePane(tab) {
   if (tab === "profile") refreshProfilePane();
   else if (tab === "account") refreshAccountPane();
   else if (tab === "prefs") refreshPrefsPane();
-  else if (tab === "contacts") loadRelations();
+  else if (tab === "contacts") { loadRelations(); loadMutualCounts(); }
   else if (tab === "groups") {
     // Сентинел `id: null` кеширует и режим «без активной группы» (placeholder), чтобы повторные клики
     // по табу не гоняли populateGroupSettingsPane вхолостую — функция всё равно идемпотентна,
