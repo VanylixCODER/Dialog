@@ -45,7 +45,7 @@ import {
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
   getPinnedChats, savePinnedChats,
-  savePushSub, getPushSubs, deletePushSub,
+  savePushSub, getPushSubs, deletePushSub, saveFcmToken, getFcmTokens, deleteFcmToken,
   getRoomWatermarks, bumpWatermarks,
   getUserByEmail, setUserEmail, markEmailVerified, setNagDismissed,
   createEmailToken, getEmailToken, deleteEmailToken,
@@ -99,17 +99,69 @@ const VAPID_PRIVATE = process.env.VAPID_PRIVATE || "";
 const pushOn = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 if (pushOn) webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@dialog.app", VAPID_PUBLIC, VAPID_PRIVATE);
 async function sendPush(login, payload) {
-  if (!pushOn) return;
   try { // «не беспокоить» — не шлём уведомления
     const st = userStatus.has(login) ? userStatus.get(login) : await getStatus(login);
     if (st === "dnd") return;
   } catch {}
-  let subs = [];
-  try { subs = await getPushSubs(login); } catch { return; }
-  const body = JSON.stringify(payload);
-  await Promise.all(subs.map((s) =>
-    webpush.sendNotification(s, body).catch((e) => { if (e.statusCode === 404 || e.statusCode === 410) deletePushSub(s.endpoint).catch(() => {}); })
-  ));
+  // Web Push (browser / desktop) — VAPID.
+  if (pushOn) {
+    let subs = [];
+    try { subs = await getPushSubs(login); } catch { subs = []; }
+    const body = JSON.stringify(payload);
+    await Promise.all(subs.map((s) =>
+      webpush.sendNotification(s, body).catch((e) => { if (e.statusCode === 404 || e.statusCode === 410) deletePushSub(s.endpoint).catch(() => {}); })
+    ));
+  }
+  // FCM (native Android app) — the WebView can't receive Web Push.
+  sendFcm(login, payload).catch(() => {});
+}
+
+// ---------- FCM (Firebase Cloud Messaging, HTTP v1) ----------
+// Service account JSON via env FCM_SA (raw JSON) or FCM_SA_PATH (file). Dependency-free:
+// we mint the OAuth2 token by signing a JWT with the SA private key (RS256, node:crypto).
+let fcmSA = null;
+try {
+  const raw = process.env.FCM_SA || (process.env.FCM_SA_PATH ? readFileSync(process.env.FCM_SA_PATH, "utf8") : "");
+  if (raw) fcmSA = JSON.parse(raw);
+} catch (e) { console.warn("FCM_SA parse failed:", e.message); }
+const fcmOn = !!(fcmSA && fcmSA.client_email && fcmSA.private_key && fcmSA.project_id);
+if (fcmOn) console.log("FCM push enabled for project", fcmSA.project_id);
+let _fcmTok = null, _fcmTokExp = 0;
+const b64url = (buf) => Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function fcmAccessToken() {
+  if (_fcmTok && Date.now() < _fcmTokExp - 60000) return _fcmTok;
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claim = b64url(JSON.stringify({
+    iss: fcmSA.client_email, scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
+  }));
+  const sig = b64url(crypto.createSign("RSA-SHA256").update(header + "." + claim).sign(fcmSA.private_key));
+  const jwt = `${header}.${claim}.${sig}`;
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error("no fcm access_token");
+  _fcmTok = j.access_token; _fcmTokExp = Date.now() + (j.expires_in || 3600) * 1000;
+  return _fcmTok;
+}
+async function sendFcm(login, payload) {
+  if (!fcmOn) return;
+  let tokens = [];
+  try { tokens = await getFcmTokens(login); } catch { return; }
+  if (!tokens.length) return;
+  let at; try { at = await fcmAccessToken(); } catch (e) { console.warn("fcm token", e.message); return; }
+  const url = `https://fcm.googleapis.com/v1/projects/${fcmSA.project_id}/messages:send`;
+  // Data-only message so the app renders it (fires even when backgrounded/killed).
+  await Promise.all(tokens.map((tk) => fetch(url, {
+    method: "POST", headers: { Authorization: "Bearer " + at, "Content-Type": "application/json" },
+    body: JSON.stringify({ message: {
+      token: tk, android: { priority: "high" },
+      data: { kind: String(payload.kind || ""), title: String(payload.title || "Dialog"), body: String(payload.body || ""), room: String(payload.room || "") },
+    } }),
+  }).then((r) => { if (r.status === 404 || r.status === 400) deleteFcmToken(tk).catch(() => {}); }).catch(() => {})));
 }
 
 // ---------- Express ----------
@@ -1215,6 +1267,24 @@ app.post("/api/push/subscribe", async (req, res) => {
     if (!req.body || !req.body.endpoint) return res.status(400).json({ error: "bad sub" });
     await savePushSub(me.login, req.body); res.json({ ok: true });
   } catch (e) { console.error("push sub", e.message); res.status(500).json({ error: "server error" }); }
+});
+// FCM device token registration (native Android app). `enabled` tells the client
+// whether the server can actually send (Firebase configured) so it can decide UX.
+app.get("/api/push/fcm/status", (req, res) => res.json({ enabled: fcmOn }));
+app.post("/api/push/fcm", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const token = String(req.body && req.body.token || "").trim();
+    if (!token) return res.status(400).json({ error: "no token" });
+    await saveFcmToken(me.login, token); res.json({ ok: true });
+  } catch (e) { console.error("fcm reg", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/push/fcm/delete", async (req, res) => {
+  try {
+    const token = String(req.body && req.body.token || "").trim();
+    if (token) await deleteFcmToken(token);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: Delete room messages (DM "delete for everyone") ----------
