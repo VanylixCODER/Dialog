@@ -4212,7 +4212,7 @@ function playRingChord() {
     g.gain.linearRampToValueAtTime(v, t0 + 0.04);
     g.gain.setValueAtTime(v, t0 + d - 0.04);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
-    o.connect(g); g.connect(ctx.destination);
+    o.connect(g); g.connect(ctx.destination); if (ring.analyser) g.connect(ring.analyser); // feed CAVA
     o.start(t0); o.stop(t0 + d + 0.02);
     t0 += d + 0.06;
   });
@@ -4225,9 +4225,22 @@ function playRingChord() {
 //   → только этот звонок уходит в синтезатор; mp3 пробуем снова на следующем звонке.
 let ringAudioEl = null;
 let ringMp3Disabled = false;
+let ringSrcNode = null; // MediaElementSource for the mp3 (created once) → feeds the analyser
+// Shared analyser the CAVA reads from, so the bars react to the ACTUAL ringtone audio
+// (both the mp3 and the synth chord) instead of the sine-wave placeholder.
+function ensureRingAnalyser() {
+  const ctx = ensureAudioCtx(); if (!ctx || ring.analyser) return ring.analyser;
+  try {
+    const an = ctx.createAnalyser(); an.fftSize = 128; an.smoothingTimeConstant = 0.72;
+    an.connect(ctx.destination);
+    ring.analyser = an; ring.data = new Uint8Array(an.frequencyBinCount);
+  } catch { ring.analyser = null; }
+  return ring.analyser;
+}
 function startRingtone() {
   if (ring.audio) return; // двойной вызов не заводит второй луп
   ensureAudioCtx();
+  ensureRingAnalyser();
   startCava();
   if (!ringMp3Disabled) {
     if (!ringAudioEl) {
@@ -4247,6 +4260,11 @@ function startRingtone() {
       }, { once: true });
     }
     ring.audio = { mp3: true };
+    // Route the mp3 through the analyser so CAVA reacts to it (once per element).
+    if (ring.analyser && !ringSrcNode && audioCtx) {
+      try { ringSrcNode = audioCtx.createMediaElementSource(ringAudioEl); ringSrcNode.connect(ring.analyser); }
+      catch { ringSrcNode = null; }
+    }
     ringAudioEl.currentTime = 0;
     const p = ringAudioEl.play();
     if (p && typeof p.catch === "function") {
@@ -4276,13 +4294,34 @@ function stopRingtone() {
 }
 
 function startCava() {
-  const canvas = $("cavaCanvas"), toast = $("callToast"); if (!canvas) return; const cx = canvas.getContext("2d"); const N = 40;
+  const canvas = $("cavaCanvas"), toast = $("callToast"); if (!canvas) return; const cx = canvas.getContext("2d"); const N = 48;
   if (ring.bars.length !== N) ring.bars = new Array(N).fill(0); cancelAnimationFrame(ring.raf);
+  // Pull the theme accent so the visualizer matches whatever theme is active.
+  const cs = getComputedStyle(document.body);
+  const rgb = (cs.getPropertyValue("--primary-rgb").trim() || "0,255,90");
   const frame = () => {
     ring.raf = requestAnimationFrame(frame); const dpr = devicePixelRatio || 1;
-    canvas.width = toast.clientWidth * dpr; canvas.height = toast.clientHeight * dpr; const w = canvas.width, h = canvas.height; cx.clearRect(0, 0, w, h);
-    if (ring.analyser) ring.analyser.getByteFrequencyData(ring.data); const bw = w / N;
-    for (let i = 0; i < N; i++) { let target; if (ring.analyser) target = ring.data[Math.floor((i / N) * ring.data.length * 0.7)] / 255; else target = 0.25 + 0.55 * Math.abs(Math.sin(Date.now() / 180 + i * 0.5)); ring.bars[i] = Math.max(target, ring.bars[i] * 0.86); const bh = Math.max(2 * dpr, ring.bars[i] * h * 0.5); const g = cx.createLinearGradient(0, h, 0, h - bh); g.addColorStop(0, "rgba(0,255,90,0.1)"); g.addColorStop(1, "rgba(0,255,90,0.5)"); cx.fillStyle = g; cx.fillRect(i * bw + bw * 0.15, h - bh, bw * 0.7, bh); }
+    canvas.width = toast.clientWidth * dpr; canvas.height = toast.clientHeight * dpr;
+    const w = canvas.width, h = canvas.height, mid = h / 2; cx.clearRect(0, 0, w, h);
+    if (ring.analyser) ring.analyser.getByteFrequencyData(ring.data);
+    const bw = w / N; let sum = 0;
+    for (let i = 0; i < N; i++) {
+      let target;
+      if (ring.analyser) target = ring.data[Math.floor((i / N) * ring.data.length * 0.7)] / 255;
+      else target = 0.18 + 0.4 * Math.abs(Math.sin(Date.now() / 200 + i * 0.5));
+      ring.bars[i] = Math.max(target, ring.bars[i] * 0.85); sum += ring.bars[i];
+      // Mirror each bar around the vertical center → a fuller waveform look.
+      const bh = Math.max(2 * dpr, ring.bars[i] * h * 0.42);
+      const x = i * bw + bw * 0.18, bwe = bw * 0.64;
+      const g = cx.createLinearGradient(0, mid - bh, 0, mid + bh);
+      g.addColorStop(0, `rgba(${rgb},0.05)`); g.addColorStop(0.5, `rgba(${rgb},0.55)`); g.addColorStop(1, `rgba(${rgb},0.05)`);
+      cx.fillStyle = g;
+      const r = Math.min(bwe / 2, 3 * dpr);
+      if (cx.roundRect) { cx.beginPath(); cx.roundRect(x, mid - bh, bwe, bh * 2, r); cx.fill(); }
+      else cx.fillRect(x, mid - bh, bwe, bh * 2);
+    }
+    // Feed the average level to the avatar pulse (CSS var --ring-level, 0..1).
+    if (toast) toast.style.setProperty("--ring-level", (sum / N).toFixed(3));
   };
   frame();
 }
