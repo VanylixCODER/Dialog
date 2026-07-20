@@ -4729,3 +4729,20 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
   .ci-ava { transform: none !important; }
   .ci-ava-wrap::before, .ci-ava-wrap::after { animation: none; }
 }
+
+/* ============ Group settings pane — sectioned, card-based layout ============ */
+.gs-body { display: flex; flex-direction: column; gap: 16px; }
+.gs-header { display: flex; align-items: center; gap: 14px; }
+.gs-header .gs-ava { width: 68px; height: 68px; flex: none; margin: 0; border-radius: 18px; }
+.gs-header .gs-ava .ava-fallback img { width: 34px; height: 34px; }
+.gs-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.gs-name { margin: 0; font-size: 16px; font-weight: 700; }
+.gs-card { border: 1px solid var(--border-1); background: var(--bg-2); border-radius: var(--r-3); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.gs-sec-title { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--accent-200); }
+.gs-sec-title.gs-sub { margin-top: 6px; color: var(--text-dim); }
+.gs-actions { display: flex; gap: 8px; }
+.gs-actions .btn-primary, .gs-actions .btn-ghost { width: auto; flex: 1; }
+.gs-body .gs-danger { width: auto; align-self: flex-start; color: var(--danger); border-color: rgba(255,82,82,0.3); }
+.gs-body .gs-danger:hover { background: rgba(255,82,82,0.12); border-color: var(--danger); }
+.gs-card .contacts-list { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 560px) { .gs-actions { flex-direction: column; } .gs-actions .btn-primary, .gs-actions .btn-ghost { width: 100%; } }
