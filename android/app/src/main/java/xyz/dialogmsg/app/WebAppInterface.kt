@@ -20,9 +20,26 @@ class WebAppInterface(
     private val onReady: () -> Unit,
     private val notifications: NotificationHelper
 ) {
+    companion object {
+        // Whether the web app asked to stay connected in the background (signed in +
+        // background mode on). Used to resume ConnectionService after a call ends.
+        @Volatile var keepAliveWanted = false
+    }
+
     @JavascriptInterface
     fun ready() {
         onReady()
+    }
+
+    // Background mode: keep the process (and its socket) alive while signed in so
+    // messages/calls arrive when the app is off-screen. Called on login/logout and when
+    // the user toggles "Run in background". During a call, CallService covers this, so we
+    // don't double up — we resume afterwards in callEnded().
+    @JavascriptInterface
+    fun keepAlive(on: Boolean) {
+        keepAliveWanted = on
+        if (on) { if (!MainActivity.isCallActive()) ConnectionService.start(context) }
+        else ConnectionService.stop(context)
     }
 
     @JavascriptInterface
@@ -56,6 +73,7 @@ class WebAppInterface(
     @JavascriptInterface
     fun callStarted(title: String, sub: String) {
         MainActivity.setCallActive(true)
+        ConnectionService.stop(context) // CallService keeps the process alive during the call
         CallService.start(context, title, sub)
     }
 
@@ -65,6 +83,7 @@ class WebAppInterface(
         RingController.stop(context)
         notifications.cancelIncoming()
         CallService.stop(context)
+        if (keepAliveWanted) ConnectionService.start(context) // resume background mode
     }
 
     // Route call audio to the loudspeaker or the earpiece. Mobile browsers don't
