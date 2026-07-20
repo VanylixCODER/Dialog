@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "xyz.dialogmsg.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "xyz.dialogmsg.app"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 8
-        versionName = "1.1.2"
+        targetSdk = 35
+        versionCode = 9
+        versionName = "1.1.3"
 
         // The hosted web app the WebView loads — straight into the messenger
         // (/login), never the marketing landing page.

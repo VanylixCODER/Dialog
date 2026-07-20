@@ -34,3 +34,9 @@ android/app/google-services.json
 **/*firebase-adminsdk*.json
 **/*service-account*.json
 docs/*service*.json
+
+# Play upload signing key — NEVER commit (back this up!)
+*.jks
+*.keystore
+android/upload-keystore.jks
+docs/upload-key-credentials.txt
