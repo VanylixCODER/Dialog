@@ -461,36 +461,51 @@
             </div>
           <div class="modal-sep">—</div>
           <div id="groupPanelPlaceholder" class="contacts-empty" data-i18n="pick_chat">Select a group chat to manage its settings</div>
-          <div id="groupSettingsBody" class="hidden" style="display:flex;flex-direction:column;gap:12px">
-            <div class="profile-ava avatar ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit"><img src="/src/group.svg" alt="" /></span></div>
-            <button id="gsAvaBtn" class="btn-ghost gs-owner" data-i18n="upload_avatar">Upload logo</button>
-            <input id="gsAvaFile" type="file" accept="image/*" hidden />
-            <input id="gsName" class="field" data-i18n-ph="ph_group_name" maxlength="64" />
-            <div class="pick-label" data-i18n="members_title">Members</div>
-            <div id="gsMembers" class="contacts-list"></div>
-            <div class="pick-label gs-owner" data-i18n="add_members">Add friends</div>
-            <div id="gsAddPick" class="friend-pick gs-owner"></div>
+          <div id="groupSettingsBody" class="hidden gs-body">
+            <!-- Header: logo + name together -->
+            <div class="gs-header">
+              <div class="profile-ava avatar ava gs-ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit"><img src="/src/group.svg" alt="" /></span></div>
+              <div class="gs-head-main">
+                <input id="gsName" class="field gs-name" data-i18n-ph="ph_group_name" maxlength="64" />
+                <button id="gsAvaBtn" class="btn-ghost btn-sm gs-owner" data-i18n="upload_avatar">Upload logo</button>
+                <input id="gsAvaFile" type="file" accept="image/*" hidden />
+              </div>
+            </div>
+
+            <!-- Members -->
+            <div class="gs-card">
+              <div class="gs-sec-title" data-i18n="members_title">Members</div>
+              <div id="gsMembers" class="contacts-list"></div>
+              <div class="gs-sec-title gs-owner gs-sub" data-i18n="add_members">Add friends</div>
+              <div id="gsAddPick" class="friend-pick gs-owner"></div>
+            </div>
+
             <div class="form-error" id="gsError"></div>
-            <div class="modal-actions">
+            <div class="modal-actions gs-actions">
               <button id="gsSave" class="btn-primary gs-owner" data-i18n="save">Save</button>
               <button id="gsLeave" class="btn-ghost" data-i18n="leave_group_btn">Leave</button>
             </div>
-            <button id="gsDelete" class="btn-ghost gs-owner gs-danger" data-i18n="delete_group">Delete group</button>
-            <!-- Invites + pending queue: новые разделы настроек группы. Все участники могут генерить
-                 и видеть активные ссылки + отзывать свои; список ожидающих заявок — овнеру (.gs-owner). -->
-            <div class="modal-sep" data-i18n="invite_section">Invites</div>
-            <div class="invite-opts">
-              <label class="io-field"><span data-i18n="invite_max_uses">Max uses</span><input id="gsInviteUses" class="field" type="number" min="0" max="9999" data-i18n-ph="invite_unlimited" /></label>
-              <label class="io-field"><span data-i18n="invite_expiry_days">Expires (days)</span><input id="gsInviteDays" class="field" type="number" min="0" max="365" data-i18n-ph="invite_never" /></label>
-            </div>
-            <button id="gsGenerateCode" class="btn-ghost" data-i18n="invite_code_btn">Create invite link</button>
-            <div class="form-error" id="gsInviteError"></div>
-            <div id="gsInviteList" class="contacts-list"></div>
-            <div id="gsInviteEmpty" class="contacts-empty hidden" data-i18n="invite_none">No active invite links</div>
 
-            <div class="modal-sep gs-owner" data-i18n="pending_requests">Pending requests</div>
-            <div id="gsPendingList" class="contacts-list gs-owner"></div>
-            <div id="gsPendingEmpty" class="contacts-empty gs-owner hidden" data-i18n="pending_empty">No pending requests</div>
+            <!-- Invites: everyone can create/see/revoke; pending queue is owner-only. -->
+            <div class="gs-card">
+              <div class="gs-sec-title" data-i18n="invite_section">Invites</div>
+              <div class="invite-opts">
+                <label class="io-field"><span data-i18n="invite_max_uses">Max uses</span><input id="gsInviteUses" class="field" type="number" min="0" max="9999" data-i18n-ph="invite_unlimited" /></label>
+                <label class="io-field"><span data-i18n="invite_expiry_days">Expires (days)</span><input id="gsInviteDays" class="field" type="number" min="0" max="365" data-i18n-ph="invite_never" /></label>
+              </div>
+              <button id="gsGenerateCode" class="btn-ghost btn-sm" data-i18n="invite_code_btn">Create invite link</button>
+              <div class="form-error" id="gsInviteError"></div>
+              <div id="gsInviteList" class="contacts-list"></div>
+              <div id="gsInviteEmpty" class="contacts-empty hidden" data-i18n="invite_none">No active invite links</div>
+            </div>
+
+            <div class="gs-card gs-owner">
+              <div class="gs-sec-title" data-i18n="pending_requests">Pending requests</div>
+              <div id="gsPendingList" class="contacts-list"></div>
+              <div id="gsPendingEmpty" class="contacts-empty hidden" data-i18n="pending_empty">No pending requests</div>
+            </div>
+
+            <button id="gsDelete" class="btn-ghost gs-owner gs-danger" data-i18n="delete_group">Delete group</button>
           </div>
         </section>
         <!-- Voice & Video -->
