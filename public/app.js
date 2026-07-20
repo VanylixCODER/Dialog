@@ -862,6 +862,7 @@ function enterApp() {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   socket.emit("identify", { token });
+  applyBackgroundMode(); // native Android: keep the socket alive in the background
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
@@ -898,6 +899,7 @@ socket.on("connect", () => {
 socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
 // Admin kicked this device (or ban): drop just THIS account and reload.
 socket.on("force-logout", () => {
+  if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} }
   if (profile) { const rest = getAccounts().filter((x) => x.login !== profile.login); saveAccounts(rest); if (rest[0]) localStorage.setItem("dialog_token", rest[0].token); else localStorage.removeItem("dialog_token"); }
   else localStorage.removeItem("dialog_token");
   location.reload();
@@ -1923,7 +1925,7 @@ $("profileSave") && ($("profileSave").onclick = async () => {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   closeSettings(); renderChatList($("searchInput").value);
 });
-$("logoutBtn") && ($("logoutBtn").onclick = async () => { await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
+$("logoutBtn") && ($("logoutBtn").onclick = async () => { if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Контакты / друзья ----------
 $("contactsBtn").onclick = () => openSettings("contacts");
@@ -4333,6 +4335,10 @@ function nativeIncomingCall(ctx, name, callerLogin) {
   catch (e) { return false; }
 }
 function nativeCancelIncomingCall() { if (NATIVE && NATIVE.cancelIncomingCall) { try { NATIVE.cancelIncomingCall(); } catch (e) {} } }
+// Background mode (native Android only): keep the process/socket alive while signed in so
+// messages & calls arrive off-screen. Gated by a preference (default on); no-op on web/desktop.
+function bgModeOn() { return localStorage.getItem("dialog_bg") !== "0"; }
+function applyBackgroundMode() { if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(!!token && bgModeOn()); } catch (e) {} } }
 // Native calls these back from the IncomingCallActivity buttons.
 window.__dialogCall = {
   answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },
@@ -4816,8 +4822,12 @@ async function refreshPrefsPane() {
   if ($("prefGroupAdd")) $("prefGroupAdd").checked = p.groupAdd !== false;
   if ($("prefReadReceipts")) $("prefReadReceipts").checked = p.readReceipts !== false;
   if ($("prefDmOpen")) $("prefDmOpen").checked = p.dmOpen === true;
+  // Background mode is native-only + local (no server round-trip).
+  if ($("prefBgRow")) $("prefBgRow").classList.toggle("hidden", !(NATIVE && NATIVE.keepAlive));
+  if ($("prefBgMode")) $("prefBgMode").checked = bgModeOn();
   if ($("prefMsg")) $("prefMsg").textContent = "";
 }
+$("prefBgMode") && ($("prefBgMode").onchange = (e) => { localStorage.setItem("dialog_bg", e.target.checked ? "1" : "0"); applyBackgroundMode(); });
 async function savePref(patch) {
   const { ok, data } = await api("/api/prefs", patch);
   const msg = $("prefMsg");

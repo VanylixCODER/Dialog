@@ -22,6 +22,7 @@ class NotificationHelper(private val context: Context) {
         const val CHANNEL_MESSAGES = "messages"
         const val CHANNEL_CALLS = "calls"
         const val CHANNEL_SOCIAL = "social"
+        const val CHANNEL_BG = "background"
         const val KEY_REPLY = "key_reply"
         const val INCOMING_ID = 4001
         private var idCounter = 1000
@@ -39,6 +40,11 @@ class NotificationHelper(private val context: Context) {
             )
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_SOCIAL, "Requests", NotificationManager.IMPORTANCE_HIGH)
+            )
+            // Silent, low-key channel for the "running in background" ongoing notice.
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_BG, "Background connection", NotificationManager.IMPORTANCE_MIN)
+                    .apply { setShowBadge(false); setSound(null, null); lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET }
             )
         }
     }
@@ -156,6 +162,19 @@ class NotificationHelper(private val context: Context) {
             .setContentIntent(openAppIntent(""))
             .addAction(R.drawable.ic_notification, "Mute", actionIntent(CallActionReceiver.ACTION_CALL_MUTE, ""))
             .addAction(R.drawable.ic_notification, "End", actionIntent(CallActionReceiver.ACTION_CALL_END, ""))
+            .build()
+    }
+
+    // Ongoing, minimal "running in background" notification for ConnectionService.
+    fun buildOngoingConnection(): android.app.Notification {
+        return NotificationCompat.Builder(context, CHANNEL_BG)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Dialog")
+            .setContentText("Staying connected for calls & messages")
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setContentIntent(openAppIntent(""))
             .build()
     }
 

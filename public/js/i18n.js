@@ -218,7 +218,8 @@ const I18N = {
     pref_everyone: "Everyone", pref_fof: "Friends of friends", pref_nobody: "Nobody",
     pref_group_add: "Friends can add me to groups", pref_group_add_d: "Let others add or invite you into group chats",
     pref_read_receipts: "Read receipts", pref_read_receipts_d: "Let others see when you've read their messages",
-    pref_dm_open: "Non-friends can message me", pref_dm_open_d: "When off, people who aren't your friends can't open a DM with you", dm_closed_notice: "This person only accepts messages from friends. Add them as a friend to chat.",
+    pref_dm_open: "Non-friends can message me", pref_dm_open_d: "When off, people who aren't your friends can't open a DM with you",
+    pref_bg: "Run in background", pref_bg_d: "Keep receiving messages & calls when the app is closed (uses more battery)", dm_closed_notice: "This person only accepts messages from friends. Add them as a friend to chat.",
     err_req_blocked: "This user isn't accepting friend requests.",
     // Invite limits
     invite_max_uses: "Max uses", invite_expiry_days: "Expires (days)", invite_unlimited: "∞", invite_never: "never",
@@ -476,7 +477,8 @@ const I18N = {
     pref_everyone: "Все", pref_fof: "Друзья друзей", pref_nobody: "Никто",
     pref_group_add: "Друзья могут добавлять меня в группы", pref_group_add_d: "Разрешить добавлять и приглашать вас в группы",
     pref_read_receipts: "Отчёты о прочтении", pref_read_receipts_d: "Показывать другим, что вы прочитали их сообщения",
-    pref_dm_open: "Не-друзья могут писать мне", pref_dm_open_d: "Если выключено, люди не из друзей не смогут написать вам", dm_closed_notice: "Этот пользователь принимает сообщения только от друзей. Добавьте его в друзья, чтобы написать.",
+    pref_dm_open: "Не-друзья могут писать мне", pref_dm_open_d: "Если выключено, люди не из друзей не смогут написать вам",
+    pref_bg: "Работать в фоне", pref_bg_d: "Получать сообщения и звонки, когда приложение закрыто (расходует больше батареи)", dm_closed_notice: "Этот пользователь принимает сообщения только от друзей. Добавьте его в друзья, чтобы написать.",
     err_req_blocked: "Этот пользователь не принимает заявки в друзья.",
     // Лимиты инвайтов
     invite_max_uses: "Макс. использований", invite_expiry_days: "Истекает (дней)", invite_unlimited: "∞", invite_never: "никогда",
