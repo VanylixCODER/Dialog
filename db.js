@@ -637,6 +637,30 @@ export async function haveMutualFriend(a, b) {
   );
   return !!r.length;
 }
+// Logins that are friends of BOTH a and b (the actual mutual-friend list).
+export async function mutualFriends(a, b) {
+  const r = await query(
+    "SELECT ra.target FROM relations ra JOIN relations rb ON ra.target = rb.target " +
+    "WHERE ra.login=? AND ra.type='friend' AND rb.login=? AND rb.type='friend' ORDER BY ra.target",
+    [a, b]
+  );
+  return r.map((x) => x.target);
+}
+// One query → { friendLogin: mutualCount } for every friend of `me`. Counts how many
+// of me's friends each of my friends also has as a friend (excluding me/them).
+export async function mutualCounts(me) {
+  const r = await query(
+    "SELECT rb.login AS friend, COUNT(*) AS n " +
+    "FROM relations ra " +                                   // ra: me -> my friends (the mutuals)
+    "JOIN relations rb ON rb.target = ra.target " +          // rb: someone -> that mutual
+    "JOIN relations rme ON rme.login=? AND rme.type='friend' AND rme.target = rb.login " + // rb.login must also be my friend
+    "WHERE ra.login=? AND ra.type='friend' AND rb.type='friend' AND rb.login <> ? AND ra.target <> rb.login " +
+    "GROUP BY rb.login",
+    [me, me, me]
+  );
+  const out = {}; for (const row of r) out[row.friend] = Number(row.n);
+  return out;
+}
 
 // ---------- Privacy preferences ----------
 export async function getPrefs(login) {

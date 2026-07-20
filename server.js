@@ -40,7 +40,7 @@ import {
   createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
   queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
-  sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend,
+  sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend, mutualFriends, mutualCounts,
   getPrefs, setPrefs, bumpInviteUse,
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
@@ -880,6 +880,18 @@ app.post("/api/friend", async (req, res) => {
   else return res.status(400).json({ error: "bad action" });
   notifyUser(target, "relations-changed", {}); notifyUser(me.login, "relations-changed", {});
   res.json({ ok: true });
+});
+
+// Mutual friends: a per-contact list, and a one-shot map of counts for all my friends.
+app.get("/api/mutual/:login", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  try { res.json({ ok: true, mutual: await mutualFriends(me.login, String(req.params.login).toLowerCase()) }); }
+  catch (e) { console.error("mutual", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.get("/api/mutuals", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  try { res.json({ ok: true, counts: await mutualCounts(me.login) }); }
+  catch (e) { console.error("mutuals", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: DM синхронизация ----------
