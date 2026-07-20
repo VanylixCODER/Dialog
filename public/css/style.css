@@ -4683,3 +4683,25 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .c-mutual svg { width: 13px; height: 13px; opacity: 0.8; }
 .mp-mutual { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
 .mp-mutual .mpm-ico svg { width: 15px; height: 15px; vertical-align: -3px; opacity: 0.85; }
+
+/* Media download / fullscreen overlay on image & video bubbles */
+.bubble.media { position: relative; }
+.media-ov { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--t-fast) var(--ease); pointer-events: none; }
+.bubble.media:hover .media-ov, .media-ov:focus-within { opacity: 1; pointer-events: auto; }
+.media-btn {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0; cursor: pointer;
+  border-radius: 9px; border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.55); color: #fff; backdrop-filter: blur(6px);
+}
+.media-btn:hover { background: rgba(0,0,0,0.78); border-color: var(--accent-400); color: var(--accent-300); }
+.media-btn svg { width: 16px; height: 16px; }
+/* Touch: no hover, so keep the buttons visible. */
+@media (hover: none) { .media-ov { opacity: 1; pointer-events: auto; } .media-btn { width: 38px; height: 38px; } }
+
+/* Lightbox top bar (name + download + close) */
+.lb-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent); }
+.lb-name { flex: 1; min-width: 0; color: #fff; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+.lb-btn { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.4); color: #fff; cursor: pointer; text-decoration: none; }
+.lb-btn:hover { background: rgba(0,0,0,0.7); border-color: var(--accent-400); color: var(--accent-300); }
+.lb-btn svg { width: 20px; height: 20px; }
+.lightbox video.lb-media { max-width: 92vw; max-height: 84vh; border-radius: 6px; background: #000; }

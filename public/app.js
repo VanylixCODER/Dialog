@@ -2527,8 +2527,8 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   } else {
     if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
     if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
-    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="" loading="lazy" decoding="async"></div>`;
-    else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls preload="none"></video></div>`;
+    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div></div>`;
+    else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div></div>`;
     else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}" preload="none"></audio></div>`;
     else if (m.type === "file") {
       const safeName = escapeHtml(m.mediaName || t("file_untitled"));
@@ -2614,8 +2614,17 @@ messagesEl.addEventListener("click", (e) => {
   const eb = e.target.closest(".ma-edit"); if (eb) { startEdit(eb.closest(".msg")); return; }
   const db = e.target.closest(".ma-del"); if (db) { const w = db.closest(".msg"); if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id: Number(w.dataset.id) }); return; }
   const bl = e.target.closest(".msg.blocked:not(.revealed)"); if (bl) { bl.classList.add("revealed"); return; }
-  const img = e.target.closest(".bubble.media img"); if (img) openLightbox(img.src);
+  // Media overlay buttons (download / fullscreen) — check before the plain image click.
+  const dlb = e.target.closest(".media-dl");
+  if (dlb) { const mediaEl = dlb.closest(".bubble.media")?.querySelector("img,video"); if (mediaEl) downloadMedia(mediaEl.currentSrc || mediaEl.src, dlb.dataset.name || "file"); return; }
+  const exp = e.target.closest(".media-expand");
+  if (exp) { const v = exp.closest(".bubble.media")?.querySelector("video"); if (v) openLightbox(v.currentSrc || v.src, exp.dataset.name || "video.mp4", true); return; }
+  const img = e.target.closest(".bubble.media img"); if (img) { openLightbox(img.src, "image.png", false); return; }
 });
+function downloadMedia(src, name) {
+  const a = document.createElement("a"); a.href = src; a.download = name || "file";
+  document.body.appendChild(a); a.click(); a.remove();
+}
 // ---------- Message right-click menu ----------
 let msgMenu;
 function openMsgMenu(e, wrap) {
@@ -3103,17 +3112,42 @@ $("spSend") && ($("spSend").onclick = sendPending);
 $("spDiscard") && ($("spDiscard").onclick = clearPending);
 
 // Лайтбокс
-const lb = $("lightbox"), lbImg = $("lightboxImg");
+const lb = $("lightbox"), lbImg = $("lightboxImg"), lbVid = $("lightboxVid");
 let lbScale = 1, lbX = 0, lbY = 0, lbDrag = null;
 const applyLb = () => { lbImg.style.transform = `translate(${lbX}px,${lbY}px) scale(${lbScale})`; };
-function openLightbox(src) { lbImg.src = src; lbScale = 1; lbX = lbY = 0; applyLb(); lb.classList.remove("hidden"); }
-function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; }
-lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+// Open an image OR a video in the viewer. `name` sets the download filename.
+function openLightbox(src, name, isVideo) {
+  lbScale = 1; lbX = lbY = 0; applyLb();
+  lbImg.classList.toggle("hidden", !!isVideo);
+  lbVid.classList.toggle("hidden", !isVideo);
+  if (isVideo) { lbImg.src = ""; lbVid.src = src; } else { lbVid.pause(); lbVid.removeAttribute("src"); lbImg.src = src; }
+  const dl = $("lbDownload"); if (dl) { dl.href = src; dl.download = name || (isVideo ? "video" : "image"); }
+  const nm = $("lbName"); if (nm) nm.textContent = name || "";
+  lb.classList.remove("hidden");
+}
+function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; try { lbVid.pause(); } catch {} lbVid.removeAttribute("src"); }
+$("lbClose") && ($("lbClose").onclick = closeLightbox);
+$("lbDownload") && $("lbDownload").querySelector && ($("lbDownload").innerHTML = window.ICON.download || "⬇");
+$("lbClose") && ($("lbClose").innerHTML = window.ICON.close || "✕");
+lb.addEventListener("click", (e) => { if (e.target === lb || e.target.classList.contains("lb-bar")) closeLightbox(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !lb.classList.contains("hidden")) closeLightbox(); });
 lbImg.addEventListener("wheel", (e) => { e.preventDefault(); lbScale = Math.min(8, Math.max(1, lbScale + (e.deltaY < 0 ? 0.25 : -0.25))); if (lbScale === 1) { lbX = lbY = 0; } applyLb(); }, { passive: false });
-lbImg.addEventListener("pointerdown", (e) => { if (lbScale <= 1) return; lbDrag = { x: e.clientX - lbX, y: e.clientY - lbY }; lbImg.setPointerCapture(e.pointerId); });
-lbImg.addEventListener("pointermove", (e) => { if (!lbDrag) return; lbX = e.clientX - lbDrag.x; lbY = e.clientY - lbDrag.y; applyLb(); });
-lbImg.addEventListener("pointerup", () => (lbDrag = null));
+// Double-tap / double-click toggles 1x <-> 2.5x zoom.
+lbImg.addEventListener("dblclick", () => { lbScale = lbScale > 1 ? 1 : 2.5; if (lbScale === 1) lbX = lbY = 0; applyLb(); });
+// Pointer drag (when zoomed) + two-finger pinch-zoom for touch.
+const lbPts = new Map(); let lbPinch = null;
+lbImg.addEventListener("pointerdown", (e) => {
+  lbImg.setPointerCapture(e.pointerId); lbPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (lbPts.size === 2) { const [a, b] = [...lbPts.values()]; lbPinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: lbScale }; }
+  else if (lbScale > 1) lbDrag = { x: e.clientX - lbX, y: e.clientY - lbY };
+});
+lbImg.addEventListener("pointermove", (e) => {
+  if (lbPts.has(e.pointerId)) lbPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (lbPinch && lbPts.size === 2) { const [a, b] = [...lbPts.values()]; lbScale = Math.min(8, Math.max(1, lbPinch.s * Math.hypot(a.x - b.x, a.y - b.y) / lbPinch.d)); if (lbScale === 1) lbX = lbY = 0; applyLb(); }
+  else if (lbDrag) { lbX = e.clientX - lbDrag.x; lbY = e.clientY - lbDrag.y; applyLb(); }
+});
+const lbUp = (e) => { lbPts.delete(e.pointerId); if (lbPts.size < 2) lbPinch = null; if (!lbPts.size) lbDrag = null; };
+lbImg.addEventListener("pointerup", lbUp); lbImg.addEventListener("pointercancel", lbUp);
 
 // ---------- Эмодзи-пикер ----------
 const picker = $("emojiPicker");

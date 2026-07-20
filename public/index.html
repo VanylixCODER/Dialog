@@ -767,8 +767,14 @@
 
   <!-- Лайтбокс -->
   <div id="lightbox" class="lightbox hidden">
-    <img id="lightboxImg" alt="" draggable="false" />
-    <div class="lightbox-hint" data-i18n="lb_hint">scroll = zoom · drag = move · Esc = close</div>
+    <div class="lb-bar">
+      <span id="lbName" class="lb-name"></span>
+      <a id="lbDownload" class="lb-btn" download title="Download" aria-label="Download"></a>
+      <button id="lbClose" class="lb-btn" title="Close" aria-label="Close"></button>
+    </div>
+    <img id="lightboxImg" class="lb-media" alt="" draggable="false" />
+    <video id="lightboxVid" class="lb-media hidden" controls playsinline preload="metadata"></video>
+    <div class="lightbox-hint" data-i18n="lb_hint">scroll / pinch = zoom · drag = move · Esc = close</div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
