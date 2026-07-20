@@ -45,41 +45,56 @@ jobs:
           echo "$GS_B64" | base64 -d > android/app/google-services.json
           echo "wrote android/app/google-services.json ($(wc -c < android/app/google-services.json) bytes)"
 
+      # The PERMANENT Play upload key. Play binds the app to one upload certificate
+      # forever, so this must never be regenerated (previously CI made a throwaway key
+      # each run, which would have made every post-launch update rejectable).
       - name: Prepare signing keystore
         id: ks
+        env:
+          KS_B64: ${{ secrets.DIALOG_KEYSTORE_B64 }}
         run: |
-          KS="$RUNNER_TEMP/dialog.keystore"
-          keytool -genkeypair -v -keystore "$KS" -storepass dialog123 \
-            -keypass dialog123 -alias dialog -keyalg RSA -keysize 2048 \
-            -validity 10000 -dname "CN=Dialog, O=Dialog, C=US"
+          if [ -z "$KS_B64" ]; then
+            echo "::error::DIALOG_KEYSTORE_B64 secret missing — refusing to build with a throwaway key."
+            exit 1
+          fi
+          KS="$RUNNER_TEMP/upload-keystore.jks"
+          echo "$KS_B64" | base64 -d > "$KS"
           echo "path=$KS" >> "$GITHUB_OUTPUT"
 
-      - name: Build release APK
+      # APK for direct download/sideload + AAB for the Play Store (Play requires .aab).
+      - name: Build release APK + AAB
         working-directory: android
         env:
           DIALOG_KEYSTORE: ${{ steps.ks.outputs.path }}
-          DIALOG_KS_PASS: dialog123
-          DIALOG_KEY_ALIAS: dialog
-          DIALOG_KEY_PASS: dialog123
+          DIALOG_KS_PASS: ${{ secrets.DIALOG_KS_PASS }}
+          DIALOG_KEY_ALIAS: ${{ secrets.DIALOG_KEY_ALIAS }}
+          DIALOG_KEY_PASS: ${{ secrets.DIALOG_KEY_PASS }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon assembleRelease bundleRelease
 
-      - name: Stage APK
+      - name: Stage APK + AAB
         id: stage
         run: |
           VER=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           mkdir -p out
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          echo "Built: $APK (v$VER)"
           cp "$APK" "out/Dialog-${VER}.apk"
+          AAB=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -1)
+          cp "$AAB" "out/Dialog-${VER}.aab"
+          echo "Built APK: $APK"
+          echo "Built AAB: $AAB (upload THIS to Play Console)"
 
       - uses: actions/upload-artifact@v4
         with:
           name: dialog-android
-          path: out/*.apk
+          path: |
+            out/*.apk
+            out/*.aab
 
+      # Only the APK goes on the public release (sideload). The AAB stays a build
+      # artifact — it's for uploading to Play Console, not for end users.
       - name: Attach APK to the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
