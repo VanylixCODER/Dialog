@@ -4746,3 +4746,70 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .gs-body .gs-danger:hover { background: rgba(255,82,82,0.12); border-color: var(--danger); }
 .gs-card .contacts-list { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 560px) { .gs-actions { flex-direction: column; } .gs-actions .btn-primary, .gs-actions .btn-ghost { width: 100%; } }
+
+/* ============================================================================
+   Small phones. Breakpoints previously stopped at 560px, so 360–430px devices
+   (most Androids, iPhone SE/mini) got desktop-ish sizing and overflowed:
+   the chat header packs 6 icon buttons + avatar, and the call pill is nowrap
+   with ~6 × 52px buttons (~366px — wider than a 360px screen).
+   Specificity note: several base rules are id-scoped (#callStage …), so these
+   overrides match that specificity deliberately.
+   ========================================================================= */
+@media (max-width: 430px) {
+  /* No accidental horizontal scroll anywhere. */
+  html, body { max-width: 100%; overflow-x: hidden; }
+
+  /* --- Chat header: shrink chrome so the name keeps readable room --- */
+  .chat-head { padding-left: 6px; padding-right: 6px; gap: 4px; }
+  .chat-head .avatar.ch-ava { width: 38px; height: 38px; border-radius: 11px; font-size: 15px; }
+  .chat-head .hicon-btn { width: 32px; height: 32px; }
+  .chat-head .hicon-btn svg { width: 17px; height: 17px; }
+  .chat-title { font-size: 14px; }
+  .chat-sub, .typing { font-size: 10px; }
+
+  /* --- Messages: use the narrow width properly --- */
+  .messages, .composer { padding-left: 10px; padding-right: 10px; }
+  .msg { max-width: 88%; }
+  .msg .bubble { padding: 8px 11px; }
+
+  /* --- Composer: input stays dominant --- */
+  .composer { gap: 5px; }
+  .composer .icon-btn { width: 36px; height: 36px; }
+  .composer .icon-btn svg { width: 18px; height: 18px; }
+
+  /* --- Chat list rows --- */
+  .chat-item { padding: 8px 8px 8px 10px; gap: 9px; }
+  .chat-item .avatar { width: 40px; height: 40px; }
+
+  /* --- Call pill: shrink so ~6 controls fit, and never clip if they don't --- */
+  #callStage .call-actions { gap: 5px; padding: 8px 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 20px); }
+  #callStage .call-actions::-webkit-scrollbar { display: none; }
+  #callStage .call-btn, #callStage .call-btn.end { width: 44px; height: 44px; flex: 0 0 auto; }
+  #callStage .call-btn svg { width: 19px; height: 19px; }
+
+  /* --- Overlays / panels --- */
+  .settings-card { width: 100vw; border-radius: 14px 14px 0 0; }
+  .settings-panes { padding-left: 11px; padding-right: 11px; }
+  .mp-card, .modal-card { width: calc(100vw - 20px); }
+  .cont-subtabs .settings-subtab { padding: 8px 5px; font-size: 11px; }
+  .c-icon-btn { width: 36px; height: 36px; }
+}
+
+@media (max-width: 360px) {
+  .chat-head .avatar.ch-ava { width: 34px; height: 34px; font-size: 14px; }
+  .chat-head .hicon-btn { width: 29px; height: 29px; }
+  .chat-head .hicon-btn svg { width: 16px; height: 16px; }
+  .chat-title { font-size: 13.5px; }
+  .msg { max-width: 92%; }
+  #callStage .call-btn, #callStage .call-btn.end { width: 40px; height: 40px; }
+  #callStage .call-btn svg { width: 18px; height: 18px; }
+  .composer .icon-btn { width: 34px; height: 34px; }
+  .cs-count { display: none; } /* counts stop fitting next to the tab labels */
+}
+
+/* Short screens (landscape phones): don't let fixed vertical chrome eat the view. */
+@media (max-height: 480px) and (max-width: 900px) {
+  .ci-ava { width: 84px; height: 84px; font-size: 34px; }
+  .ci-actions { margin-top: 18px; gap: 28px; }
+  .settings-card { height: 96dvh; }
+}
