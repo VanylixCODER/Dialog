@@ -81,8 +81,6 @@
   <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="app hidden">
     <aside class="chatlist">
-      <button class="cl-collapse" id="clCollapse" data-i18n-title="collapse_list" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
-      <div class="cl-resizer" id="clResizer" title="Drag to resize"></div>
       <div class="cl-pinzone" id="clPinzone">📌 <span data-i18n="drop_to_pin">Drop to pin</span></div>
       <div class="cl-head">
         <div class="avatar me-trigger" id="myAvatar" tabindex="0" role="button" data-i18n-title="open_profile" title="Open profile" aria-label="Open profile">?</div>
@@ -110,6 +108,13 @@
         <div data-i18n="no_chats">No chats yet</div>
         <button id="emptyNewGroup" class="btn-primary" data-i18n="btn_new_group">Create group</button>
         <button id="emptyAddFriend" class="btn-ghost" data-i18n="add_friend">Add friend</button>
+      </div>
+      <div class="cl-foot" id="clFoot">
+        <button class="cl-min" id="clCollapse" type="button" data-i18n-title="minimize" title="Minimize">
+          <svg class="cl-min-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <span class="cl-min-txt" data-i18n="minimize">Minimize</span>
+        </button>
+        <div class="cl-resizer" id="clResizer" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-title="resize_list" title="Drag to resize width"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18-3-3 3-3"/><path d="m15 18 3-3-3-3"/></svg></div>
       </div>
     </aside>
 

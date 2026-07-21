@@ -4839,37 +4839,58 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .app { transition: --cl-w 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
 .app.cl-resizing { transition: none; }   /* follow the pointer 1:1 while dragging the handle */
 
-/* Collapse toggle + resize handle live on the chat list. */
+/* Minimize + resize controls live in a bottom bar (.cl-foot). */
 .chatlist { position: relative; }
-.cl-collapse { position: absolute; z-index: 6; top: 12px; right: 8px; width: 26px; height: 26px;
-  display: grid; place-items: center; border: none; background: transparent; color: var(--text-dim);
-  cursor: pointer; border-radius: var(--r-2); transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
-.cl-collapse:hover { color: var(--accent-300); background: var(--accent-faint); }
-.cl-collapse svg { width: 17px; height: 17px; transition: transform 0.3s var(--ease); }
-.app.cl-collapsed .cl-collapse svg { transform: rotate(180deg); }
-.cl-resizer { position: absolute; z-index: 6; top: 0; right: -3px; width: 8px; height: 100%; cursor: col-resize; }
-.cl-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px;
-  background: transparent; transition: background var(--t-fast) var(--ease); }
-.cl-resizer:hover::after, .cl-resizer.active::after { background: var(--accent-400); }
-.app.cl-collapsed .cl-resizer { display: none; }
+.cl-foot { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-top: 1px solid var(--border-1);
+  background: linear-gradient(0deg, rgba(var(--primary-rgb), 0.05), transparent); }
+.cl-min { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 10px; border: none; border-radius: var(--r-2);
+  background: transparent; color: var(--text-dim); cursor: pointer; font: inherit; font-weight: 600;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.cl-min:hover { color: var(--accent-200); background: var(--accent-faint); }
+.cl-min-ico { width: 18px; height: 18px; flex: none; transition: transform 0.3s var(--ease); }
+.app.cl-collapsed .cl-min-ico { transform: rotate(180deg); }   /* points right = maximize */
+.cl-min-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.cl-resizer { display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  border-radius: var(--r-2); color: var(--text-dim); cursor: ew-resize; touch-action: none;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.cl-resizer svg { width: 18px; height: 18px; }
+.cl-resizer:hover, .cl-resizer.active { color: var(--accent-200); background: var(--accent-faint); }
 
-/* ---- Collapsed rail: only avatars ---- */
-.app.cl-collapsed .cl-search,
-.app.cl-collapsed .cl-filters,
-.app.cl-collapsed .me-name-wrap,
-.app.cl-collapsed .cl-head .hicon-btn:not(.cl-keep),
-.app.cl-collapsed .ci-body,
-.app.cl-collapsed .voice-bar .vb-info,
-.app.cl-collapsed .chats-empty { display: none; }
-.app.cl-collapsed .cl-head { justify-content: center; padding: 12px 0; }
-.app.cl-collapsed .chat-item { justify-content: center; padding: 8px 0; gap: 0; }
-.app.cl-collapsed .chat-item .ava-wrap { margin: 0; }
-.app.cl-collapsed .chats { padding: 4px 0; overflow-x: hidden; }
-.app.cl-collapsed .chat-item.pinned::before { content: ""; position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 20px; border-radius: 3px; background: var(--accent-400); }
-/* unread as a small corner dot on the avatar when collapsed */
-.app.cl-collapsed .chat-item .badge { position: absolute; top: -2px; right: -2px; min-width: 9px; height: 9px;
-  padding: 0; font-size: 0; border-radius: 50%; }
+/* ---- Minimize animation: chat-name text fades + drifts down, avatar slides to center ---- */
+.ci-body { max-width: 640px; transition: opacity 0.22s var(--ease), transform 0.22s var(--ease),
+  max-width 0.28s var(--ease), margin 0.28s var(--ease); }
+.app.cl-collapsed .ci-body { opacity: 0; transform: translateY(12px); max-width: 0; margin: 0; overflow: hidden; }
+
+/* ---- Collapsed rail: avatars only, but the top header stays full-width (floats over the chat) ---- */
+@media (min-width: 721px) {
+  .app.cl-collapsed .chatlist { overflow: visible; z-index: 30; }  /* let the full header spill right, above the chat's isolate context */
+  .app.cl-collapsed .cl-head {                                     /* stays full-width, floats over the chat pane */
+    width: var(--cl-full, 340px); z-index: 40;
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border-right: 1px solid var(--border-1); }
+  .app.cl-collapsed .chat-head {                                   /* push partner name/avatar clear of the floating header */
+    padding-left: calc(var(--cl-full, 340px) - var(--cl-w) + 20px); }
+  .app.cl-collapsed .cl-search,
+  .app.cl-collapsed .cl-filters,
+  .app.cl-collapsed .voice-bar .vb-info,
+  .app.cl-collapsed .cl-min-txt,
+  .app.cl-collapsed .cl-resizer,
+  .app.cl-collapsed .chats-empty { display: none; }
+  .app.cl-collapsed .cl-min { flex: none; width: 100%; justify-content: center; }
+  .app.cl-collapsed .chat-item { justify-content: center; padding: 8px 0; gap: 0; }
+  .app.cl-collapsed .chat-item .ava-wrap { margin: 0; }
+  .app.cl-collapsed .chats { padding: 4px 0; overflow-x: hidden; }
+  .app.cl-collapsed .chat-item.pinned::before { content: ""; position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 20px; border-radius: 3px; background: var(--accent-400); }
+  /* unread as a small corner dot on the avatar when collapsed */
+  .app.cl-collapsed .chat-item .badge { position: absolute; top: -2px; right: -2px; min-width: 9px; height: 9px;
+    padding: 0; font-size: 0; border-radius: 50%; }
+}
+
+/* Bottom bar is a desktop control — the phone list is full-screen, nothing to minimize/resize. */
+@media (max-width: 720px) { .cl-foot { display: none; } }
 
 /* ---- Mobile: no inline pin button — pin lives in the long-press menu ---- */
 @media (max-width: 720px) { .ci-pin { display: none !important; } }
