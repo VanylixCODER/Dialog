@@ -78,6 +78,10 @@ function buildMenu() {
       }
     },
     {
+      label: "Reload Dialog",
+      click: () => { if (ctx.onReload) ctx.onReload(); }
+    },
+    {
       label: "Check for updates",
       click: () => {
         try {

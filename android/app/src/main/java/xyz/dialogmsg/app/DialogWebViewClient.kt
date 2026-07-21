@@ -3,6 +3,7 @@ package xyz.dialogmsg.app
 import android.graphics.Bitmap
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
@@ -59,12 +60,30 @@ class DialogWebViewClient(
         onPageFinished()
     }
 
+    private val ERROR_PAGE = "file:///android_asset/error.html"
+
     override fun onReceivedError(
         view: WebView,
         request: WebResourceRequest,
         error: WebResourceError
     ) {
-        // Only react to main-frame failures.
-        if (request.isForMainFrame) onError()
+        // Only react to main-frame failures. Show our themed offline page instead of the
+        // stock Android WebView "webpage not available" screen.
+        if (request.isForMainFrame) {
+            onError()
+            if (view.url != ERROR_PAGE) view.loadUrl(ERROR_PAGE)
+        }
+    }
+
+    // Server-side errors on the main document (5xx) → same themed page. 4xx is skipped:
+    // the SPA fallback returns 200 for unknown paths, so a 4xx here is genuinely broken.
+    override fun onReceivedHttpError(
+        view: WebView,
+        request: WebResourceRequest,
+        errorResponse: WebResourceResponse
+    ) {
+        if (request.isForMainFrame && errorResponse.statusCode >= 500 && view.url != ERROR_PAGE) {
+            view.loadUrl(ERROR_PAGE)
+        }
     }
 }

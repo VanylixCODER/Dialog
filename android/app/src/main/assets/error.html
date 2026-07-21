@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Dialog</title>
+  <style>
+    :root { --green: #00ff5a; }
+    * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+    html, body { margin: 0; height: 100%; background: #000700; color: #d6ffe4;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; padding: 32px 26px; text-align: center; }
+    .logo { width: 64px; height: 64px; filter: drop-shadow(0 0 14px var(--green)); }
+    h1 { margin: 4px 0 0; font-size: 20px; letter-spacing: 1px; }
+    p { margin: 0; color: #6f8f7d; font-size: 14px; line-height: 1.6; max-width: 300px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid rgba(0,255,90,0.15);
+      border-top-color: var(--green); border-radius: 50%; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    button { margin-top: 6px; appearance: none; border: 1px solid var(--green); background: transparent;
+      color: var(--green); font-size: 15px; font-weight: 700; padding: 12px 28px; border-radius: 10px; cursor: pointer; }
+    button:active { background: rgba(0,255,90,0.12); }
+    .status { font-size: 12px; color: #4a6a58; letter-spacing: 1px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="lil_dialog.webp" alt="" onerror="this.style.display='none'" />
+  <div class="spinner" id="spin"></div>
+  <h1>Can't reach Dialog</h1>
+  <p>You appear to be offline. We'll reconnect automatically the moment you're back.</p>
+  <button onclick="retry()">Try again</button>
+  <div class="status" id="status">reconnecting…</div>
+
+  <script>
+    var APP = "https://dialogmsg.xyz/login";
+    function retry() { document.getElementById("status").textContent = "connecting…"; location.href = APP; }
+    // Auto-reconnect: when the device reports it's back online, jump straight back in.
+    window.addEventListener("online", retry);
+    // Also poll — `online` can be unreliable in a WebView. Every 4s, if online, retry.
+    setInterval(function () { if (navigator.onLine) retry(); }, 4000);
+  </script>
+</body>
+</html>
