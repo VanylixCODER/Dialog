@@ -4813,3 +4813,19 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
   .ci-actions { margin-top: 18px; gap: 28px; }
   .settings-card { height: 96dvh; }
 }
+
+/* Audio-output picker (call bar → speaker button) */
+.audio-menu {
+  position: fixed; z-index: 60; min-width: 168px; padding: 6px;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: var(--r-3);
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 2px;
+  animation: paneSwap var(--t-fast) var(--ease);
+}
+.audio-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; border: none; background: transparent; border-radius: var(--r-2);
+  cursor: pointer; color: var(--text); font-size: 14px; font-weight: 600;
+}
+.audio-menu button:hover { background: var(--accent-faint); }
+.audio-menu button.sel { color: var(--accent-200); background: var(--accent-faint); }
+.audio-menu button svg { width: 18px; height: 18px; flex: none; }

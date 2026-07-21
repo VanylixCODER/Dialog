@@ -3945,22 +3945,40 @@ function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(cal
 // Mobile browsers don't implement setSinkId, so routing is only actually possible
 // through the native Android bridge. We show the button when that bridge exposes
 // setSpeaker(); otherwise (desktop) the mic dropdown's speaker picker already covers it.
-let speakerOn = localStorage.getItem("dialog_speaker") !== "0";
+// Default EARPIECE (like a phone call) — the loudspeaker is opt-in via the dropdown.
+let speakerOn = localStorage.getItem("dialog_speaker") === "1";
 const nativeAudio = () => { try { return window.Android && typeof window.Android.setSpeaker === "function" ? window.Android : null; } catch (e) { return null; } };
 function applySpeaker() {
   const btn = $("toggleSpeaker"); if (!btn) return;
   const na = nativeAudio();
-  btn.classList.toggle("hidden", !na);           // no native routing → no button
+  btn.classList.toggle("hidden", !na);           // no native routing → no button (desktop uses the mic dropdown)
   if (!na) return;
-  btn.classList.toggle("off", !speakerOn);
+  btn.classList.toggle("off", !speakerOn);       // "off" look = earpiece
   btn.innerHTML = speakerOn ? window.ICON.speaker : window.ICON.earpiece;
-  const tip = t(speakerOn ? "t_speaker_on" : "t_speaker_off");
+  const tip = t("audio_output");
   btn.title = tip; btn.setAttribute("data-tip", tip);
   try { na.setSpeaker(speakerOn); } catch (e) {}
 }
-$("toggleSpeaker") && ($("toggleSpeaker").onclick = () => {
-  speakerOn = !speakerOn; localStorage.setItem("dialog_speaker", speakerOn ? "1" : "0"); applySpeaker();
+function setAudioOut(on) {
+  speakerOn = on; localStorage.setItem("dialog_speaker", on ? "1" : "0"); applySpeaker();
+  const m = $("speakerMenu"); if (m) m.classList.add("hidden");
+}
+// Tap the output button → a small "choose output" menu (earpiece / speaker), highlighting
+// the current one. Clearer than a blind toggle.
+$("toggleSpeaker") && ($("toggleSpeaker").onclick = (e) => {
+  e.stopPropagation();
+  let menu = $("speakerMenu");
+  if (!menu) { menu = document.createElement("div"); menu.id = "speakerMenu"; menu.className = "audio-menu hidden"; document.body.appendChild(menu); }
+  menu.innerHTML =
+    `<button data-spk="0" class="${!speakerOn ? "sel" : ""}">${window.ICON.earpiece}<span>${t("out_earpiece")}</span></button>` +
+    `<button data-spk="1" class="${speakerOn ? "sel" : ""}">${window.ICON.speaker}<span>${t("out_speaker")}</span></button>`;
+  menu.querySelectorAll("button").forEach((b) => (b.onclick = () => setAudioOut(b.dataset.spk === "1")));
+  const r = $("toggleSpeaker").getBoundingClientRect();
+  menu.classList.remove("hidden");
+  menu.style.left = Math.max(8, Math.min(r.left - 40, innerWidth - 180)) + "px";
+  menu.style.bottom = (innerHeight - r.top + 10) + "px";
 });
+document.addEventListener("click", (e) => { const m = $("speakerMenu"); const b = $("toggleSpeaker"); if (m && !m.contains(e.target) && b && !b.contains(e.target)) m.classList.add("hidden"); });
 async function populateDevices() {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -4338,7 +4356,9 @@ function nativeIncomingCall(ctx, name, callerLogin) {
 function nativeCancelIncomingCall() { if (NATIVE && NATIVE.cancelIncomingCall) { try { NATIVE.cancelIncomingCall(); } catch (e) {} } }
 // Background mode (native Android only): keep the process/socket alive while signed in so
 // messages & calls arrive off-screen. Gated by a preference (default on); no-op on web/desktop.
-function bgModeOn() { return localStorage.getItem("dialog_bg") !== "0"; }
+// Default OFF now that FCM push delivers messages/calls when the app is closed — so no
+// persistent "app is running" notification unless the user explicitly opts in.
+function bgModeOn() { return localStorage.getItem("dialog_bg") === "1"; }
 function applyBackgroundMode() { if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(!!token && bgModeOn()); } catch (e) {} } }
 // FCM push (native Android): the app delivers its device token here; we register it
 // with the server so it can push messages/calls even when the app is fully closed.
@@ -5040,6 +5060,35 @@ window.addEventListener("langchange", () => setTimeout(fitAllTabInds, 40));
 // ---------- Старт ----------
 loadSavedTheme(); refreshOnAccent(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
 window.addEventListener("popstate", onPopState);
+
+// Contextual "back" for the native Android app. The router pushes a history entry per
+// opened chat, so the WebView's own back button walked BACK through chats ("by link, not
+// action"). Native now calls this instead of WebView.goBack(): it closes the topmost
+// overlay, or exits a chat to the list, and returns false only when there's nothing left
+// to dismiss (native then backgrounds the app). Returns a boolean → read by evaluateJavascript.
+window.dialogOnBack = function () {
+  const vis = (id) => { const el = $(id); return el && !el.classList.contains("hidden") ? el : null; };
+  // 1. Full-screen viewers.
+  if (vis("lightbox")) { closeLightbox(); return true; }
+  if (vis("miniAppOverlay")) { closeMiniApp(); return true; }
+  // 2. Modals / dialogs.
+  for (const id of ["reportModal", "deleteChatModal", "createGroupModal", "screenModal", "mpModal"]) {
+    if (vis(id)) { $(id).classList.add("hidden"); return true; }
+  }
+  // 3. Settings sheet.
+  if (typeof settingsOpen !== "undefined" && settingsOpen) { closeSettings(); return true; }
+  // 4. Popovers / menus / pickers.
+  for (const id of ["emojiPicker", "gifPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
+    if (vis(id)) { $(id).classList.add("hidden"); return true; }
+  }
+  const rp = document.querySelector(".react-picker:not(.hidden)"); if (rp) { rp.classList.add("hidden"); return true; }
+  // 5. Mobile members/info panel.
+  if (isMobile() && vis("infoPanel")) { $("infoPanel").classList.add("hidden"); return true; }
+  // 6. Inside a chat on mobile → back to the chat list (not the previous chat).
+  if ($("app").classList.contains("in-chat")) { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); return true; }
+  // 7. Nothing to dismiss → let native background the app.
+  return false;
+};
 
 // ---------- PWA Install ----------
 let deferredPrompt = null;
