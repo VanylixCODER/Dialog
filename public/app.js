@@ -1233,21 +1233,30 @@ function applyChatListChrome() {
 $("clCollapse") && ($("clCollapse").onclick = () => {
   clCollapsed = !clCollapsed; localStorage.setItem("dialog_cl_collapsed", clCollapsed ? "1" : "0"); applyChatListChrome();
 });
-(function () {                                                          // resize grip (bottom bar → drag left/right)
+(function () {                                                          // drag the divider between list ↔ chat to resize
   const rz = $("clResizer"), app = $("app"); if (!rz || !app) return;
-  let sx = 0, sw = 0, dragging = false;
+  let dragging = false;
   rz.addEventListener("pointerdown", (e) => {
-    if (clCollapsed) return; dragging = true; sx = e.clientX; sw = clW;
+    if (clCollapsed) return; dragging = true;
     rz.classList.add("active"); app.classList.add("cl-resizing");
     try { rz.setPointerCapture(e.pointerId); } catch {} e.preventDefault();
   });
   rz.addEventListener("pointermove", (e) => {
-    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(sw + (e.clientX - sx))));
+    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(e.clientX)));  // seam follows the cursor
     app.style.setProperty("--cl-w", clW + "px"); app.style.setProperty("--cl-full", clW + "px");
   });
   const stop = () => { if (!dragging) return; dragging = false; rz.classList.remove("active"); app.classList.remove("cl-resizing"); localStorage.setItem("dialog_cl_w", String(clW)); };
   rz.addEventListener("pointerup", stop); rz.addEventListener("pointercancel", stop);
 })();
+
+// Ctrl/Cmd+R reloads Dialog everywhere — including the desktop app, whose menu (and its
+// default reload accelerator) is stripped for lockdown. Leave Shift+R (hard reload) alone.
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "r" || e.key === "R")) {
+    e.preventDefault();
+    location.reload();
+  }
+});
 
 // Drag a chat row to reorder; drop in the top zone to pin; drop out of bounds → springs back.
 // Mouse/pen only (touch keeps native scroll + long-press menu).
