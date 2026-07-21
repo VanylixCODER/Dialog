@@ -474,8 +474,9 @@ a:focus-visible {
 .lang-row > span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
 
 /* ============ App grid (Telegram-style) ============ */
-.app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
-.app:has(#infoPanel:not(.hidden)) { grid-template-columns: 340px 1fr 280px; }
+.app { display: grid; grid-template-columns: var(--cl-w, 340px) 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
+.app:has(#infoPanel:not(.hidden)) { grid-template-columns: var(--cl-w, 340px) 1fr 280px; }
+.app.cl-collapsed { --cl-w: 76px; }
 
 .chatlist {
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
@@ -4829,3 +4830,63 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .audio-menu button:hover { background: var(--accent-faint); }
 .audio-menu button.sel { color: var(--accent-200); background: var(--accent-faint); }
 .audio-menu button svg { width: 18px; height: 18px; flex: none; }
+
+/* ============================================================================
+   Chat list: collapsible avatar rail, resizable width, drag-to-reorder
+   ========================================================================= */
+/* Animate the sidebar width smoothly (registered custom prop → transitionable). */
+@property --cl-w { syntax: "<length>"; inherits: true; initial-value: 340px; }
+.app { transition: --cl-w 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.app.cl-resizing { transition: none; }   /* follow the pointer 1:1 while dragging the handle */
+
+/* Collapse toggle + resize handle live on the chat list. */
+.chatlist { position: relative; }
+.cl-collapse { position: absolute; z-index: 6; top: 12px; right: 8px; width: 26px; height: 26px;
+  display: grid; place-items: center; border: none; background: transparent; color: var(--text-dim);
+  cursor: pointer; border-radius: var(--r-2); transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.cl-collapse:hover { color: var(--accent-300); background: var(--accent-faint); }
+.cl-collapse svg { width: 17px; height: 17px; transition: transform 0.3s var(--ease); }
+.app.cl-collapsed .cl-collapse svg { transform: rotate(180deg); }
+.cl-resizer { position: absolute; z-index: 6; top: 0; right: -3px; width: 8px; height: 100%; cursor: col-resize; }
+.cl-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px;
+  background: transparent; transition: background var(--t-fast) var(--ease); }
+.cl-resizer:hover::after, .cl-resizer.active::after { background: var(--accent-400); }
+.app.cl-collapsed .cl-resizer { display: none; }
+
+/* ---- Collapsed rail: only avatars ---- */
+.app.cl-collapsed .cl-search,
+.app.cl-collapsed .cl-filters,
+.app.cl-collapsed .me-name-wrap,
+.app.cl-collapsed .cl-head .hicon-btn:not(.cl-keep),
+.app.cl-collapsed .ci-body,
+.app.cl-collapsed .voice-bar .vb-info,
+.app.cl-collapsed .chats-empty { display: none; }
+.app.cl-collapsed .cl-head { justify-content: center; padding: 12px 0; }
+.app.cl-collapsed .chat-item { justify-content: center; padding: 8px 0; gap: 0; }
+.app.cl-collapsed .chat-item .ava-wrap { margin: 0; }
+.app.cl-collapsed .chats { padding: 4px 0; overflow-x: hidden; }
+.app.cl-collapsed .chat-item.pinned::before { content: ""; position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; border-radius: 3px; background: var(--accent-400); }
+/* unread as a small corner dot on the avatar when collapsed */
+.app.cl-collapsed .chat-item .badge { position: absolute; top: -2px; right: -2px; min-width: 9px; height: 9px;
+  padding: 0; font-size: 0; border-radius: 50%; }
+
+/* ---- Mobile: no inline pin button — pin lives in the long-press menu ---- */
+@media (max-width: 720px) { .ci-pin { display: none !important; } }
+
+/* ---- Drag to reorder ---- */
+.chat-item { position: relative; touch-action: pan-y; }
+.chat-item.drag-src { opacity: 0.28; }
+.drag-ghost { position: fixed; z-index: 3000; left: 0; top: 0; margin: 0 !important; pointer-events: none;
+  width: auto; border-radius: var(--r-3); background: var(--bg-3); border: 1px solid var(--accent-400);
+  box-shadow: 0 18px 46px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--primary-rgb),0.25);
+  transform: scale(1.04) rotate(-1.5deg); transition: none; will-change: transform, left, top; }
+.drag-ghost.returning { transition: left 0.32s cubic-bezier(0.34,1.4,0.5,1), top 0.32s cubic-bezier(0.34,1.4,0.5,1), transform 0.3s ease; transform: scale(1) rotate(0); }
+.chats.drag-active .chat-item { transition: transform 0.18s var(--ease); }
+/* the "drop here to pin" zone at the very top */
+.cl-pinzone { position: absolute; z-index: 5; left: 8px; right: 8px; top: 0; height: 44px; border-radius: var(--r-3);
+  border: 1px dashed var(--accent-400); background: rgba(var(--primary-rgb), 0.08); display: none;
+  align-items: center; justify-content: center; gap: 8px; color: var(--accent-200); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; }
+.cl-pinzone.show { display: flex; }
+.cl-pinzone.hot { background: rgba(var(--primary-rgb), 0.18); border-style: solid; }

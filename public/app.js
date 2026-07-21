@@ -29,6 +29,10 @@ let avaVer = Date.now();
 let myStatus = "online", myDesc = "", myActivity = "";
 const chats = new Map();             // key -> {key,type,name,login,id,last,ts,unread,pinned}
 let chatTypeFilter = "all";          // "all" | "dm" | "group"
+let chatOrder = [];                  // manual drag order (keys), from localStorage
+try { const o = JSON.parse(localStorage.getItem("dialog_chat_order") || "[]"); if (Array.isArray(o)) chatOrder = o; } catch {}
+let clCollapsed = localStorage.getItem("dialog_cl_collapsed") === "1";
+let clW = Math.max(240, Math.min(520, parseInt(localStorage.getItem("dialog_cl_w") || "340", 10) || 340));
 const peers = new Map();             // socketId -> {name, login}
 const presence = new Map();          // login -> 'online'|'dnd'|'offline'
 const relations = { friends: [], blocked: [], sent: [], incoming: [] };
@@ -859,6 +863,7 @@ function enterApp() {
   myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || ""; myActivity = profile.activity || "";
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  applyChatListChrome();   // restore collapsed / resized sidebar
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   socket.emit("identify", { token });
@@ -946,14 +951,14 @@ async function syncDMsFromServer() {
   if (!ok || !Array.isArray(data)) return;
   const localKeys = new Set([...chats.values()].filter((c) => c.type === "dm").map((c) => c.key));
   for (const d of data) {
-    if (!localKeys.has(d.key)) chats.set(d.key, d);
+    if (!localKeys.has(d.key)) chats.set(d.key, repairDM(d));
   }
   _dmsSynced = true;
   applyPins();
   renderChatList($("searchInput").value);
 }
 async function persistDMs() {
-  const dms = [...chats.values()].filter((c) => c.type === "dm").slice(0, 50);
+  const dms = [...chats.values()].filter((c) => c.type === "dm").map(repairDM).slice(0, 50);
   await api("/api/dms", { dms });
 }
 async function loadGroups() {
@@ -1050,12 +1055,25 @@ function markDeliveredSeenUpToLast() {
     if (document.visibilityState === "visible" && (!profile || profile.prefReadReceipts !== false)) socket.emit("seen", { maxId: id });
   }
 }
+function repairDM(c) {
+  // A DM row must never be keyed/named after yourself. Derive the partner from the room
+  // key (source of truth) and fix a missing / self name — the "named after you" bug.
+  if (!c || c.type !== "dm" || !profile) return c;
+  if (c.key && c.key.startsWith("@dm:")) {
+    const partner = c.key.slice(4).split("~").find((l) => l && l !== profile.login);
+    if (partner) c.login = partner;
+  }
+  if (!c.name || c.login === profile.login || c.name === myName) c.name = c.login;
+  return c;
+}
 function renderChatList(filter = "") {
   const ul = $("chatList"); ul.innerHTML = ""; filter = filter.toLowerCase();
+  for (const c of chats.values()) if (c.type === "dm") repairDM(c);
+  const oi = (k) => { const i = chatOrder.indexOf(k); return i === -1 ? 1e9 : i; };
   const list = [...chats.values()].sort((a, b) => {
-    if (a.pinned && !b.pinned) return -1;
-    if (!a.pinned && b.pinned) return 1;
-    return (b.ts || 0) - (a.ts || 0);
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;      // pinned float to the top
+    const d = oi(a.key) - oi(b.key); if (d) return d;          // then the manual drag order
+    return (b.ts || 0) - (a.ts || 0);                          // then most-recent
   });
   let shown = 0;
   for (const c of list) {
@@ -1203,6 +1221,94 @@ function togglePin(c) {
   savePins();
   renderChatList($("searchInput").value);
 }
+
+// ---------- Chat list: collapse rail · resize · drag-to-reorder ----------
+function applyChatListChrome() {
+  const app = $("app"); if (!app) return;
+  app.classList.toggle("cl-collapsed", clCollapsed);
+  app.style.setProperty("--cl-w", (clCollapsed ? 76 : clW) + "px");   // JS owns the width → smooth @property transition
+  const b = $("clCollapse"); if (b) b.title = t(clCollapsed ? "expand_list" : "collapse_list");
+}
+$("clCollapse") && ($("clCollapse").onclick = () => {
+  clCollapsed = !clCollapsed; localStorage.setItem("dialog_cl_collapsed", clCollapsed ? "1" : "0"); applyChatListChrome();
+});
+(function () {                                                          // resize handle
+  const rz = $("clResizer"), app = $("app"); if (!rz || !app) return;
+  let dragging = false;
+  rz.addEventListener("pointerdown", (e) => {
+    if (clCollapsed) return; dragging = true; rz.classList.add("active"); app.classList.add("cl-resizing");
+    try { rz.setPointerCapture(e.pointerId); } catch {} e.preventDefault();
+  });
+  rz.addEventListener("pointermove", (e) => {
+    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(e.clientX)));
+    app.style.setProperty("--cl-w", clW + "px");
+  });
+  const stop = () => { if (!dragging) return; dragging = false; rz.classList.remove("active"); app.classList.remove("cl-resizing"); localStorage.setItem("dialog_cl_w", String(clW)); };
+  rz.addEventListener("pointerup", stop); rz.addEventListener("pointercancel", stop);
+})();
+
+// Drag a chat row to reorder; drop in the top zone to pin; drop out of bounds → springs back.
+// Mouse/pen only (touch keeps native scroll + long-press menu).
+(function () {
+  const ul = $("chatList"); if (!ul) return;
+  let cand = null, drag = null;
+  ul.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.pointerType === "touch") return;
+    if (e.target.closest(".ci-del, .ci-pin")) return;
+    const li = e.target.closest(".chat-item"); if (!li) return;
+    cand = { li, sx: e.clientX, sy: e.clientY, id: e.pointerId };
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (drag) return updateDrag(e);
+    if (!cand) return;
+    if (Math.abs(e.clientX - cand.sx) + Math.abs(e.clientY - cand.sy) > 7) beginDrag(e);
+  });
+  window.addEventListener("pointerup", (e) => { if (drag) endDrag(e); cand = null; });
+
+  function beginDrag(e) {
+    const li = cand.li, r = li.getBoundingClientRect();
+    const ghost = li.cloneNode(true); ghost.className = "chat-item drag-ghost";
+    ghost.style.width = r.width + "px"; ghost.style.height = r.height + "px";
+    document.body.appendChild(ghost);
+    li.classList.add("drag-src"); ul.classList.add("drag-active");
+    const pz = $("clPinzone"); if (pz) pz.classList.add("show");
+    li._suppressClick = true; clearTimeout(li._holdT);
+    drag = { li, ghost, ox: e.clientX - r.left, oy: e.clientY - r.top, srcRect: r };
+    cand = null; updateDrag(e);
+  }
+  function updateDrag(e) {
+    const g = drag.ghost;
+    g.style.left = (e.clientX - drag.ox) + "px"; g.style.top = (e.clientY - drag.oy) + "px";
+    const listR = ul.getBoundingClientRect();
+    const oob = e.clientX < listR.left - 60 || e.clientX > listR.right + 60 || e.clientY < listR.top - 80 || e.clientY > listR.bottom + 80;
+    drag.oob = oob; g.style.opacity = oob ? "0.55" : "1";
+    const pz = $("clPinzone");
+    const inPin = !oob && e.clientY < listR.top + 46;
+    drag.pin = inPin; if (pz) pz.classList.toggle("hot", inPin);
+    if (oob || inPin) return;
+    // live shuffle: place src before the first row whose midpoint is below the pointer
+    const rows = [...ul.querySelectorAll(".chat-item:not(.drag-src)")];
+    let before = null;
+    for (const row of rows) { const rr = row.getBoundingClientRect(); if (e.clientY < rr.top + rr.height / 2) { before = row; break; } }
+    if (before) ul.insertBefore(drag.li, before); else ul.appendChild(drag.li);
+  }
+  function endDrag(e) {
+    const li = drag.li, g = drag.ghost, pz = $("clPinzone");
+    ul.classList.remove("drag-active"); if (pz) pz.classList.remove("show", "hot");
+    const finish = () => { g.remove(); li.classList.remove("drag-src"); setTimeout(() => { li._suppressClick = false; }, 60); };
+    if (drag.oob) {                                   // spring back, restore canonical order
+      g.classList.add("returning"); g.style.left = drag.srcRect.left + "px"; g.style.top = drag.srcRect.top + "px";
+      setTimeout(() => { finish(); renderChatList($("searchInput").value); }, 330);
+    } else {
+      if (drag.pin) { const c = chats.get(li._chatKey); if (c && !c.pinned) { c.pinned = true; savePins(); } }
+      chatOrder = [...ul.querySelectorAll(".chat-item")].map((x) => x._chatKey).filter(Boolean);
+      localStorage.setItem("dialog_chat_order", JSON.stringify(chatOrder));
+      finish();
+      renderChatList($("searchInput").value);
+    }
+    drag = null;
+  }
+})();
 // Close a DM: drop it from the list WITHOUT clearing history — reopening it
 // (via search suggestions or a contact) brings the whole conversation back.
 function closeDm(c) {
