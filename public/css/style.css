@@ -4872,6 +4872,13 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 /* ---- Collapsed rail: avatars only, but the top header stays full-width (floats over the chat) ---- */
 @media (min-width: 721px) {
   .app.cl-collapsed .chatlist { overflow: visible; z-index: 30; }  /* let the full header spill right, above the chat's isolate context */
+  /* A call is docked in the chat column: the wide header would cover it. Tuck the sidebar
+     back under the chat and shrink the header to just the avatar rail so nothing overlaps. */
+  .app.cl-collapsed:has(.chat.has-call) .chatlist { z-index: auto; }
+  .app.cl-collapsed:has(.chat.has-call) .cl-head { width: auto; justify-content: center; border-right: none; }
+  .app.cl-collapsed:has(.chat.has-call) .cl-head .me-name-wrap,
+  .app.cl-collapsed:has(.chat.has-call) .cl-head .hicon-btn { display: none; }
+  .app.cl-collapsed:has(.chat.has-call) .chat-head { padding-left: 24px; }
   .app.cl-collapsed .cl-head {                                     /* stays full-width, floats over the chat pane */
     width: var(--cl-full, 340px);
     height: calc(81px + env(safe-area-inset-top, 0px)); z-index: 40; /* == .chat-head height, so the two top bars align */
