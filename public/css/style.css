@@ -4871,9 +4871,11 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 @media (min-width: 721px) {
   .app.cl-collapsed .chatlist { overflow: visible; z-index: 30; }  /* let the full header spill right, above the chat's isolate context */
   .app.cl-collapsed .cl-head {                                     /* stays full-width, floats over the chat pane */
-    width: var(--cl-full, 340px); z-index: 40;
+    width: var(--cl-full, 340px);
+    height: calc(81px + env(safe-area-inset-top, 0px)); z-index: 40; /* == .chat-head height, so the two top bars align */
     background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
     border-right: 1px solid var(--border-1); }
+  .app.cl-collapsed:has(#chatHead.hidden) .cl-head { width: 100vw; border-right: none; }  /* no chat open → the bar spans the whole top */
   .app.cl-collapsed .chat-head {                                   /* push partner name/avatar clear of the floating header */
     padding-left: calc(var(--cl-full, 340px) - var(--cl-w) + 20px); }
   .app.cl-collapsed .cl-search,
