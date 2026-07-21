@@ -263,8 +263,17 @@ class MainActivity : AppCompatActivity() {
         }, 3000)
     }
 
+    // Action-based back: ask the web app to dismiss the topmost overlay / exit a chat.
+    // Only when it has nothing to dismiss do we background the app. We deliberately do NOT
+    // use webView.goBack() — the SPA pushes a history entry per opened chat, so history
+    // "back" walked back THROUGH chats instead of closing menus.
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        webView.evaluateJavascript(
+            "(function(){try{return (window.dialogOnBack&&window.dialogOnBack())?1:0;}catch(e){return 0;}})()"
+        ) { res ->
+            if (res == null || !res.contains("1")) moveTaskToBack(true) // nothing handled → send to background
+        }
     }
 
     override fun onDestroy() {

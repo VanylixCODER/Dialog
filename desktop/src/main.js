@@ -3,6 +3,7 @@
 const {
   app,
   BrowserWindow,
+  Menu,
   session,
   desktopCapturer,
   ipcMain,
@@ -136,6 +137,9 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Ship a locked-down shell: no DevTools in the packaged app (dev flag keeps
+      // them for local debugging). Nothing but the messenger should be reachable.
+      devTools: isDev,
       // Permissions are granted at the session level (below). This still
       // needs to be allowed for media to be usable.
       spellcheck: true
@@ -143,6 +147,21 @@ function createMainWindow() {
   });
 
   const wc = mainWin.webContents;
+
+  // Kill the application menu entirely — no File/Edit/View menus, and Alt no longer
+  // surfaces a menu bar. Everything the user needs lives in the web UI + tray.
+  mainWin.setMenuBarVisibility(false);
+  mainWin.setMenu(null);
+  // Belt-and-suspenders: if anything tries to open DevTools in the packaged app, slam
+  // it shut, and swallow the usual DevTools/menu keyboard shortcuts.
+  if (!isDev) {
+    wc.on("devtools-opened", () => wc.closeDevTools());
+    wc.on("before-input-event", (event, input) => {
+      const k = (input.key || "").toLowerCase();
+      const devtools = (input.control || input.meta) && input.shift && (k === "i" || k === "j" || k === "c");
+      if (k === "f12" || devtools) event.preventDefault(); // block DevTools shortcuts
+    });
+  }
 
   // Mark the User-Agent so the server can recognise the desktop app and keep
   // it out of the marketing landing/downloads pages.
@@ -417,6 +436,12 @@ app.whenReady().then(() => {
 
   createTray({
     onOpen: showMainWindow,
+    onReload: () => {
+      if (!mainWin) return;
+      showMainWindow();
+      // Load the app fresh (recovers even from an error/blank state, unlike reload()).
+      mainWin.webContents.loadURL(config.APP_URL);
+    },
     onQuit: () => {
       app.isQuitting = true;
       app.quit();
