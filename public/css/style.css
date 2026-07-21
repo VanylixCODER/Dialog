@@ -804,6 +804,8 @@ a:focus-visible {
   background: var(--accent-400); box-shadow: 0 0 6px var(--accent-400);
   animation: stPulse 1.1s var(--ease) infinite;
 }
+/* Nobody typing → the indicator is empty; hide it so its ::before dot doesn't linger. */
+.typing:empty { display: none; }
 
 .call-go { font-size: 17px; }
 .call-go.in-call {
