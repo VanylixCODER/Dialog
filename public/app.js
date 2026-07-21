@@ -1226,22 +1226,24 @@ function togglePin(c) {
 function applyChatListChrome() {
   const app = $("app"); if (!app) return;
   app.classList.toggle("cl-collapsed", clCollapsed);
+  app.style.setProperty("--cl-full", clW + "px");                     // the expanded width — header keeps it while collapsed
   app.style.setProperty("--cl-w", (clCollapsed ? 76 : clW) + "px");   // JS owns the width → smooth @property transition
-  const b = $("clCollapse"); if (b) b.title = t(clCollapsed ? "expand_list" : "collapse_list");
+  const b = $("clCollapse"); if (b) b.title = t(clCollapsed ? "maximize" : "minimize");
 }
 $("clCollapse") && ($("clCollapse").onclick = () => {
   clCollapsed = !clCollapsed; localStorage.setItem("dialog_cl_collapsed", clCollapsed ? "1" : "0"); applyChatListChrome();
 });
-(function () {                                                          // resize handle
+(function () {                                                          // resize grip (bottom bar → drag left/right)
   const rz = $("clResizer"), app = $("app"); if (!rz || !app) return;
-  let dragging = false;
+  let sx = 0, sw = 0, dragging = false;
   rz.addEventListener("pointerdown", (e) => {
-    if (clCollapsed) return; dragging = true; rz.classList.add("active"); app.classList.add("cl-resizing");
+    if (clCollapsed) return; dragging = true; sx = e.clientX; sw = clW;
+    rz.classList.add("active"); app.classList.add("cl-resizing");
     try { rz.setPointerCapture(e.pointerId); } catch {} e.preventDefault();
   });
   rz.addEventListener("pointermove", (e) => {
-    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(e.clientX)));
-    app.style.setProperty("--cl-w", clW + "px");
+    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(sw + (e.clientX - sx))));
+    app.style.setProperty("--cl-w", clW + "px"); app.style.setProperty("--cl-full", clW + "px");
   });
   const stop = () => { if (!dragging) return; dragging = false; rz.classList.remove("active"); app.classList.remove("cl-resizing"); localStorage.setItem("dialog_cl_w", String(clW)); };
   rz.addEventListener("pointerup", stop); rz.addEventListener("pointercancel", stop);
