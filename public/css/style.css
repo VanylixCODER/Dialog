@@ -474,7 +474,7 @@ a:focus-visible {
 .lang-row > span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
 
 /* ============ App grid (Telegram-style) ============ */
-.app { display: grid; grid-template-columns: var(--cl-w, 340px) 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
+.app { display: grid; grid-template-columns: var(--cl-w, 340px) 1fr; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
 .app:has(#infoPanel:not(.hidden)) { grid-template-columns: var(--cl-w, 340px) 1fr 280px; }
 .app.cl-collapsed { --cl-w: 76px; }
 
@@ -4852,11 +4852,15 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .cl-min-ico { width: 18px; height: 18px; flex: none; transition: transform 0.3s var(--ease); }
 .app.cl-collapsed .cl-min-ico { transform: rotate(180deg); }   /* points right = maximize */
 .cl-min-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.cl-resizer { display: grid; place-items: center; width: 34px; height: 34px; flex: none;
-  border-radius: var(--r-2); color: var(--text-dim); cursor: ew-resize; touch-action: none;
-  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
-.cl-resizer svg { width: 18px; height: 18px; }
-.cl-resizer:hover, .cl-resizer.active { color: var(--accent-200); background: var(--accent-faint); }
+/* Resize by dragging the divider between the list and the chat (VS-Code style). */
+.cl-resizer { position: absolute; top: 0; bottom: 0; left: var(--cl-w, 340px); width: 11px; margin-left: -4px;
+  z-index: 8; cursor: col-resize; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.cl-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px;
+  background: transparent; transition: background var(--t-fast) var(--ease); }        /* accent line on the seam */
+.cl-resizer:hover::before, .cl-resizer.active::before { background: var(--accent-400); }
+.cl-resizer::after { content: ""; width: 4px; height: 42px; border-radius: 4px; background: var(--border-1);   /* always-visible grip */
+  transition: background var(--t-fast) var(--ease), height var(--t-fast) var(--ease); }
+.cl-resizer:hover::after, .cl-resizer.active::after { background: var(--accent-300); height: 66px; }
 
 /* ---- Minimize animation: chat-name text fades + drifts down, avatar slides to center ---- */
 .ci-body { max-width: 640px; transition: opacity 0.22s var(--ease), transform 0.22s var(--ease),
@@ -4889,8 +4893,8 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
     padding: 0; font-size: 0; border-radius: 50%; }
 }
 
-/* Bottom bar is a desktop control — the phone list is full-screen, nothing to minimize/resize. */
-@media (max-width: 720px) { .cl-foot { display: none; } }
+/* Minimize + resize are desktop controls — the phone list is full-screen, nothing to minimize/resize. */
+@media (max-width: 720px) { .cl-foot, .cl-resizer { display: none; } }
 
 /* ---- Mobile: no inline pin button — pin lives in the long-press menu ---- */
 @media (max-width: 720px) { .ci-pin { display: none !important; } }
