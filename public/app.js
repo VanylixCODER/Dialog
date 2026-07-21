@@ -32,7 +32,7 @@ let chatTypeFilter = "all";          // "all" | "dm" | "group"
 let chatOrder = [];                  // manual drag order (keys), from localStorage
 try { const o = JSON.parse(localStorage.getItem("dialog_chat_order") || "[]"); if (Array.isArray(o)) chatOrder = o; } catch {}
 let clCollapsed = localStorage.getItem("dialog_cl_collapsed") === "1";
-let clW = Math.max(240, Math.min(520, parseInt(localStorage.getItem("dialog_cl_w") || "340", 10) || 340));
+let clW = Math.max(296, Math.min(520, parseInt(localStorage.getItem("dialog_cl_w") || "340", 10) || 340));
 const peers = new Map();             // socketId -> {name, login}
 const presence = new Map();          // login -> 'online'|'dnd'|'offline'
 const relations = { friends: [], blocked: [], sent: [], incoming: [] };
@@ -1242,7 +1242,7 @@ $("clCollapse") && ($("clCollapse").onclick = () => {
     try { rz.setPointerCapture(e.pointerId); } catch {} e.preventDefault();
   });
   rz.addEventListener("pointermove", (e) => {
-    if (!dragging) return; clW = Math.max(240, Math.min(520, Math.round(e.clientX)));  // seam follows the cursor
+    if (!dragging) return; clW = Math.max(296, Math.min(520, Math.round(e.clientX)));  // seam follows the cursor
     app.style.setProperty("--cl-w", clW + "px"); app.style.setProperty("--cl-full", clW + "px");
   });
   const stop = () => { if (!dragging) return; dragging = false; rz.classList.remove("active"); app.classList.remove("cl-resizing"); localStorage.setItem("dialog_cl_w", String(clW)); };
