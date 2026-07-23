@@ -135,7 +135,7 @@ function applyWallpaper() {
 // On by default for the Matrix theme; a global toggle (off elsewhere) with speed +
 // character-colour controls; a custom background image hides it.
 let chatMatrixRaf = 0;
-function matrixEffective() { const s = localStorage.getItem("dialog_ap_matrix"); const th = document.body.dataset.theme || "matrix"; return s === "on" ? true : s === "off" ? false : (th === "matrix"); }
+function matrixEffective() { return localStorage.getItem("dialog_ap_matrix") === "on"; }  // rain OFF by default; opt-in via preferences
 function updateChatMatrix() {
   const c = $("chatMatrix"); if (!c) return;
   const show = matrixEffective() && !!myRoom && !resolveBgForChat(myRoom);
@@ -269,8 +269,6 @@ window.addEventListener("langchange", refreshBgStatusTexts);
 const THEMES = [
   { key: "matrix",    name: "theme_matrix",    desc: "theme_desc_matrix",    swatch: ["#00ff5a", "#88ffaa", "#b6ffd2", "#000000"] },
   { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#ffffff", "#cccccc", "#888888", "#000000"] },
-  { key: "midnight",  name: "theme_midnight",  desc: "theme_desc_midnight",  swatch: ["#5a8aff", "#88aedb", "#3868d8", "#0a0e1c"] },
-  { key: "dracula",   name: "theme_dracula",   desc: "theme_desc_dracula",   swatch: ["#bd93f9", "#ff79c6", "#8be9fd", "#21222c"] },
   { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
   { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"], beta: true },
 ];
@@ -284,11 +282,14 @@ function refreshOnAccent() {
   if (rgb) { const p = rgb.split(",").map((n) => Number(n.trim())); if (p.length === 3 && p.every((x) => !isNaN(x))) lum = relLumRgb(p[0], p[1], p[2]); }
   document.documentElement.style.setProperty("--on-accent", lum > 0.42 ? "#0a1512" : "#ffffff");
 }
-function applyTheme(key) {
-  // Legacy "contrast"/"high_contrast" → matrix (migration for users with old localStorage);
-  // unknown keys → matrix. Custom themes no longer exist, so we don't try to remap those.
-  if (key === "contrast" || key === "high_contrast") key = "matrix";
+function applyTheme(key, animate = false) {
+  // Legacy "contrast"/"high_contrast" and the retired "dracula"/"midnight" → matrix (migration
+  // for users with old localStorage); unknown keys → matrix. Custom themes no longer exist.
+  if (["contrast", "high_contrast", "dracula", "midnight"].includes(key)) key = "matrix";
   else if (!THEMES.find((x) => x.key === key)) key = "matrix";
+  // Smooth cross-fade: a transient .theming class transitions colours on everything so the
+  // old palette mixes into the new one instead of snapping. Skipped on initial load.
+  if (animate) { document.body.classList.add("theming"); clearTimeout(window._themingT); window._themingT = setTimeout(() => document.body.classList.remove("theming"), 480); }
   document.body.dataset.theme = key;
   try { localStorage.setItem("dialog_theme", key); } catch {}
   const grid = $("themeGrid");
@@ -410,10 +411,10 @@ function clearThemePreview() {
   // still calls applyTheme() directly so init restore never shows the modal.
   function selectTheme(key) {
     if (key === "flashbang") {
-      openFlashbangConfirm(() => applyTheme(key));
+      openFlashbangConfirm(() => applyTheme(key, true));
       return;
     }
-    applyTheme(key);
+    applyTheme(key, true);
   }
   // Show the centered flashbang confirm dialog with a "Don't show again" checkbox.
   // Skips the dialog entirely if the user previously checked the box.
@@ -1346,7 +1347,14 @@ function deleteChat(c) {
   modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
   modal.classList.remove("hidden");
 }
-function resetToEmpty() { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); const bn = document.getElementById("blockNotice"); if (bn) bn.remove(); applyWallpaper(); }
+function resetToEmpty() { activeKey = myRoom = ""; $("chatHead").classList.add("hidden"); $("messages").classList.add("hidden"); $("composer").classList.add("hidden"); $("emptyState").classList.remove("hidden"); const bn = document.getElementById("blockNotice"); if (bn) bn.remove(); applyWallpaper(); playChatAnim("close"); }
+// Retrigger the open (slide in from the right) / close (slide in from the left) animation.
+function playChatAnim(dir) {
+  const p = $("chatPane"); if (!p) return;
+  p.classList.remove("anim-open", "anim-close");
+  void p.offsetWidth;                                  // force reflow so the animation replays
+  p.classList.add(dir === "close" ? "anim-close" : "anim-open");
+}
 
 // ---------- Открытие чата ----------
 function openChat(c) {
@@ -1358,6 +1366,7 @@ function openChat(c) {
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
+  playChatAnim("open");
   $("messages").innerHTML = "";
   showMsgSkeletons(); // placeholder until history arrives
   $("chatTitle").textContent = c.name;
@@ -1415,7 +1424,14 @@ function syncBlockComposer() {
     const bn = document.getElementById("blockNotice"); if (bn) bn.remove();
   }
 }
-$("backBtnMobile").onclick = $("esBackBtn").onclick = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
+$("backBtnMobile").onclick = $("esBackBtn").onclick = () => {
+  const done = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
+  const chat = $("chatPane");
+  if (chat && window.matchMedia("(max-width: 720px)").matches) {   // slide the chat off to the right, then drop it
+    chat.classList.add("mob-leaving");
+    setTimeout(() => { chat.classList.remove("mob-leaving"); done(); }, 240);
+  } else done();
+};
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
