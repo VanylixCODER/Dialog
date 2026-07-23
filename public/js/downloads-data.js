@@ -4,9 +4,16 @@
 // CDN directly.
 (function () {
   const VERSION = "1.1.4";
+  // Android ships on its own cadence (1.1.5 adds avatars in notifications); desktop stays 1.1.4
+  // until its next release, so the Android APK link points at its own release tag.
+  const ANDROID_VERSION = "1.1.5";
   const BASE =
     "https://github.com/VanylixCODER/Dialog/releases/download/v" +
     VERSION +
+    "/";
+  const ANDROID_BASE =
+    "https://github.com/VanylixCODER/Dialog/releases/download/v" +
+    ANDROID_VERSION +
     "/";
 
   // Each platform lists one or more downloadable installers.
@@ -41,9 +48,9 @@
     android: {
       label: "Android",
       icon: "android",
-      note: "Android 7.0+",
+      note: "Android 7.0+ · v" + ANDROID_VERSION,
       installers: [
-        { kind: "APK", file: "Dialog-" + VERSION + ".apk", primary: true }
+        { kind: "APK", file: ANDROID_BASE + "Dialog-" + ANDROID_VERSION + ".apk", primary: true }
       ]
     }
   };
@@ -78,7 +85,7 @@
     PLATFORMS: PLATFORMS,
     detectOS: detectOS,
     url: function (file) {
-      return BASE + file;
+      return /^https?:\/\//.test(file) ? file : BASE + file;
     }
   };
 })();
