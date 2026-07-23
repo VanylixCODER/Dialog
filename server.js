@@ -1561,6 +1561,19 @@ async function saveSystemMessage(room, fromLogin, name, type, text) {
 // Save + broadcast + notify a message into a room, then fan out to any bot participants.
 // Shared by the socket "message" handler and the bot HTTP API. Returns the saved payload
 // (with .id) or null if the DB rejected it. Never throws.
+// Which participants a message @-mentions. `@all` (word-boundary) → everyone but the sender;
+// otherwise the @login tokens that match an actual participant. recips is already scoped to the
+// room (DM = the partner, group = its members), so DM mentions can only ever hit the DM partner.
+function resolveMentions(text, recips, fromLogin) {
+  const s = String(text || "");
+  const out = new Set();
+  if (/(^|\s)@all(?![\w-])/i.test(s)) { for (const l of recips) if (l !== fromLogin) out.add(l); return out; }
+  const toks = new Set((s.match(/@([a-z0-9_.]+)/gi) || []).map((x) => x.slice(1).toLowerCase()));
+  if (!toks.size) return out;
+  for (const l of recips) if (l !== fromLogin && toks.has(String(l).toLowerCase())) out.add(l);
+  return out;
+}
+
 async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId }) {
   const payload = {
     from: from || fromLogin, fromLogin, name, ts: Date.now(),
@@ -1580,10 +1593,13 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   const dmTo = dmPartner(room, fromLogin);
   if (dmTo) recips = [dmTo];
   else if (room.startsWith("@grp:")) { try { recips = await getGroupMembers(room.slice(5)); } catch {} }
+  const mentions = resolveMentions(payload.text, recips, fromLogin);
   for (const login of recips) {
     if (login === fromLogin) continue;
-    notifyUser(login, "dm-ping", { room, fromLogin, fromName: name });
-    if (!isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: preview, room });
+    const mentioned = mentions.has(login);
+    notifyUser(login, "dm-ping", { room, fromLogin, fromName: name, mention: mentioned });
+    // A mention pushes even if the recipient is elsewhere; normal msgs push only when not in the room.
+    if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: (mentioned ? "@ " : "") + preview, room });
   }
   maybeDeliverToBots(room, payload).catch((e) => console.error("bot fanout", e.message));
   return payload;

@@ -4952,5 +4952,23 @@ body.theming, body.theming *:not(canvas) {
   @keyframes mobChatIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
   @keyframes mobChatOut { from { transform: translateX(0); }    to { transform: translateX(100%); } }
   .app.in-chat .chat { animation: mobChatIn 0.28s var(--ease); }
-  .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.24s var(--ease) both; }
+  .app.in-chat .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.24s var(--ease) both; }
 }
+
+/* ============ @mention autocomplete ============ */
+.mention-menu { position: fixed; z-index: 2600; max-height: 264px; overflow-y: auto;
+  background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-3);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5); padding: 5px; }
+.mention-menu.hidden { display: none; }
+.mm-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 9px; border: none;
+  background: transparent; color: var(--text); cursor: pointer; border-radius: var(--r-2); text-align: left; font: inherit; }
+.mm-item.sel, .mm-item:hover { background: var(--accent-faint); }
+.mm-ava { width: 30px; height: 30px; flex: none; font-size: 12px; }
+.mm-all { display: grid; place-items: center; border-radius: 50%; font-weight: 800;
+  background: linear-gradient(180deg, var(--accent-400), var(--accent-600)); color: var(--on-accent); }
+.mm-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-login { margin-left: auto; color: var(--text-dim); font-size: 12px; flex: none; }
+/* Unread badge for a chat that @-mentioned you — red so it stands out from normal counts. */
+.badge.mention-badge { background: linear-gradient(180deg, #ff5566, #e0384a); color: #fff;
+  box-shadow: 0 0 12px rgba(255, 70, 90, 0.5); }
+.chat-item.has-mention .ci-name { color: var(--accent-100); }
