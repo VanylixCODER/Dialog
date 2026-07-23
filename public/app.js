@@ -1088,7 +1088,7 @@ function renderChatList(filter = "") {
     } else if (chatTypeFilter !== "all" && c.type !== chatTypeFilter) continue;
     shown++;
     const li = document.createElement("li");
-    li.className = "chat-item" + (c.key === activeKey ? " active" : "") + (c.pinned ? " pinned" : "");
+    li.className = "chat-item" + (c.key === activeKey ? " active" : "") + (c.pinned ? " pinned" : "") + (c.mentioned && c.unread ? " has-mention" : "");
     li._chatKey = c.key; // метка для быстрого in-place обновления точек (см. updateDots)
     const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
     const avaInner = c.type === "group"
@@ -1096,7 +1096,7 @@ function renderChatList(filter = "") {
       : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
-      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : (c.type === "group" ? `<span class="ci-del" title="${t("delete_chat")}">✕</span>` : "")}</div></div>`;
+      <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge${c.mentioned ? " mention-badge" : ""}">${c.mentioned ? "@" : ""}${c.unread}</span>` : (c.type === "group" ? `<span class="ci-del" title="${t("delete_chat")}">✕</span>` : "")}</div></div>`;
     // Клавиатурная навигация по списку чатов: Tab → focus (зелёное кольцо из .chat-item:focus-visible),
     // Enter/Space → то же, что и клик (открыть чат), Delete/Backspace → то же, что и клик по крестику.
     // Сам крестик — <span.c i-del> без tabindex, поэтому курсором он недоступен; это запасной клавиатурный путь.
@@ -1359,7 +1359,7 @@ function playChatAnim(dir) {
 // ---------- Открытие чата ----------
 function openChat(c) {
   c = upsertChat(c);
-  activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0;
+  activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0; c.mentioned = false;
   dismissNotif(c.key);
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
@@ -2600,14 +2600,29 @@ socket.on("rate-limited", ({ reason, localId } = {}) => {
 });
 // Снимок курсоров для всей комнаты (приходит на join и при каждом обновлении).
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
-socket.on("dm-ping", ({ room, fromLogin, fromName }) => {
-  const c = upsertChat({ key: dmKey(fromLogin), type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 });
-  c.ts = Date.now();    if (myRoom !== room) { c.unread = (c.unread || 0) + 1; if (!isMuted(room) && !isDnd()) { msgSfxForTheme()(); notify(t("dm_ping", { name: fromName }), room); } }
-  persistDMs(); renderChatList($("searchInput").value);
+socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
+  // Room-type aware: a DM ping resolves to (or creates) the DM chat; a GROUP ping updates the
+  // existing group chat — NEVER a DM keyed by the sender (that spawned phantom "named-after-them"
+  // contacts on every group message).
+  const isDm = !!room && room.startsWith("@dm:");
+  const c = isDm
+    ? upsertChat({ key: room, type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 })
+    : chats.get(room);
+  if (c) c.ts = Date.now();
+  if (myRoom !== room) {
+    if (c) { c.unread = (c.unread || 0) + 1; if (mention) c.mentioned = true; }
+    // Mentions ping through a mute (like Discord); ordinary messages respect it. DnD silences all.
+    if (!isDnd() && (mention || !isMuted(room))) {
+      if (mention) sfx.call(); else msgSfxForTheme()();
+      notify(mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName }), room);
+    }
+  }
+  if (isDm) persistDMs();
+  renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
-function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
-function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const me = profile && (name.toLowerCase() === profile.login.toLowerCase() || name.toLowerCase() === (profile.name || "").toLowerCase()); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
+function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); if (/(^|\s)@all(?![\w-])/.test(x)) return true; return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
+function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
 function formatMessage(text) {
   let html = escapeHtml(text);
@@ -2913,12 +2928,75 @@ function sendText() {
   };
   renderMessage(m, true, false);
   socket.emit("message", { type: "text", text, localId });
-  input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode();
+  input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode(); closeMention();
 }
 // sendBtn click is wired in wireComposerSend() below (text send + voice record).
-$("msgInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
+// ---------- @mention autocomplete (Discord-style) ----------
+let mentionState = null;   // { start, items, sel } while the menu is open
+function mentionCandidates(query) {
+  const q = query.toLowerCase();
+  let people = [];
+  const cc = chats.get(activeKey);
+  if (curKind === "group") people = (groupMembers || []).filter((m) => m.login !== (profile && profile.login));
+  else if (curKind === "dm" && cc && cc.login) people = [{ login: cc.login, name: cc.name }];
+  const list = [];
+  if ("all".startsWith(q) || t("mention_all").toLowerCase().startsWith(q)) list.push({ login: "all", name: t("mention_all"), all: true });
+  for (const m of people) if (!q || m.login.toLowerCase().includes(q) || (m.name || "").toLowerCase().includes(q)) list.push(m);
+  return list.slice(0, 8);
+}
+function mentionElm() { let el = document.getElementById("mentionMenu"); if (!el) { el = document.createElement("div"); el.id = "mentionMenu"; el.className = "mention-menu hidden"; document.body.appendChild(el); } return el; }
+function closeMention() { mentionState = null; const el = document.getElementById("mentionMenu"); if (el) el.classList.add("hidden"); }
+function updateMentionMenu() {
+  const input = $("msgInput"); if (!input || !myRoom) return closeMention();
+  const pos = input.selectionStart;
+  const m = input.value.slice(0, pos).match(/(?:^|\s)@([\w.Ѐ-ӿ-]*)$/);   // an @token ending at the caret
+  if (!m) return closeMention();
+  const items = mentionCandidates(m[1]);
+  if (!items.length) return closeMention();
+  mentionState = { start: pos - m[1].length - 1, items, sel: mentionState ? Math.min(mentionState.sel, items.length - 1) : 0 };
+  renderMentionMenu();
+}
+function renderMentionMenu() {
+  if (!mentionState) return;
+  const el = mentionElm();
+  el.innerHTML = mentionState.items.map((it, i) =>
+    `<button type="button" class="mm-item${i === mentionState.sel ? " sel" : ""}" data-i="${i}">` +
+    (it.all ? `<span class="mm-ava mm-all">@</span>` : `<span class="avatar mm-ava"><img src="${avaUrl(it.login)}" onerror="this.remove()">${initials(it.name || it.login)}</span>`) +
+    `<span class="mm-name">${escapeHtml(it.name || it.login)}</span>` +
+    (it.all ? `<span class="mm-login">${escapeHtml(t("mention_all_hint"))}</span>` : `<span class="mm-login">@${escapeHtml(it.login)}</span>`) +
+    `</button>`).join("");
+  el.classList.remove("hidden");
+  const r = $("msgInput").getBoundingClientRect();
+  el.style.left = Math.round(r.left) + "px";
+  el.style.width = Math.min(340, Math.round(r.width)) + "px";
+  el.style.top = Math.round(r.top - el.offsetHeight - 8) + "px";
+  el.querySelectorAll(".mm-item").forEach((b) => { b.onmousedown = (ev) => { ev.preventDefault(); acceptMention(Number(b.dataset.i)); }; });
+}
+function acceptMention(i) {
+  if (!mentionState) return;
+  const it = mentionState.items[i]; if (!it) return;
+  const input = $("msgInput"); const pos = input.selectionStart;
+  const ins = "@" + it.login + " ";
+  input.value = input.value.slice(0, mentionState.start) + ins + input.value.slice(pos);
+  const caret = mentionState.start + ins.length;
+  closeMention();
+  input.focus(); input.setSelectionRange(caret, caret);
+  input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  updateSendMode();
+}
+function mentionKeydown(e) {
+  if (!mentionState) return false;
+  const n = mentionState.items.length;
+  if (e.key === "ArrowDown") { mentionState.sel = (mentionState.sel + 1) % n; renderMentionMenu(); e.preventDefault(); return true; }
+  if (e.key === "ArrowUp") { mentionState.sel = (mentionState.sel - 1 + n) % n; renderMentionMenu(); e.preventDefault(); return true; }
+  if (e.key === "Enter" || e.key === "Tab") { acceptMention(mentionState.sel); e.preventDefault(); return true; }
+  if (e.key === "Escape") { closeMention(); e.preventDefault(); return true; }
+  return false;
+}
+$("msgInput").addEventListener("keydown", (e) => { if (mentionKeydown(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
+$("msgInput").addEventListener("blur", () => setTimeout(closeMention, 150));   // delay so a click on an item still lands
 let typingTimer;
-$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; updateSendMode(); socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
+$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; updateSendMode(); updateMentionMenu(); socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
 // ---------- Input right-click menu ----------
 let inputMenu;
 $("msgInput").addEventListener("contextmenu", (e) => {
