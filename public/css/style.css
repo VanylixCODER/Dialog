@@ -70,9 +70,9 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Шрифты (UI Inter fallback для читабельности; mono для акцентов) */
-  --font-ui: "Segoe UI", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
-  --display: "Segoe UI", "Segoe UI Variable Display", "Segoe UI Variable", "Segoe", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif, "JetBrains Mono", ui-monospace, monospace;
+  /* Шрифты: Montserrat — дефолтный UI-шрифт всех тем (кроме aero, у неё Segoe-подобный стек). */
+  --font-ui: "Montserrat", "Segoe UI", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --display: "Montserrat", "Segoe UI", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Базовый сброс -------------------------------------------------- */
@@ -3512,8 +3512,11 @@ body[data-theme="aero"] {
   background-attachment: fixed;
   color: var(--text);
   text-shadow: none;
-  /* Tahoma is the native XP UI face; Open Sans / Segoe are the web fallbacks. */
-  font-family: "Tahoma", "Segoe UI", "Open Sans", Verdana, system-ui, -apple-system, sans-serif;
+  /* Aero keeps a Segoe UI-style face (its Windows look). "Selawik" is MS's metric-compatible
+     Segoe substitute; Open Sans is the loaded web fallback. Overrides the Montserrat default. */
+  --font-ui: "Segoe UI", "Selawik", "Open Sans", Tahoma, Verdana, system-ui, -apple-system, sans-serif;
+  --display: "Segoe UI", "Selawik", "Open Sans", Tahoma, Verdana, system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
 }
 /* The green Luna title-bar gloss — reused by the chat header + list header. */
 body[data-theme="aero"] {
@@ -4926,3 +4929,28 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
   letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; }
 .cl-pinzone.show { display: flex; }
 .cl-pinzone.hot { background: rgba(var(--primary-rgb), 0.18); border-style: solid; }
+
+/* ============ Theme cross-fade ============ */
+/* While switching themes, transition colours on everything for ~0.45s so the old palette
+   mixes into the new one. Temporary class (added/removed in applyTheme) — not a permanent
+   transition, so hovers/etc. stay snappy. Canvas rain is excluded (it repaints itself). */
+body.theming, body.theming *:not(canvas) {
+  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease,
+              fill 0.45s ease, stroke 0.45s ease, box-shadow 0.45s ease, outline-color 0.45s ease !important;
+}
+
+/* ============ Chat open / close slide ============ */
+@keyframes chatSlideInRight { from { opacity: 0; transform: translateX(34px); } to { opacity: 1; transform: none; } }
+@keyframes chatSlideInLeft  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+#chatPane.anim-open  .chat-head,
+#chatPane.anim-open  #messages,
+#chatPane.anim-open  .composer { animation: chatSlideInRight 0.30s var(--ease) both; }
+#chatPane.anim-close #emptyState { animation: chatSlideInLeft 0.30s var(--ease) both; }
+
+/* On phones the chat is a full-screen overlay — slide the whole pane in from / out to the right. */
+@media (max-width: 720px) {
+  @keyframes mobChatIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  @keyframes mobChatOut { from { transform: translateX(0); }    to { transform: translateX(100%); } }
+  .app.in-chat .chat { animation: mobChatIn 0.28s var(--ease); }
+  .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.24s var(--ease) both; }
+}
