@@ -71,8 +71,8 @@ class NotificationHelper(private val context: Context) {
         return PendingIntent.getBroadcast(context, (action + arg).hashCode(), i, flags)
     }
 
-    // Incoming chat message — with Reply / Mark read / Silent actions.
-    fun show(title: String, body: String, chatId: String) {
+    // Incoming chat message — with Reply / Mark read / Silent actions. largeIcon = sender's avatar.
+    fun show(title: String, body: String, chatId: String, largeIcon: android.graphics.Bitmap? = null) {
         val b = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title.ifBlank { "Dialog" })
@@ -80,6 +80,7 @@ class NotificationHelper(private val context: Context) {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(openAppIntent(chatId))
+        if (largeIcon != null) b.setLargeIcon(largeIcon)
 
         if (chatId.isNotBlank()) {
             val remoteInput = RemoteInput.Builder(KEY_REPLY).setLabel("Reply").build()
@@ -122,7 +123,7 @@ class NotificationHelper(private val context: Context) {
     // Incoming call → a call notification with a FULL-SCREEN intent. Android shows the
     // full-screen IncomingCallActivity when the screen is locked/idle, and a heads-up
     // notification with Answer / Cancel when another app is in the foreground.
-    fun showIncomingCall(room: String, name: String, isGroup: Boolean) {
+    fun showIncomingCall(room: String, name: String, isGroup: Boolean, largeIcon: android.graphics.Bitmap? = null) {
         val fs = Intent(context, IncomingCallActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(IncomingCallActivity.EXTRA_ROOM, room)
@@ -145,6 +146,7 @@ class NotificationHelper(private val context: Context) {
             .setContentIntent(fsPi)
             .addAction(R.drawable.ic_notification, "Answer Call", actionIntent(CallActionReceiver.ACTION_CALL_ANSWER, room))
             .addAction(R.drawable.ic_notification, "Cancel Call", actionIntent(CallActionReceiver.ACTION_CALL_DECLINE, room))
+        if (largeIcon != null) b.setLargeIcon(largeIcon)
         safeNotify(INCOMING_ID, b.build())
     }
 

@@ -159,7 +159,7 @@ async function sendFcm(login, payload) {
     method: "POST", headers: { Authorization: "Bearer " + at, "Content-Type": "application/json" },
     body: JSON.stringify({ message: {
       token: tk, android: { priority: "high" },
-      data: { kind: String(payload.kind || ""), title: String(payload.title || "Dialog"), body: String(payload.body || ""), room: String(payload.room || "") },
+      data: { kind: String(payload.kind || ""), title: String(payload.title || "Dialog"), body: String(payload.body || ""), room: String(payload.room || ""), icon: String(payload.icon || "") },
     } }),
   }).then((r) => { if (r.status === 404 || r.status === 400) deleteFcmToken(tk).catch(() => {}); }).catch(() => {})));
 }
@@ -1599,7 +1599,7 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
     const mentioned = mentions.has(login);
     notifyUser(login, "dm-ping", { room, fromLogin, fromName: name, mention: mentioned });
     // A mention pushes even if the recipient is elsewhere; normal msgs push only when not in the room.
-    if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: (mentioned ? "@ " : "") + preview, room });
+    if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: (mentioned ? "@ " : "") + preview, room, icon: `${APP_ORIGIN}/api/avatar/${fromLogin}` });
   }
   maybeDeliverToBots(room, payload).catch((e) => console.error("bot fanout", e.message));
   return payload;
@@ -1986,7 +1986,7 @@ io.on("connection", (socket) => {
     const meta = callMeta.get(room); if (meta) meta.recips = ringed; // to dismiss on cancel
     for (const login of ringed) {
       notifyUser(login, "call-ring", payload);
-      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room });
+      sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room, icon: `${APP_ORIGIN}/api/avatar/${userLogin}` });
     }
   });
   socket.on("call-leave", () => callLeave());

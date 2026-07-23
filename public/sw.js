@@ -6,7 +6,7 @@ self.addEventListener("push", (event) => {
   let data = {}; try { data = event.data.json(); } catch {}
   const isCall = data.kind === "call";
   const opts = {
-    body: data.body || "", icon: "/icon.svg", badge: "/icon.svg",
+    body: data.body || "", icon: data.icon || "/icon.svg", badge: "/icon.svg",
     tag: (isCall ? "call:" : "msg:") + (data.room || ""), renotify: true,
     requireInteraction: isCall, vibrate: isCall ? [400, 200, 400, 200, 400] : [120],
     actions: isCall ? [{ action: "accept", title: "✅ Принять" }, { action: "decline", title: "✖ Отклонить" }] : [],
