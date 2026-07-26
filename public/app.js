@@ -3736,6 +3736,12 @@ function wireRoom(room, LK) {
   room.on(E.TrackUnmuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), false); });
   room.on(E.ConnectionStateChanged, updateCallStatus);
   room.on(E.ConnectionQualityChanged, (quality, p) => setTileNet(p.isLocal ? "me" : lkTile(p.identity), quality));
+  room.on(E.DataReceived, (payload, p) => {
+    let d; try { d = JSON.parse(new TextDecoder().decode(payload)); } catch { return; }
+    const tileId = p && p.identity ? lkTile(p.identity) : null; if (!tileId) return;
+    if (d.t === "rx" && d.e) floatEmoji(tileId, String(d.e).slice(0, 8));
+    else if (d.t === "hand") setHand(tileId, !!d.up);
+  });
   room.on(E.Disconnected, () => { if (call.active) endCall(); });
 }
 function setMicIndicator(tileId, muted) {
@@ -3762,6 +3768,43 @@ document.addEventListener("keydown", (e) => {
   const btn = { m: "toggleMic", v: "toggleCam", d: "toggleDeafen", s: "shareScreen" }[e.key.toLowerCase()];
   if (btn) { e.preventDefault(); const b = $(btn); if (b) b.click(); }
 });
+
+// ---------- In-call reactions + raise hand (broadcast over the LiveKit data channel) ----------
+const RXN_EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "👏", "🔥", "🙏"];
+let handUp = false;
+function lkPublish(obj) { try { const lp = call.room && call.room.localParticipant; if (lp && lp.publishData) lp.publishData(new TextEncoder().encode(JSON.stringify(obj)), { reliable: true }); } catch {} }
+function floatEmoji(tileId, emoji) {
+  const tile = $("tile-" + tileId); if (!tile) return;
+  const s = document.createElement("span"); s.className = "tile-reaction"; s.textContent = emoji;
+  s.style.left = (12 + Math.random() * 60) + "%";
+  tile.appendChild(s); setTimeout(() => s.remove(), 2200);
+}
+function setHand(tileId, up) {
+  const tile = $("tile-" + tileId); if (!tile) return;
+  let h = tile.querySelector(".tile-hand");
+  if (up) { if (!h) { h = document.createElement("div"); h.className = "tile-hand"; h.textContent = "✋"; tile.appendChild(h); } }
+  else if (h) h.remove();
+}
+function sendReaction(emoji) { floatEmoji("me", emoji); lkPublish({ t: "rx", e: emoji }); }
+function toggleHand() { handUp = !handUp; setHand("me", handUp); const b = $("handBtn"); if (b) b.classList.toggle("active", handUp); lkPublish({ t: "hand", up: handUp }); }
+let reactPop;
+function openCallReactPicker(e) {
+  if (!reactPop) {
+    reactPop = document.createElement("div"); reactPop.className = "call-react-pop hidden"; document.body.appendChild(reactPop);
+    reactPop.innerHTML = RXN_EMOJIS.map((em) => `<button type="button" class="crp-item">${em}</button>`).join("");
+    reactPop.querySelectorAll(".crp-item").forEach((b) => { b.onclick = () => { sendReaction(b.textContent); reactPop.classList.add("hidden"); }; });
+  }
+  reactPop.classList.toggle("hidden");
+  if (!reactPop.classList.contains("hidden")) {
+    const r = $("reactBtn").getBoundingClientRect();
+    reactPop.style.left = Math.max(8, Math.min(r.left + r.width / 2 - reactPop.offsetWidth / 2, innerWidth - reactPop.offsetWidth - 8)) + "px";
+    reactPop.style.top = (r.top - reactPop.offsetHeight - 10) + "px";
+    reactPop._openedAt = Date.now();
+  }
+}
+$("reactBtn") && ($("reactBtn").onclick = (e) => { e.stopPropagation(); openCallReactPicker(e); });
+$("handBtn") && ($("handBtn").onclick = () => toggleHand());
+document.addEventListener("click", (e) => { if (reactPop && !reactPop.classList.contains("hidden") && Date.now() - (reactPop._openedAt || 0) > 200 && !reactPop.contains(e.target) && e.target !== $("reactBtn")) reactPop.classList.add("hidden"); });
 
 // Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
 $("startCallBtn").onclick = () => {
@@ -3904,6 +3947,7 @@ function endCall() {
   if (isCallFullscreen()) exitCallFullscreen(); // tear down native/overlay fullscreen
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
+  handUp = false; $("handBtn") && $("handBtn").classList.remove("active"); reactPop && reactPop.classList.add("hidden");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   clearAllCava();
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
