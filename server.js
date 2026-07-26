@@ -1517,7 +1517,8 @@ const getCall = (room) => { if (!callRooms.has(room)) callRooms.set(room, new Ma
 function callStatePayload(room) {
   const c = callRooms.get(room);
   const logins = c ? [...new Set([...c.values()].map((v) => v.login))] : [];
-  return { room, count: logins.length, logins };
+  const meta = callMeta.get(room);
+  return { room, count: logins.length, logins, locked: !!(meta && meta.locked), muteOnEntry: !!(meta && meta.muteOnEntry) };
 }
 function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
 // Remove one socket from a call room, running the same end-of-call bookkeeping
@@ -1916,6 +1917,14 @@ io.on("connection", (socket) => {
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
     const c = getCall(currentRoom);
+    // Locked group call: only the owner or someone already in it may join (checked before
+    // the device-swap so a legitimate reconnect from another device isn't turned away).
+    if (currentRoom.startsWith("@grp:")) {
+      const mLock = callMeta.get(currentRoom);
+      if (mLock && mLock.locked && ![...c.values()].some((v) => v.login === userLogin) && !(await isGroupOwner(currentRoom.slice(5), userLogin))) {
+        socket.emit("call-locked"); return;
+      }
+    }
     // Same user already in a call on ANOTHER device/room → kick it (full
     // cleanup) so this device takes over; the old one shows a red notice.
     for (const [room, members] of [...callRooms]) {
@@ -1938,6 +1947,11 @@ io.on("connection", (socket) => {
     const wasEmpty = c.size === 0;
     c.set(socket.id, { name: userName, login: userLogin });
     broadcastCallState(currentRoom);
+    // Mute-on-entry: a non-owner joining an ongoing group call starts muted if the owner set it.
+    if (!wasEmpty && currentRoom.startsWith("@grp:")) {
+      const mMoe = callMeta.get(currentRoom);
+      if (mMoe && mMoe.muteOnEntry && !(await isGroupOwner(currentRoom.slice(5), userLogin))) socket.emit("call-forced", { action: "mute", by: "host" });
+    }
     if (!wasEmpty) {
       // Другой участник присоединился — звонок отвечен
       const meta = callMeta.get(currentRoom);
@@ -2000,6 +2014,8 @@ io.on("connection", (socket) => {
     if (action === "mute" && target) emitTo(target, "call-forced", { action: "mute", by: userName });
     else if (action === "mute-all") { for (const info of members.values()) if (info.login !== userLogin) emitTo(info.login, "call-forced", { action: "mute", by: userName }); }
     else if (action === "kick" && target) { emitTo(target, "call-kicked", { by: userName }); for (const [sid, info] of [...members]) if (info.login === target) removeFromCall(currentRoom, sid); broadcastCallState(currentRoom); }
+    else if (action === "lock" || action === "unlock") { const m = callMeta.get(currentRoom); if (m) { m.locked = action === "lock"; broadcastCallState(currentRoom); } }
+    else if (action === "moe-on" || action === "moe-off") { const m = callMeta.get(currentRoom); if (m) { m.muteOnEntry = action === "moe-on"; broadcastCallState(currentRoom); } }
   });
 
   socket.on("set-status", async (status) => {

@@ -3813,10 +3813,15 @@ $("startCallBtn").onclick = () => {
   joinCall();
 };
 // Состояние звонка в комнате (для кнопки «войти» и боковой панели)
-socket.on("call-state", ({ room, count, logins }) => {
+socket.on("call-state", ({ room, count, logins, locked, muteOnEntry }) => {
   if (count > 0) activeCalls.set(room, { count, logins }); else activeCalls.delete(room);
+  if (call.active && room === call.roomKey) {   // reflect owner lock / mute-on-entry state on the toggles
+    const lt = $("lockToggle"); if (lt) lt.classList.toggle("on", !!locked);
+    const mt = $("moeToggle"); if (mt) mt.classList.toggle("on", !!muteOnEntry);
+  }
   updateCallButton(); if (!$("infoPanel").classList.contains("hidden")) renderMembers();
 });
+socket.on("call-locked", () => notify(t("call_is_locked")));
 function updateCallButton() {
   const btn = $("startCallBtn"); if (!btn) return;
   const inThis = call.active && call.roomKey === myRoom;
@@ -3939,6 +3944,8 @@ async function joinCall() {
   populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
   $("toggleDeafen").classList.remove("off"); $("toggleDeafen").innerHTML = window.ICON.headphones;
   dismissNotif(myRoom);
+  if (pttOn) setMic(false);   // push-to-talk: start muted, hold Space to talk
+  syncCallOwnerUI();
   socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
 }
 function endCall() {
@@ -4081,6 +4088,7 @@ $("toggleCam").onclick = async () => {
     const Src = window.LivekitClient && window.LivekitClient.Track.Source.Camera;
     const pub = Src && call.room.localParticipant.getTrackPublication ? call.room.localParticipant.getTrackPublication(Src) : null;
     if (pub && pub.track) attachLocalCamera(pub.track); else setTileAvatar("me", false);
+    if (blurOn) applyBlur(true);   // re-apply background blur to the freshly-enabled camera
   } else {
     setTileAvatar("me", true);
   }
@@ -4205,7 +4213,56 @@ $("ssCancelBtn").onclick = closeScreenModal;
 $("screenModal").addEventListener("click", (e) => { if (e.target === $("screenModal")) closeScreenModal(); });
 
 // Дропдаун микрофона + устройства
-$("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) populateDevices(); };
+$("micDrop").onclick = (e) => { e.stopPropagation(); $("micDropdown").classList.toggle("open"); if ($("micDropdown").classList.contains("open")) { populateDevices(); syncCallOwnerUI(); } };
+
+// ---------- Push-to-talk · background blur · owner call-lock / mute-on-entry ----------
+let pttOn = localStorage.getItem("dialog_ptt") === "1";
+let blurOn = localStorage.getItem("dialog_blur") === "1";
+let blurMod = null, blurProc = null;
+function syncCallOwnerUI() {
+  const show = call.active && curKind === "group" && groupOwner;
+  document.querySelectorAll(".owner-only-call").forEach((el) => el.classList.toggle("hidden", !show));
+  $("pttToggle") && $("pttToggle").classList.toggle("on", pttOn);
+  $("blurToggle") && $("blurToggle").classList.toggle("on", blurOn);
+}
+$("togglePtt") && ($("togglePtt").onclick = (e) => {
+  e.stopPropagation(); pttOn = !pttOn; $("pttToggle").classList.toggle("on", pttOn);
+  localStorage.setItem("dialog_ptt", pttOn ? "1" : "0");
+  if (call.active && pttOn && call.micOn) setMic(false);   // muted until you hold Space
+});
+// Hold Space to talk while push-to-talk is on (ignored while typing).
+document.addEventListener("keydown", (e) => {
+  if (!call.active || !pttOn || e.repeat || e.code !== "Space") return;
+  const tag = (e.target.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea" || (e.target && e.target.isContentEditable)) return;
+  e.preventDefault(); if (!call.micOn) setMic(true);
+});
+document.addEventListener("keyup", (e) => {
+  if (!call.active || !pttOn || e.code !== "Space") return;
+  const tag = (e.target.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea") return;
+  e.preventDefault(); if (call.micOn) setMic(false);
+});
+// Background blur — camera-track processor via the same esm.sh pattern as Krisp; camera-only,
+// can never affect audio. Falls back silently (toggle off) if the browser can't run it.
+async function applyBlur(on) {
+  if (!call.room || !window.LivekitClient) return;
+  const pub = call.room.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Camera);
+  const track = pub && pub.track;
+  try {
+    if (on) {
+      if (!track) return;   // camera off → applied when it turns on (see toggleCam)
+      if (!blurMod) blurMod = await import("https://esm.sh/@livekit/track-processors");
+      if (!blurProc) blurProc = blurMod.BackgroundBlur ? blurMod.BackgroundBlur(12) : null;
+      if (blurProc) await track.setProcessor(blurProc);
+    } else if (track && track.stopProcessor) { await track.stopProcessor().catch(() => {}); }
+  } catch (err) { console.log("blur:", err.message); blurOn = false; $("blurToggle") && $("blurToggle").classList.remove("on"); }
+}
+$("toggleBlur") && ($("toggleBlur").onclick = async (e) => {
+  e.stopPropagation(); blurOn = !blurOn; $("blurToggle").classList.toggle("on", blurOn);
+  localStorage.setItem("dialog_blur", blurOn ? "1" : "0"); await applyBlur(blurOn);
+});
+// Owner: lock the call / mute new joiners on entry — enforced server-side (call-mod).
+$("toggleLock") && ($("toggleLock").onclick = (e) => { e.stopPropagation(); const on = !$("lockToggle").classList.contains("on"); $("lockToggle").classList.toggle("on", on); socket.emit("call-mod", { action: on ? "lock" : "unlock" }); });
+$("toggleMoe") && ($("toggleMoe").onclick = (e) => { e.stopPropagation(); const on = !$("moeToggle").classList.contains("on"); $("moeToggle").classList.toggle("on", on); socket.emit("call-mod", { action: on ? "moe-on" : "moe-off" }); });
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
 $("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); const snt = $("settingsNoiseToggle"); if (snt) snt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
 // Усиленный шумодав Krisp (LiveKit Cloud). Грузим по требованию; при неудаче остаётся браузерный NS.
