@@ -1991,6 +1991,17 @@ io.on("connection", (socket) => {
   });
   socket.on("call-leave", () => callLeave());
 
+  // Owner-only call moderation (group calls). Cooperative: the target's client obeys the signal.
+  socket.on("call-mod", async ({ action, target } = {}) => {
+    if (!currentRoom || !userLogin || !currentRoom.startsWith("@grp:")) return;
+    if (!(await isGroupOwner(currentRoom.slice(5), userLogin))) return; // only the group owner
+    const members = callRooms.get(currentRoom); if (!members) return;
+    const emitTo = (login, ev, data) => { for (const [sid, info] of members) if (info.login === login) io.to(sid).emit(ev, data); };
+    if (action === "mute" && target) emitTo(target, "call-forced", { action: "mute", by: userName });
+    else if (action === "mute-all") { for (const info of members.values()) if (info.login !== userLogin) emitTo(info.login, "call-forced", { action: "mute", by: userName }); }
+    else if (action === "kick" && target) { emitTo(target, "call-kicked", { by: userName }); for (const [sid, info] of [...members]) if (info.login === target) removeFromCall(currentRoom, sid); broadcastCallState(currentRoom); }
+  });
+
   socket.on("set-status", async (status) => {
     if (!userLogin || !["online", "dnd", "invisible"].includes(status)) return;
     userStatus.set(userLogin, status);
