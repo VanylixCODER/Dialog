@@ -28,7 +28,7 @@ const I18N = {
 
     screen_share_title: "Share your screen", screen_quality: "Quality", screen_pick_hint: "You'll choose the screen or window next.", screen_share_go: "Share screen", screen_share_failed: "Couldn't start screen share",
     spam_flood: "Slow down — you're sending too fast", spam_duplicate: "Stop spamming the same message",
-    mute_user: "Mute", volume: "Volume", mute_room: "Mute room", unmute_room: "Unmute room",
+    mute_user: "Mute", volume: "Volume", mute_room: "Mute room", unmute_room: "Unmute room", mod_force_mute: "Mute for everyone", mod_mute_all: "Mute everyone", mod_kick: "Remove from call", mod_muted_by: "{name} muted you", mod_kicked_by: "{name} removed you from the call",
     dm_open: "message", dm_ping: "{name} messaged you", mention_ping: "{name} mentioned you", mention_all: "Everyone", mention_all_hint: "Notify everyone here", room_sub_dm: "direct message", room_sub_group: "group",
     hub_my_groups: "My groups", btn_new_group: "+ New group",
     ph_dm_user: "Username", btn_open_dm: "Message", ph_group_name: "Group name", ph_group_members: "Members: alice, bob",
@@ -289,7 +289,7 @@ const I18N = {
 
     screen_share_title: "Демонстрация экрана", screen_quality: "Качество", screen_pick_hint: "Окно или экран выберете на следующем шаге.", screen_share_go: "Поделиться", screen_share_failed: "Не удалось начать демонстрацию",
     spam_flood: "Помедленнее — слишком часто", spam_duplicate: "Хватит спамить одним и тем же",
-    mute_user: "Заглушить", volume: "Громкость", mute_room: "Заглушить чат", unmute_room: "Включить звук чата",
+    mute_user: "Заглушить", volume: "Громкость", mute_room: "Заглушить чат", unmute_room: "Включить звук чата", mod_force_mute: "Заглушить для всех", mod_mute_all: "Заглушить всех", mod_kick: "Удалить из звонка", mod_muted_by: "{name} заглушил(а) вас", mod_kicked_by: "{name} удалил(а) вас из звонка",
     dm_open: "сообщение", dm_ping: "{name} написал(а) вам", mention_ping: "{name} упомянул(а) вас", mention_all: "Все", mention_all_hint: "Уведомить всех в чате", room_sub_dm: "личное сообщение", room_sub_group: "группа",
     hub_my_groups: "Мои группы", btn_new_group: "+ Новая группа",
     ph_dm_user: "Логин", btn_open_dm: "Написать", ph_group_name: "Название группы", ph_group_members: "Участники: alice, bob",

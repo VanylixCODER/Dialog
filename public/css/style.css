@@ -2573,6 +2573,15 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   border-radius: var(--r-2); transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
 .crp-item:hover { transform: scale(1.25); background: var(--accent-faint); }
 #handBtn.active { background: var(--accent-500); color: var(--on-accent); }
+/* Owner moderation section inside the per-tile volume popup. */
+.stream-vol-popup { flex-wrap: wrap; }
+.svp-mod { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-1); }
+.svp-mod.hidden { display: none; }
+.svp-mod-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: none; background: transparent;
+  color: var(--text); cursor: pointer; border-radius: var(--r-2); font: inherit; font-size: 13px; text-align: left; }
+.svp-mod-btn:hover { background: var(--accent-faint); }
+.svp-mod-btn.danger { color: var(--danger); }
+.svp-mod-btn.danger:hover { background: rgba(255, 82, 82, 0.12); }
 
 .voice-bar {
   display: flex; align-items: center; gap: 6px;

@@ -3460,8 +3460,16 @@ function openStreamVolPopup(tile, identity, e) {
     streamVolPopup.innerHTML =
       `<button id="svpMute">${window.ICON.volume}</button>` +
       `<input id="svpVol" type="range" min="0" max="1" step="0.05" value="1">` +
-      `<span class="svp-label" id="svpName">${escapeHtml(tile.querySelector(".tile-name")?.textContent?.trim() || "")}</span>`;
+      `<span class="svp-label" id="svpName">${escapeHtml(tile.querySelector(".tile-name")?.textContent?.trim() || "")}</span>` +
+      `<div class="svp-mod hidden" id="svpMod">` +
+        `<button class="svp-mod-btn" id="svpForceMute">🔇 <span data-i18n="mod_force_mute">Mute for all</span></button>` +
+        `<button class="svp-mod-btn" id="svpMuteAll">🔕 <span data-i18n="mod_mute_all">Mute everyone</span></button>` +
+        `<button class="svp-mod-btn danger" id="svpKick">⛔ <span data-i18n="mod_kick">Remove from call</span></button>` +
+      `</div>`;
     document.body.appendChild(streamVolPopup);
+    $("svpForceMute").onclick = () => { const id = streamVolPopup._identity; if (id) socket.emit("call-mod", { action: "mute", target: id }); streamVolPopup.classList.add("hidden"); };
+    $("svpMuteAll").onclick = () => { socket.emit("call-mod", { action: "mute-all" }); streamVolPopup.classList.add("hidden"); };
+    $("svpKick").onclick = () => { const id = streamVolPopup._identity; if (id) socket.emit("call-mod", { action: "kick", target: id }); streamVolPopup.classList.add("hidden"); };
     $("svpMute").onclick = () => {
       const id = streamVolPopup._identity;
       if (!id) return;
@@ -3495,6 +3503,7 @@ function openStreamVolPopup(tile, identity, e) {
   $("svpVol").disabled = st.muted;
   $("svpName").textContent = tile.querySelector(".tile-name")?.textContent?.trim() || "";
   streamVolPopup._identity = identity;
+  const svpMod = $("svpMod"); if (svpMod) svpMod.classList.toggle("hidden", !(call.active && curKind === "group" && groupOwner));
   streamVolPopup.classList.remove("hidden");
   streamVolPopup._openedAt = Date.now();
   requestAnimationFrame(() => {
@@ -4007,6 +4016,13 @@ socket.on("call-ring", (p) => {
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
 socket.on("call-auto-end", () => { if (call.active) endCall(); });
+// Owner moderation, target side (cooperative).
+socket.on("call-forced", ({ action, by } = {}) => {
+  if (action === "mute" && call.active && call.micOn) { setMic(false); notify(t("mod_muted_by", { name: by || "" })); }
+});
+socket.on("call-kicked", ({ by } = {}) => {
+  if (call.active) { notify(t("mod_kicked_by", { name: by || "" })); endCall(); }
+});
 // Caller cancelled before we answered → stop ringing + dismiss the popup.
 socket.on("call-cancelled", ({ room } = {}) => {
   if (pendingCall && (!room || pendingCall.room === room)) hideToast();
