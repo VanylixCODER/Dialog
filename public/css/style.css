@@ -2545,6 +2545,15 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   animation: recPulse 1.4s infinite;
 }
 .tile-mic svg { width: 14px; height: 14px; }
+/* Connection-quality dot (top-left of a call tile). */
+.tile-net {
+  position: absolute; top: 8px; left: 8px; z-index: 4;
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.55); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.tile-net.net-good { background: #22c55e; }
+.tile-net.net-bad { background: #ef4444; animation: recPulse 1.4s infinite; }
+.tile-net.net-unknown { background: #9aa0a6; }
 
 .voice-bar {
   display: flex; align-items: center; gap: 6px;

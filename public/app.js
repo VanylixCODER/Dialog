@@ -3432,15 +3432,21 @@ function ensureTile(identity, name, isMe) {
   }
   updateCallCount(); scheduleFsLayout(); return tile;
 }
-// Громкость/мут конкретного участника (локально, через LiveKit setVolume)
+// Громкость/мут конкретного участника (локально, через LiveKit setVolume).
+// Persisted by login → the level/mute you set for someone carries across every future call.
 const tileVol = new Map(); // identity -> {vol, muted}
+function loadCallVol() { try { return JSON.parse(localStorage.getItem("dialog_call_vol") || "{}") || {}; } catch { return {}; } }
+function persistedVolState(identity) { const s = loadCallVol()[identity]; return s && typeof s === "object" ? { vol: typeof s.vol === "number" ? s.vol : 1, muted: !!s.muted } : { vol: 1, muted: false }; }
+function saveCallVolFor(identity, st) { try { const all = loadCallVol(); all[identity] = { vol: st.vol, muted: st.muted }; localStorage.setItem("dialog_call_vol", JSON.stringify(all)); } catch {} }
+function volStateFor(identity) { let st = tileVol.get(identity); if (!st) { st = persistedVolState(identity); tileVol.set(identity, st); } return st; }
 function wireTileControls(tile, identity) {
   const muteBtn = tile.querySelector(".tctrl-mute"), vol = tile.querySelector(".tctrl-vol");
-  const st = tileVol.get(identity) || { vol: 1, muted: false }; tileVol.set(identity, st);
+  const st = volStateFor(identity);
   const apply = () => { const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity)); if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {} };
   vol.value = st.vol;
-  vol.oninput = () => { st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } apply(); };
-  muteBtn.onclick = () => { st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); apply(); };
+  muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted);
+  vol.oninput = () => { st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } apply(); saveCallVolFor(identity, st); };
+  muteBtn.onclick = () => { st.muted = !st.muted; muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted); apply(); saveCallVolFor(identity, st); };
   apply();
 }
 // ---------- Stream volume popup (right-click / long-press on tile) ----------
@@ -3465,7 +3471,7 @@ function openStreamVolPopup(tile, identity, e) {
       $("svpMute").innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume;
       $("svpMute").classList.toggle("muted", st.muted);
       $("svpVol").disabled = st.muted;
-      applyTileVol(id);
+      applyTileVol(id); saveCallVolFor(id, st);
     };
     $("svpVol").oninput = () => {
       const id = streamVolPopup._identity;
@@ -3479,11 +3485,10 @@ function openStreamVolPopup(tile, identity, e) {
         $("svpMute").classList.remove("muted");
         $("svpVol").disabled = false;
       }
-      applyTileVol(id);
+      applyTileVol(id); saveCallVolFor(id, st);
     };
   }
-  const st = tileVol.get(identity) || { vol: 1, muted: false };
-  tileVol.set(identity, st);
+  const st = volStateFor(identity);
   $("svpMute").innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume;
   $("svpMute").classList.toggle("muted", st.muted);
   $("svpVol").value = st.vol;
@@ -3730,6 +3735,7 @@ function wireRoom(room, LK) {
   room.on(E.TrackMuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), true); });
   room.on(E.TrackUnmuted, (pub, p) => { if (pub.kind === "audio") setMicIndicator(p.isLocal ? "me" : lkTile(p.identity), false); });
   room.on(E.ConnectionStateChanged, updateCallStatus);
+  room.on(E.ConnectionQualityChanged, (quality, p) => setTileNet(p.isLocal ? "me" : lkTile(p.identity), quality));
   room.on(E.Disconnected, () => { if (call.active) endCall(); });
 }
 function setMicIndicator(tileId, muted) {
@@ -3738,6 +3744,24 @@ function setMicIndicator(tileId, muted) {
   if (muted) { if (!ind) { ind = document.createElement("div"); ind.className = "tile-mic"; ind.innerHTML = window.ICON.micOff; tile.appendChild(ind); } }
   else if (ind) ind.remove();
 }
+// Per-participant connection-quality dot (green/amber/red) from LiveKit ConnectionQuality.
+function setTileNet(tileId, quality) {
+  const tile = $("tile-" + tileId); if (!tile) return;
+  let ind = tile.querySelector(".tile-net");
+  if (!ind) { ind = document.createElement("div"); ind.className = "tile-net"; tile.appendChild(ind); }
+  const q = String(quality || "unknown");
+  const lvl = q === "excellent" || q === "good" ? "good" : q === "poor" ? "bad" : "unknown";
+  ind.className = "tile-net net-" + lvl;
+  ind.title = t(lvl === "good" ? "net_good" : lvl === "bad" ? "net_poor" : "net_unknown");
+}
+// Call keyboard shortcuts (only during a call, never while typing): M mic · V camera · D deafen · S screen.
+document.addEventListener("keydown", (e) => {
+  if (!call.active || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const el = e.target, tag = (el.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || (el && el.isContentEditable)) return;
+  const btn = { m: "toggleMic", v: "toggleCam", d: "toggleDeafen", s: "shareScreen" }[e.key.toLowerCase()];
+  if (btn) { e.preventDefault(); const b = $(btn); if (b) b.click(); }
+});
 
 // Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
 $("startCallBtn").onclick = () => {
