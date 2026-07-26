@@ -2554,6 +2554,25 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .tile-net.net-good { background: #22c55e; }
 .tile-net.net-bad { background: #ef4444; animation: recPulse 1.4s infinite; }
 .tile-net.net-unknown { background: #9aa0a6; }
+/* In-call reactions (floating emoji) + raise-hand badge + reaction picker. */
+.tile-reaction { position: absolute; bottom: 16%; z-index: 6; font-size: 30px; pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); animation: rxnFloat 2.2s ease-out forwards; }
+@keyframes rxnFloat {
+  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
+  15% { opacity: 1; transform: translateY(0) scale(1.15); }
+  40% { transform: translateY(-28px) scale(1); }
+  100% { opacity: 0; transform: translateY(-92px) scale(0.9); }
+}
+.tile-hand { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 17px;
+  background: rgba(0, 0, 0, 0.6); border-radius: var(--r-pill); padding: 2px 8px; animation: handWave 1.2s ease-in-out infinite; }
+@keyframes handWave { 0%, 100% { transform: translateX(-50%) rotate(-9deg); } 50% { transform: translateX(-50%) rotate(9deg); } }
+.call-react-pop { position: fixed; z-index: 2600; display: flex; gap: 4px; padding: 8px;
+  background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-pill); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); }
+.call-react-pop.hidden { display: none; }
+.crp-item { border: none; background: transparent; font-size: 24px; line-height: 1; cursor: pointer; padding: 4px 6px;
+  border-radius: var(--r-2); transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.crp-item:hover { transform: scale(1.25); background: var(--accent-faint); }
+#handBtn.active { background: var(--accent-500); color: var(--on-accent); }
 
 .voice-bar {
   display: flex; align-items: center; gap: 6px;
