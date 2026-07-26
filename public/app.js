@@ -3749,7 +3749,6 @@ function wireRoom(room, LK) {
     let d; try { d = JSON.parse(new TextDecoder().decode(payload)); } catch { return; }
     const tileId = p && p.identity ? lkTile(p.identity) : null; if (!tileId) return;
     if (d.t === "rx" && d.e) floatEmoji(tileId, String(d.e).slice(0, 8));
-    else if (d.t === "hand") setHand(tileId, !!d.up);
   });
   room.on(E.Disconnected, () => { if (call.active) endCall(); });
 }
@@ -3778,9 +3777,8 @@ document.addEventListener("keydown", (e) => {
   if (btn) { e.preventDefault(); const b = $(btn); if (b) b.click(); }
 });
 
-// ---------- In-call reactions + raise hand (broadcast over the LiveKit data channel) ----------
+// ---------- In-call reactions (broadcast over the LiveKit data channel) ----------
 const RXN_EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "👏", "🔥", "🙏"];
-let handUp = false;
 function lkPublish(obj) { try { const lp = call.room && call.room.localParticipant; if (lp && lp.publishData) lp.publishData(new TextEncoder().encode(JSON.stringify(obj)), { reliable: true }); } catch {} }
 function floatEmoji(tileId, emoji) {
   const tile = $("tile-" + tileId); if (!tile) return;
@@ -3788,14 +3786,7 @@ function floatEmoji(tileId, emoji) {
   s.style.left = (12 + Math.random() * 60) + "%";
   tile.appendChild(s); setTimeout(() => s.remove(), 2200);
 }
-function setHand(tileId, up) {
-  const tile = $("tile-" + tileId); if (!tile) return;
-  let h = tile.querySelector(".tile-hand");
-  if (up) { if (!h) { h = document.createElement("div"); h.className = "tile-hand"; h.textContent = "✋"; tile.appendChild(h); } }
-  else if (h) h.remove();
-}
 function sendReaction(emoji) { floatEmoji("me", emoji); lkPublish({ t: "rx", e: emoji }); }
-function toggleHand() { handUp = !handUp; setHand("me", handUp); const b = $("handBtn"); if (b) b.classList.toggle("active", handUp); lkPublish({ t: "hand", up: handUp }); }
 let reactPop;
 function openCallReactPicker(e) {
   if (!reactPop) {
@@ -3812,7 +3803,6 @@ function openCallReactPicker(e) {
   }
 }
 $("reactBtn") && ($("reactBtn").onclick = (e) => { e.stopPropagation(); openCallReactPicker(e); });
-$("handBtn") && ($("handBtn").onclick = () => toggleHand());
 document.addEventListener("click", (e) => { if (reactPop && !reactPop.classList.contains("hidden") && Date.now() - (reactPop._openedAt || 0) > 200 && !reactPop.contains(e.target) && e.target !== $("reactBtn")) reactPop.classList.add("hidden"); });
 
 // Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
@@ -3956,7 +3946,7 @@ function endCall() {
   if (isCallFullscreen()) exitCallFullscreen(); // tear down native/overlay fullscreen
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
-  handUp = false; $("handBtn") && $("handBtn").classList.remove("active"); reactPop && reactPop.classList.add("hidden");
+  reactPop && reactPop.classList.add("hidden");
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   clearAllCava();
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
@@ -5291,7 +5281,7 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
