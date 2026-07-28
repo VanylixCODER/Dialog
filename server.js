@@ -2011,6 +2011,17 @@ io.on("connection", (socket) => {
   });
   socket.on("call-leave", () => callLeave());
 
+  // ---- Custom P2P WebRTC signalling relay (SDP offer/answer + ICE) ----
+  // Relays a payload to a specific peer *login* that is in the same call room. No media ever
+  // touches the server — it only forwards the tiny signalling messages between the two browsers.
+  socket.on("rtc-signal", ({ to, data } = {}) => {
+    if (!currentRoom || !userLogin || !to || !data) return;
+    const members = callRooms.get(currentRoom); if (!members) return;
+    // Sender must actually be in this call room (prevents relaying from outside a call).
+    if (![...members.values()].some((v) => v.login === userLogin)) return;
+    for (const [sid, info] of members) if (info.login === to && sid !== socket.id) io.to(sid).emit("rtc-signal", { from: userLogin, fromName: userName, data });
+  });
+
   // Owner-only call moderation (group calls). Cooperative: the target's client obeys the signal.
   socket.on("call-mod", async ({ action, target } = {}) => {
     if (!currentRoom || !userLogin || !currentRoom.startsWith("@grp:")) return;

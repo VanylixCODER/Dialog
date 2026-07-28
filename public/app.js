@@ -3407,7 +3407,7 @@ if (moreBtn && moreDropdown) {
 }
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null, peers: null, localStream: null };
 const audioEls = new Map(); // identity -> <audio> (голос участника / микрофон)
 const screenAudioEls = new Map(); // identity -> <audio> (звук демонстрации экрана, отдельно от микрофона)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
@@ -3818,6 +3818,7 @@ socket.on("call-state", ({ room, count, logins, locked, muteOnEntry }) => {
   if (call.active && room === call.roomKey) {   // reflect owner lock / mute-on-entry state on the toggles
     const lt = $("lockToggle"); if (lt) lt.classList.toggle("on", !!locked);
     const mt = $("moeToggle"); if (mt) mt.classList.toggle("on", !!muteOnEntry);
+    p2pReconcile(logins);   // open/close P2P peer connections to match who's in the call
   }
   updateCallButton(); if (!$("infoPanel").classList.contains("hidden")) renderMembers();
 });
@@ -3910,33 +3911,105 @@ $("minBtn").onclick = () => { call.minimized = true; syncCallUI(); };
   grip.addEventListener("pointermove", (e) => { if (dragging) showHint(zoneAt(e.clientX, e.clientY)); });
   grip.addEventListener("pointerup", (e) => { if (!dragging) return; dragging = false; if (hint) hint.classList.remove("show"); callDock = zoneAt(e.clientX, e.clientY); localStorage.setItem("dialog_dock", callDock); applyDock(); });
 })();
+// ============ Custom P2P WebRTC calling (replaces LiveKit Cloud) ============
+// No media server: browsers connect directly, signalling (SDP/ICE) is relayed over Socket.IO,
+// NAT traversal via /api/ice (STUN + Metered TURN). Peers are keyed by login; mesh for groups.
+let p2pIce = null, p2pIceExp = 0;
+async function p2pGetIce() {
+  if (p2pIce && Date.now() < p2pIceExp) return p2pIce;
+  try { const { ok, data } = await api("/api/ice", null, "GET"); if (ok && data && Array.isArray(data.iceServers) && data.iceServers.length) { p2pIce = data.iceServers; p2pIceExp = Date.now() + 3000e3; return p2pIce; } } catch {}
+  return [{ urls: "stun:stun.l.google.com:19302" }];
+}
+function p2pNameFor(login) {
+  const c = chats.get(activeKey); if (c && c.type === "dm" && c.login === login) return c.name;
+  const m = (groupMembers || []).find((x) => x.login === login); if (m) return m.name;
+  return login;
+}
+function p2pBroadcast(data) { if (call.peers) for (const login of call.peers.keys()) socket.emit("rtc-signal", { to: login, data }); }
+// Synchronous (ICE is pre-warmed in joinCall) so two rapid call-state events can't double-create.
+function p2pEnsurePeer(login, name) {
+  if (!call.active || !call.peers || login === profile.login) return null;
+  let m = call.peers.get(login);
+  if (m) { if (name) m.name = name; return m; }
+  const pc = new RTCPeerConnection({ iceServers: p2pIce || [{ urls: "stun:stun.l.google.com:19302" }] });
+  m = { pc, makingOffer: false, ignoreOffer: false, polite: profile.login > login, name: name || p2pNameFor(login) };
+  call.peers.set(login, m);
+  ensureTile(login, m.name, false);
+  if (call.localStream) for (const track of call.localStream.getTracks()) { try { pc.addTrack(track, call.localStream); } catch {} }
+  pc.onicecandidate = ({ candidate }) => { if (candidate) socket.emit("rtc-signal", { to: login, data: { candidate } }); };
+  pc.onnegotiationneeded = async () => {
+    try { m.makingOffer = true; await pc.setLocalDescription(); socket.emit("rtc-signal", { to: login, data: { description: pc.localDescription } }); }
+    catch (e) { console.log("nego", e.message); } finally { m.makingOffer = false; }
+  };
+  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") { try { pc.restartIce(); } catch {} } };
+  pc.ontrack = (e) => p2pOnTrack(login, m, e);
+  return m;
+}
+function p2pOnTrack(login, m, e) {
+  const stream = e.streams[0]; if (!stream) return;
+  if (e.track.kind === "video") {
+    const tile = ensureTile(login, m.name, false);
+    const v = tile.querySelector("video"); if (v) { v.srcObject = stream; setTileAvatar(lkTile(login), false); }
+    e.track.onended = () => setTileAvatar(lkTile(login), true);
+  } else {
+    let a = audioEls.get(login);
+    if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(login, a); }
+    a.srcObject = stream; applySinkId(a); a.muted = call.deaf;
+    const st = volStateFor(login); try { a.volume = st.muted ? 0 : Math.min(1, st.vol); } catch {}
+    try { addTileCava(lkTile(login), e.track); } catch {}
+  }
+}
+async function p2pOnSignal({ from, fromName, data }) {
+  if (!call.active || !from || !data) return;
+  const m = p2pEnsurePeer(from, fromName); if (!m) return;
+  if (data.mic !== undefined) { setMicIndicator(lkTile(from), !data.mic); return; }  // remote mute indicator
+  const pc = m.pc;
+  try {
+    if (data.description) {
+      const desc = data.description;
+      const collision = desc.type === "offer" && (m.makingOffer || pc.signalingState !== "stable");
+      m.ignoreOffer = !m.polite && collision;
+      if (m.ignoreOffer) return;
+      await pc.setRemoteDescription(desc);
+      if (desc.type === "offer") { await pc.setLocalDescription(); socket.emit("rtc-signal", { to: from, data: { description: pc.localDescription } }); }
+    } else if (data.candidate) {
+      try { await pc.addIceCandidate(data.candidate); } catch (e) { if (!m.ignoreOffer) console.log("ice", e.message); }
+    }
+  } catch (e) { console.log("rtc-signal", e.message); }
+}
+socket.on("rtc-signal", p2pOnSignal);
+function p2pClosePeer(login) {
+  const m = call.peers && call.peers.get(login); if (!m) return;
+  try { m.pc.close(); } catch {}
+  call.peers.delete(login); removeParticipant(login);
+}
+function p2pLeaveAll() {
+  if (call.peers) { for (const m of call.peers.values()) { try { m.pc.close(); } catch {} } call.peers.clear(); }
+  if (call.localStream) { for (const tk of call.localStream.getTracks()) { try { tk.stop(); } catch {} } call.localStream = null; }
+}
+// Establish/tear down peer connections to match who's in the call room (from call-state).
+function p2pReconcile(logins) {
+  if (!call.active || !call.peers) return;
+  const want = new Set((logins || []).filter((l) => l !== profile.login));
+  for (const l of want) p2pEnsurePeer(l, p2pNameFor(l));
+  for (const l of [...call.peers.keys()]) if (!want.has(l)) p2pClosePeer(l);
+}
+
 async function joinCall() {
   ensureAudioCtx();
-  const { ok, data } = await api("/api/livekit/token?room=" + encodeURIComponent(myRoom), null, "GET");
-  if (!ok || !data.enabled) { alert(t("call_disabled")); return; }
-  const LK = window.LivekitClient;
-  if (!LK) { alert(t("call_disabled")); return; }
-  const room = new LK.Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  call.room = room; call.active = true; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; wireRoom(room, LK); startCallMatrix(); startPing();
+  let stream;
+  const micCon = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  if (call.audioInId) micCon.deviceId = { ideal: call.audioInId };
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: micCon, video: false }); }
+  catch (e) { alert(t("err_media") + (e.message || "")); return; }
+  await p2pGetIce();   // warm the ICE (STUN+TURN) cache so peer creation is synchronous
+  call.localStream = stream; call.peers = new Map();
+  call.active = true; call.room = null; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false;
+  startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
   applySpeaker(); // restore the saved loudspeaker/earpiece route (native mobile only)
-  // Android: start the foreground service (keeps the call alive in the background + ongoing notification).
   if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
-  try {
-    await room.connect(data.url, data.token);
-    await room.localParticipant.setMicrophoneEnabled(true);
-    if (call.audioInId) await room.switchActiveDevice("audioinput", call.audioInId).catch(() => {});
-    applyNoiseFilter(true); // усиленный шумодав по умолчанию
-    // показать уже присутствующих участников (для них ParticipantConnected не приходит)
-    const parts = room.remoteParticipants || room.participants;
-    parts && parts.forEach((p) => {
-      ensureTile(p.identity, p.name || p.identity, false);
-      const pubs = p.trackPublications || p.tracks;
-      pubs && pubs.forEach((pub) => { if (pub.track) attachTrack(pub.track, pub, p); });
-      if (!p.isMicrophoneEnabled) setMicIndicator(lkTile(p.identity), true);
-    });
-  } catch (e) { console.error("livekit connect", e); if (call.active) { alert(t("err_media") + (e.message || "")); endCall(); } return; }
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
@@ -3954,6 +4027,7 @@ function endCall() {
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
   reactPop && reactPop.classList.add("hidden");
+  p2pLeaveAll();   // close all P2P peer connections + stop local media
   if (call.room) { try { call.room.disconnect(); } catch {} call.room = null; }
   clearAllCava();
   for (const a of audioEls.values()) { try { a.srcObject = null; a.remove(); } catch {} } audioEls.clear();
@@ -4042,14 +4116,16 @@ function showDeviceTakeover() {
 // Контролы
 async function setMic(on) {
   call.micOn = on;
-  try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {}
+  if (call.localStream) call.localStream.getAudioTracks().forEach((tk) => { tk.enabled = on; });   // P2P
+  else if (call.room) { try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {} } // legacy
+  p2pBroadcast({ mic: on });   // tell peers so their mic indicator on my tile updates
   $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
   setMicIndicator("me", !on); (on ? sfx.unmute : sfx.mute)();
 }
-$("toggleMic").onclick = () => { if (!call.room) return; setMic(!call.micOn); };
+$("toggleMic").onclick = () => { if (!call.active) return; setMic(!call.micOn); };
 // Заглушить наушники (deafen) — глушим входящий звук; по-дискордовски выключаем и свой микрофон
 $("toggleDeafen").onclick = () => {
-  if (!call.room) return;
+  if (!call.active) return;
   call.deaf = !call.deaf;
   audioEls.forEach((a) => (a.muted = call.deaf));
   screenAudioEls.forEach((a) => (a.muted = call.deaf));
