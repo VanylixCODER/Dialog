@@ -3632,9 +3632,17 @@ function showGridHint() {
 function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; }
 function updateCallStatus() {
   const el = $("callStatus"); if (!el) return;
-  const s = call.room ? call.room.state : ""; // 'connecting'|'connected'|'reconnecting'|'disconnected'
-  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected" };
-  el.textContent = call.active ? t(map[s] || "call_waiting") : "";
+  if (!call.active) { el.textContent = ""; el.className = "call-status"; return; }
+  let s;
+  if (call.peers && call.peers.size) {                 // P2P: derive from peer connection states
+    const states = [...call.peers.values()].map((m) => m.pc && m.pc.connectionState);
+    if (states.some((x) => x === "connected")) s = "connected";
+    else if (states.some((x) => x === "failed" || x === "disconnected")) s = "reconnecting";
+    else s = "connecting";
+  } else if (call.room) { s = call.room.state; }        // legacy LiveKit
+  else { s = "waiting"; }                                // alone in the call, waiting for someone to join
+  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected", waiting: "call_waiting" };
+  el.textContent = t(map[s] || "call_waiting");
   el.className = "call-status " + (s === "connected" ? "ok" : s === "reconnecting" || s === "disconnected" ? "bad" : "");
 }
 
@@ -3946,6 +3954,7 @@ function p2pEnsurePeer(login, name) {
     catch (e) { console.log("nego", e.message); } finally { m.makingOffer = false; }
   };
   pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") { try { pc.restartIce(); } catch {} } };
+  pc.onconnectionstatechange = () => updateCallStatus();   // "connecting" → "Connected" once media is flowing
   pc.ontrack = (e) => p2pOnTrack(login, m, e);
   return m;
 }
@@ -3988,7 +3997,7 @@ socket.on("rtc-signal", p2pOnSignal);
 function p2pClosePeer(login) {
   const m = call.peers && call.peers.get(login); if (!m) return;
   try { m.pc.close(); } catch {}
-  call.peers.delete(login); removeParticipant(login);
+  call.peers.delete(login); removeParticipant(login); updateCallStatus();
 }
 function p2pLeaveAll() {
   if (call.peers) { for (const m of call.peers.values()) { try { m.pc.close(); } catch {} } call.peers.clear(); }
