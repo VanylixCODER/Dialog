@@ -4710,40 +4710,22 @@ function startRingtone() {
   ensureAudioCtx();
   ensureRingAnalyser();
   startCava();
-  if (!ringMp3Disabled) {
-    if (!ringAudioEl) {
-      ringAudioEl = new Audio("/ringtone.mp3");
-      ringAudioEl.loop = true;
-      // preload="none" — не тащим 24KB на каждой загрузке страницы, если звонка так и не будет.
-      // Первый ring-ring всё равно быстро закэшируется (server/CDN) — лаг незаметный.
-      ringAudioEl.preload = "none";
-      ringAudioEl.addEventListener("error", () => {
-        // 404 / decode-failure — отключаем mp3 навсегда и, если ринг активен на этом пути,
-        // немедленно подхватываем синтезатор. Один console.warn чтобы не было «бесследного» фоллбэка:
-        // если юзер кинет свой файл с битым именем/форматом, причина ищется в DevTools одной строкой.
-        console.warn("ringtone.mp3 failed to load, falling back to synth chord");
-        ringMp3Disabled = true;
-        ringAudioEl = null;
-        if (ring.audio && ring.audio.mp3) startRingtoneSynth();
-      }, { once: true });
-    }
-    ring.audio = { mp3: true };
-    // Route the mp3 through the analyser so CAVA reacts to it (once per element).
-    if (ring.analyser && !ringSrcNode && audioCtx) {
-      try { ringSrcNode = audioCtx.createMediaElementSource(ringAudioEl); ringSrcNode.connect(ring.analyser); }
-      catch { ringSrcNode = null; }
-    }
-    ringAudioEl.currentTime = 0;
-    const p = ringAudioEl.play();
-    if (p && typeof p.catch === "function") {
-      p.catch(() => {
-        // NotAllowedError и подобные — на этот звонок синтезатор; ringMp3Disabled НЕ выставляем.
-        if (ring.audio && ring.audio.mp3) startRingtoneSynth();
-      });
-    }
-    return;
+  // Always the real ringtone file (public/ringtone.mp3) — no synth fallback.
+  if (!ringAudioEl) {
+    ringAudioEl = new Audio("/ringtone.mp3");
+    ringAudioEl.loop = true;
+    ringAudioEl.preload = "none";
+    ringAudioEl.addEventListener("error", () => { console.warn("ringtone.mp3 failed to load"); }, { once: true });
   }
-  startRingtoneSynth();
+  ring.audio = { mp3: true };
+  // Route the mp3 through the analyser so CAVA reacts to it (once per element).
+  if (ring.analyser && !ringSrcNode && audioCtx) {
+    try { ringSrcNode = audioCtx.createMediaElementSource(ringAudioEl); ringSrcNode.connect(ring.analyser); }
+    catch { ringSrcNode = null; }
+  }
+  ringAudioEl.currentTime = 0;
+  const p = ringAudioEl.play();
+  if (p && typeof p.catch === "function") p.catch((e) => console.warn("ringtone play blocked:", e && e.name));
 }
 function startRingtoneSynth() {
   // Старая логика рингтона (WebAudio chord каждые 4.5с) — fallback, если /ringtone.mp3 отсутствует
