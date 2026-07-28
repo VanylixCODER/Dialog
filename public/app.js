@@ -3442,7 +3442,10 @@ function volStateFor(identity) { let st = tileVol.get(identity); if (!st) { st =
 function wireTileControls(tile, identity) {
   const muteBtn = tile.querySelector(".tctrl-mute"), vol = tile.querySelector(".tctrl-vol");
   const st = volStateFor(identity);
-  const apply = () => { const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity)); if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {} };
+  const apply = () => {
+    const a = audioEls.get(identity); if (a) a.volume = st.muted ? 0 : Math.min(1, st.vol);   // P2P: element gain
+    const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity)); if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {} // legacy
+  };
   vol.value = st.vol;
   muteBtn.innerHTML = st.muted ? window.ICON.volumeMute : window.ICON.volume; muteBtn.classList.toggle("muted", st.muted);
   vol.oninput = () => { st.vol = parseFloat(vol.value); if (st.muted) { st.muted = false; muteBtn.innerHTML = window.ICON.volume; muteBtn.classList.remove("muted"); } apply(); saveCallVolFor(identity, st); };
@@ -3515,6 +3518,7 @@ function openStreamVolPopup(tile, identity, e) {
 function applyTileVol(identity) {
   const st = tileVol.get(identity);
   if (!st) return;
+  const a = audioEls.get(identity); if (a) a.volume = st.muted ? 0 : Math.min(1, st.vol);   // P2P: element gain
   const p = call.room && (call.room.remoteParticipants?.get?.(identity) || call.room.getParticipantByIdentity?.(identity));
   if (p && p.setVolume) try { p.setVolume(st.muted ? 0 : st.vol); } catch {}
 }
