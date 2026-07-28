@@ -774,8 +774,18 @@ export async function getUserDMs(login) {
 export async function saveUserDMs(login, dms) {
   await execute("DELETE FROM user_dms WHERE login=?", [login]);
   if (!dms || !dms.length) return;
-  const vals = dms.map((d) => [login, d.key, d.login, d.name || "", d.ts || 0]);
-  await execute("INSERT INTO user_dms (login, chat_key, target_login, name, ts) VALUES ?", [vals]);
+  // Dedupe by chat_key — a duplicate key blows up the bulk INSERT (ER_DUP_ENTRY); last write wins.
+  const seen = new Map();
+  for (const d of dms) if (d && d.key) seen.set(d.key, d);
+  const vals = [...seen.values()].map((d) => [login, d.key, d.login, d.name || "", d.ts || 0]);
+  if (!vals.length) return;
+  // ON DUPLICATE KEY UPDATE also makes this safe against two concurrent saves racing the
+  // DELETE→INSERT (which previously crashed the whole server on the collision).
+  await execute(
+    "INSERT INTO user_dms (login, chat_key, target_login, name, ts) VALUES ? " +
+    "ON DUPLICATE KEY UPDATE target_login=VALUES(target_login), name=VALUES(name), ts=VALUES(ts)",
+    [vals]
+  );
 }
 
 // ---------- Закреплённые чаты (серверная синхронизация) ----------
