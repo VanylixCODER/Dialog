@@ -81,6 +81,12 @@ for (const level of ["log", "info", "warn", "error"]) {
   console[level] = (...args) => { pushLog(level, args); orig(...args); };
 }
 
+// Last-resort resilience: a stray DB error or unhandled rejection must NEVER take the whole
+// server down — a crash drops every Socket.IO connection and kills all in-progress calls.
+// Log loudly and stay up. (An ER_DUP_ENTRY from a racing user_dms save was crash-looping us.)
+process.on("unhandledRejection", (e) => console.error("unhandledRejection:", (e && e.stack) || (e && e.message) || e));
+process.on("uncaughtException", (e) => console.error("uncaughtException:", (e && e.stack) || (e && e.message) || e));
+
 // In-memory mirror of banned_ips (ip -> expires|null) so the gate stays synchronous.
 const bannedIps = new Map();
 // Normalize IPv4-mapped IPv6 (::ffff:1.2.3.4) down to the v4 form for consistent matching.
@@ -955,8 +961,8 @@ app.get("/api/dms", async (req, res) => {
 app.post("/api/dms", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const list = Array.isArray(req.body.dms) ? req.body.dms.slice(0, 50) : [];
-  await saveUserDMs(me.login, list);
-  res.json({ ok: true });
+  try { await saveUserDMs(me.login, list); res.json({ ok: true }); }
+  catch (e) { console.error("saveUserDMs", e.message); res.status(500).json({ error: "save_failed" }); }
 });
 
 // ---------- REST: закреплённые чаты (серверная синхронизация) ----------
