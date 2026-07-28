@@ -3407,7 +3407,7 @@ if (moreBtn && moreDropdown) {
 }
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null, peers: null, localStream: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null, peers: null, localStream: null, videoTrack: null };
 const audioEls = new Map(); // identity -> <audio> (голос участника / микрофон)
 const screenAudioEls = new Map(); // identity -> <audio> (звук демонстрации экрана, отдельно от микрофона)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
@@ -3949,8 +3949,11 @@ function p2pOnTrack(login, m, e) {
   const stream = e.streams[0]; if (!stream) return;
   if (e.track.kind === "video") {
     const tile = ensureTile(login, m.name, false);
-    const v = tile.querySelector("video"); if (v) { v.srcObject = stream; setTileAvatar(lkTile(login), false); }
-    e.track.onended = () => setTileAvatar(lkTile(login), true);
+    const v = tile.querySelector("video"); if (v) v.srcObject = stream;
+    const showVid = () => setTileAvatar(lkTile(login), false);
+    const showAva = () => setTileAvatar(lkTile(login), true);   // peer turned camera off → their track mutes
+    e.track.muted ? showAva() : showVid();
+    e.track.onunmute = showVid; e.track.onmute = showAva; e.track.onended = showAva;
   } else {
     let a = audioEls.get(login);
     if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); audioEls.set(login, a); }
@@ -4148,26 +4151,39 @@ function canStartStream() {
   return true;
 }
 $("toggleCam").onclick = async () => {
-  if (!call.room) return;
+  if (!call.active) return;
   if (!call.camOn && !canStartStream()) return;
-  call.camOn = !call.camOn;
-  try {
-    if (call.camOn && call.camId) await call.room.switchActiveDevice("videoinput", call.camId);
-    await call.room.localParticipant.setCameraEnabled(call.camOn, { resolution: { width: 640, height: 360 } });
-  } catch { call.camOn = false; }
-  $("toggleCam").classList.toggle("off", !call.camOn);
-  $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
-  // Flip-camera button: only useful with the camera on and 2+ cameras (phones).
-  updateFlipCamBtn();
-  if (call.camOn) {
-    // self-view сразу, не дожидаясь LocalTrackPublished (подстраховка от приватного бага)
-    const Src = window.LivekitClient && window.LivekitClient.Track.Source.Camera;
-    const pub = Src && call.room.localParticipant.getTrackPublication ? call.room.localParticipant.getTrackPublication(Src) : null;
-    if (pub && pub.track) attachLocalCamera(pub.track); else setTileAvatar("me", false);
-    if (blurOn) applyBlur(true);   // re-apply background blur to the freshly-enabled camera
+  if (!call.camOn) {
+    // Turn camera ON: capture video, add the track to every peer (→ renegotiation), show self-view.
+    const vcon = { width: { ideal: 640 }, height: { ideal: 360 } };
+    if (call.camId) vcon.deviceId = { ideal: call.camId };
+    let vstream;
+    try { vstream = await navigator.mediaDevices.getUserMedia({ video: vcon }); }
+    catch (e) { return; }
+    const vtrack = vstream.getVideoTracks()[0]; if (!vtrack) return;
+    call.videoTrack = vtrack; call.camOn = true;
+    try { call.localStream.addTrack(vtrack); } catch {}
+    for (const m of call.peers.values()) { try { m.pc.addTrack(vtrack, call.localStream); } catch {} }
+    const meTile = ensureTile(profile.login, myName, true);
+    const v = meTile.querySelector("video"); if (v) { v.srcObject = new MediaStream([vtrack]); v.muted = true; }
+    setTileAvatar("me", false);
+    vtrack.onended = () => { if (call.camOn) $("toggleCam").click(); };  // device unplugged → flip UI off
   } else {
+    // Turn camera OFF: remove the track from every peer (→ renegotiation), stop it, back to avatar.
+    const vtrack = call.videoTrack;
+    if (vtrack) {
+      for (const m of call.peers.values()) { const s = m.pc.getSenders().find((x) => x.track === vtrack); if (s) { try { m.pc.removeTrack(s); } catch {} } }
+      try { call.localStream.removeTrack(vtrack); } catch {}
+      try { vtrack.stop(); } catch {}
+      call.videoTrack = null;
+    }
+    call.camOn = false;
+    const meTile = $("tile-me"); const v = meTile && meTile.querySelector("video"); if (v) v.srcObject = null;
     setTileAvatar("me", true);
   }
+  $("toggleCam").classList.toggle("off", !call.camOn);
+  $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
+  updateFlipCamBtn();
 };
 // Flip between the phone's front/back cameras (cycles video inputs). The button
 // only shows with the camera on and more than one camera present.
