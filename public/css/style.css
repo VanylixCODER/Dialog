@@ -3001,12 +3001,13 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
   .call-bar { --cbtn: 48px; }
-  /* Phone: secondary controls (react · speaker · deafen) collapse into a ⋮ dropdown. */
-  .call-more { display: none; position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+  /* Phone: secondary controls (react · speaker · deafen) collapse into a ⋮ dropdown.
+     Fixed above the call bar with a high z-index so it's never clipped or mispositioned
+     by the bar wrapping / the fullscreen stage. */
+  .call-more { display: none; position: fixed; bottom: calc(84px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     flex-direction: row; gap: 10px; padding: 10px 12px; background: var(--bg-1); border: 1px solid var(--border-2);
-    border-radius: var(--r-pill); box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55); z-index: 30; }
+    border-radius: var(--r-pill); box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55); z-index: 250; }
   .call-more.open { display: flex; }
-  #callStage.fs-call .call-more.open { position: fixed; bottom: 92px; }
   .call-btn.mobile-only { display: grid; }
   .call-grip, .call-resizer { display: none !important; }
   .lang-select { top: 10px; right: 10px; }
