@@ -2165,6 +2165,25 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 }
 /* Prominent name pill on a focused stream. */
 .video-grid.pip-grid.has-focus .tile.focused .tile-name { font-size: 15px; padding: 5px 14px; }
+
+/* Phone spotlight = WhatsApp/Discord full-screen: the tapped stream fills the whole screen
+   (cover), everyone else (incl. your self-view) becomes a small floating corner PiP. */
+@media (max-width: 720px) {
+  .video-grid.pip-grid.has-focus { display: block; position: relative; padding: 0; overflow: hidden; }
+  .video-grid.pip-grid.has-focus .tile.focused {
+    position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; z-index: 1;
+  }
+  .video-grid.pip-grid.has-focus .tile.focused > video { object-fit: cover; }
+  .video-grid.pip-grid.has-focus .tile:not(.focused) {
+    position: absolute; z-index: 3; right: 12px; width: 94px; height: 140px; aspect-ratio: auto;
+    border-radius: 14px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  }
+  .video-grid.pip-grid.has-focus .tile:not(.focused) > video { object-fit: cover; }
+  .video-grid.pip-grid.has-focus .tile:not(.focused):nth-of-type(1) { top: calc(12px + env(safe-area-inset-top)); }
+  .video-grid.pip-grid.has-focus .tile:not(.focused):nth-of-type(2) { top: calc(160px + env(safe-area-inset-top)); }
+  .video-grid.pip-grid.has-focus .tile:not(.focused):nth-of-type(3) { top: calc(308px + env(safe-area-inset-top)); }
+  .video-grid.pip-grid.has-focus .tile:not(.focused) .tile-name { font-size: 10px; padding: 2px 7px; }
+}
 /* Side docks (left/right): one rectangular (16:9) tile per row. */
 .chat.has-call.dock-left .video-grid .tile,
 .chat.has-call.dock-right .video-grid .tile { width: 100%; aspect-ratio: 16 / 9; }
