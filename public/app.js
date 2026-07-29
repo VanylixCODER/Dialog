@@ -5760,11 +5760,33 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
   }
 
   async function loadAdminLogs() {
+    loadAdminSys();
     const { ok, data } = await aapi("/api/admin/logs", null, "GET");
     if (!ok) return;
     const pre = $("adminLogs");
     pre.textContent = data.map((l) => `[${new Date(l.t).toLocaleTimeString()}] ${l.level.toUpperCase()}  ${l.line}`).join("\n");
     pre.scrollTop = pre.scrollHeight;
+  }
+  async function loadAdminSys() {
+    const box = $("adminSys"); if (!box) return;
+    const { ok, data } = await aapi("/api/admin/sys", null, "GET");
+    if (!ok || !data) { box.innerHTML = ""; return; }
+    const gb = (b) => (b / 1073741824).toFixed(2) + " GB";
+    const pct = (used, total) => total ? Math.round((used / total) * 100) : 0;
+    const cell = (label, used, total, extra) => {
+      const p = pct(used, total);
+      const cls = p >= 90 ? "hot" : p >= 75 ? "warn" : "";
+      return `<div class="asys-cell ${cls}"><div class="asys-top"><span>${label}</span><b>${p}%</b></div>` +
+        `<div class="asys-bar"><span style="width:${p}%"></span></div>` +
+        `<div class="asys-sub">${gb(used)} / ${gb(total)}${extra ? " · " + extra : ""}</div></div>`;
+    };
+    const m = data.mem || {}, d = data.disk || {};
+    const memUsed = (m.total || 0) - (m.free || 0);
+    const load = Array.isArray(data.load) ? data.load.map((x) => x.toFixed(2)).join(" ") : "";
+    let html = cell("RAM", memUsed, m.total || 0, m.rss ? "app " + gb(m.rss) : "");
+    if (d.total) html += cell("Disk", (d.total || 0) - (d.free || 0), d.total || 0, "");
+    html += `<div class="asys-cell"><div class="asys-top"><span>Load</span><b>${load}</b></div><div class="asys-sub">up ${Math.floor((data.uptime || 0) / 3600)}h · app ${Math.floor((data.procUptime || 0) / 3600)}h</div></div>`;
+    box.innerHTML = html;
   }
   async function loadAdminIps() {
     const { ok, data } = await aapi("/api/admin/banned-ips", null, "GET");

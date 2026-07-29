@@ -4053,6 +4053,18 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 .aip button:hover { border-color: var(--accent-400); color: var(--accent-200); }
 .admin-logbar { display: flex; justify-content: flex-end; }
 .admin-logbar .btn-ghost { width: auto; padding: 9px 18px; }
+/* Server resource usage cards (admin Logs tab). */
+.admin-sys { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.asys-cell { flex: 1 1 150px; min-width: 130px; background: var(--bg-2); border: 1px solid var(--border-1); border-radius: var(--r-2); padding: 8px 11px; }
+.asys-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.asys-top b { color: var(--text-strong); font-size: 13px; }
+.asys-bar { height: 6px; border-radius: 3px; background: var(--bg-4); overflow: hidden; }
+.asys-bar span { display: block; height: 100%; background: var(--accent-400); border-radius: 3px; transition: width var(--t-base) var(--ease); }
+.asys-cell.warn .asys-bar span { background: #f5a623; }
+.asys-cell.warn .asys-top b { color: #f5a623; }
+.asys-cell.hot .asys-bar span { background: #ef4444; }
+.asys-cell.hot .asys-top b { color: #ef4444; }
+.asys-sub { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
 .admin-logs {
   background: #05080a; color: #9fe6b6; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 12px;
   padding: 16px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
