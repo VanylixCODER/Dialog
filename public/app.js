@@ -3951,6 +3951,7 @@ function p2pEnsurePeer(login, name) {
   call.peers.set(login, m);
   ensureTile(login, m.name, false);
   if (call.localStream) for (const track of call.localStream.getTracks()) { try { pc.addTrack(track, call.localStream); } catch {} }
+  if (rnnOn && call._rnn && call._rnn.processed) { const s = pc.getSenders().find((x) => x.track && x.track.kind === "audio"); if (s) s.replaceTrack(call._rnn.processed).catch(() => {}); }
   pc.onicecandidate = ({ candidate }) => { if (candidate) socket.emit("rtc-signal", { to: login, data: { candidate } }); };
   pc.onnegotiationneeded = async () => {
     try { m.makingOffer = true; await pc.setLocalDescription(); socket.emit("rtc-signal", { to: login, data: { description: pc.localDescription } }); }
@@ -4004,6 +4005,8 @@ function p2pClosePeer(login) {
 }
 function p2pLeaveAll() {
   if (call.peers) { for (const m of call.peers.values()) { try { m.pc.close(); } catch {} } call.peers.clear(); }
+  if (call._rnn) { try { call._rnn.node.disconnect(); } catch {} try { call._rnn.src.disconnect(); } catch {} call._rnn = null; }
+  call._rawMic = null;
   if (call.localStream) { for (const tk of call.localStream.getTracks()) { try { tk.stop(); } catch {} } call.localStream = null; }
 }
 // Establish/tear down peer connections to match who's in the call room (from call-state).
@@ -4038,6 +4041,7 @@ async function joinCall() {
   dismissNotif(myRoom);
   if (pttOn) setMic(false);   // push-to-talk: start muted, hold Space to talk
   syncCallOwnerUI();
+  if (rnnOn) applyRnnoise(true);   // opt-in strong noise cancel
   socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
 }
 function endCall() {
@@ -4136,6 +4140,7 @@ function showDeviceTakeover() {
 async function setMic(on) {
   call.micOn = on;
   if (call.localStream) call.localStream.getAudioTracks().forEach((tk) => { tk.enabled = on; });   // P2P
+  if (call._rnn && call._rnn.processed) call._rnn.processed.enabled = on;   // keep the RNNoise-processed track in sync
   else if (call.room) { try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {} } // legacy
   p2pBroadcast({ mic: on });   // tell peers so their mic indicator on my tile updates
   $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
@@ -4344,6 +4349,7 @@ function syncCallOwnerUI() {
   document.querySelectorAll(".owner-only-call").forEach((el) => el.classList.toggle("hidden", !show));
   $("pttToggle") && $("pttToggle").classList.toggle("on", pttOn);
   $("blurToggle") && $("blurToggle").classList.toggle("on", blurOn);
+  $("rnnToggle") && $("rnnToggle").classList.toggle("on", rnnOn);
 }
 $("togglePtt") && ($("togglePtt").onclick = (e) => {
   e.stopPropagation(); pttOn = !pttOn; $("pttToggle").classList.toggle("on", pttOn);
@@ -4379,6 +4385,45 @@ async function applyBlur(on) {
 $("toggleBlur") && ($("toggleBlur").onclick = async (e) => {
   e.stopPropagation(); blurOn = !blurOn; $("blurToggle").classList.toggle("on", blurOn);
   localStorage.setItem("dialog_blur", blurOn ? "1" : "0"); await applyBlur(blurOn);
+});
+// ---------- Strong noise suppression (RNNoise WASM, self-hosted, opt-in beta) ----------
+// Routes the mic through an RNNoise AudioWorklet and swaps the SENT track (replaceTrack).
+// Fully guarded: any failure reverts to the raw mic so you're never left silent.
+let rnnMod = null, rnnWasm = null, rnnWorkletAdded = false;
+let rnnOn = localStorage.getItem("dialog_rnn") === "1";
+function audioSenders() { const out = []; if (call.peers) for (const m of call.peers.values()) { const s = m.pc.getSenders().find((x) => x.track && x.track.kind === "audio"); if (s) out.push(s); } return out; }
+async function revertRnnoise() {
+  const raw = call._rawMic || (call.localStream && call.localStream.getAudioTracks()[0]); if (raw) { raw.enabled = call.micOn; for (const s of audioSenders()) { try { await s.replaceTrack(raw); } catch {} } }
+  if (call._rnn) { try { call._rnn.node.disconnect(); } catch {} try { call._rnn.src.disconnect(); } catch {} call._rnn = null; }
+}
+async function applyRnnoise(on) {
+  if (!call.active || !call.localStream) return;
+  if (!on) { await revertRnnoise(); return; }
+  try {
+    const ctx = ensureAudioCtx();
+    if (!call._rawMic) call._rawMic = call.localStream.getAudioTracks()[0];
+    if (!call._rawMic) throw new Error("no mic");
+    if (!rnnMod) rnnMod = await import("https://esm.sh/@sapphi-red/web-noise-suppressor@0.3.5");
+    if (!rnnWasm) rnnWasm = await rnnMod.loadRnnoise({ url: "/vendor/rnnoise/rnnoise.wasm", simdUrl: "/vendor/rnnoise/rnnoise_simd.wasm" });
+    if (!rnnWorkletAdded) { await ctx.audioWorklet.addModule("/vendor/rnnoise/workletProcessor.js"); rnnWorkletAdded = true; }
+    const src = ctx.createMediaStreamSource(new MediaStream([call._rawMic]));
+    const node = new rnnMod.RnnoiseWorkletNode(ctx, { wasmBinary: rnnWasm, maxChannels: 1 });
+    const dest = ctx.createMediaStreamDestination();
+    src.connect(node); node.connect(dest);
+    const processed = dest.stream.getAudioTracks()[0]; if (!processed) throw new Error("no processed track");
+    processed.enabled = call.micOn;
+    call._rnn = { src, node, dest, processed };
+    for (const s of audioSenders()) { try { await s.replaceTrack(processed); } catch {} }
+  } catch (err) {
+    console.warn("rnnoise failed:", err.message);
+    rnnOn = false; localStorage.setItem("dialog_rnn", "0"); $("rnnToggle") && $("rnnToggle").classList.remove("on");
+    notify(t("strong_ns_failed"));
+    await revertRnnoise();
+  }
+}
+$("toggleRnn") && ($("toggleRnn").onclick = async (e) => {
+  e.stopPropagation(); rnnOn = !rnnOn; $("rnnToggle").classList.toggle("on", rnnOn);
+  localStorage.setItem("dialog_rnn", rnnOn ? "1" : "0"); await applyRnnoise(rnnOn);
 });
 // Owner: lock the call / mute new joiners on entry — enforced server-side (call-mod).
 $("toggleLock") && ($("toggleLock").onclick = (e) => { e.stopPropagation(); const on = !$("lockToggle").classList.contains("on"); $("lockToggle").classList.toggle("on", on); socket.emit("call-mod", { action: on ? "lock" : "unlock" }); });
