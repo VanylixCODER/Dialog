@@ -25,8 +25,9 @@ import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync, existsSync } from "fs";
+import { statfs } from "fs/promises";
 import { exec } from "child_process";
-import { networkInterfaces } from "os";
+import { networkInterfaces, totalmem, freemem, loadavg, uptime as osUptime } from "os";
 import crypto from "crypto";
 import webpush from "web-push";
 import { AccessToken } from "livekit-server-sdk";
@@ -1058,6 +1059,14 @@ app.get("/api/admin/users", async (req, res) => {
 app.get("/api/admin/logs", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
   res.json(LOG_RING.slice(-300));
+});
+// Server resource usage for the admin Logs tab (RAM + disk + load).
+app.get("/api/admin/sys", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const mem = { total: totalmem(), free: freemem(), rss: process.memoryUsage().rss };
+  let disk = null;
+  try { const s = await statfs("/"); disk = { total: s.blocks * s.bsize, free: s.bavail * s.bsize }; } catch (e) { console.warn("statfs", e.message); }
+  res.json({ mem, disk, load: loadavg(), uptime: osUptime(), procUptime: process.uptime() });
 });
 app.get("/api/admin/banned-ips", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
