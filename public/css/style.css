@@ -2925,6 +2925,20 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .cl-head > [data-tip]:last-child::after { left: auto; right: 0; transform: translate(0, -4px) scale(0.96); }
 .cl-head > [data-tip]:last-child:hover::after { transform: translate(0, 0) scale(1); }
 
+/* Call-bar tooltips: float clearly ABOVE the buttons (bigger gap, opaque bg, shadow) so the pill
+   reads as a real tooltip instead of sitting on / overlapping the button row. Touch has no hover,
+   so this is desktop-only anyway. */
+.call-actions [data-tip]::after {
+  bottom: calc(100% + 11px);
+  transform: translate(-50%, 5px) scale(0.96);
+  background: rgba(16, 18, 16, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+  z-index: 1200;
+}
+.call-actions [data-tip]:hover::after { transform: translate(-50%, 0) scale(1); }
+
 /* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
 @media (max-width: 720px) {
   .settings-overlay { padding: 0; align-items: end; }
