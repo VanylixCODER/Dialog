@@ -3815,6 +3815,9 @@ function openCallReactPicker(e) {
   }
 }
 $("reactBtn") && ($("reactBtn").onclick = (e) => { e.stopPropagation(); openCallReactPicker(e); });
+// Mobile call bar: ⋮ collapses the secondary controls into a dropdown.
+$("callMoreBtn") && ($("callMoreBtn").onclick = (e) => { e.stopPropagation(); const m = $("callMore"); if (m) m.classList.toggle("open"); });
+document.addEventListener("click", (e) => { const m = $("callMore"); if (m && m.classList.contains("open") && !m.contains(e.target) && e.target !== $("callMoreBtn")) m.classList.remove("open"); });
 document.addEventListener("click", (e) => { if (reactPop && !reactPop.classList.contains("hidden") && Date.now() - (reactPop._openedAt || 0) > 200 && !reactPop.contains(e.target) && e.target !== $("reactBtn")) reactPop.classList.add("hidden"); });
 
 // Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
