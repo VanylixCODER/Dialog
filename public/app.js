@@ -4212,14 +4212,26 @@ async function updateFlipCamBtn() {
   btn.classList.toggle("hidden", !(call.camOn && _hasMultiCam));
 }
 async function flipCamera() {
-  if (!call.room || !call.camOn) return;
+  if (!call.active || !call.camOn) return;
   let cams = [];
   try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput"); } catch {}
   if (cams.length < 2) return;
   const cur = Math.max(0, cams.findIndex((d) => d.deviceId === call.camId));
   const next = cams[(cur + 1) % cams.length];
-  call.camId = next.deviceId;
-  try { await call.room.switchActiveDevice("videoinput", next.deviceId); saveDevicePrefs(); } catch {}
+  // P2P: capture the other camera and hot-swap the outgoing track (replaceTrack — no renegotiation).
+  let vstream;
+  try { vstream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: next.deviceId }, width: { ideal: 640 }, height: { ideal: 360 } } }); }
+  catch (e) { return; }
+  const newTrack = vstream.getVideoTracks()[0]; if (!newTrack) return;
+  const old = call.videoTrack;
+  for (const m of call.peers.values()) { const s = m.pc.getSenders().find((x) => x.track === old); if (s) { try { await s.replaceTrack(newTrack); } catch {} } }
+  if (old) { try { call.localStream.removeTrack(old); } catch {} try { old.stop(); } catch {} }
+  try { call.localStream.addTrack(newTrack); } catch {}
+  call.videoTrack = newTrack; call.camId = next.deviceId;
+  const meTile = $("tile-me"); const v = meTile && meTile.querySelector("video"); if (v) v.srcObject = new MediaStream([newTrack]);
+  newTrack.onended = () => { if (call.camOn) $("toggleCam").click(); };
+  saveDevicePrefs();
+  if (call.room) { try { await call.room.switchActiveDevice("videoinput", next.deviceId); } catch {} }  // legacy
 }
 $("flipCam") && ($("flipCam").onclick = flipCamera);
 // ── Демонстрация экрана (Discord-стиль): сначала выбор качества, потом нативный
