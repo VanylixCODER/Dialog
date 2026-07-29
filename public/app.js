@@ -553,6 +553,7 @@ window.addEventListener("langchange", () => {
   if (sel) sel.value = window.getLang();
   renderChatList($("searchInput").value);
   applyI18n(document.querySelector('[data-pane="themes"]'));
+  setIcons();   // re-localize the [data-tip] tooltip pills (call bar etc.) — they were stale in the startup language
   updateCallButton();
   pushState();
 });
