@@ -2381,8 +2381,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   font-size: 11px; letter-spacing: 0.5px;
 }
 /* The controls sit in a soft floating dock so the row reads as one unit. */
+/* Secondary call buttons sit inline in the bar on desktop; collapse under ⋮ on phones. */
+.call-more { display: contents; }
 .call-actions {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; position: relative;
   flex-wrap: wrap; gap: var(--cgap);
   padding: 7px 9px;
   background: rgba(0, 0, 0, 0.3);
@@ -2933,7 +2935,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
     font-size: 11px;
     letter-spacing: 1px;
   }
-  .settings-panes { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); }
+  .settings-panes { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
   .settings-pane { gap: 11px; }
   /* Profile pane: bigger touch targets */
   .profile-ava { width: 88px; height: 88px; font-size: 32px; }
@@ -2980,6 +2982,12 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   .video-grid .tile { width: 100%; }
   .tile-avatar { width: 70px; height: 70px; font-size: 28px; }
   .call-bar { --cbtn: 48px; }
+  /* Phone: secondary controls (react · speaker · deafen) collapse into a ⋮ dropdown. */
+  .call-more { display: none; position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+    flex-direction: row; gap: 10px; padding: 10px 12px; background: var(--bg-1); border: 1px solid var(--border-2);
+    border-radius: var(--r-pill); box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55); z-index: 30; }
+  .call-more.open { display: flex; }
+  #callStage.fs-call .call-more.open { position: fixed; bottom: 92px; }
   .call-btn.mobile-only { display: grid; }
   .call-grip, .call-resizer { display: none !important; }
   .lang-select { top: 10px; right: 10px; }
@@ -4722,7 +4730,9 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 @media (max-width: 560px) {
   .cont-subtabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .cont-subtabs .settings-subtab { justify-content: center; padding: 9px 6px; font-size: 12px; }
-  .cont-subpane .contacts-list { max-height: none; }
+  /* Phone: the list must NOT be its own scroll box — one smooth scroll on .settings-panes.
+     A nested overflow:auto with overscroll-contain was trapping touch scrolls (janky/stuck). */
+  .cont-subpane .contacts-list { max-height: none; overflow: visible; }
   .c-icon-btn { width: 40px; height: 40px; }
   .c-icon-btn svg { width: 18px; height: 18px; }
   .req-add { flex-wrap: wrap; }
