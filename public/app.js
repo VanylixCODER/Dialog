@@ -3931,10 +3931,10 @@ $("minBtn").onclick = () => { call.minimized = true; syncCallUI(); };
 // No media server: browsers connect directly, signalling (SDP/ICE) is relayed over Socket.IO,
 // NAT traversal via /api/ice (STUN + Metered TURN). Peers are keyed by login; mesh for groups.
 let p2pIce = null, p2pIceExp = 0;
-async function p2pGetIce() {
-  if (p2pIce && Date.now() < p2pIceExp) return p2pIce;
-  try { const { ok, data } = await api("/api/ice", null, "GET"); if (ok && data && Array.isArray(data.iceServers) && data.iceServers.length) { p2pIce = data.iceServers; p2pIceExp = Date.now() + 3000e3; return p2pIce; } } catch {}
-  return [{ urls: "stun:stun.l.google.com:19302" }];
+async function p2pGetIce(force) {
+  if (!force && p2pIce && Date.now() < p2pIceExp) return p2pIce;
+  try { const { ok, data } = await api("/api/ice", null, "GET"); if (ok && data && Array.isArray(data.iceServers) && data.iceServers.length) { p2pIce = data.iceServers; p2pIceExp = Date.now() + 600e3; return p2pIce; } } catch {}
+  return p2pIce || [{ urls: "stun:stun.l.google.com:19302" }];
 }
 function p2pNameFor(login) {
   const c = chats.get(activeKey); if (c && c.type === "dm" && c.login === login) return c.name;
@@ -3947,8 +3947,8 @@ function p2pEnsurePeer(login, name) {
   if (!call.active || !call.peers || login === profile.login) return null;
   let m = call.peers.get(login);
   if (m) { if (name) m.name = name; return m; }
-  const pc = new RTCPeerConnection({ iceServers: p2pIce || [{ urls: "stun:stun.l.google.com:19302" }] });
-  m = { pc, makingOffer: false, ignoreOffer: false, polite: profile.login > login, name: name || p2pNameFor(login) };
+  const pc = new RTCPeerConnection({ iceServers: p2pIce || [{ urls: "stun:stun.l.google.com:19302" }], iceCandidatePoolSize: 4, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
+  m = { pc, makingOffer: false, ignoreOffer: false, polite: profile.login > login, name: name || p2pNameFor(login), candQueue: [], restartT: 0 };
   call.peers.set(login, m);
   ensureTile(login, m.name, false);
   if (call.localStream) for (const track of call.localStream.getTracks()) { try { pc.addTrack(track, call.localStream); } catch {} }
@@ -3958,10 +3958,38 @@ function p2pEnsurePeer(login, name) {
     try { m.makingOffer = true; await pc.setLocalDescription(); socket.emit("rtc-signal", { to: login, data: { description: pc.localDescription } }); }
     catch (e) { console.log("nego", e.message); } finally { m.makingOffer = false; }
   };
-  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") { try { pc.restartIce(); } catch {} } };
-  pc.onconnectionstatechange = () => updateCallStatus();   // "connecting" → "Connected" once media is flowing
+  pc.oniceconnectionstatechange = () => {
+    const s = pc.iceConnectionState;
+    if (s === "failed") p2pRestartPeer(login);                 // hard failure → restart ICE now
+    else if (s === "disconnected") p2pScheduleRestart(login);  // transient blip → wait, then restart if it doesn't recover
+    else if (s === "connected" || s === "completed") { clearTimeout(m.restartT); m.restartT = 0; }
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") p2pRestartPeer(login);
+    else if (pc.connectionState === "connected") { clearTimeout(m.restartT); m.restartT = 0; }
+    updateCallStatus();   // "connecting" → "Connected" once media is flowing
+  };
   pc.ontrack = (e) => p2pOnTrack(login, m, e);
   return m;
+}
+// Transient "disconnected" is often momentary — give it 3s to recover on its own before restarting.
+function p2pScheduleRestart(login) {
+  const m = call.peers && call.peers.get(login); if (!m || m.restartT) return;
+  m.restartT = setTimeout(() => { m.restartT = 0; const s = m.pc.iceConnectionState; if (s !== "connected" && s !== "completed" && s !== "closed") p2pRestartPeer(login); }, 3000);
+}
+// Re-fetch fresh TURN credentials and restart ICE (re-gathers candidates + a fresh offer). Both
+// peers may fire this on a drop; perfect-negotiation resolves the resulting offer glare.
+async function p2pRestartPeer(login) {
+  const m = call.peers && call.peers.get(login); if (!m || !call.active) return;
+  clearTimeout(m.restartT); m.restartT = 0;
+  const pc = m.pc, s = pc.iceConnectionState;
+  if (s === "connected" || s === "completed" || s === "closed") return;
+  try {
+    const ice = await p2pGetIce(true);
+    try { pc.setConfiguration({ iceServers: ice, iceCandidatePoolSize: 4, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" }); } catch {}
+    if (pc.restartIce) pc.restartIce();
+    else if (pc.signalingState === "stable") { m.makingOffer = true; await pc.setLocalDescription(await pc.createOffer({ iceRestart: true })); socket.emit("rtc-signal", { to: login, data: { description: pc.localDescription } }); m.makingOffer = false; }
+  } catch (e) { console.log("ice-restart", e.message); }
 }
 function p2pOnTrack(login, m, e) {
   const stream = e.streams[0]; if (!stream) return;
@@ -3992,20 +4020,24 @@ async function p2pOnSignal({ from, fromName, data }) {
       m.ignoreOffer = !m.polite && collision;
       if (m.ignoreOffer) return;
       await pc.setRemoteDescription(desc);
+      // Flush candidates that arrived before the remote description was ready (else they're lost).
+      if (m.candQueue && m.candQueue.length) { const q = m.candQueue.splice(0); for (const c of q) { try { await pc.addIceCandidate(c); } catch {} } }
       if (desc.type === "offer") { await pc.setLocalDescription(); socket.emit("rtc-signal", { to: from, data: { description: pc.localDescription } }); }
     } else if (data.candidate) {
-      try { await pc.addIceCandidate(data.candidate); } catch (e) { if (!m.ignoreOffer) console.log("ice", e.message); }
+      if (!pc.remoteDescription || !pc.remoteDescription.type) { (m.candQueue = m.candQueue || []).push(data.candidate); }   // queue until remote desc is set
+      else { try { await pc.addIceCandidate(data.candidate); } catch (e) { if (!m.ignoreOffer) console.log("ice", e.message); } }
     }
   } catch (e) { console.log("rtc-signal", e.message); }
 }
 socket.on("rtc-signal", p2pOnSignal);
 function p2pClosePeer(login) {
   const m = call.peers && call.peers.get(login); if (!m) return;
+  clearTimeout(m.restartT);
   try { m.pc.close(); } catch {}
   call.peers.delete(login); removeParticipant(login); updateCallStatus();
 }
 function p2pLeaveAll() {
-  if (call.peers) { for (const m of call.peers.values()) { try { m.pc.close(); } catch {} } call.peers.clear(); }
+  if (call.peers) { for (const m of call.peers.values()) { clearTimeout(m.restartT); try { m.pc.close(); } catch {} } call.peers.clear(); }
   if (call._rnn) { try { call._rnn.node.disconnect(); } catch {} try { call._rnn.src.disconnect(); } catch {} call._rnn = null; }
   call._rawMic = null;
   if (call.localStream) { for (const tk of call.localStream.getTracks()) { try { tk.stop(); } catch {} } call.localStream = null; }
