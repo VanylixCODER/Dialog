@@ -5134,3 +5134,13 @@ body.theming, body.theming *:not(canvas) {
 .gs-hook-row .field { flex: 1; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
 .gs-hook-row .btn-sm { width: auto; flex: none; }
 #gsHookRegen { width: auto; }
+
+/* In-chat "join the ongoing call" banner. */
+.call-join-banner { display: flex; align-items: center; gap: 10px; margin: 8px 16px 0; padding: 10px 14px;
+  background: linear-gradient(90deg, var(--accent-600), var(--accent-500)); color: var(--on-accent);
+  border: none; border-radius: var(--r-pill); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.35); animation: fadeUp 0.25s var(--ease-out); }
+.call-join-banner.hidden { display: none; }
+.cjb-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; animation: recPulse 1.3s infinite; flex: none; }
+.cjb-txt { flex: 1; text-align: left; }
+.cjb-join { background: rgba(255, 255, 255, 0.22); padding: 4px 14px; border-radius: var(--r-pill); font-weight: 800; }

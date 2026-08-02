@@ -3999,7 +3999,9 @@ function updateCallButton() {
   // so update BOTH it and the native title, else a DM still shows "Group call".
   btn.title = tip; btn.setAttribute("data-tip", tip);
   btn.innerHTML = inThis ? window.ICON.phoneOff : window.ICON.phone;
+  const jb = $("callJoinBanner"); if (jb) jb.classList.toggle("hidden", !ongoing);   // in-chat "join the ongoing call" bar
 }
+$("callJoinBanner") && ($("callJoinBanner").onclick = () => { if (!call.active || call.roomKey !== myRoom) joinCall(); });
 // Показ/сворачивание оверлея звонка в зависимости от просматриваемого чата и флага minimized
 // Звонок = левая колонка переписки (ПК): сообщения адаптивно справа, не под звонком. Телефон — стек сверху.
 function syncCallUI() {
@@ -5154,6 +5156,9 @@ function startPing() {
 
 // ---------- Утилиты ----------
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+// Phone: when the keyboard opens (input focus / viewport shrinks), keep the latest messages in view.
+$("msgInput") && $("msgInput").addEventListener("focus", () => { setTimeout(scrollDown, 100); setTimeout(scrollDown, 350); });
+if (window.visualViewport) window.visualViewport.addEventListener("resize", () => { if (document.activeElement === $("msgInput")) scrollDown(); });
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString(window.getLang() === "ru" ? "ru-RU" : "en-GB", { hour: "2-digit", minute: "2-digit" }); }
 // Метка дня над лентой: «Today / Yesterday» для свежих суток, иначе локализованная дата.
 // Раньше функция была потеряна при рефакторинге (браузер падал в ReferenceError на любом сообщении
