@@ -46,8 +46,6 @@ import {
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
   getPinnedChats, savePinnedChats,
-  createNewsPost, getNewsPosts, getNewsPost, deleteNewsPost, newsCommentCounts,
-  addNewsComment, getNewsComments, getNewsComment, deleteNewsComment,
   savePushSub, getPushSubs, deletePushSub, saveFcmToken, getFcmTokens, deleteFcmToken,
   getRoomWatermarks, bumpWatermarks,
   getUserByEmail, setUserEmail, markEmailVerified, setNagDismissed,
@@ -1003,71 +1001,6 @@ app.post("/api/pins", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const keys = Array.isArray(req.body.keys) ? req.body.keys.slice(0, 200) : [];
   await savePinnedChats(me.login, keys);
-  res.json({ ok: true });
-});
-
-// ---------- REST: News pages (personal feed + comment threads) ----------
-const NEWS_MEDIA_MAX = 5 * 1024 * 1024; // 5 MB data-URL cap for a post image
-function newsMediaOk(media) {
-  if (!media) return true;
-  if (typeof media !== "string" || !media.startsWith("data:image/")) return false;
-  const c = media.indexOf(","); const b64 = c >= 0 ? media.length - c - 1 : media.length;
-  return Math.floor(b64 * 3 / 4) <= NEWS_MEDIA_MAX;
-}
-// A user's page: paginated posts (newest first) + a comment count on each.
-app.get("/api/news/:login", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const login = String(req.params.login || "").toLowerCase();
-  const owner = await getUser(login); if (!owner) return res.status(404).json({ error: "no_user" });
-  const before = /^\d+$/.test(req.query.before || "") ? Number(req.query.before) : 0;
-  const posts = await getNewsPosts(login, before, 20);
-  const counts = await newsCommentCounts(posts.map((p) => p.id));
-  res.json({
-    owner: { login: owner.login, name: owner.name },
-    isOwner: me.login === login,
-    posts: posts.map((p) => ({ id: p.id, login: p.author_login, name: p.name || p.author_login, text: p.text || "", media: p.media || null, ts: p.created_at, comments: counts[p.id] || 0 })),
-  });
-});
-// Post to YOUR OWN page.
-app.post("/api/news", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const text = String(req.body.text || "").trim();
-  const media = req.body.media || null;
-  if (!text && !media) return res.status(400).json({ error: "empty" });
-  if (!newsMediaOk(media)) return res.status(400).json({ error: "bad_media" });
-  try {
-    const id = await createNewsPost(me.login, text, media);
-    res.json({ ok: true, post: { id, login: me.login, name: me.name, text, media: media || null, ts: Date.now(), comments: 0 } });
-  } catch (e) { console.error("news post", e.message); res.status(500).json({ error: "server" }); }
-});
-app.delete("/api/news/post/:id", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const post = await getNewsPost(req.params.id); if (!post) return res.json({ ok: true });
-  if (post.author_login !== me.login && !auth.isAdmin(me.login)) return res.status(403).json({ error: "forbidden" });
-  await deleteNewsPost(post.id);
-  res.json({ ok: true });
-});
-app.get("/api/news/post/:id/comments", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const rows = await getNewsComments(req.params.id);
-  res.json(rows.map((c) => ({ id: c.id, login: c.author_login, name: c.name || c.author_login, text: c.text, ts: c.created_at })));
-});
-app.post("/api/news/post/:id/comment", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const post = await getNewsPost(req.params.id); if (!post) return res.status(404).json({ error: "no_post" });
-  const text = String(req.body.text || "").trim(); if (!text) return res.status(400).json({ error: "empty" });
-  const c = await addNewsComment(post.id, me.login, text);
-  // Ping the page owner (unless they commented on their own post).
-  if (post.author_login !== me.login) notifyUser(post.author_login, "news-comment", { postId: post.id, fromLogin: me.login, fromName: me.name });
-  res.json({ ok: true, comment: { id: c.id, login: me.login, name: me.name, text: c.text, ts: c.created_at } });
-});
-app.delete("/api/news/comment/:id", async (req, res) => {
-  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  const c = await getNewsComment(req.params.id); if (!c) return res.json({ ok: true });
-  const post = await getNewsPost(c.post_id);
-  const canDelete = c.author_login === me.login || (post && post.author_login === me.login) || auth.isAdmin(me.login);
-  if (!canDelete) return res.status(403).json({ error: "forbidden" });
-  await deleteNewsComment(c.id);
   res.json({ ok: true });
 });
 

@@ -5061,67 +5061,6 @@ body.theming, body.theming *:not(canvas) {
 .badge.mention-badge { background: linear-gradient(180deg, #ff5566, #e0384a); color: #fff;
   box-shadow: 0 0 12px rgba(255, 70, 90, 0.5); }
 .chat-item.has-mention .ci-name { color: var(--accent-100); }
-
-/* ============ News pages (personal feed + comment threads) ============ */
-.news-overlay { position: fixed; inset: 0; z-index: 240; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); padding: 20px; }
-.news-overlay.hidden { display: none; }
-.news-card { width: min(680px, 100%); max-height: 90vh; display: flex; flex-direction: column;
-  background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-4); overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
-.news-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-1);
-  background: linear-gradient(180deg, var(--bg-2), var(--bg-1)); }
-.news-back { border: none; background: transparent; color: var(--text-dim); font-size: 26px; line-height: 1; cursor: pointer;
-  width: 34px; height: 34px; border-radius: var(--r-2); flex: none; }
-.news-back:hover { color: var(--accent-300); background: var(--accent-faint); }
-.news-ava { width: 42px; height: 42px; flex: none; }
-.news-owner-txt { display: flex; flex-direction: column; min-width: 0; }
-.news-owner-name { font-weight: 800; font-size: 16px; color: var(--accent-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.news-owner-sub { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; }
-.news-body { flex: 1; overflow-y: auto; padding: 16px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.news-composer { background: var(--bg-2); border: 1px solid var(--border-1); border-radius: var(--r-3); padding: 12px; margin-bottom: 16px; }
-.news-composer textarea { width: 100%; background: transparent; border: none; color: var(--text); resize: vertical; min-height: 44px; font: inherit; font-size: 14px; outline: none; }
-.news-composer-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.news-composer-bar .btn-primary { margin-left: auto; width: auto; padding: 9px 22px; }
-.news-img-preview { position: relative; display: inline-block; margin-top: 8px; }
-.news-img-preview img { max-height: 160px; max-width: 100%; border-radius: var(--r-2); display: block; }
-.news-img-clear { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: none; background: rgba(0, 0, 0, 0.6); color: #fff; cursor: pointer; }
-.news-feed { display: flex; flex-direction: column; gap: 14px; }
-.news-empty { text-align: center; color: var(--text-dim); padding: 40px 0; }
-.news-post { background: var(--bg-2); border: 1px solid var(--border-1); border-radius: var(--r-3); padding: 14px; }
-.np-head { display: flex; align-items: center; gap: 10px; }
-.np-ava { width: 38px; height: 38px; flex: none; cursor: pointer; }
-.np-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.np-name { font-weight: 700; font-size: 14px; }
-.np-time { font-size: 11px; color: var(--text-dim); }
-.np-del { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 4px 9px; border-radius: var(--r-1); }
-.np-del:hover { color: var(--danger); background: rgba(255, 82, 82, 0.12); }
-.np-text { margin-top: 10px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-.np-media { margin-top: 10px; }
-.np-media img { max-width: 100%; border-radius: var(--r-2); display: block; }
-.np-foot { margin-top: 10px; }
-.np-comments-toggle { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px;
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: var(--r-2); }
-.np-comments-toggle:hover { color: var(--accent-300); background: var(--accent-faint); }
-.np-thread { margin-top: 12px; border-top: 1px solid var(--border-1); padding-top: 12px; }
-.nc-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
-.news-comment { display: flex; gap: 8px; }
-.nc-ava { width: 30px; height: 30px; flex: none; font-size: 12px; cursor: pointer; }
-.nc-body { flex: 1; min-width: 0; background: var(--bg-3); border-radius: var(--r-2); padding: 7px 10px; }
-.nc-top { display: flex; align-items: center; gap: 8px; }
-.nc-name { font-weight: 700; font-size: 12.5px; }
-.nc-time { font-size: 10px; color: var(--text-dim); }
-.nc-del { margin-left: auto; border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; }
-.nc-del:hover { color: var(--danger); }
-.nc-text { font-size: 13px; line-height: 1.4; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
-.nc-input-box { display: flex; gap: 8px; }
-.nc-input { flex: 1; }
-.nc-send { width: auto; padding: 8px 16px; }
-.nc-loading { color: var(--text-dim); font-size: 13px; padding: 8px; }
-@media (max-width: 720px) {
-  .news-overlay { padding: 0; }
-  .news-card { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; border: none; }
-}
-
 /* ============ Channel (broadcast) groups ============ */
 .cg-channel-row { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); cursor: pointer; padding: 6px 2px; }
 .cg-channel-row input { width: 17px; height: 17px; accent-color: var(--accent-500); flex: none; }
