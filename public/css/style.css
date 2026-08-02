@@ -5121,3 +5121,16 @@ body.theming, body.theming *:not(canvas) {
   .news-overlay { padding: 0; }
   .news-card { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; border: none; }
 }
+
+/* ============ Channel (broadcast) groups ============ */
+.cg-channel-row { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); cursor: pointer; padding: 6px 2px; }
+.cg-channel-row input { width: 17px; height: 17px; accent-color: var(--accent-500); flex: none; }
+.channel-notice { padding: 15px 18px calc(15px + env(safe-area-inset-bottom)); text-align: center; color: var(--text-dim);
+  font-size: 13px; border-top: 1px solid var(--border-1); background: var(--bg-2); }
+.channel-notice.hidden { display: none; }
+.chat-head.is-channel .chat-sub::before { content: "📢 "; }
+.gs-hook-hint { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; line-height: 1.4; }
+.gs-hook-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.gs-hook-row .field { flex: 1; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+.gs-hook-row .btn-sm { width: auto; flex: none; }
+#gsHookRegen { width: auto; }

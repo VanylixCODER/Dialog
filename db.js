@@ -142,6 +142,9 @@ export async function initSchema() {
     owner VARCHAR(24) NOT NULL, avatar LONGTEXT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
   try { await pool.query("ALTER TABLE chat_groups ADD COLUMN avatar LONGTEXT NULL"); } catch {}
+  // Channel (broadcast) groups: only the owner + bots + the incoming webhook may post; members read.
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN channel TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN hook_secret CHAR(32) NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS group_members (
     group_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL,
@@ -500,13 +503,14 @@ export async function toggleReaction(id, login, emoji, room) {
 }
 
 // ---------- Группы ----------
-export async function createGroup(name, owner, memberLogins) {
-  const res = await execute("INSERT INTO chat_groups (name, owner) VALUES (?,?)", [name, owner]);
+export async function createGroup(name, owner, memberLogins, channel = false, hookSecret = null) {
+  const res = await execute("INSERT INTO chat_groups (name, owner, channel, hook_secret) VALUES (?,?,?,?)", [name, owner, channel ? 1 : 0, channel ? hookSecret : null]);
   const id = res.insertId;
   const members = [...new Set([owner, ...memberLogins])];
   for (const login of members) await execute("INSERT IGNORE INTO group_members (group_id, login) VALUES (?,?)", [id, login]);
   return id;
 }
+export async function regenGroupHook(id, secret) { await execute("UPDATE chat_groups SET hook_secret=? WHERE id=?", [secret, id]); }
 export async function getUserGroups(login) {
   return await query(
     `SELECT g.id, g.name, g.owner FROM chat_groups g
@@ -521,7 +525,7 @@ export async function getGroupMembers(groupId) {
   const r = await query("SELECT login FROM group_members WHERE group_id=?", [groupId]);
   return r.map((x) => x.login);
 }
-export async function getGroup(id) { const r = await query("SELECT id, name, owner FROM chat_groups WHERE id=?", [id]); return r[0] || null; }
+export async function getGroup(id) { const r = await query("SELECT id, name, owner, channel, hook_secret FROM chat_groups WHERE id=?", [id]); return r[0] || null; }
 export async function leaveGroup(id, login) { await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]); }
 export async function isGroupOwner(id, login) { const r = await query("SELECT 1 FROM chat_groups WHERE id=? AND owner=?", [id, login]); return r.length > 0; }
 export async function getGroupAvatar(id) { const r = await query("SELECT avatar FROM chat_groups WHERE id=?", [id]); return r[0] ? r[0].avatar : null; }

@@ -522,6 +522,13 @@
               <div id="gsInviteEmpty" class="contacts-empty hidden" data-i18n="invite_none">No active invite links</div>
             </div>
 
+            <div class="gs-card hidden" id="gsHookCard">
+              <div class="gs-sec-title" data-i18n="channel_webhook">Channel webhook</div>
+              <div class="gs-hook-hint" data-i18n="channel_webhook_hint">POST JSON {"text":"…"} to this URL to publish to the channel.</div>
+              <div class="gs-hook-row"><input id="gsHookUrl" class="field" readonly /><button id="gsHookCopy" class="btn-ghost btn-sm" data-i18n="copy">Copy</button></div>
+              <button id="gsHookRegen" class="btn-ghost btn-sm" data-i18n="channel_webhook_regen">Regenerate URL</button>
+            </div>
+
             <div class="gs-card gs-owner">
               <div class="gs-sec-title" data-i18n="pending_requests">Pending requests</div>
               <div id="gsPendingList" class="contacts-list"></div>
@@ -689,6 +696,7 @@
         <input id="cgAvaFile" type="file" accept="image/*" hidden />
       </div>
       <input id="cgName" class="field" type="text" data-i18n-ph="ph_group_name" maxlength="64" />
+      <label class="cg-channel-row"><input type="checkbox" id="cgChannel"><span data-i18n="channel_label">Channel — only you (+ bots &amp; webhook) can post</span></label>
       <div class="cg-search-row">
         <input id="cgSearch" class="field" type="text" data-i18n-ph="ph_friend_search" autocomplete="off" />
         <span id="cgCount" class="cg-count">0 / 0</span>

@@ -34,7 +34,7 @@ import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, toggleReaction,
-  createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup,
+  createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser, searchUsers,
@@ -572,7 +572,8 @@ app.get("/api/groups/:id", async (req, res) => {
     if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
     const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
     const members = await getGroupMembersDetailed(id);
-    res.json({ ok: true, id: g.id, name: g.name, owner: g.owner, members });
+    const hook = (g.channel && g.owner === me.login && g.hook_secret) ? `${APP_ORIGIN}/api/hook/${g.id}/${g.hook_secret}` : null;
+    res.json({ ok: true, id: g.id, name: g.name, owner: g.owner, members, channel: !!g.channel, hook });
   } catch (e) { console.error("group get", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.post("/api/groups", async (req, res) => {
@@ -585,13 +586,38 @@ app.post("/api/groups", async (req, res) => {
     // members — comma-list (UI пикер может отправить несколько за раз). createGroup() сам добавляет owner
     // и дедупит INSERT IGNORE по (group_id,login) — дубли и owner-дубли безопасно.
     const memberList = [...new Set(String(req.body?.members || "").split(",").map((s) => s.trim().toLowerCase()).filter((l) => l && l !== me.login))];
-    const id = await createGroup(cleanName, me.login, memberList);
+    const isChannel = !!req.body?.channel;
+    const hookSecret = isChannel ? crypto.randomBytes(16).toString("hex") : null;
+    const id = await createGroup(cleanName, me.login, memberList, isChannel, hookSecret);
     // Опциональный аватар: если передали — ставим отдельным UPDATE (не в createGroup, тот его не принимает). Лимит 3 MB как в rename/avatar верху.
     if (typeof req.body?.avatar === "string" && req.body.avatar) await setGroupAvatar(id, req.body.avatar.slice(0, 5_000_000));
     // Рассылаем group-updated всем новым участникам (включая овнера), чтобы их клиенты показали группу в списке чатов без ручного refetch.
     try { for (const l of await getGroupMembers(id)) notifyUser(l, "group-updated", { id }); } catch {}
     res.json({ ok: true, id, name: cleanName });
   } catch (e) { console.error("group create", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Incoming webhook — external services POST here to publish a message into a channel.
+const _hookLast = new Map();
+app.post("/api/hook/:id/:secret", async (req, res) => {
+  const id = req.params.id; if (!/^\d+$/.test(id)) return res.status(404).json({ error: "not_found" });
+  const g = await getGroup(id);
+  if (!g || !g.channel || !g.hook_secret || g.hook_secret !== req.params.secret) return res.status(404).json({ error: "not_found" });
+  if (Date.now() - (_hookLast.get(id) || 0) < 800) return res.status(429).json({ error: "rate_limited" });
+  const text = String(req.body?.text || "").trim(); if (!text) return res.status(400).json({ error: "empty" });
+  _hookLast.set(id, Date.now());
+  const name = String(req.body?.name || g.name || "Webhook").slice(0, 64);
+  try { await deliverMessage({ room: "@grp:" + id, fromLogin: g.owner, name, type: "text", text: text.slice(0, 4000) }); res.json({ ok: true }); }
+  catch (e) { console.error("hook", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Owner: rotate the channel webhook secret (invalidates the old URL).
+app.post("/api/groups/:id/hook/regen", async (req, res) => {
+  const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+  const id = req.params.id; if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad_id" });
+  const g = await getGroup(id); if (!g || !g.channel) return res.status(404).json({ error: "not_found" });
+  if (g.owner !== me.login) return res.status(403).json({ error: "forbidden" });
+  const secret = crypto.randomBytes(16).toString("hex");
+  await regenGroupHook(id, secret);
+  res.json({ ok: true, hook: `${APP_ORIGIN}/api/hook/${id}/${secret}` });
 });
 app.post("/api/groups/:id/leave", async (req, res) => {
   try {
@@ -1925,6 +1951,11 @@ io.on("connection", (socket) => {
         notifyUser(dmTo, "relations-changed", {}); notifyUser(userLogin, "relations-changed", {});
         return;
       }
+    }
+    // Channel (broadcast) group: only the owner + bots may post; everyone else is read-only.
+    if (currentRoom.startsWith("@grp:")) {
+      const g = await getGroup(currentRoom.slice(5));
+      if (g && g.channel && g.owner !== userLogin && !(await isBot(userLogin))) { socket.emit("channel-readonly", { room: currentRoom }); return; }
     }
     // Defense-in-depth: если клиент всё-таки послал media > 75 MB (по base64-строке; raw bytes ≈
     // ¾ от длины), аккуратно отказываем: текст сохраняем, файл просто не сохраняем, и кинем
