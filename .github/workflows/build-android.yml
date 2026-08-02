@@ -100,6 +100,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || format('v{0}', steps.stage.outputs.version) }}
         run: |
+          # Create as a PRE-RELEASE when this Android-only build is first to publish the tag:
+          # an APK-only release has no latest.yml, so it must never become GitHub's "latest"
+          # (electron-updater reads /releases/latest and would 404 on latest.yml). A later
+          # desktop publish (publish-dist.sh) promotes the same tag to latest.
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Dialog $TAG" --notes "Release"
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Dialog $TAG" --notes "Release" --prerelease
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber out/*.apk

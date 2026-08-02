@@ -48,5 +48,8 @@ if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
     --notes "Dialog ${VERSION} — desktop & Android installers."
 fi
 gh release upload "$TAG" --repo "$REPO" --clobber "${FILES[@]}"
+# A desktop release ships latest.yml, so it MUST be the "latest" (an Android-only build may have
+# created the tag as a pre-release). Promote it so electron-updater's /releases/latest finds it.
+gh release edit "$TAG" --repo "$REPO" --latest --prerelease=false
 
 echo "Done → https://github.com/${REPO}/releases/tag/${TAG}"
