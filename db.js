@@ -237,6 +237,23 @@ export async function initSchema() {
     KEY idx_themes_pub (published, installs)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // ── News pages: each user's personal feed of posts, each with a comment thread. ──
+  await pool.query(`CREATE TABLE IF NOT EXISTS news_posts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    author_login VARCHAR(24) NOT NULL,
+    text TEXT, media LONGTEXT,
+    created_at BIGINT NOT NULL,
+    KEY idx_news_author (author_login, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS news_comments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    post_id BIGINT NOT NULL,
+    author_login VARCHAR(24) NOT NULL,
+    text TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    KEY idx_news_comments_post (post_id, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // IP bans (admin panel). Any request/socket from a listed IP is refused.
   await pool.query(`CREATE TABLE IF NOT EXISTS banned_ips (
     ip VARCHAR(45) NOT NULL PRIMARY KEY,
@@ -799,6 +816,37 @@ export async function savePinnedChats(login, keys) {
   const vals = keys.slice(0, 200).map((k) => [login, String(k)]);
   await execute("INSERT INTO pinned_chats (login, chat_key) VALUES ?", [vals]);
 }
+
+// ---------- News pages (personal feed + comment threads) ----------
+export async function createNewsPost(author, text, media) {
+  const r = await execute("INSERT INTO news_posts (author_login, text, media, created_at) VALUES (?,?,?,?)", [author, (text || "").slice(0, 4000), media || null, Date.now()]);
+  return r.insertId;
+}
+export async function getNewsPosts(pageLogin, before, limit = 20) {
+  const lim = Math.min(50, Math.max(1, limit | 0));
+  const params = [pageLogin];
+  let sql = "SELECT p.id, p.author_login, p.text, p.media, p.created_at, u.name FROM news_posts p LEFT JOIN users u ON u.login=p.author_login WHERE p.author_login=?";
+  if (before) { sql += " AND p.id < ?"; params.push(before); }
+  sql += " ORDER BY p.id DESC LIMIT " + lim;
+  return query(sql, params);
+}
+export async function getNewsPost(id) { const r = await query("SELECT id, author_login, text, media, created_at FROM news_posts WHERE id=?", [id]); return r[0] || null; }
+export async function deleteNewsPost(id) { await execute("DELETE FROM news_posts WHERE id=?", [id]); await execute("DELETE FROM news_comments WHERE post_id=?", [id]); }
+export async function newsCommentCounts(postIds) {
+  if (!postIds || !postIds.length) return {};
+  const r = await query("SELECT post_id, COUNT(*) c FROM news_comments WHERE post_id IN (?) GROUP BY post_id", [postIds]);
+  const out = {}; for (const row of r) out[row.post_id] = row.c; return out;
+}
+export async function addNewsComment(postId, author, text) {
+  const ts = Date.now();
+  const r = await execute("INSERT INTO news_comments (post_id, author_login, text, created_at) VALUES (?,?,?,?)", [postId, author, text.slice(0, 2000), ts]);
+  return { id: r.insertId, post_id: postId, author_login: author, text: text.slice(0, 2000), created_at: ts };
+}
+export async function getNewsComments(postId, limit = 300) {
+  return query("SELECT c.id, c.post_id, c.author_login, c.text, c.created_at, u.name FROM news_comments c LEFT JOIN users u ON u.login=c.author_login WHERE c.post_id=? ORDER BY c.id ASC LIMIT " + Math.min(500, limit | 0), [postId]);
+}
+export async function getNewsComment(id) { const r = await query("SELECT id, post_id, author_login, text, created_at FROM news_comments WHERE id=?", [id]); return r[0] || null; }
+export async function deleteNewsComment(id) { await execute("DELETE FROM news_comments WHERE id=?", [id]); }
 
 // ---------- Админка ----------
 export async function adminListUsers(q = "", limit = 100) {
