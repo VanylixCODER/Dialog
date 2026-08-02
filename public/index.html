@@ -92,6 +92,7 @@
         <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
         <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
         <button id="adminBtn" class="hicon-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
+        <button id="myNewsBtn" class="hicon-btn" data-i18n-title="my_page" title="My page">📰</button>
         <button id="accountBtn" class="hicon-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
       </div>
@@ -587,6 +588,30 @@
   </div>
 
   <!-- Мини-профиль -->
+  <!-- News page overlay: a user's feed of posts, each with a comment thread. -->
+  <div id="newsOverlay" class="news-overlay hidden">
+    <div class="news-card">
+      <div class="news-head">
+        <button id="newsBack" class="news-back" aria-label="Close">‹</button>
+        <div class="avatar news-ava" id="newsAva" data-login="">?</div>
+        <div class="news-owner-txt"><span class="news-owner-name" id="newsOwnerName">—</span><span class="news-owner-sub" data-i18n="news_page">News page</span></div>
+      </div>
+      <div class="news-body">
+        <div class="news-composer hidden" id="newsComposer">
+          <textarea id="newsInput" data-i18n-ph="news_ph" rows="2" maxlength="4000"></textarea>
+          <div id="newsImgPreview" class="news-img-preview hidden"><img id="newsImgEl" alt=""><button id="newsImgClear" class="news-img-clear" aria-label="Remove image">✕</button></div>
+          <div class="news-composer-bar">
+            <button id="newsAttach" class="icon-btn" data-i18n-title="t_attach" title="Attach image">📎</button>
+            <input id="newsFile" type="file" accept="image/*" hidden />
+            <button id="newsPost" class="btn-primary" data-i18n="news_post">Post</button>
+          </div>
+        </div>
+        <div id="newsFeed" class="news-feed"></div>
+        <div id="newsEmpty" class="news-empty hidden" data-i18n="news_empty">No posts yet.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="mpModal" class="modal hidden"><div class="modal-card mp-card">
     <div class="mp-banner hidden" id="mpBanner"><img id="mpBannerImg" alt="" /></div>
     <button id="mpCancel" class="hub-close">✕</button>
@@ -602,6 +627,7 @@
     <div class="modal-actions">
       <button id="mpAddFriend" class="btn-primary hidden" data-i18n="add_friend">Add friend</button>
       <button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button>
+      <button id="mpPage" class="btn-ghost" data-i18n="view_page">Page</button>
       <button id="mpReport" class="btn-ghost mp-report" data-i18n="report_user">Report</button>
     </div>
   </div></div>
