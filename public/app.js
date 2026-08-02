@@ -1367,6 +1367,7 @@ function openChat(c) {
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
   $("chatHead").classList.remove("hidden"); $("messages").classList.remove("hidden"); $("composer").classList.remove("hidden");
+  curChannel = false; applyChannelUI();   // reset channel state on open; loadGroupMembers re-applies for channels
   playChatAnim("open");
   $("messages").innerHTML = "";
   showMsgSkeletons(); // placeholder until history arrives
@@ -1866,6 +1867,7 @@ let cgFriends = [];           // отфильтрованный список п�
 function openCreateGroup(preselect) {
   if (!profile) return;
   cgPicked.clear(); cgAvatar = null; cgFriends = [];
+  const ch = $("cgChannel"); if (ch) ch.checked = false;
   if (preselect && preselect !== profile.login) cgPicked.add(preselect); // e.g. "New group with @x"
   const nameInp = $("cgName"); if (nameInp) nameInp.value = "";
   const search = $("cgSearch"); if (search) search.value = "";
@@ -1923,7 +1925,7 @@ function updateCgCount() {
     el.classList.toggle("full", picked > 0);
   }
   const nm = ($("cgName")?.value || "").trim();
-  $("cgCreate").disabled = !(nm && picked > 0);
+  $("cgCreate").disabled = !(nm && (picked > 0 || $("cgChannel")?.checked));
 }
 $("cgCloseBtn")?.addEventListener?.("click", closeCreateGroup);
 $("cgCancel")?.addEventListener?.("click", closeCreateGroup);
@@ -1949,6 +1951,7 @@ $("cgAvaClear")?.addEventListener?.("click", () => {
   $("cgAvaClear").classList.add("hidden");
 });
 $("cgName")?.addEventListener?.("input", updateCgCount);
+$("cgChannel")?.addEventListener?.("change", updateCgCount);
 $("cgSearch")?.addEventListener?.("input", renderCgPicker);
 $("cgSelectAll")?.addEventListener?.("click", () => {
   // Тоггл «выбрать всех видимых» — клик на пустом фильтре = все друзья. Если уже все выбраны → сброс.
@@ -1959,9 +1962,10 @@ $("cgSelectAll")?.addEventListener?.("click", () => {
 async function submitCreateGroup() {
   $("cgError").textContent = "";
   const name = ($("cgName")?.value || "").trim();
+  const isChannel = !!$("cgChannel")?.checked;
   if (!name) { $("cgError").textContent = t("err_group_name"); return; }
-  if (cgPicked.size === 0) { $("cgError").textContent = t("err_pick_members"); return; }
-  const body = { name, members: [...cgPicked].join(",") };
+  if (cgPicked.size === 0 && !isChannel) { $("cgError").textContent = t("err_pick_members"); return; }
+  const body = { name, members: [...cgPicked].join(","), channel: isChannel };
   if (cgAvatar) body.avatar = cgAvatar;
   $("cgCreate").disabled = true;
   const { ok, data } = await api("/api/groups", body);
@@ -2451,16 +2455,41 @@ let groupMembers = []; // [{login,name}] текущей группы (для б�
 // переключаемся на другой чат или в DM. disconnect/identify — отдельный путь, см. loadGroupMembers.
 let groupOwner = false;
 let groupOwnerLogin = "";
+let curChannel = false, curChannelHook = null;
+// Channel (broadcast) group: members can't post — hide the composer, show a read-only notice + label.
+function applyChannelUI() {
+  const readOnly = curKind === "group" && curChannel && !groupOwner;
+  const comp = $("composer"); if (comp) comp.classList.toggle("hidden", readOnly);
+  let notice = $("channelNotice");
+  if (!notice) { notice = document.createElement("div"); notice.id = "channelNotice"; notice.className = "channel-notice hidden"; const pane = $("chatPane"); if (pane) pane.appendChild(notice); }
+  if (notice) { notice.textContent = "🔒 " + t("channel_readonly"); notice.classList.toggle("hidden", !readOnly); }
+  const head = $("chatHead"); if (head) head.classList.toggle("is-channel", curKind === "group" && curChannel);
+  if (curKind === "group" && curChannel) { const sub = $("chatSub"); if (sub) sub.textContent = t("channel_sub"); }
+  const hookCard = $("gsHookCard");
+  if (hookCard) {
+    const showHook = curKind === "group" && curChannel && groupOwner && !!curChannelHook;
+    hookCard.classList.toggle("hidden", !showHook);
+    if (showHook) { const inp = $("gsHookUrl"); if (inp) inp.value = curChannelHook; }
+  }
+}
+$("gsHookCopy") && ($("gsHookCopy").onclick = () => { copyToClipboard(curChannelHook || ($("gsHookUrl") && $("gsHookUrl").value) || ""); notify(t("copied")); });
+$("gsHookRegen") && ($("gsHookRegen").onclick = async () => {
+  if (!curChannel || !groupOwner) return;
+  const { ok, data } = await api("/api/groups/" + myRoom.slice(5) + "/hook/regen", {});
+  if (ok && data.hook) { curChannelHook = data.hook; const inp = $("gsHookUrl"); if (inp) inp.value = data.hook; notify(t("saved")); }
+});
 async function loadGroupMembers() {
-  if (curKind !== "group") { groupMembers = []; groupOwner = false; groupOwnerLogin = ""; syncAddMemberUI(); return; }
+  if (curKind !== "group") { groupMembers = []; groupOwner = false; groupOwnerLogin = ""; curChannel = false; curChannelHook = null; syncAddMemberUI(); applyChannelUI(); return; }
   const id = myRoom.slice(5);
   const { ok, data } = await api("/api/groups/" + id, null, "GET");
   if (ok && myRoom === "@grp:" + id) {
     groupMembers = data.members || [];
     groupOwner = data.owner === profile.login;
     groupOwnerLogin = data.owner;
+    curChannel = !!data.channel; curChannelHook = data.hook || null;
     renderMembers();
     syncAddMemberUI();
+    applyChannelUI();
   }
 }
 function renderMembers() {
@@ -2739,6 +2768,7 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
   renderChatList($("searchInput").value);
 });
 socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
+socket.on("channel-readonly", () => notify(t("channel_readonly")));
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); if (/(^|\s)@all(?![\w-])/.test(x)) return true; return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
 function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
