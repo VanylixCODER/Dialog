@@ -1620,16 +1620,18 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   const payload = {
     from: from || fromLogin, fromLogin, name, ts: Date.now(),
     type: media ? (type || "file") : "text",
-    text: media ? "" : String(text || "").slice(0, 4000),
+    // Keep the caption on media too (was previously dropped) — up to 1024 chars, Telegram-style.
+    text: String(text || "").slice(0, media ? 1024 : 4000),
     media: media || null, mediaName: (mediaName || "").slice(0, 255),
     localId: localId || null,
   };
   try { payload.id = await saveMessage({ room, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
   if (!payload.id) return null;
   io.to(room).emit("message", payload);
+  const capPrev = payload.text ? " " + payload.text.slice(0, 110) : "";
   const preview = payload.type === "text" ? payload.text.slice(0, 120)
-    : payload.type === "image" || payload.type === "gif" ? "🖼 Photo"
-    : payload.type === "video" ? "🎬 Video"
+    : payload.type === "image" || payload.type === "gif" ? "🖼" + (capPrev || " Photo")
+    : payload.type === "video" ? "🎬" + (capPrev || " Video")
     : payload.type === "audio" ? "🎤 Voice" : "📎 " + (payload.mediaName || "File");
   let recips = [];
   const dmTo = dmPartner(room, fromLogin);

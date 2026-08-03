@@ -2618,12 +2618,32 @@ socket.on("channel-readonly", () => notify(t("channel_readonly")));
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); if (/(^|\s)@all(?![\w-])/.test(x)) return true; return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
 function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
+// Inline Markdown (bold / italic / strike / spoiler) applied to ALREADY-escaped text —
+// only this fixed set of tags is ever emitted, so no user HTML can slip through.
+function mdInline(s) {
+  s = s.replace(/\*\*([^\n]+?)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/__([^_\n]+?)__/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>");
+  s = s.replace(/(^|[^_\w])_([^_\n]+?)_(?!_)/g, "$1<em>$2</em>");
+  s = s.replace(/~~([^\n]+?)~~/g, "<del>$1</del>");
+  s = s.replace(/\|\|([^\n]+?)\|\|/g, '<span class="spoiler">$1</span>');
+  return s;
+}
+// Safe formatting: markdown + @mentions + auto-links. Code and URLs are stashed in
+// control-char placeholders (impossible in the escaped text) so other rules never touch
+// their contents, and restored last — code last of all so it is never re-parsed.
 function formatMessage(text) {
-  let html = escapeHtml(text);
+  let html = escapeHtml(String(text || "").replace(/[-]/g, ""));
+  const code = [];
+  html = html.replace(/```\n?([\s\S]*?)```/g, (_, c) => "" + (code.push({ b: true, c: c.replace(/\n$/, "") }) - 1) + "");
+  html = html.replace(/`([^`\n]+?)`/g, (_, c) => "" + (code.push({ b: false, c }) - 1) + "");
   const links = [];
-  html = html.replace(/(https?:\/\/[^\s]+)/g, (u) => { const i = links.push(u) - 1; return "L" + i + ""; });
+  html = html.replace(/(https?:\/\/[^\s-]+)/g, (u) => "" + (links.push(u) - 1) + "");
+  html = html.replace(/^&gt; ?(.*)$/gm, "<blockquote>$1</blockquote>");
+  html = mdInline(html);
   html = highlightMentions(html);
-  html = html.replace(/L(\d+)/g, (_, i) => `<a href="${links[i]}" target="_blank" rel="noopener noreferrer" style="color:#7dffaf">${links[i]}</a>`);
+  html = html.replace(/(\d+)/g, (_, i) => `<a href="${links[i]}" target="_blank" rel="noopener noreferrer" style="color:#7dffaf">${links[i]}</a>`);
+  html = html.replace(/(\d+)/g, (_, i) => code[i].b ? `<pre class="md-pre"><code>${code[i].c}</code></pre>` : `<code class="md-code">${code[i].c}</code>`);
   return html;
 }
 function firstUrl(text) { const m = (text || "").match(/https?:\/\/[^\s]+/); return m ? m[0] : null; }
@@ -2672,8 +2692,8 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   } else {
     if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
     if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
-    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div></div>`;
-    else if (m.type === "video") inner += `<div class="bubble media"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div></div>`;
+    else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
+    else if (m.type === "video") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}" preload="none"></audio></div>`;
     else if (m.type === "file") {
       const safeName = escapeHtml(m.mediaName || t("file_untitled"));
@@ -2759,6 +2779,7 @@ messagesEl.addEventListener("click", (e) => {
   const eb = e.target.closest(".ma-edit"); if (eb) { startEdit(eb.closest(".msg")); return; }
   const db = e.target.closest(".ma-del"); if (db) { const w = db.closest(".msg"); if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id: Number(w.dataset.id) }); return; }
   const bl = e.target.closest(".msg.blocked:not(.revealed)"); if (bl) { bl.classList.add("revealed"); return; }
+  const sp = e.target.closest(".spoiler:not(.revealed)"); if (sp) { sp.classList.add("revealed"); return; }
   // Media overlay buttons (download / fullscreen) — check before the plain image click.
   const dlb = e.target.closest(".media-dl");
   if (dlb) { const mediaEl = dlb.closest(".bubble.media")?.querySelector("img,video"); if (mediaEl) downloadMedia(mediaEl.currentSrc || mediaEl.src, dlb.dataset.name || "file"); return; }
@@ -2910,6 +2931,7 @@ function spamBlock(text, isMedia) {
 function spamNotify(reason) { notify(t(reason === "duplicate" ? "spam_duplicate" : "spam_flood")); }
 function sendText() {
   const input = $("msgInput"); const text = input.value.trim();
+  if (pendingSend.length) { sendPending(); return; }   // queued media → send it (text becomes the caption)
   if (!text || !myRoom) return;
   const blocked = spamBlock(text, false);
   if (blocked) { spamNotify(blocked); return; } // не рендерим и не шлём — текст остаётся в поле
@@ -3074,7 +3096,7 @@ $("upCancel")?.addEventListener?.("click", () => {
   if (uploadingCount <= 0) hideProgress();
 });
 
-function sendFile(file) {
+function sendFile(file, caption) {
   if (!file || !file.size || !myRoom) return null;
   const blocked = spamBlock("", true); // файлы — только анти-флуд, без проверки дублей
   if (blocked) { spamNotify(blocked); return "spam"; }
@@ -3083,6 +3105,8 @@ function sendFile(file) {
     return "too_big";
   }
   const type = pickMediaType(file);
+  // Captions only attach to visual media (image/gif/video), Telegram-style; capped at 1024.
+  const cap = (type === "image" || type === "gif" || type === "video") ? String(caption || "").trim().slice(0, 1024) : "";
   const localId = ++localIdCounter;
   uploadingCount++;
 
@@ -3095,11 +3119,11 @@ function sendFile(file) {
     if (uploadingCount <= 0) hideProgress();
     const optimistic = {
       localId, id: null, fromLogin: profile.login, name: myName, ts: Date.now(),
-      type, media: reader.result, mediaName: file.name, mediaSize: file.size,
+      type, media: reader.result, mediaName: file.name, mediaSize: file.size, text: cap,
       room: myRoom, _optimistic: true,
     };
     renderMessage(optimistic, true, false);
-    socket.emit("message", { type, media: reader.result, mediaName: file.name, localId });
+    socket.emit("message", { type, media: reader.result, mediaName: file.name, text: cap, localId });
   };
   reader.onerror = () => {
     uploadingCount = Math.max(0, uploadingCount - 1);
@@ -3244,7 +3268,7 @@ function isMicMode() { return $("sendBtn").classList.contains("mic-mode"); }
 function updateSendMode() {
   if (recState !== "idle") return;
   const b = $("sendBtn"); if (!b) return;
-  const has = (($("msgInput") || {}).value || "").trim().length > 0;
+  const has = ((($("msgInput") || {}).value || "").trim().length > 0) || pendingSend.length > 0;
   b.classList.toggle("mic-mode", !has);
   b.innerHTML = has ? window.ICON.send : window.ICON.mic;
 }
@@ -3300,20 +3324,28 @@ function spItemHTML(it, i) {
 }
 function renderSendPreview() {
   const wrap = $("sendPreview"), box = $("spItems"); if (!wrap || !box) return;
-  if (!pendingSend.length) { wrap.classList.add("hidden"); box.innerHTML = ""; return; }
+  if (!pendingSend.length) { wrap.classList.add("hidden"); box.innerHTML = ""; updateSendMode(); return; }
   wrap.classList.remove("hidden");
   box.innerHTML = pendingSend.map((it, i) => spItemHTML(it, i)).join("");
   applyI18n(wrap);
   box.querySelectorAll(".sp-x").forEach((x) => x.onclick = () => { const it = pendingSend[+x.dataset.i]; if (it && it.url) URL.revokeObjectURL(it.url); pendingSend.splice(+x.dataset.i, 1); renderSendPreview(); });
+  // A queued attachment turns the mic button into a send button (Enter/⏎ now sends media + caption).
+  updateSendMode();
 }
 function clearPending() { pendingSend.forEach((it) => it.url && URL.revokeObjectURL(it.url)); pendingSend = []; renderSendPreview(); }
 function sendPending() {
   if (!myRoom) { clearPending(); return; }
-  pendingSend.forEach((it) => {
+  // Whatever is typed in the composer becomes the caption of the first visual attachment
+  // (Telegram-style). Consume it so it isn't also sent as a separate text message.
+  const input = $("msgInput");
+  let caption = input ? input.value.trim() : "";
+  const firstVisual = pendingSend.findIndex((it) => it.type === "image" || it.type === "gif" || it.type === "video");
+  pendingSend.forEach((it, i) => {
     if (it.kind === "voice") { const r = new FileReader(); r.onload = () => socket.emit("message", { type: "audio", media: r.result, mediaName: "voice" }); r.readAsDataURL(it.blob); }
-    else sendFile(it.file);
+    else sendFile(it.file, i === firstVisual ? caption : "");
     if (it.url) URL.revokeObjectURL(it.url);
   });
+  if (firstVisual !== -1 && caption && input) { input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode(); closeMention(); }
   pendingSend = []; renderSendPreview();
 }
 $("spSend") && ($("spSend").onclick = sendPending);

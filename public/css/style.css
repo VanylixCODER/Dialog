@@ -1113,6 +1113,34 @@ a:focus-visible {
 }
 .bubble.audio audio { height: 36px; max-width: 240px; }
 
+/* ---- Markdown inside message bubbles (bold/italic/strike/code/quote/spoiler) ---- */
+.bubble strong { font-weight: 800; }
+.bubble em { font-style: italic; }
+.bubble del { opacity: 0.7; }
+.bubble .md-code { font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-1);
+  border-radius: 5px; padding: 1px 5px; white-space: pre-wrap; }
+.bubble .md-pre { margin: 5px 0; padding: 9px 12px; background: rgba(0, 0, 0, 0.34);
+  border: 1px solid var(--border-1); border-radius: 9px; overflow-x: auto; }
+.bubble .md-pre code { font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em; white-space: pre; line-height: 1.5; }
+.bubble blockquote { margin: 3px 0; padding: 1px 0 1px 10px; border-left: 3px solid var(--accent-400);
+  color: var(--text-dim); }
+.msg.me .bubble .md-code, .msg.me .bubble .md-pre { background: rgba(0, 0, 0, 0.26); }
+/* Spoiler: blurred block until clicked/tapped (revealed) */
+.bubble .spoiler { background-color: var(--text-dim); color: transparent; border-radius: 4px;
+  cursor: pointer; box-shadow: 0 0 7px 2px var(--text-dim);
+  transition: color 0.12s var(--ease), background-color 0.12s var(--ease), box-shadow 0.12s var(--ease); }
+.bubble .spoiler.revealed { background-color: rgba(0, 0, 0, 0.28); color: inherit; box-shadow: none; cursor: text; }
+
+/* ---- Caption under an image / video (Telegram-style) ---- */
+.bubble.media.has-cap { background: var(--bg-2); border: 1px solid var(--border-1);
+  padding: 4px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16); }
+.msg.me .bubble.media.has-cap { background: var(--bg-4); border-color: var(--accent-400); }
+.media-cap { padding: 6px 8px 3px; font-size: 14px; line-height: 1.45; white-space: pre-wrap;
+  word-break: break-word; overflow-wrap: anywhere; color: var(--text); }
+.msg.me .media-cap { color: var(--accent-100); }
+
 /* File attachment bubble (zf, pdf, exe, …): кликабельная вся, не только имя — download attribute
    на <a> сохраняет файл локально под оригинальным именем, не открывая dataURL в новой вкладке. */
 .bubble.file {
