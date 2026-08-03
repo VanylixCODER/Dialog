@@ -3006,23 +3006,38 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   @keyframes sheetIn { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
   .settings-head { padding: 12px 18px; }
   .settings-head h2 { font-size: 14px; letter-spacing: 1.6px; }
+  /* ---- Phone: the tab bar becomes a drill-in section list (iOS-style) ---- */
+  /* Flex column (not grid) so whichever of the list / pane is shown simply fills the card —
+     no dependence on grid track counts. List mode shows the list; .mob-detail shows the pane. */
+  .settings-card { display: flex; flex-direction: column; }
+  .settings-head { flex: none; }
   .settings-tabs {
-    padding: 6px 12px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    flex-wrap: nowrap;
-    gap: 4px;
-    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto; min-height: 0;
+    flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start;
+    overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    gap: 6px; padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+    border-bottom: none;
   }
   .settings-tabs::-webkit-scrollbar { display: none; }
   .settings-tab {
-    flex-shrink: 0;
-    min-height: 44px;
-    padding: 11px 14px;
-    font-size: 11px;
-    letter-spacing: 1px;
+    width: 100%; justify-content: flex-start; gap: 13px;
+    min-height: 56px; padding: 0 14px;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.2px; text-transform: none;
+    color: var(--text); background: var(--bg-2);
+    border: 1px solid var(--border-1); border-radius: var(--r-3);
   }
-  .settings-panes { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
+  .settings-tab:active { background: var(--surface-2); }
+  .settings-tab .stab-label { flex: 1; text-align: left; }
+  .settings-tab .stab-ico { color: var(--accent-300); }
+  .settings-tab .stab-ico svg { width: 21px; height: 21px; }
+  .settings-tab::after { content: "›"; font-size: 22px; line-height: 1; font-weight: 400; color: var(--text-dim); }
+  .settings-tab.active { color: var(--text); background: var(--bg-2); } /* no pill highlight in the list */
+  .settings-tab-ind { display: none !important; }                       /* pill is a desktop-only affordance */
+  /* Toggle: list hides the panes; detail hides the list. */
+  .settings-card:not(.mob-detail) .settings-panes { display: none; }
+  .settings-card.mob-detail .settings-tabs { display: none; }
+  .settings-back.mobile-only:not(.hidden) { display: inline-flex; }
+  .settings-panes { flex: 1 1 auto; min-height: 0; padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
   .settings-pane { gap: 11px; }
   /* Profile pane: bigger touch targets */
   .profile-ava { width: 88px; height: 88px; font-size: 32px; }
@@ -3199,7 +3214,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   font-weight: 800; font-size: 16px; color: var(--accent-200);
   letter-spacing: 2px; text-transform: uppercase;
   text-shadow: 0 0 8px rgba(var(--primary-rgb), 0.25);
-  margin: 0;
+  margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .settings-tabs {
   position: relative; /* anchor for the sliding indicator */
@@ -3213,6 +3228,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 }
 .settings-tab {
   position: relative; z-index: 1; /* above the pill */
+  display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 15px;
   background: transparent; border: 0;
   color: var(--text-dim);
@@ -3220,6 +3236,15 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   cursor: pointer; border-radius: var(--r-pill); white-space: nowrap;
   transition: color 0.28s var(--ease);
 }
+.stab-ico { display: inline-flex; align-items: center; }
+.stab-ico svg { width: 16px; height: 16px; }
+.stab-ico:empty { display: none; }
+/* Back button in the settings head — shown only in the mobile detail view. */
+.settings-back { display: none; width: 34px; height: 34px; align-items: center; justify-content: center;
+  flex: none; background: transparent; border: 0; color: var(--text); font-size: 26px; line-height: 1;
+  cursor: pointer; border-radius: var(--r-2); transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.settings-back svg { width: 22px; height: 22px; }
+.settings-back:hover { background: var(--surface-2); color: var(--accent-200); }
 .settings-tab:hover { color: var(--accent-200); }
 .settings-tab.active { color: var(--on-accent); background: transparent; box-shadow: none; }
 /* The pill: a single element JS slides + resizes to the active tab (a springy glide). */
