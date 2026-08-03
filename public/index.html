@@ -279,18 +279,19 @@
   <div id="settingsOverlay" class="settings-overlay hidden" role="dialog" aria-modal="true">
     <div class="settings-card" role="document">
       <div class="settings-head">
+        <button id="settingsBack" class="settings-back mobile-only hidden" data-i18n-title="back" title="Back" aria-label="Back">‹</button>
         <h2 id="settingsTitle" data-i18n="settings">Settings</h2>
         <button id="settingsClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
       </div>
       <nav class="settings-tabs" role="tablist" id="settingsTabs">
-        <button class="settings-tab active" data-tab="profile"    data-i18n="tab_general"    role="tab">General</button>
-        <button class="settings-tab"        data-tab="account"    data-i18n="tab_account"    role="tab">Account</button>
-        <button class="settings-tab"        data-tab="prefs"      data-i18n="tab_prefs"      role="tab">Preferences</button>
-        <button class="settings-tab"        data-tab="contacts"   data-i18n="tab_contacts"   role="tab">Contacts</button>
-        <button class="settings-tab"        data-tab="themes"     data-i18n="tab_appearance" role="tab">Appearances</button>
-        <button class="settings-tab"        data-tab="groups"     data-i18n="tab_groups"     role="tab">Group</button>
-        <button class="settings-tab"        data-tab="devices"    data-i18n="tab_devices"    role="tab">Voice & Video</button>
-        <button class="settings-tab"        data-tab="dev"        data-i18n="tab_dev"        role="tab">Developer</button>
+        <button class="settings-tab active" data-tab="profile"  role="tab"><span class="stab-ico" data-ico="user"></span><span class="stab-label" data-i18n="tab_general">General</span></button>
+        <button class="settings-tab"        data-tab="account"  role="tab"><span class="stab-ico" data-ico="key"></span><span class="stab-label" data-i18n="tab_account">Account</span></button>
+        <button class="settings-tab"        data-tab="prefs"    role="tab"><span class="stab-ico" data-ico="sliders"></span><span class="stab-label" data-i18n="tab_prefs">Preferences</span></button>
+        <button class="settings-tab"        data-tab="contacts" role="tab"><span class="stab-ico" data-ico="users"></span><span class="stab-label" data-i18n="tab_contacts">Contacts</span></button>
+        <button class="settings-tab"        data-tab="themes"   role="tab"><span class="stab-ico" data-ico="palette"></span><span class="stab-label" data-i18n="tab_appearance">Appearances</span></button>
+        <button class="settings-tab"        data-tab="groups"   role="tab"><span class="stab-ico" data-ico="messageSquare"></span><span class="stab-label" data-i18n="tab_groups">Group</span></button>
+        <button class="settings-tab"        data-tab="devices"  role="tab"><span class="stab-ico" data-ico="video"></span><span class="stab-label" data-i18n="tab_devices">Voice & Video</span></button>
+        <button class="settings-tab"        data-tab="dev"      role="tab"><span class="stab-ico" data-ico="code"></span><span class="stab-label" data-i18n="tab_dev">Developer</span></button>
       </nav>
       <div class="settings-panes" id="settingsPanes">
         <!-- General -->

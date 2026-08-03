@@ -516,6 +516,7 @@ window.addEventListener("langchange", () => {
   renderChatList($("searchInput").value);
   applyI18n(document.querySelector('[data-pane="themes"]'));
   setIcons();   // re-localize the [data-tip] tooltip pills (call bar etc.) — they were stale in the startup language
+  updateSettingsHeadTitle(); // keep the mobile detail header title in the new language
   updateCallButton();
   pushState();
 });
@@ -1415,7 +1416,7 @@ $("chatMenuBtn").onclick = (e) => {
     item(t("chat_wallpaper"), "image", () => openChatBgModal());
     // Не-овнер может предложить участника; овнеру предлагать не нужно (у него есть + в панели info).
     if (!groupOwner) item(t("suggest_member_btn"), "userPlus", () => openAddMembers());
-    item(t("group_settings"), "settings", () => openSettings("groups"));
+    item(t("group_settings"), "settings", () => openSettings("groups", true));
     item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
   } else if (curKind === "dm") {
     // DM background — первым пунктом (эстетика выше блокировки).
@@ -2033,7 +2034,7 @@ $("profileSave") && ($("profileSave").onclick = async () => {
 $("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
 
 // ---------- Контакты / друзья ----------
-$("contactsBtn").onclick = () => openSettings("contacts");
+$("contactsBtn").onclick = () => openSettings("contacts", true);
 // Кнопка отправки заявки работает по тому же #reqInput, который теперь живёт в settingsOverlay → contacts пейн.
 $("reqSendBtn").onclick = async () => {
   const inp = $("reqInput"); const target = (inp?.value || "").trim().toLowerCase();
@@ -2201,7 +2202,7 @@ $("chatAva").onclick = () => {
   // DM: открывает мини-профиль собеседника. Группа: открывает settings overlay на пейне «groups»
   // с её составом, инвайтами и pending (как у myName → «Open profile», только это групповая страница).
   if (curKind === "dm") openMiniProfile(myRoom.slice(4).split("~").find((l) => l !== profile.login));
-  else if (curKind === "group") openSettings("groups");
+  else if (curKind === "group") openSettings("groups", true);
 };
 $("chatAva").onkeydown = (e) => {
   // Клавиатурная активация для tabindex=0/role=button; предотвращаем скролл по Space.
@@ -5119,7 +5120,31 @@ function dismissNotif(room) {
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
 const SETTINGS_TABS = ["profile", "account", "prefs", "contacts", "themes", "groups", "devices", "dev"];
-function openSettings(tab) {
+// ---- Mobile settings: a section LIST that drills into a detail pane with a back button ----
+function isMobileView() { return window.matchMedia("(max-width: 720px)").matches; }
+function settingsCard() { return $("settingsOverlay") && $("settingsOverlay").querySelector(".settings-card"); }
+function settingsTabLabel(tab) { const l = $("settingsTabs") && $("settingsTabs").querySelector(`.settings-tab[data-tab="${tab}"] .stab-label`); return l ? l.textContent : t("settings"); }
+let mobileDetailTab = null;   // which section the mobile detail view is showing (null = the list)
+function updateSettingsHeadTitle() {
+  const title = $("settingsTitle"); if (!title) return;
+  if (mobileDetailTab) { title.removeAttribute("data-i18n"); title.textContent = settingsTabLabel(mobileDetailTab); }
+  else { title.setAttribute("data-i18n", "settings"); title.textContent = t("settings"); }
+}
+function enterSettingsDetail(tab) {   // show a section's pane (mobile) + back button + section title
+  mobileDetailTab = tab;
+  const c = settingsCard(); if (c) c.classList.add("mob-detail");
+  const b = $("settingsBack"); if (b) b.classList.remove("hidden");
+  updateSettingsHeadTitle();
+}
+function showSettingsList() {         // back to the list (also the desktop / reset state)
+  mobileDetailTab = null;
+  const c = settingsCard(); if (c) c.classList.remove("mob-detail");
+  const b = $("settingsBack"); if (b) b.classList.add("hidden");
+  updateSettingsHeadTitle();
+}
+// `direct` deep-links straight into a section on mobile (contextual openers); otherwise mobile
+// lands on the section list. Desktop ignores it (always tabs + pane).
+function openSettings(tab, direct) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
   const ov = $("settingsOverlay"); if (!ov) return;
   // Если открываем groups без активной группы — показываем placeholder в пейне (ТОЛЬКО переключаем таб, не перенаправляем).
@@ -5127,7 +5152,8 @@ function openSettings(tab) {
   ov.classList.remove("hidden");
   settingsOpen = true;
   switchTab(tab);
-  applyI18n(ov); // обновить лейблы и плейсхолдеры (темы/табы называния)
+  applyI18n(ov); // обновить лейблы и плейсхолдеры (темы/табы называния) — ДО чтения лейбла в заголовок
+  if (isMobileView() && direct) enterSettingsDetail(tab); else showSettingsList();
   if (!ov._themesRendered) renderThemes();
   if (tab === "contacts") { loadRelations(); loadMutualCounts(); }
   if (tab === "profile") refreshProfilePane();
@@ -5142,6 +5168,7 @@ function closeSettings() {
   if (!settingsOpen) return;
   const ov = $("settingsOverlay"); if (ov) ov.classList.add("hidden");
   settingsOpen = false;
+  showSettingsList(); // reset so the next open starts on the list (mobile)
 }
 function switchTab(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
@@ -5488,7 +5515,7 @@ $("prefDmOpen") && ($("prefDmOpen").onchange = (e) => savePref({ dmOpen: e.targe
 // в `&&` гард по тому же шаблону: разметка может их удалить, и тогда $() вернёт null,
 // а .onclick на null роняет весь дальнейший init (один такой баг уже сломал скрипт после
 // рефакторинга «new start for groups» — кнопки в settings и темах не открывались).
-$("contactsBtn").onclick = () => openSettings("contacts");
+$("contactsBtn").onclick = () => openSettings("contacts", true);
 
 // Клик по своему аватару/имени в хедере чатлиста открывает свой профиль. Элементы #myAvatar и
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
@@ -5506,8 +5533,11 @@ $("myName").onclick = openMyProfile;
 // Табы / закрытие оверлея
 $("settingsTabs").addEventListener("click", (e) => {
   const tab = e.target.closest(".settings-tab");
-  if (tab) switchTab(tab.dataset.tab);
+  if (!tab) return;
+  switchTab(tab.dataset.tab);
+  if (isMobileView()) enterSettingsDetail(tab.dataset.tab); // drill into the section on phones
 });
+$("settingsBack").onclick = showSettingsList;
 $("settingsClose").onclick = closeSettings;
 
 // Click-outside на бэкдроп (сам .settings-overlay div — фоновый слой) закрывает оверлей.
@@ -5574,7 +5604,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   // Inline-edit в сообщении уже обрабатывает Esc сам (startEdit), не трогаем.
   if (!$("lightbox").classList.contains("hidden")) { closeLightbox(); return; }
-  if (settingsOpen) { closeSettings(); return; }
+  if (settingsOpen) { if (isMobileView() && mobileDetailTab) showSettingsList(); else closeSettings(); return; }
   if (!$("meStatusMenu").classList.contains("hidden")) { closeStatusMenu(); return; }
   if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
   if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
@@ -5599,7 +5629,9 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  // Settings-tab icons (mobile list + desktop tabs): fill each .stab-ico from its data-ico.
+  document.querySelectorAll(".stab-ico[data-ico]").forEach((el) => { const ic = window.ICON[el.dataset.ico]; if (ic) el.innerHTML = ic; });
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
@@ -5678,8 +5710,11 @@ window.dialogOnBack = function () {
   for (const id of ["reportModal", "deleteChatModal", "createGroupModal", "screenModal", "mpModal"]) {
     if (vis(id)) { $(id).classList.add("hidden"); return true; }
   }
-  // 3. Settings sheet.
-  if (typeof settingsOpen !== "undefined" && settingsOpen) { closeSettings(); return true; }
+  // 3. Settings sheet — on phones, back first pops the detail pane to the section list.
+  if (typeof settingsOpen !== "undefined" && settingsOpen) {
+    if (isMobileView() && mobileDetailTab) showSettingsList(); else closeSettings();
+    return true;
+  }
   // 4. Popovers / menus / pickers.
   for (const id of ["emojiPicker", "gifPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
     if (vis(id)) { $(id).classList.add("hidden"); return true; }
