@@ -5103,7 +5103,11 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   @keyframes mobChatIn  { from { transform: translate3d(100%, 0, 0); } to { transform: translateX(0); } }
   @keyframes mobChatOut { from { transform: translateX(0); }    to { transform: translateX(100%); } }
   .app.in-chat .chat { animation: mobChatIn 0.34s var(--ease-out); }
-  .app.in-chat .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.3s var(--ease-out) both; }
+  /* On close we drop .in-chat immediately (so the list paints underneath) and keep the chat
+     as a fixed full-screen overlay via .mob-leaving — it slides off to the right revealing
+     the list instead of a black gap. Not scoped to .in-chat for exactly that reason. */
+  .app .chat.mob-leaving { display: flex !important; position: fixed; inset: 0; z-index: 60;
+    animation: mobChatOut 0.3s var(--ease-out) both; }
 }
 
 /* ============ @mention autocomplete ============ */
