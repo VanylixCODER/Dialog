@@ -1389,12 +1389,16 @@ function syncBlockComposer() {
   }
 }
 $("backBtnMobile").onclick = $("esBackBtn").onclick = () => {
-  const done = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
+  const reveal = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
   const chat = $("chatPane");
-  if (chat && window.matchMedia("(max-width: 720px)").matches) {   // slide the chat off to the right, then drop it
+  if (chat && window.matchMedia("(max-width: 720px)").matches) {
+    // Reveal + render the contact list FIRST so it sits under the chat as it slides off to
+    // the right — otherwise the list stays display:none behind the pane and you see black
+    // until the animation ends. .mob-leaving keeps the chat as a fixed overlay meanwhile.
+    reveal();
     chat.classList.add("mob-leaving");
-    setTimeout(() => { chat.classList.remove("mob-leaving"); done(); }, 300);
-  } else done();
+    setTimeout(() => chat.classList.remove("mob-leaving"), 300);
+  } else reveal();
 };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
