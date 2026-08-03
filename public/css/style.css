@@ -69,6 +69,8 @@
   --t-slow: 320ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-pop: cubic-bezier(0.22, 1.12, 0.36, 1);  /* gentle overshoot for popup entrances */
+  --t-pop: 0.46s;                                 /* deliberately slow so the motion reads */
 
   /* Шрифты: Montserrat — дефолтный UI-шрифт всех тем (кроме aero, у неё Segoe-подобный стек). */
   --font-ui: "Montserrat", "Segoe UI", "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -343,6 +345,8 @@ a:focus-visible {
   animation: cardIn 0.55s var(--ease-out);
 }
 @keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+/* Popups glide in from the right with a soft overshoot — slow enough to actually see. */
+@keyframes popIn { from { opacity: 0; transform: translate3d(56px, 0, 0) scale(0.96); } to { opacity: 1; transform: none; } }
 /* (вращающаяся conic-рамка убрана — отвлекала и портила вид логина; тонкая подсветка через .login-card box-shadow остаётся) */
 .login-card > * { position: relative; z-index: 1; }
 
@@ -1531,7 +1535,7 @@ a:focus-visible {
   display: grid; place-items: center;
   background: rgba(0, 4, 0, 0.7);
   backdrop-filter: blur(14px) saturate(140%);
-  animation: modalIn 0.18s var(--ease-out);
+  animation: modalIn 0.3s var(--ease-out);
 }
 @keyframes modalIn { from { opacity: 0; } to { opacity: 1; } }
 .modal-card {
@@ -1544,7 +1548,7 @@ a:focus-visible {
   border-radius: var(--r-4);
   box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; gap: 12px;
-  animation: cardIn 0.34s var(--ease-out);
+  animation: popIn var(--t-pop) var(--ease-pop) both;
 }
 .modal-card.wide { width: min(480px, 94vw); }
 .modal-title {
@@ -3115,7 +3119,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   display: grid; place-items: center;
   background: rgba(0, 4, 0, 0.7);
   backdrop-filter: blur(14px) saturate(140%);
-  animation: modalIn 0.18s var(--ease-out);
+  animation: modalIn 0.3s var(--ease-out);
 }
 .settings-card {
   position: relative;
@@ -3124,6 +3128,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   display: grid;
   /* Rows: flashbang-banner (auto, may be hidden), settings-head, settings-tabs, settings-panes (1fr, scrollable) */
   grid-template-rows: auto auto auto 1fr;
+  /* Single column pinned to min 0 — without this a wide child (e.g. the non-wrapping RU
+     tab row) forces the implicit `auto` track wider than the card, spilling every pane
+     out past the clipped right edge. */
+  grid-template-columns: minmax(0, 1fr);
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
   border: 1px solid var(--border-2);
   border-radius: var(--r-4);
@@ -3146,6 +3154,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .settings-tabs {
   position: relative; /* anchor for the sliding indicator */
   display: flex; gap: 2px; padding: 8px 22px;
+  /* Wrap to a second centered row rather than overflow — longer locales (RU) have 8 wide
+     labels that never fit one line at max card width. The pill indicator tracks offsetTop
+     too, so it lands correctly on either row. (Mobile overrides this to a nowrap scroller.) */
+  flex-wrap: wrap; justify-content: center; row-gap: 4px;
   border-bottom: 1px solid var(--border-1);
   background: var(--bg-1);
 }
@@ -4706,8 +4718,8 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 @keyframes callUp   { from { opacity: 1; transform: translateY(0); }                to { opacity: 0; transform: translateY(-100%); } }
 @keyframes chatInR  { from { opacity: 0.4; transform: translateX(26px); }           to { opacity: 1; transform: translateX(0); } }
 
-/* Settings overlay: panel fades UP into place (the backdrop keeps its own fade). */
-.settings-overlay > .settings-card { animation: fadeUp 0.26s var(--ease-out) both; }
+/* Settings overlay: panel glides in from the side (the backdrop keeps its own fade). */
+.settings-overlay > .settings-card { animation: popIn var(--t-pop) var(--ease-pop) both; }
 
 /* Call stage slides in from out of bounds (above), and back out when the call ends. */
 #callStage:not(.hidden):not(.fs-call) { animation: callDown 0.3s var(--ease-out) both; }
@@ -5020,19 +5032,28 @@ body.theming, body.theming *:not(canvas) {
 }
 
 /* ============ Chat open / close slide ============ */
-@keyframes chatSlideInRight { from { opacity: 0; transform: translateX(34px); } to { opacity: 1; transform: none; } }
-@keyframes chatSlideInLeft  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-#chatPane.anim-open  .chat-head,
-#chatPane.anim-open  #messages,
-#chatPane.anim-open  .composer { animation: chatSlideInRight 0.30s var(--ease) both; }
-#chatPane.anim-close #emptyState { animation: chatSlideInLeft 0.30s var(--ease) both; }
+/* The old version slid the whole message list on the X axis, which repaints every bubble
+   mid-animation and stutters right as history loads. Now only the light chrome (header +
+   composer) slides in from the side; the big #messages list just cross-fades (compositor
+   only — no layout/paint), and a small stagger makes it read as a deliberate reveal. */
+@keyframes chatChromeIn { from { opacity: 0; transform: translate3d(30px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes chatFadeIn   { from { opacity: 0; }                                  to { opacity: 1; } }
+@keyframes chatEmptyIn  { from { opacity: 0; transform: translate3d(-22px, 0, 0); } to { opacity: 1; transform: none; } }
+#chatPane.anim-open  .chat-head { animation: chatChromeIn 0.42s var(--ease-out) both; }
+#chatPane.anim-open  #messages  { animation: chatFadeIn 0.5s var(--ease-out) 0.05s both; }
+#chatPane.anim-open  .composer  { animation: chatChromeIn 0.44s var(--ease-out) 0.09s both; }
+#chatPane.anim-close #emptyState { animation: chatEmptyIn 0.4s var(--ease-out) both; }
+body.motion-off #chatPane.anim-open .chat-head,
+body.motion-off #chatPane.anim-open #messages,
+body.motion-off #chatPane.anim-open .composer,
+body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 
 /* On phones the chat is a full-screen overlay — slide the whole pane in from / out to the right. */
 @media (max-width: 720px) {
-  @keyframes mobChatIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  @keyframes mobChatIn  { from { transform: translate3d(100%, 0, 0); } to { transform: translateX(0); } }
   @keyframes mobChatOut { from { transform: translateX(0); }    to { transform: translateX(100%); } }
-  .app.in-chat .chat { animation: mobChatIn 0.28s var(--ease); }
-  .app.in-chat .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.24s var(--ease) both; }
+  .app.in-chat .chat { animation: mobChatIn 0.34s var(--ease-out); }
+  .app.in-chat .chat.mob-leaving { display: flex !important; z-index: 60; animation: mobChatOut 0.3s var(--ease-out) both; }
 }
 
 /* ============ @mention autocomplete ============ */

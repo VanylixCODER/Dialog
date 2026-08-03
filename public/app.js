@@ -1393,7 +1393,7 @@ $("backBtnMobile").onclick = $("esBackBtn").onclick = () => {
   const chat = $("chatPane");
   if (chat && window.matchMedia("(max-width: 720px)").matches) {   // slide the chat off to the right, then drop it
     chat.classList.add("mob-leaving");
-    setTimeout(() => { chat.classList.remove("mob-leaving"); done(); }, 240);
+    setTimeout(() => { chat.classList.remove("mob-leaving"); done(); }, 300);
   } else done();
 };
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
