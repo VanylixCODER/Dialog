@@ -131,6 +131,8 @@ export async function initSchema() {
     reactions TEXT NULL, edited TINYINT NOT NULL DEFAULT 0,
     KEY idx_messages_room (room, id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // Inline keyboard (Telegram-style buttons) attached to a bot/webhook message — JSON rows.
+  try { await pool.query("ALTER TABLE messages ADD COLUMN buttons TEXT NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
     token VARCHAR(64) PRIMARY KEY, login VARCHAR(24) NOT NULL,
@@ -441,22 +443,28 @@ export async function tokensForLogin(login) { const r = await query("SELECT toke
 // ---------- Сообщения ----------
 export async function saveMessage(m) {
   const res = await execute(
-    `INSERT INTO messages (room, from_login, name, ts, type, text, media, media_name) VALUES (?,?,?,?,?,?,?,?)`,
-    [m.room, m.fromLogin, m.name, m.ts, m.type, m.text, m.media, m.mediaName]
+    `INSERT INTO messages (room, from_login, name, ts, type, text, media, media_name, buttons) VALUES (?,?,?,?,?,?,?,?,?)`,
+    [m.room, m.fromLogin, m.name, m.ts, m.type, m.text, m.media, m.mediaName, m.buttons ? JSON.stringify(m.buttons) : null]
   );
   await cacheDel("hist:" + m.room);
   return res.insertId;
+}
+function hydrateRow(r) {
+  try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; }
+  try { r.buttons = r.buttons ? JSON.parse(r.buttons) : null; } catch { r.buttons = null; }
+  r.edited = !!r.edited;
+  return r;
 }
 export async function recentMessages(room, limit = 100) {
   const cached = await cacheGet("hist:" + room);
   if (cached) { try { return JSON.parse(cached); } catch {} }
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100));
   const rows = await query(
-    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited
+    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited, buttons
      FROM messages WHERE room=? ORDER BY id DESC LIMIT ${lim}`, [room]
   );
   rows.reverse();
-  rows.forEach((r) => { try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; } r.edited = !!r.edited; });
+  rows.forEach(hydrateRow);
   const json = JSON.stringify(rows);
   if (json.length < HIST_MAX_CACHE) await cacheSet("hist:" + room, json, HIST_TTL);
   return rows;
@@ -464,11 +472,11 @@ export async function recentMessages(room, limit = 100) {
 export async function messagesBefore(room, beforeId, limit = 50) {
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 50));
   const rows = await query(
-    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited
+    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited, buttons
      FROM messages WHERE room=? AND id<? ORDER BY id DESC LIMIT ${lim}`, [room, beforeId]
   );
   rows.reverse();
-  rows.forEach((r) => { try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; } r.edited = !!r.edited; });
+  rows.forEach(hydrateRow);
   return rows;
 }
 export async function deleteMessage(id, login) {
@@ -488,6 +496,22 @@ export async function editMessage(id, login, text) {
   await execute("UPDATE messages SET text=?, edited=1 WHERE id=?", [text, id]);
   await cacheDel("hist:" + r[0].room);
   return r[0].room;
+}
+// Replace the inline keyboard of a message the caller (bot) authored. `buttons` = array|null.
+export async function editMessageMarkup(id, login, buttons) {
+  const r = await query("SELECT room FROM messages WHERE id=? AND from_login=?", [id, login]);
+  if (!r.length) return null;
+  await execute("UPDATE messages SET buttons=? WHERE id=?", [buttons ? JSON.stringify(buttons) : null, id]);
+  await cacheDel("hist:" + r[0].room);
+  return r[0].room;
+}
+// Lightweight lookup used to validate a callback-button press (no media payload fetched).
+export async function getMessageMeta(id) {
+  const r = await query("SELECT id, room, from_login AS fromLogin, name, type, buttons FROM messages WHERE id=?", [id]);
+  if (!r.length) return null;
+  const m = r[0];
+  try { m.buttons = m.buttons ? JSON.parse(m.buttons) : null; } catch { m.buttons = null; }
+  return m;
 }
 export async function toggleReaction(id, login, emoji, room) {
   const r = await query("SELECT room, reactions FROM messages WHERE id=?", [id]);

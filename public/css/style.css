@@ -1133,6 +1133,28 @@ a:focus-visible {
   transition: color 0.12s var(--ease), background-color 0.12s var(--ease), box-shadow 0.12s var(--ease); }
 .bubble .spoiler.revealed { background-color: rgba(0, 0, 0, 0.28); color: inherit; box-shadow: none; cursor: text; }
 
+/* ---- Inline keyboard (bot/webhook buttons) ---- */
+.msg-kb { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; max-width: 320px; }
+.msg.me .msg-kb { align-self: flex-end; margin-left: auto; }
+.kb-row { display: flex; gap: 5px; }
+.kb-btn {
+  flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; text-align: center;
+  text-decoration: none; color: var(--accent-100); background: var(--bg-3);
+  border: 1px solid var(--accent-400); border-radius: var(--r-3); cursor: pointer;
+  white-space: normal; word-break: break-word; line-height: 1.25;
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.kb-btn:hover { background: var(--accent-faint); box-shadow: 0 3px 12px rgba(var(--primary-rgb), 0.22); transform: translateY(-1px); }
+.kb-btn:active { transform: translateY(0); }
+.kb-btn:disabled { cursor: default; opacity: 0.85; }
+.kb-btn.kb-loading { color: transparent; position: relative; pointer-events: none; }
+.kb-btn.kb-loading::after {
+  content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid rgba(var(--primary-rgb), 0.35); border-top-color: var(--accent-300);
+  animation: spin 0.6s linear infinite;
+}
+
 /* ---- Caption under an image / video (Telegram-style) ---- */
 .bubble.media.has-cap { background: var(--bg-2); border: 1px solid var(--border-1);
   padding: 4px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16); }

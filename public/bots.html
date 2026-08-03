@@ -99,6 +99,7 @@
         <li><a href="#chatid">chat_id format</a></li>
         <li><a href="#receiving">Receiving messages</a></li>
         <li><a href="#sending">Sending messages</a></li>
+        <li><a href="#buttons">Inline buttons</a></li>
         <li><a href="#update">The update object</a></li>
         <li><a href="#commands">Commands</a></li>
         <li><a href="#groups">Groups &amp; privacy</a></li>
@@ -109,7 +110,7 @@
 
     <p class="muted"><strong style="color:var(--text)">Base URL:</strong> <code>https://dialogmsg.xyz</code>
       &nbsp;·&nbsp; Everything is a bot user (DMable, addable to groups).
-      &nbsp;·&nbsp; Inline keyboards / <code>callback_query</code> are out of v1.</p>
+      &nbsp;·&nbsp; Inline keyboards &amp; <code>callback_query</code> are supported.</p>
 
     <h2 id="create">1. Create a bot</h2>
     <p>Bots are self-serve — no approval needed.</p>
@@ -178,6 +179,27 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       <code>editMessageText</code> and <code>deleteMessage</code> your own messages, and send a typing
       indicator with <code>sendChatAction</code>.</p>
 
+    <h2 id="buttons">5b. Inline buttons (keyboards)</h2>
+    <p>Attach an inline keyboard to any message with <code>reply_markup</code> (Telegram-shaped) — a
+      list of rows, each a list of buttons. A button is a <strong>link</strong>
+      (<code>url</code>, opens in the user's browser) or a <strong>callback</strong>
+      (<code>callback_data</code>, ≤ 64 chars). Works on <code>sendMessage</code> and the media
+      methods, and channel webhooks accept the same <code>buttons</code> field.</p>
+    <pre><code>curl -X POST ".../sendMessage" -H 'Content-Type: application/json' -d '{
+  "chat_id": "@dm:demo_bot~vnx",
+  "text": "Pick one:",
+  "reply_markup": { "inline_keyboard": [
+    [ {"text":"👍 Yes","callback_data":"yes"}, {"text":"👎 No","callback_data":"no"} ],
+    [ {"text":"Open site","url":"https://dialogmsg.xyz"} ]
+  ] }
+}'</code></pre>
+    <p>When a user taps a callback button you receive a <code>callback_query</code> update (see below).
+      Acknowledge it with <code>answerCallbackQuery</code> (optionally showing a toast/alert), and
+      swap the keyboard or text with <code>editMessageReplyMarkup</code> / <code>editMessageText</code>.</p>
+    <pre><code><span class="c">// on a callback_query update:</span>
+await call(<span class="s">"answerCallbackQuery"</span>, { callback_query_id: q.id, text: <span class="s">"You chose "</span> + q.data });
+await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } });</code></pre>
+
     <h2 id="update">6. The update object</h2>
     <p>Each item from <code>getUpdates</code> (and each webhook POST body) looks like:</p>
     <pre><code>{
@@ -196,6 +218,16 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
     <p><code>chat.type</code> is <code>"private"</code> or <code>"group"</code>. <code>text</code> is
       present for text; <code>media_type</code> ∈ <code>image · video · audio · file</code> for media.
       <code>update_id</code> is the acknowledgement cursor for <code>getUpdates</code>.</p>
+    <p>A button tap arrives as a <code>callback_query</code> update instead of a <code>message</code>:</p>
+    <pre><code>{
+  <span class="s">"update_id"</span>: 140,
+  <span class="s">"callback_query"</span>: {
+    <span class="s">"id"</span>: <span class="s">"a1b2c3…"</span>,
+    <span class="s">"from"</span>: { <span class="s">"login"</span>: <span class="s">"vnx"</span>, <span class="s">"name"</span>: <span class="s">"Vanylix"</span>, <span class="s">"is_bot"</span>: false },
+    <span class="s">"message"</span>: { <span class="s">"message_id"</span>: 684, <span class="s">"chat"</span>: { <span class="s">"id"</span>: <span class="s">"@dm:demo_bot~vnx"</span>, <span class="s">"type"</span>: <span class="s">"private"</span> } },
+    <span class="s">"data"</span>: <span class="s">"yes"</span>
+  }
+}</code></pre>
 
     <h2 id="commands">7. Commands</h2>
     <p>Register slash-commands — they power the <strong>/ command menu</strong> that appears in the
@@ -222,9 +254,11 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       <tr><td><code>setWebhook</code></td><td><code>url</code>, <code>secret?</code></td><td><code>true</code></td></tr>
       <tr><td><code>deleteWebhook</code></td><td>—</td><td><code>true</code></td></tr>
       <tr><td><code>getUpdates</code></td><td><code>offset?</code>, <code>limit?</code>, <code>timeout?</code></td><td><code>[update, …]</code></td></tr>
-      <tr><td><code>sendMessage</code></td><td><code>chat_id</code>, <code>text</code></td><td>sent message</td></tr>
-      <tr><td><code>sendPhoto</code> / <code>Video</code> / <code>Audio</code> / <code>Document</code></td><td><code>chat_id</code>, media, <code>caption?</code>, <code>filename?</code></td><td>sent message</td></tr>
-      <tr><td><code>editMessageText</code></td><td><code>message_id</code>, <code>text</code></td><td><code>true</code></td></tr>
+      <tr><td><code>sendMessage</code></td><td><code>chat_id</code>, <code>text</code>, <code>reply_markup?</code></td><td>sent message</td></tr>
+      <tr><td><code>sendPhoto</code> / <code>Video</code> / <code>Audio</code> / <code>Document</code></td><td><code>chat_id</code>, media, <code>caption?</code>, <code>filename?</code>, <code>reply_markup?</code></td><td>sent message</td></tr>
+      <tr><td><code>editMessageText</code></td><td><code>message_id</code>, <code>text</code>, <code>reply_markup?</code></td><td><code>true</code></td></tr>
+      <tr><td><code>editMessageReplyMarkup</code></td><td><code>message_id</code>, <code>reply_markup</code></td><td><code>true</code></td></tr>
+      <tr><td><code>answerCallbackQuery</code></td><td><code>callback_query_id</code>, <code>text?</code>, <code>show_alert?</code></td><td><code>true</code></td></tr>
       <tr><td><code>deleteMessage</code></td><td><code>message_id</code></td><td><code>true</code></td></tr>
       <tr><td><code>sendChatAction</code></td><td><code>chat_id</code>, <code>action</code></td><td><code>true</code></td></tr>
     </table></div>
