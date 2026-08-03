@@ -4490,15 +4490,6 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 }
 
 /* ============================================================
-   Batch 5 — matrix-rain chat background (behind the messages).
-   z-index:-1 sits it inside .chat (isolated) behind all content;
-   ~0.8 opacity + slight blur keeps bubbles readable.
-   ============================================================ */
-.chat-matrix { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; display: none; opacity: 0; }
-.chat-matrix.on { display: block; opacity: 0.94; background: #04070a; }
-.chat.has-wallpaper .chat-matrix { display: none; }
-
-/* ============================================================
    Batch 4 — WhatsApp-style voice composer (mic on the send button
    + a recording overlay bar).
    ============================================================ */

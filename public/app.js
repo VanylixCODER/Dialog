@@ -129,33 +129,7 @@ function applyWallpaper() {
     cp.classList.remove("has-wallpaper");
   }
   refreshBgStatusTexts();
-  updateChatMatrix();
 }
-// --- Matrix-rain chat background (Batch 5) ---
-// On by default for the Matrix theme; a global toggle (off elsewhere) with speed +
-// character-colour controls; a custom background image hides it.
-let chatMatrixRaf = 0;
-function matrixEffective() { return localStorage.getItem("dialog_ap_matrix") === "on"; }  // rain OFF by default; opt-in via preferences
-function updateChatMatrix() {
-  const c = $("chatMatrix"); if (!c) return;
-  const show = matrixEffective() && !!myRoom && !resolveBgForChat(myRoom);
-  if (!show) { c.classList.remove("on"); cancelAnimationFrame(chatMatrixRaf); chatMatrixRaf = 0; try { const x = c.getContext("2d"); x && x.clearRect(0, 0, c.width, c.height); } catch {} return; }
-  c.classList.add("on");
-  if (chatMatrixRaf) return;
-  const ctx = c.getContext("2d"); if (!ctx) return;
-  const chars = "アイウエオカキ0123456789ABCDEF<>/{}".split(""); let cols = 0, drops = [];
-  const frame = () => {
-    if (document.hidden || !c.classList.contains("on")) { chatMatrixRaf = 0; return; }
-    chatMatrixRaf = requestAnimationFrame(frame);
-    if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; cols = Math.max(1, Math.floor(c.width / 16)); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
-    ctx.fillStyle = "rgba(0,3,0,0.12)"; ctx.fillRect(0, 0, c.width, c.height); ctx.font = "14px monospace";
-    const col = localStorage.getItem("dialog_ap_matrix_color") || "#00ff5a";
-    const sp = Math.max(1, Math.min(10, Number(localStorage.getItem("dialog_ap_matrix_speed") || 4))) / 12;
-    for (let i = 0; i < cols; i++) { ctx.fillStyle = Math.random() > 0.98 ? "#ffffff" : col; ctx.fillText(chars[(Math.random() * chars.length) | 0], i * 16, drops[i] * 16); if (drops[i] * 16 > c.height && Math.random() > 0.975) drops[i] = 0; drops[i] += sp; }
-  };
-  cancelAnimationFrame(chatMatrixRaf); frame();
-}
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !chatMatrixRaf) updateChatMatrix(); });
 // Обновить «status: global/per-chat/none» подписи в обоих местах: Settings секция и
 // chat-bg modal. Используется И после изменения apply (upload/clear), И из langchange
 // листенера ниже чтобы при переключении языка цифры переводились на лету.
@@ -394,7 +368,6 @@ function applyUserTheme(tk, opts = {}) {
     const grid = $("themeGrid"); if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.remove("active"));
   }
   refreshOnAccent();
-  try { updateChatMatrix(); } catch {}
 }
 function clearThemePreview() {
   const pv = document.getElementById("user-theme-preview"); if (pv) pv.remove();
@@ -500,17 +473,6 @@ function initAppearanceControls() {
     subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".ap-subpane").forEach((p) => p.classList.toggle("active", p.dataset.apsubpane === b.dataset.apsub));
   });
-  const mx = $("apMatrix"), mxs = $("apMatrixSpeed"), mxc = $("apMatrixColor");
-  if (mx && mxs && mxc) {
-    mx.checked = matrixEffective();
-    mxs.value = localStorage.getItem("dialog_ap_matrix_speed") || 4;
-    mxc.value = localStorage.getItem("dialog_ap_matrix_color") || "#00ff5a";
-    $("apMatrixSpeedV").textContent = "×" + mxs.value;
-    $("apMatrixCtrls").classList.toggle("hidden", !mx.checked);
-    mx.onchange = () => { localStorage.setItem("dialog_ap_matrix", mx.checked ? "on" : "off"); $("apMatrixCtrls").classList.toggle("hidden", !mx.checked); updateChatMatrix(); };
-    mxs.oninput = () => { $("apMatrixSpeedV").textContent = "×" + mxs.value; localStorage.setItem("dialog_ap_matrix_speed", mxs.value); updateChatMatrix(); };
-    mxc.oninput = () => { localStorage.setItem("dialog_ap_matrix_color", mxc.value); updateChatMatrix(); };
-  }
   const cv = $("apCallViz");
   if (cv) { cv.checked = callVizOn(); cv.onchange = () => localStorage.setItem("dialog_ap_callviz", cv.checked ? "on" : "off"); }
   renderFavThemes();
