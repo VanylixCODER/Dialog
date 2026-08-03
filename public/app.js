@@ -2666,6 +2666,24 @@ function addLinkExtras(wrap, text) {
     }).catch(() => {});
 }
 
+// Inline keyboard under a bot/webhook message. `u` buttons are links (open in a new tab);
+// `d` buttons fire a callback query the bot handles. Server validates the shape, but we
+// still escape everything — buttons are attacker-controlled content from a bot.
+function renderKeyboard(rows, mid) {
+  if (!Array.isArray(rows) || !rows.length) return "";
+  let h = `<div class="msg-kb" data-mid="${mid != null ? mid : ""}">`;
+  for (const row of rows) {
+    if (!Array.isArray(row) || !row.length) continue;
+    h += `<div class="kb-row">`;
+    for (const b of row) {
+      const label = escapeHtml(String(b.t || ""));
+      if (b.u) h += `<a class="kb-btn" href="${escapeHtml(String(b.u))}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      else h += `<button type="button" class="kb-btn" data-cb="${escapeHtml(String(b.d || ""))}">${label}</button>`;
+    }
+    h += `</div>`;
+  }
+  return h + `</div>`;
+}
 function renderMessage(m, scroll = true, ping = false, instant = false) {
   const mine = profile && m.fromLogin === profile.login;
   const isB = !mine && m.fromLogin && blocked.has(m.fromLogin);
@@ -2705,6 +2723,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
         (sizeStr ? `<span class="file-size">${sizeStr}</span>` : "") +
         `</span><span class="file-dl" aria-hidden="true">⬇</span></a>`;
     }
+    if (m.buttons && m.buttons.length) inner += renderKeyboard(m.buttons, m.id);
     const statusSpan = mine ? `<span class="msg-status" data-status="pending" title="${t("status_pending")}">${window.ICON.clock}</span>` : "";
     inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${statusSpan}</div>`;
     inner += `<div class="reactions"></div>`;
@@ -2780,6 +2799,17 @@ messagesEl.addEventListener("click", (e) => {
   const db = e.target.closest(".ma-del"); if (db) { const w = db.closest(".msg"); if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id: Number(w.dataset.id) }); return; }
   const bl = e.target.closest(".msg.blocked:not(.revealed)"); if (bl) { bl.classList.add("revealed"); return; }
   const sp = e.target.closest(".spoiler:not(.revealed)"); if (sp) { sp.classList.add("revealed"); return; }
+  // Inline callback button (bot/webhook) — hand the data to the server; the bot answers back.
+  const kb = e.target.closest(".kb-btn[data-cb]");
+  if (kb) {
+    if (kb.disabled) return;
+    const mid = Number(kb.closest(".msg-kb")?.dataset.mid) || Number(kb.closest(".msg")?.dataset.id) || 0;
+    if (!mid) return;
+    kb.classList.add("kb-loading"); kb.disabled = true;
+    socket.emit("callback-query", { id: mid, data: kb.dataset.cb || "" });
+    clearTimeout(kb._cbt); kb._cbt = setTimeout(() => { kb.classList.remove("kb-loading"); kb.disabled = false; }, 6000); // fail-safe re-enable
+    return;
+  }
   // Media overlay buttons (download / fullscreen) — check before the plain image click.
   const dlb = e.target.closest(".media-dl");
   if (dlb) { const mediaEl = dlb.closest(".bubble.media")?.querySelector("img,video"); if (mediaEl) downloadMedia(mediaEl.currentSrc || mediaEl.src, dlb.dataset.name || "file"); return; }
@@ -2891,6 +2921,23 @@ $("reportSend") && ($("reportSend").onclick = async () => {
 socket.on("msg-deleted", ({ id }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove(); });
 socket.on("msg-edited", ({ id, text }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return; const b = el.querySelector(".bubble"); if (b) b.innerHTML = formatMessage(text); const tag = el.querySelector(".edited-tag"); if (tag && !tag.textContent) tag.textContent = " · " + t("edited"); });
 socket.on("msg-reaction", ({ id, reactions }) => { const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) renderReactions(el, reactions); });
+// A bot replaced a message's inline keyboard (editMessageReplyMarkup / editMessageText).
+socket.on("msg-markup", ({ id, buttons }) => {
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) return;
+  const old = el.querySelector(".msg-kb"); if (old) old.remove();
+  if (buttons && buttons.length) {
+    const tmp = document.createElement("div"); tmp.innerHTML = renderKeyboard(buttons, id);
+    const kb = tmp.firstElementChild; if (!kb) return;
+    const time = el.querySelector(".time");
+    if (time) time.insertAdjacentElement("beforebegin", kb); else el.appendChild(kb);
+  }
+});
+// The bot answered our callback-button press: stop the spinner + show its reply (toast/alert).
+socket.on("cb-answer", ({ text, alert: asAlert }) => {
+  messagesEl.querySelectorAll(".kb-btn.kb-loading").forEach((b) => { b.classList.remove("kb-loading"); b.disabled = false; clearTimeout(b._cbt); });
+  const msg = String(text || "").trim(); if (!msg) return;
+  if (asAlert) { try { window.alert(msg); } catch {} } else notify(msg);
+});
 
 let localIdCounter = 0;
 // Снимок курсоров доставки/просмотра по логинам (заполняется сервером и обновляется live).

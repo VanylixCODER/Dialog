@@ -33,7 +33,7 @@ import webpush from "web-push";
 import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
-  initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, toggleReaction,
+  initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, editMessageMarkup, getMessageMeta, toggleReaction,
   createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
@@ -604,7 +604,8 @@ app.post("/api/hook/:id/:secret", async (req, res) => {
   const text = String(req.body?.text || "").trim(); if (!text) return res.status(400).json({ error: "empty" });
   _hookLast.set(id, Date.now());
   const name = String(req.body?.name || g.name || "Webhook").slice(0, 64);
-  try { await deliverMessage({ room: "@grp:" + id, fromLogin: g.owner, name, type: "text", text: text.slice(0, 4000) }); res.json({ ok: true }); }
+  const buttons = normalizeButtons(req.body?.reply_markup || req.body?.buttons);
+  try { await deliverMessage({ room: "@grp:" + id, fromLogin: g.owner, name, type: "text", text: text.slice(0, 4000), buttons }); res.json({ ok: true }); }
   catch (e) { console.error("hook", e.message); res.status(500).json({ error: "server error" }); }
 });
 // Owner: rotate the channel webhook secret (invalidates the old URL).
@@ -1452,7 +1453,26 @@ async function botApi(req, res) {
         const id = Number(body.message_id) || 0, text = String(body.text || "").trim().slice(0, 4000);
         if (!id || !text) return err(400, "message_id and text required");
         const room = await editMessage(id, bot.login, text);
-        if (!room) return err(400, "message not editable"); io.to(room).emit("msg-edited", { id, text }); return okr(true);
+        if (!room) return err(400, "message not editable"); io.to(room).emit("msg-edited", { id, text });
+        // editMessageText may also carry a new keyboard (Telegram allows reply_markup here).
+        if ("reply_markup" in body || "buttons" in body) {
+          const buttons = normalizeButtons(body.reply_markup || body.buttons);
+          const r2 = await editMessageMarkup(id, bot.login, buttons);
+          if (r2) io.to(r2).emit("msg-markup", { id, buttons: buttons || null });
+        }
+        return okr(true);
+      }
+      case "editMessageReplyMarkup": {
+        const id = Number(body.message_id) || 0; if (!id) return err(400, "message_id required");
+        const buttons = normalizeButtons(body.reply_markup || body.buttons);
+        const room = await editMessageMarkup(id, bot.login, buttons);
+        if (!room) return err(400, "message not found"); io.to(room).emit("msg-markup", { id, buttons: buttons || null }); return okr(true);
+      }
+      case "answerCallbackQuery": {
+        const cbid = String(body.callback_query_id || "");
+        const p = pendingCb.get(cbid);
+        if (p) { notifyUser(p.login, "cb-answer", { cbid, text: String(body.text || "").slice(0, 200), alert: !!(body.show_alert || body.alert) }); pendingCb.delete(cbid); }
+        return okr(true);
       }
       case "deleteMessage": {
         const id = Number(body.message_id) || 0; if (!id) return err(400, "message_id required");
@@ -1479,7 +1499,8 @@ async function botSend(bot, method, body, okr, err) {
     type = method === "sendPhoto" ? "image" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "file";
     mediaName = String(body.filename || body.media_name || "file").slice(0, 255); text = "";
   } else if (!text.trim()) return err(400, "text required");
-  const payload = await deliverMessage({ room, fromLogin: bot.login, name: bot.name, from: "bot:" + bot.login, type, text, media, mediaName });
+  const buttons = normalizeButtons(body.reply_markup || body.buttons);
+  const payload = await deliverMessage({ room, fromLogin: bot.login, name: bot.name, from: "bot:" + bot.login, type, text, media, mediaName, buttons });
   if (!payload) return err(500, "could not send");
   return okr({ message_id: payload.id, chat: { id: room }, date: Math.floor(payload.ts / 1000), text: payload.text, from: { login: bot.login, name: bot.name, is_bot: true } });
 }
@@ -1616,13 +1637,46 @@ function resolveMentions(text, recips, fromLogin) {
   return out;
 }
 
-async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId }) {
+// Normalize an inline keyboard from either the Telegram shape ({inline_keyboard:[[{text,url|
+// callback_data}]]}) or a flat {buttons:[[{text,url|data}]]} into the compact internal shape
+// [[{t, u?, d?}]]. URL buttons are http(s) only (opened in the user's browser, never fetched
+// server-side); callback buttons carry ≤64-char data. Returns null when there's nothing valid.
+function normalizeButtons(input) {
+  if (typeof input === "string") { try { input = JSON.parse(input); } catch { return null; } }
+  let rows = null;
+  if (input && input.inline_keyboard) rows = input.inline_keyboard;
+  else if (Array.isArray(input)) rows = Array.isArray(input[0]) ? input : [input];
+  if (!Array.isArray(rows)) return null;
+  const out = [];
+  for (const row of rows.slice(0, 10)) {
+    if (!Array.isArray(row)) continue;
+    const r = [];
+    for (const b of row.slice(0, 8)) {
+      if (!b || typeof b !== "object") continue;
+      const t = String(b.text ?? b.t ?? "").slice(0, 64).trim();
+      if (!t) continue;
+      const url = String(b.url ?? b.u ?? "").trim();
+      const data = String(b.callback_data ?? b.data ?? b.d ?? "").slice(0, 64);
+      if (url && /^https?:\/\//i.test(url)) r.push({ t, u: url.slice(0, 500) });
+      else if (data) r.push({ t, d: data });
+    }
+    if (r.length) out.push(r);
+  }
+  return out.length ? out : null;
+}
+// Pending callback-button presses: cbid → { login, ts }. answerCallbackQuery routes the bot's
+// reply back to the user who tapped. Entries self-expire so the map can't grow unbounded.
+const pendingCb = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of pendingCb) if (now - v.ts > 120000) pendingCb.delete(k); }, 60000);
+
+async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId, buttons }) {
   const payload = {
     from: from || fromLogin, fromLogin, name, ts: Date.now(),
     type: media ? (type || "file") : "text",
     // Keep the caption on media too (was previously dropped) — up to 1024 chars, Telegram-style.
     text: String(text || "").slice(0, media ? 1024 : 4000),
     media: media || null, mediaName: (mediaName || "").slice(0, 255),
+    buttons: buttons || null,
     localId: localId || null,
   };
   try { payload.id = await saveMessage({ room, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
@@ -1945,6 +1999,35 @@ io.on("connection", (socket) => {
   socket.on("msg-delete", async ({ id }) => {
     if (!currentRoom || !userLogin) return;
     try { if (await deleteMessage(id, userLogin)) io.to(currentRoom).emit("msg-deleted", { id }); } catch (e) { console.error("del", e.message); }
+  });
+  // A user tapped an inline callback button — hand it to the bot(s) in this chat as a
+  // callback_query (webhook or getUpdates). The bot answers via answerCallbackQuery, which
+  // routes a toast back to this user. `cb-answer` with no bot present just stops the spinner.
+  socket.on("callback-query", async ({ id, data }) => {
+    if (!currentRoom || !userLogin) return;
+    const mid = Number(id) || 0; if (!mid) return;
+    const cbData = String(data || "").slice(0, 64);
+    let meta; try { meta = await getMessageMeta(mid); } catch { return; }
+    if (!meta || meta.room !== currentRoom || !Array.isArray(meta.buttons)) return;
+    // Anti-spoof: the pressed data must actually be a callback button on this message.
+    if (!meta.buttons.some((row) => Array.isArray(row) && row.some((b) => b && b.d === cbData))) return;
+    let botLogins = [];
+    const dmTo = dmPartner(currentRoom, userLogin);
+    if (dmTo) { if (await isBot(dmTo)) botLogins.push(dmTo); }
+    else if (currentRoom.startsWith("@grp:")) {
+      try { const members = await getGroupMembers(currentRoom.slice(5)); for (const m of members) if (await isBot(m)) botLogins.push(m); } catch {}
+    }
+    if (meta.fromLogin && !botLogins.includes(meta.fromLogin) && await isBot(meta.fromLogin)) botLogins.push(meta.fromLogin);
+    if (!botLogins.length) { socket.emit("cb-answer", { cbid: null }); return; }
+    const cbid = crypto.randomBytes(9).toString("hex");
+    pendingCb.set(cbid, { login: userLogin, ts: Date.now() });
+    const cbq = { callback_query: { id: cbid, from: { login: userLogin, name: userName, is_bot: false },
+      message: { message_id: mid, chat: { id: currentRoom, type: currentRoom.startsWith("@grp:") ? "group" : "private" } }, data: cbData } };
+    for (const botLogin of botLogins) {
+      const bot = await getBot(botLogin); if (!bot) continue;
+      if (bot.bot_webhook) postBotWebhook(bot, JSON.stringify({ ...cbq, update_id: Date.now() }));
+      else queueBotUpdate(botLogin, JSON.stringify(cbq)).catch(() => {});
+    }
   });
   socket.on("msg-edit", async ({ id, text }) => {
     if (!currentRoom || !userLogin) return;
