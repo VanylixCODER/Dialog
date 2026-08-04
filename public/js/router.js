@@ -37,7 +37,9 @@ function pushState() {
 function onPopState() {
   const { lang, login, groupId } = parsePath();
   if (lang && window.setLang) window.setLang(lang);
-  if (!login && !groupId) return;
+  // Back out of the last chat: the URL no longer points at one, so leave the chat the same
+  // way the ‹ button does (animated on phones) instead of stranding it open over the list.
+  if (!login && !groupId) { if (window.exitChatToList) window.exitChatToList(); return; }
   if (!profile) return;
   if (login && window.openDM) {
     const key = "@dm:" + [profile.login, login].sort().join("~");
