@@ -1115,7 +1115,7 @@ function openChatMenu(c, x, y) {
   if (!menu) { menu = document.createElement("div"); menu.id = "rowMenu"; menu.className = "chat-menu row-menu"; document.body.appendChild(menu); }
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
-  item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "close" : "check", () => togglePin(c));
+  item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "pinOff" : "pin", () => togglePin(c));
   if (c.type === "dm") {
     // Turn a DM into a group with this contact already picked (they still confirm/join).
     item(t("new_group_with", { name: c.name || c.login }), "users", () => openCreateGroup(c.login));
@@ -1294,7 +1294,9 @@ function closeDm(c) {
   renderChatList($("searchInput").value);
 }
 function deleteChat(c) {
-  if (c.type === "group") { if (!confirm(t("leave_group"))) return; api("/api/groups/" + c.id + "/leave"); chats.delete(c.key); persistDMs(); savePins(); if (c.key === activeKey) resetToEmpty(); renderChatList($("searchInput").value); return; }
+  // Wording follows what's actually being left. `curChannel` only describes the OPEN chat, so
+  // it applies when that's the one going — leaving another group from the list stays "group".
+  if (c.type === "group") { if (!confirm(t(c.key === myRoom && curChannel ? "leave_channel" : "leave_group"))) return; api("/api/groups/" + c.id + "/leave"); chats.delete(c.key); persistDMs(); savePins(); if (c.key === activeKey) resetToEmpty(); renderChatList($("searchInput").value); return; }
   const modal = $("deleteChatModal");
   const doDelete = (everyone) => {
     modal.classList.add("hidden");
@@ -1418,20 +1420,29 @@ $("chatMenuBtn").onclick = (e) => {
   if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
+  // The ⋮ is the OPEN chat's full action set. Everything here is otherwise only reachable by
+  // long-pressing / right-clicking the row in the list (pin · new group · close DM) or from
+  // a panel two taps away — this is the discoverable copy, so keep the two in sync.
+  const c = chats.get(myRoom);
+  const isChannel = curKind === "group" && curChannel;
+  if (c) item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "pinOff" : "pin", () => togglePin(c));
   if (curKind === "group") {
-    // Wallpaper — первым пунктом (эстетический, не чат-контроль). Пункты ниже — control.
+    // Wallpaper — эстетический пункт, не чат-контроль. Пункты ниже — control.
     item(t("chat_wallpaper"), "image", () => openChatBgModal());
-    // Не-овнер может предложить участника; овнеру предлагать не нужно (у него есть + в панели info).
-    if (!groupOwner) item(t("suggest_member_btn"), "userPlus", () => openAddMembers());
-    item(t("group_settings"), "settings", () => openSettings("groups", true));
-    item(t("leave_group_btn"), "phoneOff", () => { if (confirm(t("leave_group"))) leaveCurrentGroup(); }, true);
+    // Овнер добавляет напрямую, не-овнер — предлагает (та же модалка, режим решается в openAddMembers).
+    item(groupOwner ? t("add_member_btn") : t("suggest_member_btn"), "userPlus", () => openAddMembers());
+    item(isChannel ? t("channel_settings") : t("group_settings"), "settings", () => openSettings("groups", true));
+    // deleteChat() уже спрашивает confirm(leave_group) — второй confirm здесь давал два диалога подряд.
+    item(isChannel ? t("leave_channel_btn") : t("leave_group_btn"), "logOut", () => leaveCurrentGroup(), true);
   } else if (curKind === "dm") {
-    // DM background — первым пунктом (эстетика выше блокировки).
-    item(t("chat_wallpaper"), "image", () => openChatBgModal());
     const partner = myRoom.slice(4).split("~").find((l) => l !== profile.login);
     const isB = blocked.has(partner);
+    if (c) item(t("new_group_with", { name: c.name || partner }), "users", () => openCreateGroup(partner));
+    item(t("chat_wallpaper"), "image", () => openChatBgModal());
     item(isB ? t("unblock_user") : t("block_user"), "block", () => block(partner, isB ? "unblock" : "block"), !isB);
-    item(t("delete_chat"), "trash", () => { const c = chats.get(myRoom); if (c) deleteChat(c); }, true);
+    // Close = hide the DM but keep the history (reopening restores it); Delete wipes it.
+    if (c) item(t("close_dm"), "close", () => closeDm(c));
+    item(t("delete_chat"), "trash", () => { if (c) deleteChat(c); }, true);
   }
   menu.classList.remove("hidden");
   // позиционируем фикс-меню под кнопкой, прижимая к правому краю (не вылезает за экран)
