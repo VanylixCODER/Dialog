@@ -2993,70 +2993,6 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 }
 .call-actions [data-tip]:hover::after { transform: translate(-50%, 0) scale(1); }
 
-/* === Settings overlay mobile (≤720px) — bottom-sheet style, scrollable tabs === */
-@media (max-width: 720px) {
-  .settings-overlay { padding: 0; align-items: end; }
-  .settings-card {
-    width: calc(100vw - 16px);
-    height: min(96dvh, 880px);
-    border-radius: 16px 16px 4px 4px;
-    border-bottom: none;
-    animation: sheetIn 0.32s var(--ease-out);
-  }
-  @keyframes sheetIn { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
-  .settings-head { padding: 12px 18px; }
-  .settings-head h2 { font-size: 14px; letter-spacing: 1.6px; }
-  /* ---- Phone: the tab bar becomes a drill-in section list (iOS-style) ---- */
-  /* Flex column (not grid) so whichever of the list / pane is shown simply fills the card —
-     no dependence on grid track counts. List mode shows the list; .mob-detail shows the pane. */
-  .settings-card { display: flex; flex-direction: column; }
-  .settings-head { flex: none; }
-  .settings-tabs {
-    flex: 1 1 auto; min-height: 0;
-    flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start;
-    overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    gap: 6px; padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
-    border-bottom: none;
-  }
-  .settings-tabs::-webkit-scrollbar { display: none; }
-  .settings-tab {
-    width: 100%; justify-content: flex-start; gap: 13px;
-    min-height: 56px; padding: 0 14px;
-    font-size: 15px; font-weight: 600; letter-spacing: 0.2px; text-transform: none;
-    color: var(--text); background: var(--bg-2);
-    border: 1px solid var(--border-1); border-radius: var(--r-3);
-  }
-  .settings-tab:active { background: var(--surface-2); }
-  .settings-tab .stab-label { flex: 1; text-align: left; }
-  .settings-tab .stab-ico { color: var(--accent-300); }
-  .settings-tab .stab-ico svg { width: 21px; height: 21px; }
-  .settings-tab::after { content: "›"; font-size: 22px; line-height: 1; font-weight: 400; color: var(--text-dim); }
-  .settings-tab.active { color: var(--text); background: var(--bg-2); } /* no pill highlight in the list */
-  .settings-tab-ind { display: none !important; }                       /* pill is a desktop-only affordance */
-  /* Toggle: list hides the panes; detail hides the list. */
-  .settings-card:not(.mob-detail) .settings-panes { display: none; }
-  .settings-card.mob-detail .settings-tabs { display: none; }
-  .settings-back.mobile-only:not(.hidden) { display: inline-flex; }
-  .settings-panes { flex: 1 1 auto; min-height: 0; padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
-  .settings-pane { gap: 11px; }
-  /* Profile pane: bigger touch targets */
-  .profile-ava { width: 88px; height: 88px; font-size: 32px; }
-  .field-wrap .toggle-eye, #profileName, #profileDesc { padding: 14px; font-size: 16px; } /* iOS no-zoom */
-  /* Theme grid: 2 columns instead of variable-fill so touch targets stay visible */
-  .theme-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .theme-opt { padding: 10px; gap: 6px; }
-  .theme-opt .theme-swatch { height: 28px; }
-  .theme-opt .theme-name { font-size: 12px; }
-  .theme-opt .theme-desc { font-size: 10px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
-  /* Contacts + Groups row contents: friend-pick wraps but bigger chips */
-  .fp-chip { padding: 8px 12px; font-size: 13px; min-height: 36px; }
-  .contact-row { padding: 10px 12px; gap: 12px; }
-  .contact-row button { min-height: 40px; padding: 8px 14px; font-size: 12px; }
-  .btn-primary, .btn-ghost { min-height: 48px; font-size: 14px; }
-  .modal-actions { flex-wrap: wrap; }
-  .modal-actions .btn-primary, .modal-actions .btn-ghost { flex: 1 1 140px; }
-}
-
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
   .chatlist { display: flex; }
@@ -3191,8 +3127,9 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   width: min(80vw, 980px);
   height: min(80vh, 720px);
   display: grid;
-  /* Rows: flashbang-banner (auto, may be hidden), settings-head, settings-tabs, settings-panes (1fr, scrollable) */
-  grid-template-rows: auto auto auto 1fr;
+  /* Rows: settings-head, settings-tabs, body (.settings-panes / .ts-body / .admin-body —
+     1fr + min 0 so it fills the card and scrolls INSIDE it instead of stretching it). */
+  grid-template-rows: auto auto minmax(0, 1fr);
   /* Single column pinned to min 0 — without this a wide child (e.g. the non-wrapping RU
      tab row) forces the implicit `auto` track wider than the card, spilling every pane
      out past the clipped right edge. */
@@ -3205,12 +3142,15 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   animation: cardIn 0.34s var(--ease-out);
 }
 .settings-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 22px;
+  display: flex; align-items: center; gap: 10px;
+  /* .hub-close is absolutely positioned (top/right of the card), so it takes no flex space —
+     the right padding is what keeps the title from sliding underneath it. */
+  padding: 14px 56px 14px 22px;
   border-bottom: 1px solid var(--border-1);
   background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.06), transparent);
 }
 .settings-head h2 {
+  flex: 1 1 auto;
   font-weight: 800; font-size: 16px; color: var(--accent-200);
   letter-spacing: 2px; text-transform: uppercase;
   text-shadow: 0 0 8px rgba(var(--primary-rgb), 0.25);
@@ -3219,9 +3159,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .settings-tabs {
   position: relative; /* anchor for the sliding indicator */
   display: flex; gap: 2px; padding: 8px 22px;
-  /* Wrap to a second centered row rather than overflow — longer locales (RU) have 8 wide
-     labels that never fit one line at max card width. The pill indicator tracks offsetTop
-     too, so it lands correctly on either row. (Mobile overrides this to a nowrap scroller.) */
+  /* Horizontal bar = the Theme Studio / Admin cards. The settings overlay re-lays this out
+     per breakpoint further down (≥721px: a left sidebar · ≤720px: a drill-in section list).
+     Wrapping is the fallback so a long locale never overflows the card width; the pill
+     indicator tracks offsetTop too, so it lands correctly on either row. */
   flex-wrap: wrap; justify-content: center; row-gap: 4px;
   border-bottom: 1px solid var(--border-1);
   background: var(--bg-1);
@@ -3297,6 +3238,133 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
 .theme-opt .theme-swatch span { flex: 1; height: 100%; }
 .theme-opt .theme-name { font-weight: 700; font-size: 13px; color: var(--accent-100); letter-spacing: 0.4px; }
 .theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
+
+/* ============================================================================
+   Settings overlay — responsive layouts.
+   These live AFTER the base .settings-* / .theme-* rules ON PURPOSE: they are plain
+   single-class selectors, so SOURCE ORDER (not specificity) decides. When this block
+   sat above the base rules, every property the base also set (card width/height,
+   overlay alignment, tab colors, padding, text-transform …) silently lost — the phone
+   list rendered as half desktop tab bar, half section list.
+   ========================================================================= */
+
+/* --- Desktop (≥721px): the section nav is a LEFT sidebar instead of a top tab row.
+   Scoped to #settingsOverlay so Theme Studio / Admin keep their horizontal tab bars. --- */
+@media (min-width: 721px) {
+  #settingsOverlay .settings-card {
+    grid-template-columns: 208px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "head head"
+      "nav  panes";
+  }
+  #settingsOverlay .settings-head  { grid-area: head; }
+  #settingsOverlay .settings-panes { grid-area: panes; }
+  #settingsOverlay .settings-tabs {
+    grid-area: nav;
+    flex-direction: column; flex-wrap: nowrap;
+    align-items: stretch; justify-content: flex-start;
+    gap: 3px; padding: 12px 10px;
+    overflow-y: auto; overscroll-behavior: contain;
+    border-bottom: 0; border-right: 1px solid var(--border-1);
+  }
+  #settingsOverlay .settings-tab {
+    width: 100%; justify-content: flex-start; gap: 10px;
+    padding: 11px 13px; border-radius: var(--r-2);
+  }
+  /* Long locales (RU) truncate instead of forcing the sidebar wider. */
+  #settingsOverlay .settings-tab .stab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* fitTabInd() places the pill from offsetLeft/offsetTop, so it glides DOWN the rail
+     with no JS change — only its shape needs to match the rows. */
+  #settingsOverlay .settings-tab-ind { border-radius: var(--r-2); }
+}
+
+/* --- Phone (≤720px): bottom-sheet card, and the tab bar becomes a drill-in
+   section list (tap a row → its pane + a back arrow in the head). --- */
+@media (max-width: 720px) {
+  .settings-overlay { padding: 0; align-items: end; }
+  .settings-card {
+    /* Flex column (not grid) so whichever of the list / pane is shown simply fills the
+       card — no dependence on grid track counts. */
+    display: flex; flex-direction: column;
+    width: calc(100vw - 16px);
+    height: min(96dvh, 880px);
+    border-radius: 16px 16px 4px 4px;
+    border-bottom: none;
+    /* The open animation is set in the motion section (sheetIn) — a `.settings-overlay >
+       .settings-card` rule there outranks anything single-class we'd put here. */
+  }
+  .settings-head { flex: none; padding: 12px 58px 12px 14px; }
+  .settings-head h2 { font-size: 14px; letter-spacing: 1.6px; }
+  /* Thumb-sized close/back, and the head's right padding keeps the (absolutely
+     positioned) ✕ off the title — long section names used to run underneath it. */
+  .settings-head .hub-close { width: 38px; height: 38px; top: 11px; right: 10px; font-size: 17px; }
+  .settings-back { width: 38px; height: 38px; }
+  /* The drill-in list is the SETTINGS overlay only — Theme Studio / Admin share
+     .settings-card + .settings-tabs but their tabs are real tabs (see below). */
+  #settingsOverlay .settings-tabs {
+    flex: 1 1 auto; min-height: 0;
+    flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start;
+    overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    gap: 8px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
+    border-bottom: none; background: transparent;
+  }
+  .settings-tabs::-webkit-scrollbar { display: none; }
+  #settingsOverlay .settings-tab {
+    width: 100%; justify-content: flex-start; gap: 13px;
+    min-height: 56px; padding: 0 14px;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.2px; text-transform: none;
+    color: var(--text); background: var(--bg-2);
+    border: 1px solid var(--border-1); border-radius: var(--r-3);
+  }
+  #settingsOverlay .settings-tab:active { background: var(--surface-2); }
+  #settingsOverlay .settings-tab .stab-label { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+  #settingsOverlay .settings-tab .stab-ico { color: var(--accent-300); }
+  #settingsOverlay .settings-tab .stab-ico svg { width: 21px; height: 21px; }
+  #settingsOverlay .settings-tab::after { content: "›"; font-size: 22px; line-height: 1; font-weight: 400; color: var(--text-dim); }
+  /* A row in a drill-in list is a link, not a toggle: no selected state. (The base
+     .active rule paints --on-accent for the desktop pill, which on the list reads as a
+     greyed-out / disabled row — that's why "Account" looked dead.) Touch has no hover
+     either, so the hover tint would just stick after a tap. */
+  #settingsOverlay .settings-tab.active,
+  #settingsOverlay .settings-tab:hover { color: var(--text); background: var(--bg-2); }
+  #settingsOverlay .settings-tab-ind { display: none !important; }  /* the pill is a desktop-only affordance */
+  /* Theme Studio / Admin: keep a real tab bar, just make it a horizontal scroller so
+     4 tabs never wrap into a second row on a 360px screen. */
+  .ts-card .settings-tabs, .admin-card .settings-tabs {
+    flex-wrap: nowrap; justify-content: flex-start;
+    gap: 4px; padding: 8px 12px;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  }
+  .ts-card .settings-tab, .admin-card .settings-tab { flex: 0 0 auto; }
+  /* The card is a flex column on phones — its body must be the flexible, scrolling row. */
+  .ts-body, .admin-body { flex: 1 1 auto; min-height: 0; }
+  /* Toggle: the list hides the panes; the detail view hides the list. */
+  .settings-card:not(.mob-detail) .settings-panes { display: none; }
+  .settings-card.mob-detail .settings-tabs { display: none; }
+  .settings-back.mobile-only:not(.hidden) { display: inline-flex; }
+  /* The head already names the section in the detail view — drop the pane's own title
+     so it doesn't read as "Account / Account". */
+  .settings-card.mob-detail .settings-pane.active > h3:first-child { display: none; }
+  .settings-panes { flex: 1 1 auto; min-height: 0; padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
+  .settings-pane { gap: 11px; }
+  /* Profile pane: bigger touch targets */
+  .profile-ava { width: 88px; height: 88px; font-size: 32px; }
+  .field-wrap .toggle-eye, #profileName, #profileDesc { padding: 14px; font-size: 16px; } /* iOS no-zoom */
+  /* Theme grid: 2 columns instead of variable-fill so touch targets stay visible */
+  .theme-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .theme-opt { padding: 10px; gap: 6px; }
+  .theme-opt .theme-swatch { height: 28px; }
+  .theme-opt .theme-name { font-size: 12px; }
+  .theme-opt .theme-desc { font-size: 10px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Contacts + Groups row contents: friend-pick wraps but bigger chips */
+  .fp-chip { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+  .contact-row { padding: 10px 12px; gap: 12px; }
+  .contact-row button { min-height: 40px; padding: 8px 14px; font-size: 12px; }
+  .btn-primary, .btn-ghost { min-height: 48px; font-size: 14px; }
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .btn-primary, .modal-actions .btn-ghost { flex: 1 1 140px; }
+}
 
 /* ============ Themes ============ */
 /* :root задаёт базовые токены (legacy «High Contrast» / Matrix). Все темы СЕЙЧАС
@@ -4800,10 +4868,13 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 #callStage:not(.hidden):not(.fs-call) { animation: callDown 0.3s var(--ease-out) both; }
 #callStage.call-closing { animation: callUp 0.26s var(--ease) both; pointer-events: none; }
 
-/* Mobile: opening a chat slides it in over the list. */
+@keyframes sheetIn { from { opacity: 0.4; transform: translateY(44px); } to { opacity: 1; transform: none; } }
+
+/* Mobile: opening a chat slides it in over the list; settings is a bottom sheet, so it
+   rises from the bottom edge instead of gliding in from the right. */
 @media (max-width: 720px) {
   .app.in-chat .chat { animation: chatInR 0.24s var(--ease-out) both; }
-  .settings-overlay > .settings-card { animation-duration: 0.22s; }
+  .settings-overlay > .settings-card { animation: sheetIn 0.26s var(--ease-out) both; }
 }
 
 /* Respect reduced-motion. */
