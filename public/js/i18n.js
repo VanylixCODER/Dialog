@@ -165,8 +165,8 @@ const I18N = {
     schedule_past: "Pick a time in the future.",
     theme_share: "Copy share link", theme_share_copied: "Share link copied.", theme_imported: "Theme “{name}” installed.",
     // ── Calls ──
-    call_unavailable: "Calls are unavailable right now — the media server refused the connection.",
-    p2p_calls: "Direct 1:1 calls (beta)", p2p_calls_hint: "Connect one-to-one calls peer-to-peer instead of through the media server.",
+    call_unreachable: "Couldn't connect — the network is blocking the call.",
+    call_peer_unreachable: "Couldn't reach {name} — their network is blocking the connection.",
     chat_wallpaper: "Chat background",
     bg_section_title: "Background image",
     bg_choose: "Choose image",
@@ -460,8 +460,8 @@ const I18N = {
     schedule_past: "Выберите время в будущем.",
     theme_share: "Скопировать ссылку", theme_share_copied: "Ссылка скопирована.", theme_imported: "Тема «{name}» установлена.",
     // ── Звонки ──
-    call_unavailable: "Звонки сейчас недоступны — медиасервер отклонил подключение.",
-    p2p_calls: "Прямые звонки 1:1 (бета)", p2p_calls_hint: "Соединять звонки один-на-один напрямую, минуя медиасервер.",
+    call_unreachable: "Не удалось соединиться — сеть блокирует звонок.",
+    call_peer_unreachable: "Не удалось связаться с {name} — сеть блокирует соединение.",
     chat_wallpaper: "Фон чата",
     bg_section_title: "Фоновое изображение",
     bg_choose: "Выбрать изображение",
