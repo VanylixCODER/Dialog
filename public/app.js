@@ -2716,6 +2716,7 @@ socket.on("history", (list) => {
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   placeUnreadDivider(list.length);
+  flushPendingForward();   // a forward waiting on this room's join
   stickBottomDuringMedia();
   updateJumpBtn();
   setTimeout(markDeliveredSeenUpToLast, 50);
@@ -3170,8 +3171,11 @@ function doForward(targetKey) {
   for (const id of fwdIds.sort((a, b) => a - b)) {
     const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) continue;
     const media = el.querySelector("img, video, audio, a.bubble.file");
+    const cap = el.querySelector(".media-cap");
+    const plain = el.querySelector(".bubble:not(.media):not(.file)");
     msgs.push({
-      text: (el.querySelector(".bubble") && !media ? el.querySelector(".bubble").textContent.trim() : msgSnippet(el)),
+      // Media keeps its caption (or none); a text message forwards its text.
+      text: media ? (cap ? cap.textContent.trim() : "") : (plain ? plain.textContent.trim() : ""),
       fwdFrom: el.dataset.from || "", fwdName: el.dataset.fromname || el.dataset.from || "",
       media: media ? (media.getAttribute("src") || media.getAttribute("href")) : null,
       type: media ? (media.tagName === "IMG" ? "image" : media.tagName === "VIDEO" ? "video" : media.tagName === "AUDIO" ? "audio" : "file") : "text",
@@ -3180,13 +3184,21 @@ function doForward(targetKey) {
   }
   $("forwardModal").classList.add("hidden");
   if (!msgs.length) return;
-  const send = () => { for (const m of msgs) socket.emit("message", m); notify(t("forwarded")); };
-  if (targetKey === myRoom) { send(); return; }
-  // Switching rooms is async (join → history); send once we're actually in the target.
+  if (targetKey === myRoom) { sendForwarded(msgs); return; }
   const c = chats.get(targetKey);
   if (!c) return;
+  // The server routes an emitted message by the socket's CURRENT room, so sending before the
+  // join completes would drop the copy into the chat we just left. Queue it and let the
+  // history event for the target room release it.
+  pendingForward = { key: targetKey, msgs };
   openChat(c);
-  setTimeout(send, 350);
+}
+let pendingForward = null;
+function sendForwarded(msgs) { for (const m of msgs) socket.emit("message", m); notify(t("forwarded")); }
+function flushPendingForward() {
+  if (!pendingForward || pendingForward.key !== myRoom) return;
+  const { msgs } = pendingForward; pendingForward = null;
+  sendForwarded(msgs);
 }
 
 // ---- In-chat search ----
