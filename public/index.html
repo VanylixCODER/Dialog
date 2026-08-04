@@ -458,6 +458,18 @@
             <div class="pref-label"><b data-i18n="pref_read_receipts">Read receipts</b><small data-i18n="pref_read_receipts_d">Let others see when you've read their messages</small></div>
             <label class="switch"><input type="checkbox" id="prefReadReceipts" /><span class="switch-track"></span></label>
           </div>
+          <!-- Rich Presence: master switch, then the per-person exceptions. -->
+          <div class="pref-row">
+            <div class="pref-label"><b data-i18n="pref_rich_presence">Rich Presence</b><small data-i18n="pref_rich_presence_d">Show friends what you're playing or listening to</small></div>
+            <label class="switch"><input type="checkbox" id="prefRichPresence" /><span class="switch-track"></span></label>
+          </div>
+          <div class="pref-row pref-col" id="rpHideRow">
+            <div class="pref-label"><b data-i18n="pref_rp_hide">Don't show what i am playing to this dude</b><small data-i18n="pref_rp_hide_d">Pick the people who don't get to see your activity</small></div>
+            <div class="rp-hide-wrap">
+              <input id="rpHideSearch" class="field" data-i18n-ph="ph_friend_search" autocomplete="off" />
+              <div id="rpHideList" class="friend-pick"></div>
+            </div>
+          </div>
           <div class="pref-row native-only hidden" id="prefBgRow">
             <div class="pref-label"><b data-i18n="pref_bg">Run in background</b><small data-i18n="pref_bg_d">Keep receiving messages & calls when the app is closed (uses more battery)</small></div>
             <label class="switch"><input type="checkbox" id="prefBgMode" /><span class="switch-track"></span></label>
@@ -533,6 +545,12 @@
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
           <h3 data-i18n="group_section">Manage groups</h3>            <!-- Inline Create Group CTA. Раньше тут жила «голая» форма с #gcName/#gcDesc/
+          <!-- Invitations waiting on you — the popup's persistent home. -->
+          <div class="gs-card" id="gsInviteCard">
+            <div class="gs-sec-title" data-i18n="group_add_requests">Group add requests</div>
+            <div id="gsInviteList" class="contacts-list"></div>
+            <div id="gsInviteEmpty" class="contacts-empty" data-i18n="group_add_requests_empty">No pending invitations</div>
+          </div>
                  #gcMemberPick/#gcPreview, но JS её не обрабатывал — кнопки «Create group» и
                  «Cancel» не делали ничего (i18n-ключи gc_* ещё остаются в словаре на случай
                  будущего inline-режима; вся актуальная форма переехала в #createGroupModal
@@ -927,12 +945,48 @@
     <div class="modal-card wide">
       <button id="dirClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
       <div class="modal-title" data-i18n="directory">Discover</div>
+      <input id="dirSearch" class="field" data-i18n-ph="dir_search_ph" autocomplete="off" />
+      <div id="dirSuggest" class="dir-suggest"></div>
       <div class="settings-subtabs cont-subtabs">
         <button class="settings-subtab active" data-dirtab="channels" data-i18n="dir_channels">Channels</button>
         <button class="settings-subtab" data-dirtab="bots" data-i18n="dir_bots">Bots</button>
       </div>
       <div id="dirList" class="dir-list"></div>
       <div id="dirEmpty" class="dir-empty hidden" data-i18n="dir_empty">Nothing listed yet.</div>
+    </div>
+  </div>
+
+  <!-- Ban reason picker: guideline presets, or whatever the admin types. -->
+  <div id="banModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="banClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="adm_ban_title">Ban account</div>
+      <div class="acc-hint" id="banWho"></div>
+      <div class="uppercase-tag" data-i18n="ban_reason_label">Reason</div>
+      <div id="banPresets" class="ban-presets"></div>
+      <input id="banOther" class="field" maxlength="300" data-i18n-ph="ban_other_ph" />
+      <div class="modal-actions">
+        <button id="banCancel" class="btn-ghost" type="button" data-i18n="cancel">Cancel</button>
+        <button id="banConfirm" class="btn-primary danger" type="button" data-i18n="adm_ban">Ban</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- "You've been invited to a group" — accept / deny, or close and answer later from
+       Settings → Group (the request stays pending either way). -->
+  <div id="groupInviteModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="giClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="group_invite_title">Group invitation</div>
+      <div class="gi-body">
+        <div class="avatar grp gi-ava" id="giAva"></div>
+        <div class="gi-meta"><div class="gi-name" id="giName"></div><div class="gi-from" id="giFrom"></div></div>
+      </div>
+      <div class="gi-timer" id="giTimer"></div>
+      <div class="modal-actions">
+        <button id="giDeny" class="btn-ghost danger" type="button" data-i18n="decline">Decline</button>
+        <button id="giAccept" class="btn-primary" type="button" data-i18n="accept_request">Accept</button>
+      </div>
     </div>
   </div>
 

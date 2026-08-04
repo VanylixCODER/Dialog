@@ -41,7 +41,7 @@ import {
   createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
   queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
-  sendFriendRequest, acceptFriend, declineFriend, removeFriend, haveMutualFriend, mutualFriends, mutualCounts,
+  sendFriendRequest, acceptFriend, declineFriend, removeFriend, cancelFriendRequest, haveMutualFriend, mutualFriends, mutualCounts,
   getPrefs, setPrefs, dmOpen, bumpInviteUse,
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
@@ -60,6 +60,9 @@ import {
   setGroupPublic, setBotPublic, listPublicGroups, listPublicBots,
   createScheduled, listScheduled, dueScheduled, markScheduledSent, deleteScheduled,
   exportAccount,
+  createGroupAddRequest, listGroupAddRequests, getGroupAddRequest, deleteGroupAddRequest, deleteGroupAddRequestsFor,
+  setUserBannedWithReason, getBanReason,
+  getRichPresencePref, setRichPresencePref, listPresenceHidden, setPresenceHidden,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -773,18 +776,25 @@ app.post("/api/groups/:id/members", async (req, res) => {
   const room = "@grp:" + id;
   const before = await getGroupMembers(id);
   if (Array.isArray(req.body.add)) {
-    // Skip anyone who has turned off "friends can add me to groups".
+    // Being added is now an INVITATION: the target gets a request they accept or decline, so
+    // nobody lands in a group they never agreed to join. "friends can add me to groups" still
+    // gates who may even ask.
     const requested = req.body.add.map((l) => String(l).toLowerCase());
     const logins = [];
     for (const l of requested) { if ((await getPrefs(l)).groupAdd) logins.push(l); }
     const blocked = requested.filter((l) => !logins.includes(l));
-    await addGroupMembers(id, logins);
+    const g = await getGroup(id);
     for (const login of logins) {
-      const u = await getUser(login);
-      if (u) saveSystemMessage(room, login, u.name, "join", "");
+      if (await isGroupMember(id, login)) continue;
+      const reqId = await createGroupAddRequest(id, me.login, login);
+      notifyUser(login, "group-invite", {
+        id: reqId, groupId: Number(id), groupName: g ? g.name : "", channel: !!(g && g.channel),
+        fromLogin: me.login, fromName: me.name,
+      });
     }
     if (blocked.length && !logins.length) { res.json({ ok: false, error: "add_blocked", blocked }); return; }
     req._blockedAdds = blocked;
+    req._invited = logins;
   }
   if (req.body.remove) {
     const login = String(req.body.remove).toLowerCase();
@@ -1043,6 +1053,8 @@ app.post("/api/friend", async (req, res) => {
   else if (action === "accept") await acceptFriend(me.login, target);
   else if (action === "decline") await declineFriend(me.login, target);
   else if (action === "remove") await removeFriend(me.login, target);
+  // Take back a request you sent (the row is keyed the other way round from "decline").
+  else if (action === "cancel") await cancelFriendRequest(me.login, target);
   else return res.status(400).json({ error: "bad action" });
   notifyUser(target, "relations-changed", {}); notifyUser(me.login, "relations-changed", {});
   res.json({ ok: true });
@@ -1195,7 +1207,9 @@ app.post("/api/admin/ban", async (req, res) => {
   const login = String(req.body.login || "").toLowerCase();
   const banned = !!req.body.banned;
   if (!login || auth.isAdmin(login)) return res.status(400).json({ error: "bad_target" });
-  await setUserBanned(login, banned);
+  // A ban carries a reason: one of the guideline codes, or free text the admin typed.
+  const reason = String(req.body.reason || "").slice(0, 300).trim();
+  await setUserBannedWithReason(login, banned, reason);
   if (banned) await kickAllDevices(login); // block login + kick everywhere
   res.json({ ok: true });
 });
@@ -1866,10 +1880,41 @@ function effectiveStatus(login) {
   const s = userStatus.get(login) || "online";
   return s === "invisible" ? "offline" : s;
 }
+// login -> { type, name, detail, since } — what someone is playing/listening to right now.
+// Deliberately in memory only: it's ephemeral by nature and worthless after a disconnect.
+const richPresence = new Map();
+// Who must not see it: the master switch plus the per-person list. Cached because presence is
+// broadcast far more often than the settings change.
+const rpPrefCache = new Map();   // login -> { on, hidden:Set, ts }
+async function rpSettings(login) {
+  const c = rpPrefCache.get(login);
+  if (c && Date.now() - c.ts < 30000) return c;
+  const [on, hidden] = await Promise.all([getRichPresencePref(login), listPresenceHidden(login)]);
+  const v = { on, hidden: new Set(hidden), ts: Date.now() };
+  rpPrefCache.set(login, v);
+  return v;
+}
+function rpInvalidate(login) { rpPrefCache.delete(login); }
 async function broadcastPresence(login) {
   const status = effectiveStatus(login);
   let friends = []; try { friends = await getFriendLogins(login); } catch {}
-  for (const f of friends) notifyUser(f, "presence", { login, status });
+  const act = richPresence.get(login) || null;
+  let rp = { on: true, hidden: new Set() };
+  if (act) { try { rp = await rpSettings(login); } catch {} }
+  for (const f of friends) {
+    // The activity is filtered per recipient — the status itself always goes out.
+    const activity = act && rp.on && !rp.hidden.has(f) ? act : null;
+    notifyUser(f, "presence", { login, status, activity });
+  }
+}
+// The client pushes what it's doing (a game, a track, watching together). Anything else is
+// rejected: this is a presence line, not a free-form broadcast channel.
+function normalizeActivity(a) {
+  if (!a || typeof a !== "object") return null;
+  const type = ["playing", "listening", "watching"].includes(a.type) ? a.type : null;
+  const name = String(a.name || "").slice(0, 64).trim();
+  if (!type || !name) return null;
+  return { type, name, detail: String(a.detail || "").slice(0, 96), since: Number(a.since) || Date.now() };
 }
 
 // ---------- Курсоры доставки/просмотра ----------
@@ -2086,6 +2131,14 @@ io.on("connection", (socket) => {
     socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
   });
 
+  // Rich presence in/out. Sending null clears it.
+  socket.on("presence-activity", async (a) => {
+    if (!userLogin) return;
+    const act = normalizeActivity(a);
+    if (act) richPresence.set(userLogin, act); else richPresence.delete(userLogin);
+    broadcastPresence(userLogin).catch(() => {});
+  });
+
   socket.on("typing", (isTyping) => { if (currentRoom) socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping }); });
   // Курсоры доставки / просмотра
   // — delivery: получатель подтверждает, что сообщения долетели до его устройства.
@@ -2156,6 +2209,11 @@ io.on("connection", (socket) => {
   }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
+    // Channels are broadcast rooms — no calls in them. The UI hides the button; this is the
+    // rule a hand-rolled client can't skip.
+    if (currentRoom.startsWith("@grp:")) {
+      try { const g = await getGroup(currentRoom.slice(5)); if (g && g.channel) { socket.emit("call-refused", { reason: "channel" }); return; } } catch {}
+    }
     const c = getCall(currentRoom);
     // Locked group call: only the owner or someone already in it may join (checked before
     // the device-swap so a legitimate reconnect from another device isn't turned away).
@@ -2278,8 +2336,58 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     doLeave();
-    if (userLogin) { removeUserSocket(userLogin, socket.id); if (!userSockets.has(userLogin)) broadcastPresence(userLogin); }
+    if (userLogin) {
+      removeUserSocket(userLogin, socket.id);
+      if (!userSockets.has(userLogin)) { richPresence.delete(userLogin); broadcastPresence(userLogin); }
+    }
   });
+});
+
+// ---------- REST: rich presence privacy ----------
+app.get("/api/presence-privacy", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const [on, hidden] = await Promise.all([getRichPresencePref(me.login), listPresenceHidden(me.login)]);
+    res.json({ on, hidden });
+  } catch (e) { console.error("rp get", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/presence-privacy", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    if (req.body.on !== undefined) await setRichPresencePref(me.login, !!req.body.on);
+    if (req.body.target) await setPresenceHidden(me.login, String(req.body.target).toLowerCase(), !!req.body.hidden);
+    rpInvalidate(me.login);
+    broadcastPresence(me.login).catch(() => {});   // apply immediately, don't wait for the cache
+    res.json({ ok: true });
+  } catch (e) { console.error("rp set", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: group add requests (invitations) ----------
+app.get("/api/group-invites", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    res.json({ invites: await listGroupAddRequests(me.login) });
+  } catch (e) { console.error("group invites", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/group-invites/:id/:action", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const r = await getGroupAddRequest(Number(req.params.id) || 0, me.login);
+    if (!r) return res.status(404).json({ error: "not_found" });
+    const action = req.params.action;
+    if (action === "accept") {
+      await addGroupMembers(r.groupId, [me.login]);
+      await deleteGroupAddRequest(r.id);
+      const room = "@grp:" + r.groupId;
+      saveSystemMessage(room, me.login, me.name, "join", "");
+      notifyUser(me.login, "groups-changed", {});
+      notifyUser(r.fromLogin, "group-updated", { id: r.groupId });
+      io.to(room).emit("group-updated", { id: r.groupId });
+      return res.json({ ok: true, groupId: r.groupId });
+    }
+    if (action === "decline") { await deleteGroupAddRequest(r.id); return res.json({ ok: true }); }
+    res.status(400).json({ error: "bad_action" });
+  } catch (e) { console.error("group invite action", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- Room access (shared by search / jump / pin / schedule) ----------

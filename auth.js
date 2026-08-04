@@ -62,7 +62,8 @@ export async function login(identifier, password, code, meta) {
   // Throw stable codes (not localized text) so the client renders them in the user's language.
   if (!u) throw new Error("bad_credentials");
   if (!(await pwMatches(u, password))) throw new Error("bad_credentials");
-  if (u.banned) throw new Error("account_banned");
+  // The ban reason travels with the error so the login screen can say WHY, not just "banned".
+  if (u.banned) throw new Error("account_banned" + (u.ban_reason ? ":" + String(u.ban_reason).replace(/[\r\n]+/g, " ") : ""));
   const rbu = Number(u.report_ban_until) || 0;
   if (rbu && rbu > Date.now()) throw new Error("report_banned:" + rbu);
   // Second factor last: the password is already known-good, so "totp_required" can't be used
