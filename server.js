@@ -1437,7 +1437,7 @@ const cleanCommands = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 50)
 app.get("/api/dev/bots", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const bots = await listBotsByOwner(me.login);
-  res.json({ ok: true, cap: BOT_CAP, bots: bots.map((b) => ({ login: b.login, name: b.name, description: b.description || "", webhook: b.bot_webhook || "", miniapp: b.bot_miniapp || "", privacy: !!b.bot_privacy, commands: safeJson(b.bot_commands), created_at: b.created_at })) });
+  res.json({ ok: true, cap: BOT_CAP, bots: bots.map((b) => ({ login: b.login, name: b.name, description: b.description || "", webhook: b.bot_webhook || "", miniapp: b.bot_miniapp || "", privacy: !!b.bot_privacy, public: !!b.bot_public, commands: safeJson(b.bot_commands), created_at: b.created_at })) });
 });
 app.post("/api/dev/bots", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
