@@ -5437,3 +5437,11 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   .select-bar { flex-direction: column; align-items: stretch; gap: 6px; }
   .select-bar .sel-actions .btn-ghost { flex: 1; }
 }
+
+/* A call leg that gave up (ICE/TURN can't get through) — dim the tile so it's visibly dead
+   rather than perpetually "connecting". */
+.tile.peer-failed { opacity: 0.55; filter: grayscale(0.5); }
+.tile.peer-failed::after {
+  content: "⚠"; position: absolute; top: 8px; left: 8px;
+  font-size: 14px; color: var(--danger);
+}

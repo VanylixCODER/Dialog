@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 // позволяет вызвать readInviteFromUrl() здесь, пока она объявлена ниже в файле. Если уже залогинены,
 // redeem подхватит enterApp(). Если нет — код сохранится в sessionStorage и будет подхвачен после
 // логина/регистрации. Без этого IIFE весь URL-invite-флоу немой.
-(function () { try { readInviteFromUrl(); } catch {} })();
+(function () { try { readInviteFromUrl(); readThemeFromUrl(); } catch {} })();
 
 
 function debounce(fn, ms) {
@@ -1928,6 +1928,32 @@ async function refreshGsLists(id) {
 // Capture URL ?invite=<code> на самом раннем этапе (top of file) — до login-flow. После авторизации
 // enterApp() подхватит код из sessionStorage и вызовет redeemStoredInvite(). Сохраняем и снимаем
 // query из адресной строки чтобы не «светить» код дальше по share.
+// A shared theme link (/?theme=<id>): stash the id, strip it from the URL, and install it once
+// we're authenticated (the install endpoint requires a session). Same shape as the invite flow.
+function readThemeFromUrl() {
+  try {
+    const p = new URLSearchParams(location.search);
+    const id = p.get("theme");
+    if (!id || !/^\d+$/.test(id)) return;
+    try { sessionStorage.setItem("dialog_theme_share", id); } catch {}
+    const u = new URL(location.href);
+    u.searchParams.delete("theme");
+    history.replaceState(null, "", u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "") + u.hash);
+  } catch {}
+}
+async function installSharedTheme() {
+  let id;
+  try { id = sessionStorage.getItem("dialog_theme_share"); } catch {}
+  if (!id) return;
+  try { sessionStorage.removeItem("dialog_theme_share"); } catch {}
+  const { ok, data } = await api("/api/themes/" + id + "/install", {});
+  if (!ok || !data.theme) return;
+  let tokens = data.theme.tokens;
+  if (typeof tokens === "string") { try { tokens = JSON.parse(tokens); } catch { return; } }
+  applyUserTheme(tokens);
+  notify(t("theme_imported", { name: data.theme.name }));
+}
+
 function readInviteFromUrl() {
   try {
     const p = new URLSearchParams(location.search);
@@ -1943,6 +1969,7 @@ function readInviteFromUrl() {
   } catch {}
 }
 async function redeemStoredInvite() {
+  installSharedTheme().catch(() => {});
   let code;
   try { code = sessionStorage.getItem("dialog_inv"); } catch {}
   if (!code) return;
@@ -4199,12 +4226,14 @@ function updateCallStatus() {
   let s;
   if (call.peers && call.peers.size) {                 // P2P: derive from peer connection states
     const states = [...call.peers.values()].map((m) => m.pc && m.pc.connectionState);
+    const allDead = [...call.peers.values()].every((m) => m.unreachable);
     if (states.some((x) => x === "connected")) s = "connected";
+    else if (allDead) s = "unreachable";                // every leg gave up — say so, don't spin
     else if (states.some((x) => x === "failed" || x === "disconnected")) s = "reconnecting";
     else s = "connecting";
   } else if (call.room) { s = call.room.state; }        // legacy LiveKit
   else { s = "waiting"; }                                // alone in the call, waiting for someone to join
-  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected", waiting: "call_waiting" };
+  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected", waiting: "call_waiting", unreachable: "call_unreachable" };
   el.textContent = t(map[s] || "call_waiting");
   el.className = "call-status " + (s === "connected" ? "ok" : s === "reconnecting" || s === "disconnected" ? "bad" : "");
 }
@@ -4524,17 +4553,42 @@ function p2pEnsurePeer(login, name) {
   };
   pc.oniceconnectionstatechange = () => {
     const s = pc.iceConnectionState;
-    if (s === "failed") p2pRestartPeer(login);                 // hard failure → restart ICE now
+    if (s === "failed") { m.fails = (m.fails || 0) + 1; p2pRestartPeer(login); p2pCheckStuck(login); }  // hard failure → restart ICE now
     else if (s === "disconnected") p2pScheduleRestart(login);  // transient blip → wait, then restart if it doesn't recover
-    else if (s === "connected" || s === "completed") { clearTimeout(m.restartT); m.restartT = 0; }
+    else if (s === "connected" || s === "completed") { clearTimeout(m.restartT); m.restartT = 0; m.fails = 0; p2pClearStuck(login); }
   };
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "failed") p2pRestartPeer(login);
-    else if (pc.connectionState === "connected") { clearTimeout(m.restartT); m.restartT = 0; }
+    if (pc.connectionState === "failed") { m.fails = (m.fails || 0) + 1; p2pRestartPeer(login); p2pCheckStuck(login); }
+    else if (pc.connectionState === "connected") { clearTimeout(m.restartT); m.restartT = 0; m.fails = 0; p2pClearStuck(login); }
     updateCallStatus();   // "connecting" → "Connected" once media is flowing
   };
+  // A peer that never connects used to sit on "Connecting…" forever. Give the ICE restarts a
+  // fair run, then say plainly that this leg isn't coming up (TURN refused, both sides behind
+  // symmetric NAT, network blocking UDP) instead of pretending we're still trying.
+  m.stuckT = setTimeout(() => {
+    const st = pc.connectionState;
+    if (call.active && st !== "connected" && st !== "closed") p2pMarkUnreachable(login);
+  }, 25000);
   pc.ontrack = (e) => p2pOnTrack(login, m, e);
   return m;
+}
+// Three failed ICE restarts on one leg means this pair can't reach each other — stop spinning.
+function p2pCheckStuck(login) {
+  const m = call.peers && call.peers.get(login);
+  if (m && (m.fails || 0) >= 3) p2pMarkUnreachable(login);
+}
+function p2pMarkUnreachable(login) {
+  const m = call.peers && call.peers.get(login); if (!m || m.unreachable) return;
+  m.unreachable = true;
+  const tile = $("tile-" + lkTile(login));
+  if (tile) tile.classList.add("peer-failed");
+  notify(t("call_peer_unreachable", { name: m.name || login }));
+  updateCallStatus();
+}
+function p2pClearStuck(login) {
+  const m = call.peers && call.peers.get(login); if (!m) return;
+  clearTimeout(m.stuckT); m.stuckT = 0;
+  if (m.unreachable) { m.unreachable = false; const tile = $("tile-" + lkTile(login)); if (tile) tile.classList.remove("peer-failed"); updateCallStatus(); }
 }
 // Transient "disconnected" is often momentary — give it 3s to recover on its own before restarting.
 function p2pScheduleRestart(login) {
@@ -4595,6 +4649,7 @@ async function p2pOnSignal({ from, fromName, data }) {
 }
 socket.on("rtc-signal", p2pOnSignal);
 function p2pClosePeer(login) {
+  const _m = call.peers && call.peers.get(login); if (_m) clearTimeout(_m.stuckT);
   const m = call.peers && call.peers.get(login); if (!m) return;
   clearTimeout(m.restartT);
   try { m.pc.close(); } catch {}
@@ -6721,6 +6776,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
         <button data-a="apply">${t("ts_apply")}</button>
         <button data-a="edit">${t("ts_edit")}</button>
         <button data-a="pub" class="${th.published ? "" : "accent"}">${th.published ? t("ts_unpublish") : t("ts_publish")}</button>
+        ${th.published ? `<button data-a="share">${t("theme_share")}</button>` : ""}
         <button data-a="del" class="danger">${t("ts_delete")}</button>
       </div></div>`).join("");
     box.querySelectorAll(".ts-item").forEach((el) => {
@@ -6735,6 +6791,11 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       const { ok, data } = await api(`/api/themes/${th.id}/publish`, { published: !th.published });
       if (!ok) { notify((data && data.error) === "publish_limit" ? t("ts_publish_limit", { n: (data && data.limit) || 3 }) : t("err_generic")); return; }
       loadMine();
+    } else if (a === "share") {
+      // A published theme is installable by id — the link just carries that id, and the
+      // startup handler below installs + applies it for whoever opens it.
+      copyToClipboard(location.origin + "/?theme=" + th.id);
+      notify(t("theme_share_copied"));
     } else if (a === "del") {
       if (!confirm(t("ts_del_confirm", { name: th.name }))) return;
       await api(`/api/themes/${th.id}`, null, "DELETE");
