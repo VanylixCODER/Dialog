@@ -1598,7 +1598,7 @@ a:focus-visible {
   border-radius: var(--r-4);
   box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; gap: 12px;
-  animation: popIn var(--t-pop) var(--ease-pop) both;
+  animation: popIn var(--t-pop) var(--ease-pop) backwards; /* not `both` — see "Closing animations" */
 }
 .modal-card.wide { width: min(480px, 94vw); }
 .modal-title {
@@ -3346,6 +3346,13 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
   /* The head already names the section in the detail view — drop the pane's own title
      so it doesn't read as "Account / Account". */
   .settings-card.mob-detail .settings-pane.active > h3:first-child { display: none; }
+  /* Drilling in / backing out is a horizontal move, not a cut: the section comes in from
+     the right, and the list slides back from the left (.mob-backing is set by
+     showSettingsList only when there was a section open). */
+  @keyframes settingsDrillIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+  @keyframes settingsDrillBack { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+  .settings-card.mob-detail .settings-pane.active { animation: settingsDrillIn 0.26s var(--ease-out); }
+  .settings-card.mob-backing .settings-tabs { animation: settingsDrillBack 0.26s var(--ease-out); }
   .settings-panes { flex: 1 1 auto; min-height: 0; padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
   .settings-pane { gap: 11px; }
   /* Profile pane: bigger touch targets */
@@ -4861,8 +4868,10 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 @keyframes callUp   { from { opacity: 1; transform: translateY(0); }                to { opacity: 0; transform: translateY(-100%); } }
 @keyframes chatInR  { from { opacity: 0.4; transform: translateX(26px); }           to { opacity: 1; transform: translateX(0); } }
 
-/* Settings overlay: panel glides in from the side (the backdrop keeps its own fade). */
-.settings-overlay > .settings-card { animation: popIn var(--t-pop) var(--ease-pop) both; }
+/* Settings overlay: panel glides in from the side (the backdrop keeps its own fade).
+   fill-mode `backwards`, NOT `both`: a finished animation with a forwards fill keeps
+   overriding transform/opacity, which would swallow the close transition below. */
+.settings-overlay > .settings-card { animation: popIn var(--t-pop) var(--ease-pop) backwards; }
 
 /* Call stage slides in from out of bounds (above), and back out when the call ends. */
 #callStage:not(.hidden):not(.fs-call) { animation: callDown 0.3s var(--ease-out) both; }
@@ -4874,13 +4883,71 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
    rises from the bottom edge instead of gliding in from the right. */
 @media (max-width: 720px) {
   .app.in-chat .chat { animation: chatInR 0.24s var(--ease-out) both; }
-  .settings-overlay > .settings-card { animation: sheetIn 0.26s var(--ease-out) both; }
+  .settings-overlay > .settings-card { animation: sheetIn 0.26s var(--ease-out) backwards; }
 }
 
-/* Respect reduced-motion. */
+/* ============ Closing animations ============
+   Everything here opened with an animation but closed as a hard cut: JS adds .hidden and
+   `display: none !important` lands the same frame, so there was nothing left to animate.
+   `transition-behavior: allow-discrete` lets `display` take part in a transition — the
+   element stays laid out for the fade/slide and only flips to none at the end. So JS keeps
+   toggling .hidden exactly as before: no timers, no .closing class, no state to keep in
+   sync (and .classList.contains("hidden") still reads true the instant it's dismissed).
+   --dismiss is the one knob for how long a dismissal takes; its easing is an ease-IN (the
+   mirror of the entrances) so the thing leans away before it goes — with the app's usual
+   ease-out the layer is already 80% transparent by 40ms and the exit reads as a blink. */
+:root { --dismiss: 0.2s; --dismiss-ease: cubic-bezier(0.4, 0, 1, 1); }
+.modal, .settings-overlay, .lightbox, .miniapp-overlay,
+.chat-menu, .row-menu, .account-menu, .me-status-menu, .bot-cmd-menu, .mention-menu,
+.composer-more, .emoji-picker, .gif-panel, .react-picker, .audio-menu {
+  transition: opacity var(--dismiss) var(--dismiss-ease), transform var(--dismiss) var(--dismiss-ease), display var(--dismiss);
+  transition-behavior: allow-discrete;
+}
+/* Backdrops fade; pointer-events go first so the fading layer can't eat a tap. */
+.modal.hidden, .settings-overlay.hidden, .lightbox.hidden, .miniapp-overlay.hidden { opacity: 0; pointer-events: none; }
+/* Menus / popovers retract towards their anchor (mirrors menuPop). Ones JS positions with an
+   inline transform simply keep it and fade — inline styles win, which is fine. */
+.chat-menu.hidden, .row-menu.hidden, .account-menu.hidden, .me-status-menu.hidden,
+.bot-cmd-menu.hidden, .mention-menu.hidden, .composer-more.hidden,
+.emoji-picker.hidden, .gif-panel.hidden, .react-picker.hidden, .audio-menu.hidden {
+  opacity: 0; transform: scale(0.96); pointer-events: none;   /* exactly menuPop, reversed */
+}
+/* The cards ride their backdrop out instead of blinking away with it. */
+.modal-card, .settings-overlay > .settings-card {
+  transition: opacity var(--dismiss) var(--dismiss-ease), transform var(--dismiss) var(--dismiss-ease);
+}
+.modal.hidden .modal-card { opacity: 0; transform: translate3d(28px, 0, 0) scale(0.98); } /* leaves the way popIn brought it in */
+.settings-overlay.hidden > .settings-card { opacity: 0; transform: translate3d(40px, 0, 0) scale(0.98); }
+
+@media (max-width: 720px) {
+  /* Phones: the settings sheet drops back down, and the info panel is a full-screen
+     overlay here (on desktop it's a grid column — deferring its display would hold the
+     column open for the whole fade), so it only fades out on phones. */
+  .settings-overlay.hidden > .settings-card { transform: translateY(44px); }
+  .info-panel {
+    transition: opacity var(--dismiss) var(--dismiss-ease), display var(--dismiss);
+    transition-behavior: allow-discrete;
+  }
+  .info-panel.hidden { opacity: 0; pointer-events: none; }
+}
+
+/* Respect reduced-motion: dismissals become instant again (transition:none on `display`
+   means .hidden lands the same frame, exactly like before). */
+body.motion-off :is(.modal, .settings-overlay, .lightbox, .miniapp-overlay, .info-panel,
+    .chat-menu, .row-menu, .account-menu, .me-status-menu, .bot-cmd-menu, .mention-menu,
+    .composer-more, .emoji-picker, .gif-panel, .react-picker, .audio-menu,
+    .modal-card, .settings-card) { transition: none !important; }
+body.motion-off .settings-card.mob-detail .settings-pane.active,
+body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #callStage:not(.hidden):not(.fs-call), #callStage.call-closing,
-  .app.in-chat .chat, .settings-overlay > .settings-card { animation: none !important; }
+  .app.in-chat .chat, .settings-overlay > .settings-card,
+  .settings-card.mob-detail .settings-pane.active,
+  .settings-card.mob-backing .settings-tabs { animation: none !important; }
+  :is(.modal, .settings-overlay, .lightbox, .miniapp-overlay, .info-panel,
+      .chat-menu, .row-menu, .account-menu, .me-status-menu, .bot-cmd-menu, .mention-menu,
+      .composer-more, .emoji-picker, .gif-panel, .react-picker, .audio-menu,
+      .modal-card, .settings-card) { transition: none !important; }
 }
 
 /* ============ Contacts tab — sub-tabs, search, responsive rows ============ */

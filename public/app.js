@@ -1389,8 +1389,13 @@ function syncBlockComposer() {
     const bn = document.getElementById("blockNotice"); if (bn) bn.remove();
   }
 }
-$("backBtnMobile").onclick = $("esBackBtn").onclick = () => {
-  const reveal = () => { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
+// Leaving a chat for the list. EVERY way out goes through here — the ‹ button, the Android
+// hardware back (window.dialogOnBack) and a browser Back that popped the chat URL — so the
+// pane always slides off instead of some paths cutting to the list instantly.
+function exitChatToList() {
+  const app = $("app");
+  if (!app || !app.classList.contains("in-chat")) return;
+  const reveal = () => { app.classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
   const chat = $("chatPane");
   if (chat && window.matchMedia("(max-width: 720px)").matches) {
     // Reveal + render the contact list FIRST so it sits under the chat as it slides off to
@@ -1400,7 +1405,9 @@ $("backBtnMobile").onclick = $("esBackBtn").onclick = () => {
     chat.classList.add("mob-leaving");
     setTimeout(() => chat.classList.remove("mob-leaving"), 300);
   } else reveal();
-};
+}
+window.exitChatToList = exitChatToList; // router.js (popstate) calls it across files
+$("backBtnMobile").onclick = $("esBackBtn").onclick = exitChatToList;
 $("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
@@ -3417,7 +3424,15 @@ function openLightbox(src, name, isVideo) {
   const nm = $("lbName"); if (nm) nm.textContent = name || "";
   lb.classList.remove("hidden");
 }
-function closeLightbox() { lb.classList.add("hidden"); lbImg.src = ""; try { lbVid.pause(); } catch {} lbVid.removeAttribute("src"); }
+function closeLightbox() {
+  lb.classList.add("hidden");
+  try { lbVid.pause(); } catch {}
+  // Drop the media only after the fade-out — clearing it now empties the box instantly.
+  setTimeout(() => {
+    if (!lb.classList.contains("hidden")) return; // reopened during the dismissal
+    lbImg.src = ""; lbVid.removeAttribute("src");
+  }, 240);
+}
 $("lbClose") && ($("lbClose").onclick = closeLightbox);
 $("lbDownload") && $("lbDownload").querySelector && ($("lbDownload").innerHTML = window.ICON.download || "⬇");
 $("lbClose") && ($("lbClose").innerHTML = window.ICON.close || "✕");
@@ -5137,8 +5152,16 @@ function enterSettingsDetail(tab) {   // show a section's pane (mobile) + back b
   updateSettingsHeadTitle();
 }
 function showSettingsList() {         // back to the list (also the desktop / reset state)
+  const wasDetail = !!mobileDetailTab;
   mobileDetailTab = null;
-  const c = settingsCard(); if (c) c.classList.remove("mob-detail");
+  const c = settingsCard();
+  if (c) {
+    c.classList.remove("mob-detail");
+    // Coming back from a section: the list slides in from the left (the pane it replaced
+    // arrived from the right), so back reads as a move rather than a swap. Only on the way
+    // back — a plain open shouldn't animate, the whole sheet is already sliding up.
+    if (wasDetail) { c.classList.add("mob-backing"); setTimeout(() => c.classList.remove("mob-backing"), 320); }
+  }
   const b = $("settingsBack"); if (b) b.classList.add("hidden");
   updateSettingsHeadTitle();
 }
@@ -5149,6 +5172,7 @@ function openSettings(tab, direct) {
   const ov = $("settingsOverlay"); if (!ov) return;
   // Если открываем groups без активной группы — показываем placeholder в пейне (ТОЛЬКО переключаем таб, не перенаправляем).
   // (Сохранение состояния открытого таба важнее, чем автоматический возврат на profile.)
+  clearTimeout(settingsResetTimer); // a pending "reset to the list" from a just-closed sheet
   ov.classList.remove("hidden");
   settingsOpen = true;
   switchTab(tab);
@@ -5164,11 +5188,16 @@ function openSettings(tab, direct) {
   // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
   renderChatList($("searchInput").value);
 }
+let settingsResetTimer = null;
 function closeSettings() {
   if (!settingsOpen) return;
   const ov = $("settingsOverlay"); if (ov) ov.classList.add("hidden");
   settingsOpen = false;
-  showSettingsList(); // reset so the next open starts on the list (mobile)
+  // Reset to the section list so the next open starts there (mobile) — but only once the
+  // sheet has animated out, otherwise the pane snaps back to the list mid-dismissal.
+  // `settingsOpen` re-checks in case it was reopened inside that window.
+  clearTimeout(settingsResetTimer);
+  settingsResetTimer = setTimeout(() => { if (!settingsOpen) showSettingsList(); }, 240);
 }
 function switchTab(tab) {
   if (!SETTINGS_TABS.includes(tab)) tab = "profile";
@@ -5270,7 +5299,13 @@ function openMiniApp(app) {
 function closeMiniApp() {
   const ov = $("miniAppOverlay"), fr = $("miniAppFrame");
   ov.classList.add("hidden"); document.body.classList.remove("miniapp-open");
-  fr.onload = null; fr.src = "about:blank"; ov.dataset.botLogin = "";
+  fr.onload = null;
+  // Tear the frame down after the overlay has faded, not under it (a blank white iframe
+  // flashing through the dismissal is worse than the extra 240ms).
+  setTimeout(() => {
+    if (!ov.classList.contains("hidden")) return; // reopened during the dismissal
+    fr.src = "about:blank"; ov.dataset.botLogin = "";
+  }, 240);
 }
 $("miniAppBtn") && ($("miniAppBtn").onclick = () => openMiniApp(curMiniApp));
 $("miniAppClose") && ($("miniAppClose").onclick = closeMiniApp);
@@ -5722,8 +5757,9 @@ window.dialogOnBack = function () {
   const rp = document.querySelector(".react-picker:not(.hidden)"); if (rp) { rp.classList.add("hidden"); return true; }
   // 5. Mobile members/info panel.
   if (isMobile() && vis("infoPanel")) { $("infoPanel").classList.add("hidden"); return true; }
-  // 6. Inside a chat on mobile → back to the chat list (not the previous chat).
-  if ($("app").classList.contains("in-chat")) { $("app").classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); return true; }
+  // 6. Inside a chat on mobile → back to the chat list (not the previous chat), sliding the
+  //    pane off exactly like the in-app ‹ button does.
+  if ($("app").classList.contains("in-chat")) { exitChatToList(); return true; }
   // 7. Nothing to dismiss → let native background the app.
   return false;
 };
