@@ -644,8 +644,21 @@ function authErr(code) {
 }
 $("loginForm").onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
-  const { ok, data } = await api("/api/login", { login: f.login.value.trim(), password: f.password.value });
-  if (!ok) { $("loginError").textContent = authErr(data.error); return; }
+  const codeEl = $("loginCode");
+  const body = { login: f.login.value.trim(), password: f.password.value };
+  if (codeEl && !codeEl.parentElement.classList.contains("hidden")) body.code = codeEl.value.trim();
+  const { ok, data } = await api("/api/login", body);
+  if (!ok) {
+    // The account has 2FA on: reveal the code field and let them submit again. The password is
+    // already verified server-side at this point, so this is a second step, not a retry.
+    if (data.error === "totp_required" || data.error === "totp_invalid") {
+      const wrap = $("loginCodeWrap");
+      if (wrap) { wrap.classList.remove("hidden"); codeEl.value = ""; codeEl.focus(); }
+      $("loginError").textContent = data.error === "totp_invalid" ? t("twofa_bad_code") : t("twofa_login_hint");
+      return;
+    }
+    $("loginError").textContent = authErr(data.error); return;
+  }
   onAuth(data);
 };
 $("registerForm").onsubmit = async (e) => {
@@ -1706,6 +1719,9 @@ async function populateGroupSettingsPane() {
     return { ok: false };
   }
   gsOwner = data.owner === profile.login;
+  // Discover listing (owner-only UI, enforced server-side too).
+  const pub = $("gsPublic"); if (pub) { pub.checked = !!data.isPublic; pub.disabled = !gsOwner; }
+  const abt = $("gsAbout"); if (abt) { abt.value = data.about || ""; abt.disabled = !gsOwner; }
   // 'is-owner' модификатор вешаем на сам #settingsOverlay вместо удалённого модала
   $("settingsOverlay").classList.toggle("is-owner", gsOwner);
   $("gsError").textContent = "";
@@ -2503,6 +2519,15 @@ function applyChannelUI() {
     if (showHook) { const inp = $("gsHookUrl"); if (inp) inp.value = curChannelHook; }
   }
 }
+// The listing toggle and the blurb save together — one endpoint, so the checkbox writes the
+// current blurb with it and vice versa.
+async function saveGroupPublic() {
+  if (!gsId || !gsOwner) return;
+  await api("/api/groups/" + gsId + "/public", { on: $("gsPublic").checked, about: $("gsAbout").value.trim() });
+  notify(t("saved"));
+}
+$("gsPublic") && ($("gsPublic").addEventListener("change", saveGroupPublic));
+$("gsAboutSave") && ($("gsAboutSave").onclick = saveGroupPublic);
 $("gsHookCopy") && ($("gsHookCopy").onclick = () => { copyToClipboard(curChannelHook || ($("gsHookUrl") && $("gsHookUrl").value) || ""); notify(t("copied")); });
 $("gsHookRegen") && ($("gsHookRegen").onclick = async () => {
   if (!curChannel || !groupOwner) return;
@@ -5815,6 +5840,7 @@ function botCardHTML(b) {
     <label class="pe-label" data-i18n="bot_miniapp_label">Mini App URL (optional — opens as a webview)</label>
     <input class="field bot-f-miniapp" value="${escapeHtml(b.miniapp || "")}" placeholder="https://…">
     <label class="bot-priv"><input type="checkbox" class="bot-f-privacy" ${b.privacy ? "checked" : ""}><span data-i18n="bot_privacy_label">Group privacy — only receive /commands or @mentions</span></label>
+    <label class="bot-priv"><input type="checkbox" class="bot-f-public" ${b.public ? "checked" : ""}><span data-i18n="list_publicly">List in Discover</span></label>
     <div class="form-error bot-err"></div>
     <div class="bot-actions"><button class="btn-primary btn-sm bot-save" data-i18n="save">Save</button><button class="btn-ghost btn-sm bot-del danger" data-i18n="bot_delete">Delete</button></div>
   </div>`;
@@ -5834,6 +5860,7 @@ function wireBotCard(b) {
     };
     const { ok, data } = await api("/api/dev/bots/" + b.login, body);
     if (!ok) { err.textContent = data.error === "bad_webhook" ? t("bot_bad_webhook") : data.error === "bad_miniapp" ? t("bot_bad_miniapp") : (data.error || t("err_generic")); return; }
+    await api("/api/bots/" + b.login + "/public", { on: card.querySelector(".bot-f-public").checked });
     notify(t("saved") || "Saved"); refreshDevPane();
   };
   card.querySelector(".bot-regen").onclick = async () => {
@@ -5889,8 +5916,91 @@ function accStatusMeta(s) {
   if (s === "unverified") return { cls: "unverified", icon: "mail", label: t("acc_st_unverified") };
   return { cls: "stable", icon: "shield", label: t("acc_st_stable") };
 }
+// ---------- Account pane: 2FA · signed-in devices · export ----------
+async function refresh2fa() {
+  const { ok, data } = await api("/api/2fa", null, "GET");
+  const on = ok && data.enabled;
+  const stEl = $("twofaState"); if (stEl) stEl.textContent = on ? t("twofa_state_on") : t("twofa_state_off");
+  const btn = $("twofaBtn"); if (btn) { btn.textContent = on ? t("twofa_disable") : t("twofa_setup"); btn.classList.toggle("danger", !!on); }
+  $("twofaSetup") && $("twofaSetup").classList.add("hidden");
+  $("twofaOff") && $("twofaOff").classList.add("hidden");
+  $("twofaMsg") && ($("twofaMsg").textContent = "");
+  return on;
+}
+$("twofaBtn") && ($("twofaBtn").onclick = async () => {
+  const on = ($("twofaState").textContent === t("twofa_state_on"));
+  if (on) { $("twofaOff").classList.remove("hidden"); $("twofaPw").focus(); return; }
+  const { ok, data } = await api("/api/2fa/setup", {});
+  if (!ok) return;
+  $("twofaSecret").textContent = data.secret;
+  $("twofaSecret").onclick = () => { copyToClipboard(data.secret); notify(t("copied")); };
+  $("twofaSetup").classList.remove("hidden");
+  $("twofaCode").value = ""; $("twofaCode").focus();
+});
+$("twofaEnable") && ($("twofaEnable").onclick = async () => {
+  const { ok } = await api("/api/2fa/enable", { code: $("twofaCode").value.trim() });
+  if (!ok) { $("twofaMsg").textContent = t("twofa_bad_code"); return; }
+  notify(t("twofa_on_toast")); refresh2fa();
+});
+$("twofaDisable") && ($("twofaDisable").onclick = async () => {
+  const { ok } = await api("/api/2fa/disable", { password: $("twofaPw").value });
+  if (!ok) { $("twofaMsg").textContent = t("twofa_bad_pw"); return; }
+  $("twofaPw").value = ""; notify(t("twofa_off_toast")); refresh2fa();
+});
+// Human-ish device label out of a raw user-agent. Deliberately coarse — the point is "which of
+// my devices is this", not analytics.
+function deviceLabel(ua) {
+  const u = String(ua || "");
+  if (!u) return t("unknown") || "—";
+  const os = /Android/i.test(u) ? "Android" : /iPhone|iPad|iOS/i.test(u) ? "iOS" : /Windows/i.test(u) ? "Windows"
+    : /Mac OS X|Macintosh/i.test(u) ? "macOS" : /Linux/i.test(u) ? "Linux" : "";
+  const app = /DialogApp/i.test(u) ? "Dialog app" : /Electron/i.test(u) ? "Dialog desktop"
+    : /Edg\//i.test(u) ? "Edge" : /Chrome/i.test(u) ? "Chrome" : /Firefox/i.test(u) ? "Firefox"
+    : /Safari/i.test(u) ? "Safari" : "Browser";
+  return [app, os].filter(Boolean).join(" · ");
+}
+async function refreshDevices() {
+  const box = $("devList"); if (!box) return;
+  const { ok, data } = await api("/api/sessions", null, "GET");
+  box.innerHTML = "";
+  const rows = (ok && data.sessions) || [];
+  if (rows.length <= 1) { box.innerHTML = `<div class="dir-empty">${t("devices_empty")}</div>`; }
+  for (const sdev of rows) {
+    const row = document.createElement("div");
+    row.className = "dev-row" + (sdev.current ? " current" : "");
+    const when = sdev.lastSeen ? new Date(sdev.lastSeen).toLocaleString() : "";
+    row.innerHTML = `<span class="dev-ico">${window.ICON.monitorSmartphone || ""}</span>` +
+      `<div class="dev-body"><div class="dev-name">${escapeHtml(deviceLabel(sdev.ua))}</div>` +
+      `<div class="dev-sub">${escapeHtml(sdev.ip || "")}${when ? " · " + escapeHtml(when) : ""}</div></div>`;
+    if (sdev.current) {
+      const tag = document.createElement("span"); tag.className = "dev-cur"; tag.textContent = t("device_current"); row.appendChild(tag);
+    } else {
+      const b = document.createElement("button"); b.className = "btn-ghost btn-sm"; b.textContent = t("device_revoke");
+      b.onclick = async () => { await api("/api/sessions/revoke", { id: sdev.id }); refreshDevices(); };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+}
+$("devRevokeOthers") && ($("devRevokeOthers").onclick = async () => { await api("/api/sessions/revoke", { others: true }); refreshDevices(); });
+// Export streams as an attachment; fetch it with the token and hand the blob to a link so the
+// browser saves it with the filename the server picked.
+$("exportBtn") && ($("exportBtn").onclick = async () => {
+  try {
+    const r = await fetch("/api/export", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) { notify(t("err_generic")); return; }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `dialog-${profile ? profile.login : "export"}.json`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch { notify(t("err_generic")); }
+});
+
 function refreshAccountPane() {
   if (!profile) return;
+  refresh2fa(); refreshDevices();
   // Account status card
   const st = profile.accountStatus || (profile.emailVerified ? "stable" : "unverified");
   const m = accStatusMeta(st);

@@ -44,6 +44,10 @@
         <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_email" maxlength="190" autocomplete="username" />
           <span class="field-wrap"><input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
+          <!-- Second factor: revealed only when the server says the account has 2FA on. -->
+          <div id="loginCodeWrap" class="hidden">
+            <input class="field" id="loginCode" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" data-i18n-ph="twofa_code_ph" />
+          </div>
           <div class="form-error" id="loginError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
           <button type="button" class="auth-link" id="forgotLink" data-i18n="forgot_pw">Forgot password?</button>
@@ -398,6 +402,38 @@
             <div class="form-error" id="pwMsg"></div>
             <button id="pwSaveBtn" class="btn-ghost" data-i18n="change_pw">Change password</button>
           </div>
+
+          <!-- Two-factor authentication (TOTP) -->
+          <div class="uppercase-tag" data-i18n="twofa_title">Two-factor authentication</div>
+          <div class="acc-row">
+            <span id="twofaState" class="acc-hint"></span>
+            <button id="twofaBtn" class="btn-ghost" data-i18n="twofa_setup">Set up 2FA</button>
+          </div>
+          <div id="twofaSetup" class="hidden">
+            <div class="acc-hint" data-i18n="twofa_hint">Add this secret to an authenticator app, then enter the code it shows.</div>
+            <code id="twofaSecret" class="twofa-secret" title="Copy"></code>
+            <div class="acc-row">
+              <input id="twofaCode" class="field" inputmode="numeric" maxlength="6" data-i18n-ph="twofa_code_ph" />
+              <button id="twofaEnable" class="btn-primary" data-i18n="twofa_enable">Turn on</button>
+            </div>
+          </div>
+          <div id="twofaOff" class="hidden">
+            <div class="acc-row">
+              <input id="twofaPw" class="field" type="password" data-i18n-ph="twofa_pw_ph" autocomplete="current-password" />
+              <button id="twofaDisable" class="btn-ghost danger" data-i18n="twofa_disable">Turn off 2FA</button>
+            </div>
+          </div>
+          <div class="form-error" id="twofaMsg"></div>
+
+          <!-- Signed-in devices -->
+          <div class="uppercase-tag" data-i18n="devices_title">Signed-in devices</div>
+          <div id="devList" class="fwd-list"></div>
+          <button id="devRevokeOthers" class="btn-ghost" data-i18n="device_revoke_others">Sign out everywhere else</button>
+
+          <!-- Export -->
+          <div class="uppercase-tag" data-i18n="export_title">Export your data</div>
+          <div class="acc-hint" data-i18n="export_hint">A JSON file with your profile, contacts, groups and messages.</div>
+          <button id="exportBtn" class="btn-ghost" data-i18n="export_btn">Download export</button>
         </section>
         <!-- Preferences -->
         <section class="settings-pane" data-pane="prefs" role="tabpanel">
@@ -552,6 +588,14 @@
               <div class="gs-hook-hint" data-i18n="channel_webhook_hint">POST JSON {"text":"…"} to this URL to publish to the channel.</div>
               <div class="gs-hook-row"><input id="gsHookUrl" class="field" readonly /><button id="gsHookCopy" class="btn-ghost btn-sm" data-i18n="copy">Copy</button></div>
               <button id="gsHookRegen" class="btn-ghost btn-sm" data-i18n="channel_webhook_regen">Regenerate URL</button>
+            </div>
+
+            <!-- Discover listing (owner-only): makes the channel findable by anyone. -->
+            <div class="gs-card gs-owner">
+              <div class="gs-sec-title" data-i18n="directory">Discover</div>
+              <label class="pref-row"><input type="checkbox" id="gsPublic" /><span data-i18n="list_publicly">List in Discover</span></label>
+              <div class="acc-hint" data-i18n="list_publicly_hint">Anyone can find and open this channel.</div>
+              <div class="gs-hook-row"><input id="gsAbout" class="field" maxlength="190" data-i18n-ph="about_ph" /><button id="gsAboutSave" class="btn-ghost btn-sm" data-i18n="save">Save</button></div>
             </div>
 
             <div class="gs-card gs-owner">
