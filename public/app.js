@@ -727,6 +727,12 @@ function renderAccountMenu() {
     if (!isActive) row.onclick = () => switchToAccount(a.login);
     menu.appendChild(row);
   }
+  // Saved messages: a note-to-self chat. It belongs with "my account" things rather than the
+  // contact list, where it would sort around like a normal conversation.
+  const saved = document.createElement("button"); saved.className = "acct-add";
+  saved.innerHTML = (window.ICON.bookmark || "★") + "<span>" + t("saved_messages") + "</span>";
+  saved.onclick = () => { closeAccountMenu(); openSavedMessages(); };
+  menu.appendChild(saved);
   if (accs.length < MAX_ACCOUNTS) {
     const add = document.createElement("button"); add.className = "acct-add";
     add.innerHTML = (window.ICON.plus || "+") + "<span>" + t("add_account") + "</span>";
@@ -933,8 +939,50 @@ async function loadGroups() {
   applyPins();
   renderChatList($("searchInput").value);
 }
-function isMuted(room) { return lsGet("dialog_muted").includes(room); }
-function toggleMute(room) { const m = lsGet("dialog_muted"); const i = m.indexOf(room); if (i === -1) m.push(room); else m.splice(i, 1); lsSet("dialog_muted", m); }
+// Mute is stored as { room: untilTs } where 0 = forever. The legacy shape was a plain array of
+// room keys, so anything already muted keeps working and gets migrated on the next change.
+function mutedMap() {
+  const raw = lsGet("dialog_muted");
+  if (Array.isArray(raw)) { const o = {}; for (const k of raw) o[k] = 0; return o; }
+  return raw && typeof raw === "object" ? raw : {};
+}
+function isMuted(room) {
+  const m = mutedMap()[room];
+  if (m === undefined) return false;
+  if (!m) return true;                       // 0 → muted until turned back on
+  if (Date.now() < m) return true;
+  const all = mutedMap(); delete all[room]; lsSet("dialog_muted", all);  // expired → self-heal
+  return false;
+}
+function muteUntil(room, ms) { const all = mutedMap(); all[room] = ms ? Date.now() + ms : 0; lsSet("dialog_muted", all); }
+function unmute(room) { const all = mutedMap(); delete all[room]; lsSet("dialog_muted", all); }
+function toggleMute(room) { if (isMuted(room)) unmute(room); else muteUntil(room, 0); }
+// The bell opens a duration menu instead of a blind toggle (muting "for an hour" is the common
+// case; muting forever by accident is the annoying one).
+function openMuteMenu(anchor, room) {
+  let menu = $("muteMenu");
+  if (!menu) { menu = document.createElement("div"); menu.id = "muteMenu"; menu.className = "chat-menu hidden"; document.body.appendChild(menu); }
+  menu.innerHTML = "";
+  const item = (label, fn) => { const b = document.createElement("button"); b.innerHTML = "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
+  const refresh = () => { $("muteBtn").innerHTML = isMuted(room) ? window.ICON.bellOff : window.ICON.bell; renderChatList($("searchInput").value); };
+  if (isMuted(room)) item(t("unmute"), () => { unmute(room); refresh(); });
+  else {
+    item(t("mute_15m"), () => { muteUntil(room, 15 * 60000); refresh(); });
+    item(t("mute_1h"), () => { muteUntil(room, 3600000); refresh(); });
+    item(t("mute_8h"), () => { muteUntil(room, 8 * 3600000); refresh(); });
+    item(t("mute_always"), () => { muteUntil(room, 0); refresh(); });
+  }
+  menu.classList.remove("hidden");
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + "px";
+  menu.style.left = Math.max(8, Math.min(r.right - (menu.offsetWidth || 180), innerWidth - (menu.offsetWidth || 180) - 8)) + "px";
+  menu._openedAt = Date.now();
+}
+document.addEventListener("click", (e) => {
+  const m = $("muteMenu"); if (!m || m.classList.contains("hidden")) return;
+  if (Date.now() - (m._openedAt || 0) < 250) return;
+  if (!e.target.closest("#muteMenu") && !e.target.closest("#muteBtn")) m.classList.add("hidden");
+});
 
 function preview(m) {
   if (!m) return "";
@@ -1322,10 +1370,119 @@ function playChatAnim(dir) {
   p.classList.add(dir === "close" ? "anim-close" : "anim-open");
 }
 
+// ================== Saved messages · directory · scheduled posts ==================
+// "Saved messages" is just the DM you have with yourself: @dm:<me>~<me>. The server treats it
+// as a room with no partner, so nothing is pushed or pinged — it's a private scratchpad that
+// syncs across your devices for free.
+function savedKey() { return profile ? "@dm:" + profile.login + "~" + profile.login : ""; }
+function isSavedRoom(key) { return !!profile && key === savedKey(); }
+function openSavedMessages() {
+  if (!profile) return;
+  const key = savedKey();
+  let c = chats.get(key);
+  if (!c) c = upsertChat({ key, type: "dm", login: profile.login, name: t("saved_messages"), last: "", ts: Date.now(), unread: 0 });
+  c.name = t("saved_messages");
+  openChat(c);
+}
+
+// ---- Discover: opt-in channels + bots ----
+let dirTab = "channels", dirData = { groups: [], bots: [] };
+async function openDirectory() {
+  $("directoryModal").classList.remove("hidden");
+  $("dirList").innerHTML = "";
+  const { ok, data } = await api("/api/directory", null, "GET");
+  dirData = ok ? { groups: data.groups || [], bots: data.bots || [] } : { groups: [], bots: [] };
+  renderDirectory();
+}
+function renderDirectory() {
+  const box = $("dirList"); if (!box) return;
+  box.innerHTML = "";
+  const rows = dirTab === "channels" ? dirData.groups : dirData.bots;
+  $("dirEmpty").classList.toggle("hidden", rows.length > 0);
+  for (const r of rows) {
+    const row = document.createElement("button");
+    row.type = "button"; row.className = "dir-row";
+    const sub = dirTab === "channels" ? (r.about || t("dir_members", { n: r.members || 0 })) : (r.description || "@" + r.login);
+    const ava = dirTab === "channels"
+      ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/group-avatar/${r.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'"></div>`
+      : `<div class="avatar" style="width:36px;height:36px;font-size:14px"><img src="${avaUrl(r.login)}" onerror="this.remove()">${initials(r.name)}</div>`;
+    row.innerHTML = ava + `<div class="dir-body"><div class="dir-name">${escapeHtml(r.name)}</div><div class="dir-sub">${escapeHtml(sub)}</div></div>`;
+    row.onclick = () => {
+      $("directoryModal").classList.add("hidden");
+      if (dirTab === "channels") {
+        const key = "@grp:" + r.id;
+        const existing = chats.get(key);
+        if (existing) openChat(existing);
+        else notify(t("dir_join_hint") || t("redeem_pending"));   // not a member yet → owner invites
+      } else openDM(r.login);
+    };
+    box.appendChild(row);
+  }
+}
+$("discoverBtn") && ($("discoverBtn").onclick = openDirectory);
+// Saved messages sits next to Discover: long-press/right-click Discover is too hidden, so it
+// gets its own affordance in the chat list's empty state and the account menu.
+$("discoverBtn") && $("discoverBtn").addEventListener("contextmenu", (e) => { e.preventDefault(); openSavedMessages(); });
+$("dirClose") && ($("dirClose").onclick = () => $("directoryModal").classList.add("hidden"));
+$("directoryModal") && $("directoryModal").addEventListener("click", (e) => {
+  if (e.target === $("directoryModal")) { $("directoryModal").classList.add("hidden"); return; }
+  const tab = e.target.closest("[data-dirtab]");
+  if (tab) {
+    dirTab = tab.dataset.dirtab;
+    $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b === tab));
+    renderDirectory();
+  }
+});
+
+// ---- Scheduled posts (channel owners) ----
+async function openSchedule() {
+  if (!myRoom) return;
+  $("schText").value = ""; $("schError").textContent = "";
+  // Default to an hour from now, in the input's local-time format.
+  const d = new Date(Date.now() + 3600000 - new Date().getTimezoneOffset() * 60000);
+  $("schWhen").value = d.toISOString().slice(0, 16);
+  $("scheduleModal").classList.remove("hidden");
+  refreshScheduleList();
+}
+async function refreshScheduleList() {
+  const box = $("schList"); if (!box) return;
+  const { ok, data } = await api("/api/schedule?room=" + encodeURIComponent(myRoom), null, "GET");
+  box.innerHTML = "";
+  const posts = (ok && data.posts) || [];
+  if (!posts.length) { box.innerHTML = `<div class="dir-empty">${t("scheduled_empty")}</div>`; return; }
+  for (const p of posts) {
+    const row = document.createElement("div"); row.className = "sch-row";
+    row.innerHTML = `<span class="sch-when">${new Date(Number(p.due)).toLocaleString()}</span><span class="sch-text">${escapeHtml(p.text)}</span>`;
+    const del = document.createElement("button"); del.className = "c-icon-btn"; del.innerHTML = window.ICON.trash;
+    del.onclick = async () => { await api("/api/schedule/" + p.id, null, "DELETE"); refreshScheduleList(); };
+    row.appendChild(del);
+    box.appendChild(row);
+  }
+}
+$("schClose") && ($("schClose").onclick = () => $("scheduleModal").classList.add("hidden"));
+$("schCancel") && ($("schCancel").onclick = () => $("scheduleModal").classList.add("hidden"));
+$("scheduleModal") && $("scheduleModal").addEventListener("click", (e) => { if (e.target === $("scheduleModal")) $("scheduleModal").classList.add("hidden"); });
+$("schAdd") && ($("schAdd").onclick = async () => {
+  const text = $("schText").value.trim(); const when = $("schWhen").value;
+  if (!text || !when) return;
+  const due = new Date(when).getTime();
+  if (!due || due < Date.now()) { $("schError").textContent = t("schedule_past"); return; }
+  const { ok, data } = await api("/api/schedule", { room: myRoom, text, due });
+  if (!ok) { $("schError").textContent = data.error === "channel_readonly" ? t("channel_readonly") : t("err_generic"); return; }
+  $("schText").value = ""; notify(t("scheduled_added"));
+  refreshScheduleList();
+});
+
 // ---------- Открытие чата ----------
 function openChat(c) {
   c = upsertChat(c);
+  // How many messages were unread when we walked in — the "unread from here" divider is placed
+  // that many messages up once history lands. Read before c.unread is cleared below.
+  pendingUnread = Number(c.unread) || 0;
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0; c.mentioned = false;
+  // Nothing from the previous chat may survive the switch.
+  clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null;
+  const csb = $("chatSearch"); if (csb) csb.classList.add("hidden");
   dismissNotif(c.key);
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
@@ -1357,6 +1514,7 @@ function openChat(c) {
   $("chatAva").title = t(c.type === "group" ? "group_settings" : "open_profile");
   updateBotCmds(c);
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
+  restoreDraft();
   syncBlockComposer();
   $("app").classList.add("in-chat");
   // боковая панель участников для групп (на десктопе)
@@ -1410,7 +1568,7 @@ function exitChatToList() {
 }
 window.exitChatToList = exitChatToList; // router.js (popstate) calls it across files
 $("backBtnMobile").onclick = $("esBackBtn").onclick = exitChatToList;
-$("muteBtn").onclick = () => { if (!myRoom) return; toggleMute(myRoom); $("muteBtn").innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell; };
+$("muteBtn").onclick = () => { if (!myRoom) return; openMuteMenu($("muteBtn"), myRoom); };
 $("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
 
@@ -1426,6 +1584,10 @@ $("chatMenuBtn").onclick = (e) => {
   const c = chats.get(myRoom);
   const isChannel = curKind === "group" && curChannel;
   if (c) item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "pinOff" : "pin", () => togglePin(c));
+  item(t("search_in_chat"), "search", () => toggleChatSearch());
+  item(t("jump_to_date"), "calendar", () => { $("jumpModal").classList.remove("hidden"); setTimeout(() => $("jumpDate").focus(), 30); });
+  // Queue a post for later — the same posting rule as live messages (channel → owner only).
+  if (curKind === "group" && (!curChannel || groupOwner)) item(t("schedule_post"), "clock", () => openSchedule());
   if (curKind === "group") {
     // Wallpaper — эстетический пункт, не чат-контроль. Пункты ниже — control.
     item(t("chat_wallpaper"), "image", () => openChatBgModal());
@@ -2501,9 +2663,40 @@ socket.on("history", (list) => {
   chatEmptyNote(true); // "Chat is empty…" when there's genuinely no history
   const last = list[list.length - 1]; const c = chats.get(myRoom);
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
+  placeUnreadDivider(list.length);
   stickBottomDuringMedia();
   updateJumpBtn();
   setTimeout(markDeliveredSeenUpToLast, 50);
+});
+// "Unread from here": drop a marker above the messages that arrived while you were away. Uses
+// the unread count captured when the chat was opened — the same number the badge showed.
+let pendingUnread = 0;
+function placeUnreadDivider(loaded) {
+  const n = pendingUnread; pendingUnread = 0;
+  if (!n || n > loaded) return;                       // none, or they're older than this chunk
+  const rows = messagesEl.querySelectorAll(".msg");
+  const target = rows[rows.length - n]; if (!target) return;
+  const div = document.createElement("div");
+  div.className = "unread-sep"; div.textContent = t("unread_from_here");
+  messagesEl.insertBefore(div, target);
+  target.scrollIntoView({ block: "center" });
+}
+// A jump landed: replace the list with the returned window and flash the anchor. Paging older
+// still works from here — _moreOldest points at the top of the new window.
+socket.on("jump-result", ({ msgs, anchorId }) => {
+  if (!msgs || !msgs.length) return;
+  messagesEl.innerHTML = "";
+  _moreLoading = false;
+  _moreHas = true;
+  _moreOldest = msgs[0].id;
+  _newestId = msgs[msgs.length - 1].id;
+  const sep = document.createElement("div"); sep.className = "system-msg hist-sep"; sep.textContent = t("prev_messages");
+  messagesEl.appendChild(sep);
+  msgs.forEach((m) => renderMessage(m, false, false, true));
+  refreshOutgoingStatuses();
+  const el = messagesEl.querySelector(`.msg[data-id="${anchorId || pendingJumpId}"]`);
+  if (el) { el.scrollIntoView({ block: "center" }); flashMessage(el); }
+  pendingJumpId = null;
 });
 // Older chunk prepended on scroll-up — instant, scroll position preserved.
 socket.on("more-messages", ({ msgs, before }) => {
@@ -2732,6 +2925,14 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     else if (m.type === "leave") inner += `<div class="sys-line leave">← ${name} ${t("left_chat")}</div>`;
   } else {
     if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
+    // Forward attribution + the quoted line of a reply. The quote is clickable: it scrolls to
+    // the parent, fetching a window around it when it's outside what's loaded.
+    if (m.fwdFrom) inner += `<div class="fwd-tag">${window.ICON.forward || "↪"} ${t("forwarded_from", { name: escapeHtml(m.fwdName || m.fwdFrom) })}</div>`;
+    if (m.replyTo) {
+      const rn = escapeHtml(m.replyName || "");
+      const rt = m.replyText ? escapeHtml(m.replyText) : (m.replyType && m.replyType !== "text" ? t("pv_" + (m.replyType === "image" || m.replyType === "gif" ? "photo" : m.replyType === "video" ? "video" : m.replyType === "audio" ? "voice" : "file")) : t("reply_gone"));
+      inner += `<button type="button" class="quote" data-jump="${m.replyTo}"><span class="q-name">${rn}</span><span class="q-text">${rt}</span></button>`;
+    }
     if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
     else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "video") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
@@ -2751,7 +2952,8 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     inner += `<div class="time">${fmtTime(m.ts)}<span class="edited-tag">${m.edited ? " · " + t("edited") : ""}</span>${statusSpan}</div>`;
     inner += `<div class="reactions"></div>`;
     if (m.id != null && !isB) {
-      inner += `<div class="msg-actions"><button class="ma-btn ma-react" title="${t("react")}">${window.ICON.smile}</button>` +
+      inner += `<div class="msg-actions"><button class="ma-btn ma-reply" title="${t("reply")}">${window.ICON.reply}</button>` +
+        `<button class="ma-btn ma-react" title="${t("react")}">${window.ICON.smile}</button>` +
         (mine && m.type === "text" ? `<button class="ma-btn ma-edit" title="${t("edit")}">${window.ICON.edit}</button>` : "") +
         (mine ? `<button class="ma-btn ma-del" title="${t("delete_msg")}">${window.ICON.trash}</button>` : "") + `</div>`;
     }
@@ -2778,6 +2980,221 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   if (!mine && m.id && !sysType) setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0);
   if (scroll) scrollDown();
 }
+// ================== Reply · forward · pin · select · search · drafts ==================
+// All of this hangs off the open room (myRoom) and is cleared by openChat, so nothing leaks
+// from one chat into the next.
+let replyTarget = null;      // { id, name, text } while composing a reply
+let pinnedId = null;         // id of this room's pinned message (server is the source of truth)
+let selectMode = false;
+const selectedIds = new Set();
+
+// ---- Reply ----
+function msgSnippet(wrap) {
+  const b = wrap.querySelector(".bubble");
+  if (b && b.textContent.trim()) return b.textContent.trim().slice(0, 140);
+  const f = wrap.querySelector(".file-name");
+  if (f) return "📎 " + f.textContent.trim();
+  if (wrap.querySelector("img")) return "🖼 " + t("pv_photo");
+  if (wrap.querySelector("video")) return "🎬 " + t("pv_video");
+  if (wrap.querySelector("audio")) return "🎤 " + t("pv_voice");
+  return "";
+}
+function startReply(wrap) {
+  const id = Number(wrap.dataset.id); if (!id) return;
+  replyTarget = { id, name: wrap.dataset.fromname || wrap.dataset.from || "", text: msgSnippet(wrap) };
+  const bar = $("replyBar"); if (!bar) return;
+  $("replyName").textContent = replyTarget.name;
+  $("replyText").textContent = replyTarget.text;
+  bar.classList.remove("hidden");
+  const inp = $("msgInput"); if (inp) inp.focus();
+}
+function clearReply() { replyTarget = null; const bar = $("replyBar"); if (bar) bar.classList.add("hidden"); }
+$("replyCancel") && ($("replyCancel").onclick = clearReply);
+
+// ---- Jump to a message (quote click, search hit, date pick) ----
+// In the DOM → scroll + flash it. Otherwise ask the server for a window around it; the
+// "jump-result" handler rebuilds the list, after which older chunks still page in normally.
+function jumpToMessage(id) {
+  if (!id) return;
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`);
+  if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); flashMessage(el); return; }
+  pendingJumpId = id;
+  socket.emit("jump-to", { id });
+}
+let pendingJumpId = null;
+function flashMessage(el) { el.classList.add("jump-flash"); setTimeout(() => el.classList.remove("jump-flash"), 1400); }
+
+// ---- Pinned message ----
+function canPinHere() {
+  if (curKind === "dm") return true;              // either side may pin in a DM
+  return curKind === "group" && groupOwner;       // groups/channels: owner only
+}
+async function pinMessageId(id) {
+  if (!myRoom) return;
+  await api("/api/pin", { room: myRoom, id });    // the server broadcasts "pinned" to the room
+}
+function renderPinned(p) {
+  pinnedId = p && p.id ? p.id : null;
+  const bar = $("pinnedBar"); if (!bar) return;
+  if (!p) { bar.classList.add("hidden"); return; }
+  $("pinnedText").textContent = preview(p) || "";
+  bar.classList.remove("hidden");
+  bar.onclick = (e) => { if (!e.target.closest("#pinnedUnpin")) jumpToMessage(p.id); };
+  const x = $("pinnedUnpin"); if (x) x.classList.toggle("hidden", !canPinHere());
+}
+$("pinnedUnpin") && ($("pinnedUnpin").onclick = (e) => { e.stopPropagation(); pinMessageId(null); });
+socket.on("pinned", ({ room, pinned }) => { if (room === myRoom) renderPinned(pinned); });
+
+// ---- Multi-select ----
+function enterSelectMode() {
+  if (selectMode) return;
+  selectMode = true; selectedIds.clear();
+  messagesEl.classList.add("selecting");
+  $("selectBar").classList.remove("hidden");
+  updateSelectCount();
+}
+function exitSelectMode() {
+  selectMode = false; selectedIds.clear();
+  messagesEl.classList.remove("selecting");
+  messagesEl.querySelectorAll(".msg.sel").forEach((el) => el.classList.remove("sel"));
+  $("selectBar").classList.add("hidden");
+}
+function toggleSelect(wrap) {
+  const id = Number(wrap.dataset.id); if (!id) return;
+  if (selectedIds.has(id)) { selectedIds.delete(id); wrap.classList.remove("sel"); }
+  else { selectedIds.add(id); wrap.classList.add("sel"); }
+  updateSelectCount();
+  if (!selectedIds.size) exitSelectMode();
+}
+function updateSelectCount() { const c = $("selectCount"); if (c) c.textContent = String(selectedIds.size); }
+function selectedTexts() {
+  const out = [];
+  for (const id of [...selectedIds].sort((a, b) => a - b)) {
+    const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) continue;
+    const who = el.dataset.fromname || el.dataset.from || "";
+    const txt = msgSnippet(el);
+    if (txt) out.push(who ? `${who}: ${txt}` : txt);
+  }
+  return out.join("\n");
+}
+$("selCancel") && ($("selCancel").onclick = exitSelectMode);
+$("selCopy") && ($("selCopy").onclick = () => { copyToClipboard(selectedTexts()); notify(t("copied")); exitSelectMode(); });
+$("selForward") && ($("selForward").onclick = () => { const ids = [...selectedIds]; exitSelectMode(); openForward(ids); });
+$("selDelete") && ($("selDelete").onclick = () => {
+  if (!confirm(t("confirm_delete"))) return;
+  for (const id of selectedIds) socket.emit("msg-delete", { id });
+  exitSelectMode();
+});
+
+// ---- Forward ----
+let fwdIds = [];
+function openForward(ids) {
+  fwdIds = (ids || []).filter(Boolean);
+  if (!fwdIds.length) return;
+  $("fwdSearch").value = "";
+  renderFwdList("");
+  $("forwardModal").classList.remove("hidden");
+}
+function renderFwdList(filter) {
+  const box = $("fwdList"); if (!box) return;
+  box.innerHTML = "";
+  const q = (filter || "").toLowerCase();
+  for (const c of [...chats.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0))) {
+    if (q && !(c.name || "").toLowerCase().includes(q)) continue;
+    const row = document.createElement("button");
+    row.type = "button"; row.className = "fwd-row";
+    row.innerHTML = `<div class="avatar" style="width:32px;height:32px;font-size:13px">${initials(c.name)}</div><span>${escapeHtml(c.name)}</span>`;
+    row.onclick = () => doForward(c.key);
+    box.appendChild(row);
+  }
+}
+$("fwdSearch") && ($("fwdSearch").oninput = (e) => renderFwdList(e.target.value));
+$("fwdClose") && ($("fwdClose").onclick = () => $("forwardModal").classList.add("hidden"));
+$("forwardModal") && $("forwardModal").addEventListener("click", (e) => { if (e.target === $("forwardModal")) $("forwardModal").classList.add("hidden"); });
+// Forwarding re-sends the content into the target room with attribution. Media rides along by
+// URL (offloaded attachments) so nothing is re-uploaded.
+function doForward(targetKey) {
+  const msgs = [];
+  for (const id of fwdIds.sort((a, b) => a - b)) {
+    const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (!el) continue;
+    const media = el.querySelector("img, video, audio, a.bubble.file");
+    msgs.push({
+      text: (el.querySelector(".bubble") && !media ? el.querySelector(".bubble").textContent.trim() : msgSnippet(el)),
+      fwdFrom: el.dataset.from || "", fwdName: el.dataset.fromname || el.dataset.from || "",
+      media: media ? (media.getAttribute("src") || media.getAttribute("href")) : null,
+      type: media ? (media.tagName === "IMG" ? "image" : media.tagName === "VIDEO" ? "video" : media.tagName === "AUDIO" ? "audio" : "file") : "text",
+      mediaName: media ? (media.getAttribute("download") || "") : "",
+    });
+  }
+  $("forwardModal").classList.add("hidden");
+  if (!msgs.length) return;
+  const send = () => { for (const m of msgs) socket.emit("message", m); notify(t("forwarded")); };
+  if (targetKey === myRoom) { send(); return; }
+  // Switching rooms is async (join → history); send once we're actually in the target.
+  const c = chats.get(targetKey);
+  if (!c) return;
+  openChat(c);
+  setTimeout(send, 350);
+}
+
+// ---- In-chat search ----
+let csTimer = null;
+function toggleChatSearch() {
+  const box = $("chatSearch"); if (!box) return;
+  const opening = box.classList.contains("hidden");
+  box.classList.toggle("hidden", !opening);
+  if (opening) { $("chatSearchInput").value = ""; $("chatSearchResults").innerHTML = ""; $("chatSearchInput").focus(); }
+}
+$("chatSearchBtn") && ($("chatSearchBtn").onclick = toggleChatSearch);
+$("chatSearchClose") && ($("chatSearchClose").onclick = () => $("chatSearch").classList.add("hidden"));
+$("chatSearchInput") && ($("chatSearchInput").oninput = (e) => {
+  clearTimeout(csTimer);
+  const q = e.target.value.trim();
+  if (q.length < 2) { $("chatSearchResults").innerHTML = ""; return; }
+  csTimer = setTimeout(async () => {
+    const { ok, data } = await api("/api/search?room=" + encodeURIComponent(myRoom) + "&q=" + encodeURIComponent(q), null, "GET");
+    const box = $("chatSearchResults"); box.innerHTML = "";
+    if (!ok || !data.results || !data.results.length) { box.innerHTML = `<div class="cs-empty">${t("no_results")}</div>`; return; }
+    for (const r of data.results) {
+      const row = document.createElement("button");
+      row.type = "button"; row.className = "cs-row";
+      row.innerHTML = `<span class="cs-who">${escapeHtml(r.name || "")}</span><span class="cs-txt">${escapeHtml(r.text || "")}</span><span class="cs-date">${fmtTime(r.ts)}</span>`;
+      row.onclick = () => { $("chatSearch").classList.add("hidden"); jumpToMessage(r.id); };
+      box.appendChild(row);
+    }
+  }, 220);
+});
+
+// ---- Jump to date ----
+$("jumpClose") && ($("jumpClose").onclick = () => $("jumpModal").classList.add("hidden"));
+$("jumpCancel") && ($("jumpCancel").onclick = () => $("jumpModal").classList.add("hidden"));
+$("jumpGo") && ($("jumpGo").onclick = async () => {
+  const v = $("jumpDate").value; if (!v || !myRoom) return;
+  $("jumpModal").classList.add("hidden");
+  // Local midnight of the picked day — the server compares against message ts directly.
+  const ts = new Date(v + "T00:00:00").getTime();
+  const { ok, data } = await api("/api/jump?room=" + encodeURIComponent(myRoom) + "&ts=" + ts, null, "GET");
+  if (ok && data.id) jumpToMessage(data.id);
+  else notify(t("no_results"));
+});
+
+// ---- Drafts (local only — an unsent line shouldn't need a round trip) ----
+const DRAFTS_KEY = "dialog_drafts";
+function loadDrafts() { try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || "{}"); } catch { return {}; } }
+function saveDraft(text) {
+  if (!myRoom) return;
+  const all = loadDrafts();
+  if (text && text.trim()) all[myRoom] = text; else delete all[myRoom];
+  try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(all)); } catch {}
+}
+function restoreDraft() {
+  const inp = $("msgInput"); if (!inp || !myRoom) return;
+  const d = loadDrafts()[myRoom] || "";
+  inp.value = d;
+  if (d) { inp.style.height = "auto"; inp.style.height = Math.min(inp.scrollHeight, 160) + "px"; }
+  updateSendMode();
+}
+
 function renderReactions(wrap, reactions) {
   const bar = wrap.querySelector(".reactions"); if (!bar) return; bar.innerHTML = "";
   for (const [emoji, logins] of Object.entries(reactions || {})) {
@@ -2817,6 +3234,12 @@ function startEdit(wrap) {
   ta.onblur = () => finish(true);
 }
 messagesEl.addEventListener("click", (e) => {
+  if (selectMode) {
+    const w = e.target.closest(".msg");
+    if (w && w.dataset.id) { e.preventDefault(); e.stopPropagation(); toggleSelect(w); return; }
+  }
+  const qb = e.target.closest(".quote"); if (qb) { e.stopPropagation(); jumpToMessage(Number(qb.dataset.jump)); return; }
+  const yb = e.target.closest(".ma-reply"); if (yb) { e.stopPropagation(); startReply(yb.closest(".msg")); return; }
   const rb = e.target.closest(".ma-react"); if (rb) { e.stopPropagation(); openReactPicker(rb, Number(rb.closest(".msg").dataset.id)); return; }
   const eb = e.target.closest(".ma-edit"); if (eb) { startEdit(eb.closest(".msg")); return; }
   const db = e.target.closest(".ma-del"); if (db) { const w = db.closest(".msg"); if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id: Number(w.dataset.id) }); return; }
@@ -2866,6 +3289,10 @@ function openMsgMenu(e, wrap) {
     msgMenu.appendChild(b);
   };
   item(t("react"), "smile", () => { const rb = wrap.querySelector(".ma-react"); if (rb) openReactPicker(rb, id); else { const fake = document.createElement("div"); fake.style.position = "fixed"; fake.style.left = e.clientX + "px"; fake.style.top = e.clientY + "px"; document.body.appendChild(fake); openReactPicker(fake, id); document.body.removeChild(fake); } });
+  item(t("reply"), "reply", () => startReply(wrap));
+  item(t("forward"), "forward", () => openForward([id]));
+  if (canPinHere()) item(pinnedId === id ? t("unpin_message") : t("pin_message"), "pin", () => pinMessageId(pinnedId === id ? null : id));
+  item(t("select"), "check", () => { enterSelectMode(); toggleSelect(wrap); });
   if (bubble && bubble.textContent) item(t("copy_message"), "copy", () => copyToClipboard(bubble.textContent.trim()));
   if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(sel.toString()); } });
   if (mine) { item(t("edit"), "edit", () => startEdit(wrap)); item(t("delete_msg"), "trash", () => { if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id }); }, true); }
@@ -3006,15 +3433,19 @@ function sendText() {
   const blocked = spamBlock(text, false);
   if (blocked) { spamNotify(blocked); return; } // не рендерим и не шлём — текст остаётся в поле
   const localId = ++localIdCounter;
+  const rt = replyTarget;
   // Оптимистичный локальный рендер — мгновенная обратная связь, не ждём round-trip.
   const m = {
     localId, id: null, fromLogin: profile.login, name: myName, ts: Date.now(),
     type: "text", text, media: null, mediaName: "",
     room: myRoom, _optimistic: true,
+    replyTo: rt ? rt.id : null, replyName: rt ? rt.name : null, replyText: rt ? rt.text : null,
   };
   renderMessage(m, true, false);
-  socket.emit("message", { type: "text", text, localId });
+  socket.emit("message", { type: "text", text, localId, replyTo: rt ? rt.id : null });
+  clearReply();
   input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode(); closeMention();
+  saveDraft("");
 }
 // sendBtn click is wired in wireComposerSend() below (text send + voice record).
 // ---------- @mention autocomplete (Discord-style) ----------
@@ -3082,7 +3513,7 @@ function mentionKeydown(e) {
 $("msgInput").addEventListener("keydown", (e) => { if (mentionKeydown(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } });
 $("msgInput").addEventListener("blur", () => setTimeout(closeMention, 150));   // delay so a click on an item still lands
 let typingTimer;
-$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; updateSendMode(); updateMentionMenu(); socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
+$("msgInput").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; updateSendMode(); updateMentionMenu(); saveDraft(e.target.value); socket.emit("typing", true); clearTimeout(typingTimer); typingTimer = setTimeout(() => socket.emit("typing", false), 1500); });
 // ---------- Input right-click menu ----------
 let inputMenu;
 $("msgInput").addEventListener("contextmenu", (e) => {
@@ -5678,7 +6109,7 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", discoverBtn: "compass", chatSearchBtn: "search", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   // Settings-tab icons (mobile list + desktop tabs): fill each .stab-ico from its data-ico.
   document.querySelectorAll(".stab-ico[data-ico]").forEach((el) => { const ic = window.ICON[el.dataset.ico]; if (ic) el.innerHTML = ic; });
   const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
