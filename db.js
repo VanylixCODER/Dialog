@@ -102,6 +102,11 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_commands TEXT NULL"); } catch {}       // JSON [{command,description}]
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_miniapp VARCHAR(300) NULL"); } catch {} // Telegram-style Mini App (webview) URL
   try { await pool.query("ALTER TABLE users ADD COLUMN bot_privacy TINYINT NOT NULL DEFAULT 1"); } catch {} // 1 = only commands/@mentions in groups
+  try { await pool.query("ALTER TABLE users ADD COLUMN bot_public TINYINT NOT NULL DEFAULT 0"); } catch {} // listed in the public directory
+  // TOTP two-factor. `totp_secret` is set the moment setup starts; `totp_enabled` only after a
+  // code verifies, so an abandoned setup never locks anyone out.
+  try { await pool.query("ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE users ADD COLUMN totp_enabled TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("CREATE INDEX idx_users_bot_token ON users (bot_token_hash)"); } catch {}
   // Pending updates for bots that long-poll getUpdates (id doubles as Telegram update_id).
   await pool.query(`CREATE TABLE IF NOT EXISTS bot_updates (
@@ -133,11 +138,23 @@ export async function initSchema() {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
   // Inline keyboard (Telegram-style buttons) attached to a bot/webhook message — JSON rows.
   try { await pool.query("ALTER TABLE messages ADD COLUMN buttons TEXT NULL"); } catch {}
+  // Reply (quote), forward attribution and in-chat pinning.
+  try { await pool.query("ALTER TABLE messages ADD COLUMN reply_to BIGINT NULL"); } catch {}
+  try { await pool.query("ALTER TABLE messages ADD COLUMN fwd_from VARCHAR(24) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE messages ADD COLUMN fwd_name VARCHAR(64) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE messages ADD COLUMN pinned TINYINT NOT NULL DEFAULT 0"); } catch {}
+  // Byte size of an offloaded attachment (the row no longer carries the bytes to measure).
+  try { await pool.query("ALTER TABLE messages ADD COLUMN media_size BIGINT NULL"); } catch {}
+  try { await pool.query("CREATE INDEX idx_messages_pinned ON messages (room, pinned)"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
     token VARCHAR(64) PRIMARY KEY, login VARCHAR(24) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_sessions_login (login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // Device metadata so "where am I signed in" can show something meaningful before you revoke it.
+  try { await pool.query("ALTER TABLE sessions ADD COLUMN ua VARCHAR(255) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE sessions ADD COLUMN ip VARCHAR(45) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE sessions ADD COLUMN last_seen BIGINT NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS chat_groups (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL,
@@ -147,6 +164,10 @@ export async function initSchema() {
   // Channel (broadcast) groups: only the owner + bots + the incoming webhook may post; members read.
   try { await pool.query("ALTER TABLE chat_groups ADD COLUMN channel TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE chat_groups ADD COLUMN hook_secret CHAR(32) NULL"); } catch {}
+  // Public directory listing (opt-in, owner-controlled). `is_public` — PUBLIC is reserved in
+  // enough SQL dialects that naming a column it is asking for trouble later.
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN is_public TINYINT NOT NULL DEFAULT 0"); } catch {}
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN about VARCHAR(190) NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS group_members (
     group_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL,
@@ -240,6 +261,15 @@ export async function initSchema() {
     updated_at BIGINT NOT NULL,
     KEY idx_themes_owner (owner),
     KEY idx_themes_pub (published, installs)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Scheduled channel posts — the sweeper in server.js publishes rows whose `due` has passed.
+  await pool.query(`CREATE TABLE IF NOT EXISTS scheduled_posts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    room VARCHAR(64) NOT NULL, from_login VARCHAR(24) NOT NULL, name VARCHAR(64) NOT NULL,
+    text TEXT NOT NULL, due BIGINT NOT NULL, sent TINYINT NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL,
+    KEY idx_sched_due (sent, due), KEY idx_sched_room (room, sent)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
   // ── News pages: each user's personal feed of posts, each with a comment thread. ──
@@ -435,7 +465,26 @@ export async function getStatus(login) {
 }
 
 // ---------- Сессии ----------
-export async function saveSession(token, login) { await execute("INSERT INTO sessions (token, login) VALUES (?,?)", [token, login]); }
+export async function saveSession(token, login, ua = null, ip = null) {
+  await execute("INSERT INTO sessions (token, login, ua, ip, last_seen) VALUES (?,?,?,?,?)",
+    [token, login, (ua || "").slice(0, 255) || null, (ip || "").slice(0, 45) || null, Date.now()]);
+}
+// Signed-in devices, newest first. The caller marks which row is the current token.
+export async function listSessions(login) {
+  return await query(
+    "SELECT token, ua, ip, last_seen AS lastSeen, UNIX_TIMESTAMP(created_at)*1000 AS createdAt FROM sessions WHERE login=? ORDER BY created_at DESC",
+    [login]
+  );
+}
+export async function deleteSessionOf(login, token) {
+  const r = await execute("DELETE FROM sessions WHERE login=? AND token=?", [login, token]);
+  return r.affectedRows > 0;
+}
+export async function deleteOtherSessions(login, keepToken) {
+  const r = await execute("DELETE FROM sessions WHERE login=? AND token<>?", [login, keepToken]);
+  return r.affectedRows;
+}
+export async function touchSession(token) { await execute("UPDATE sessions SET last_seen=? WHERE token=?", [Date.now(), token]); }
 export async function sessionLogin(token) { const r = await query("SELECT login FROM sessions WHERE token=?", [token]); return r[0] ? r[0].login : null; }
 export async function deleteSession(token) { await execute("DELETE FROM sessions WHERE token=?", [token]); }
 export async function tokensForLogin(login) { const r = await query("SELECT token FROM sessions WHERE login=?", [login]); return r.map((x) => x.token); }
@@ -443,16 +492,30 @@ export async function tokensForLogin(login) { const r = await query("SELECT toke
 // ---------- Сообщения ----------
 export async function saveMessage(m) {
   const res = await execute(
-    `INSERT INTO messages (room, from_login, name, ts, type, text, media, media_name, buttons) VALUES (?,?,?,?,?,?,?,?,?)`,
-    [m.room, m.fromLogin, m.name, m.ts, m.type, m.text, m.media, m.mediaName, m.buttons ? JSON.stringify(m.buttons) : null]
+    `INSERT INTO messages (room, from_login, name, ts, type, text, media, media_name, media_size, buttons, reply_to, fwd_from, fwd_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [m.room, m.fromLogin, m.name, m.ts, m.type, m.text, m.media, m.mediaName, m.mediaSize || null,
+     m.buttons ? JSON.stringify(m.buttons) : null, m.replyTo || null, m.fwdFrom || null, m.fwdName || null]
   );
   await cacheDel("hist:" + m.room);
   return res.insertId;
 }
+// One column list for every message read. The self-join resolves a reply's quoted snippet at
+// read time, so the client never has to fetch a parent that scrolled out of its loaded window.
+const MSG_COLS = `m.id, m.from_login AS fromLogin, m.name, m.ts, m.type, m.text, m.media,
+  m.media_name AS mediaName, m.media_size AS mediaSize, m.reactions, m.edited, m.buttons, m.pinned,
+  m.fwd_from AS fwdFrom, m.fwd_name AS fwdName,
+  m.reply_to AS replyTo, r.name AS replyName, r.type AS replyType, LEFT(COALESCE(r.text, ''), 140) AS replyText`;
+const MSG_FROM = `FROM messages m LEFT JOIN messages r ON r.id = m.reply_to`;
 function hydrateRow(r) {
   try { r.reactions = r.reactions ? JSON.parse(r.reactions) : {}; } catch { r.reactions = {}; }
   try { r.buttons = r.buttons ? JSON.parse(r.buttons) : null; } catch { r.buttons = null; }
   r.edited = !!r.edited;
+  r.pinned = !!r.pinned;
+  // A reply whose parent was deleted keeps replyTo (so "quoted message gone" can render) but
+  // has no snippet to show.
+  if (!r.replyTo) { delete r.replyTo; delete r.replyName; delete r.replyType; delete r.replyText; }
+  if (!r.fwdFrom) { delete r.fwdFrom; delete r.fwdName; }
   return r;
 }
 export async function recentMessages(room, limit = 100) {
@@ -460,8 +523,7 @@ export async function recentMessages(room, limit = 100) {
   if (cached) { try { return JSON.parse(cached); } catch {} }
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100));
   const rows = await query(
-    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited, buttons
-     FROM messages WHERE room=? ORDER BY id DESC LIMIT ${lim}`, [room]
+    `SELECT ${MSG_COLS} ${MSG_FROM} WHERE m.room=? ORDER BY m.id DESC LIMIT ${lim}`, [room]
   );
   rows.reverse();
   rows.forEach(hydrateRow);
@@ -472,12 +534,49 @@ export async function recentMessages(room, limit = 100) {
 export async function messagesBefore(room, beforeId, limit = 50) {
   const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 50));
   const rows = await query(
-    `SELECT id, from_login AS fromLogin, name, ts, type, text, media, media_name AS mediaName, reactions, edited, buttons
-     FROM messages WHERE room=? AND id<? ORDER BY id DESC LIMIT ${lim}`, [room, beforeId]
+    `SELECT ${MSG_COLS} ${MSG_FROM} WHERE m.room=? AND m.id<? ORDER BY m.id DESC LIMIT ${lim}`, [room, beforeId]
   );
   rows.reverse();
   rows.forEach(hydrateRow);
   return rows;
+}
+// Messages at/after an id, oldest-first — the "jump to date / jump to message" landing window.
+export async function messagesFrom(room, fromId, limit = 50) {
+  const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 50));
+  const rows = await query(
+    `SELECT ${MSG_COLS} ${MSG_FROM} WHERE m.room=? AND m.id>=? ORDER BY m.id ASC LIMIT ${lim}`, [room, fromId]
+  );
+  rows.forEach(hydrateRow);
+  return rows;
+}
+// First message id at/after a timestamp — what "jump to date" resolves a picked day into.
+export async function firstMessageIdAtOrAfter(room, ts) {
+  const r = await query("SELECT id FROM messages WHERE room=? AND ts>=? ORDER BY id ASC LIMIT 1", [room, ts]);
+  return r.length ? r[0].id : null;
+}
+// In-chat text search. LIKE, not FULLTEXT: min-token-size and word-boundary rules make FULLTEXT
+// unreliable for Russian, and a room-scoped LIKE over one chat's rows is fine at this size.
+export async function searchMessages(room, q, limit = 40) {
+  const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 40));
+  const like = "%" + String(q).replace(/[%_\\]/g, (c) => "\\" + c) + "%";
+  const rows = await query(
+    `SELECT id, from_login AS fromLogin, name, ts, type, LEFT(COALESCE(text, ''), 200) AS text
+     FROM messages WHERE room=? AND text LIKE ? ESCAPE '\\\\' ORDER BY id DESC LIMIT ${lim}`, [room, like]
+  );
+  return rows;
+}
+// ---------- Pinned message (one per room — pinning a new one replaces it) ----------
+export async function pinMessage(room, id) {
+  await execute("UPDATE messages SET pinned=0 WHERE room=? AND pinned=1", [room]);
+  if (id) await execute("UPDATE messages SET pinned=1 WHERE id=? AND room=?", [id, room]);
+  await cacheDel("hist:" + room);
+}
+export async function getPinned(room) {
+  const r = await query(
+    `SELECT id, from_login AS fromLogin, name, ts, type, LEFT(COALESCE(text, ''), 200) AS text, media_name AS mediaName
+     FROM messages WHERE room=? AND pinned=1 LIMIT 1`, [room]
+  );
+  return r[0] || null;
 }
 export async function deleteMessage(id, login) {
   const r = await query("SELECT room FROM messages WHERE id=? AND from_login=?", [id, login]);
@@ -512,6 +611,11 @@ export async function getMessageMeta(id) {
   const m = r[0];
   try { m.buttons = m.buttons ? JSON.parse(m.buttons) : null; } catch { m.buttons = null; }
   return m;
+}
+// The quoted line a live reply carries with it (history rows get this from the self-join).
+export async function replySnippet(id) {
+  const r = await query("SELECT id, room, name, type, LEFT(COALESCE(text, ''), 140) AS text FROM messages WHERE id=?", [id]);
+  return r[0] || null;
 }
 export async function toggleReaction(id, login, emoji, room) {
   const r = await query("SELECT room, reactions FROM messages WHERE id=?", [id]);
@@ -993,4 +1097,81 @@ export async function bumpWatermarks(room, logins, { delivered, seen } = {}) {
        seen_max      = GREATEST(seen_max,      VALUES(seen_max))`,
     params
   );
+}
+
+// ---------- TOTP two-factor ----------
+export async function setTotpSecret(login, secret) { await execute("UPDATE users SET totp_secret=?, totp_enabled=0 WHERE login=?", [secret, login]); }
+export async function enableTotp(login) { await execute("UPDATE users SET totp_enabled=1 WHERE login=?", [login]); }
+export async function disableTotp(login) { await execute("UPDATE users SET totp_secret=NULL, totp_enabled=0 WHERE login=?", [login]); }
+export async function getTotp(login) {
+  const r = await query("SELECT totp_secret AS secret, totp_enabled AS enabled FROM users WHERE login=?", [login]);
+  return r[0] ? { secret: r[0].secret, enabled: !!r[0].enabled } : null;
+}
+
+// ---------- Public directory (opt-in channels + bots) ----------
+export async function setGroupPublic(id, isPublic, about) {
+  await execute("UPDATE chat_groups SET is_public=?, about=? WHERE id=?", [isPublic ? 1 : 0, (about || "").slice(0, 190) || null, id]);
+}
+export async function setBotPublic(login, owner, isPublic) {
+  const r = await execute("UPDATE users SET bot_public=? WHERE login=? AND bot_owner=? AND is_bot=1", [isPublic ? 1 : 0, login, owner]);
+  return r.affectedRows > 0;
+}
+export async function listPublicGroups(limit = 60) {
+  const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 60));
+  return await query(
+    `SELECT g.id, g.name, g.owner, g.about, g.channel,
+            (SELECT COUNT(*) FROM group_members m WHERE m.group_id=g.id) AS members
+     FROM chat_groups g WHERE g.is_public=1 ORDER BY members DESC, g.id DESC LIMIT ${lim}`
+  );
+}
+export async function listPublicBots(limit = 60) {
+  const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 60));
+  return await query(
+    `SELECT login, name, description, bot_miniapp AS miniapp FROM users
+     WHERE is_bot=1 AND bot_public=1 AND banned=0 ORDER BY login ASC LIMIT ${lim}`
+  );
+}
+
+// ---------- Scheduled posts ----------
+export async function createScheduled(room, fromLogin, name, text, due) {
+  const r = await execute(
+    "INSERT INTO scheduled_posts (room, from_login, name, text, due, created_at) VALUES (?,?,?,?,?,?)",
+    [room, fromLogin, name, String(text).slice(0, 4000), due, Date.now()]
+  );
+  return r.insertId;
+}
+export async function listScheduled(room) {
+  return await query("SELECT id, from_login AS fromLogin, text, due FROM scheduled_posts WHERE room=? AND sent=0 ORDER BY due ASC", [room]);
+}
+export async function dueScheduled(now, limit = 20) {
+  const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  return await query(
+    `SELECT id, room, from_login AS fromLogin, name, text FROM scheduled_posts
+     WHERE sent=0 AND due<=? ORDER BY due ASC LIMIT ${lim}`, [now]
+  );
+}
+export async function markScheduledSent(id) { await execute("UPDATE scheduled_posts SET sent=1 WHERE id=?", [id]); }
+export async function deleteScheduled(id, login) {
+  const r = await execute("DELETE FROM scheduled_posts WHERE id=? AND from_login=? AND sent=0", [id, login]);
+  return r.affectedRows > 0;
+}
+
+// ---------- Data export ----------
+// Everything the account owns, in one pass. Media is intentionally exported as the stored
+// value (a /uploads URL for anything recent) instead of re-inlining megabytes of base64.
+export async function exportAccount(login) {
+  const [user] = await query(
+    "SELECT login, name, email, description, activity, status, created_at FROM users WHERE login=?", [login]
+  );
+  const groups = await query(
+    `SELECT g.id, g.name, g.owner, g.channel FROM chat_groups g
+     JOIN group_members m ON m.group_id=g.id WHERE m.login=?`, [login]
+  );
+  const contacts = await query("SELECT a, b, state FROM relations WHERE a=? OR b=?", [login, login]);
+  const messages = await query(
+    `SELECT id, room, from_login AS fromLogin, name, ts, type, text, media_name AS mediaName,
+            CASE WHEN media LIKE 'data:%' THEN '[inline media omitted]' ELSE media END AS media
+     FROM messages WHERE from_login=? ORDER BY id ASC LIMIT 20000`, [login]
+  );
+  return { exportedAt: Date.now(), user, groups, contacts, messages };
 }

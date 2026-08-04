@@ -3128,6 +3128,9 @@ function formatFileSize(bytes) {
 
 function mediaBytesFromDataUrl(url) {
   if (!url || typeof url !== "string") return 0;
+  // Offloaded attachments are /uploads/<hash> URLs — their size rides along as m.mediaSize,
+  // and measuring the URL string would print a nonsense "0.1 KB".
+  if (!url.startsWith("data:")) return 0;
   const i = url.indexOf(",");
   const b64 = i >= 0 ? url.slice(i + 1) : url;
   return Math.floor(b64.length * 3 / 4);
