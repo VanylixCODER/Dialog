@@ -1,5 +1,5 @@
 // Аутентификация: scrypt-хеш паролей + токен-сессии в БД (с кэшем в Redis).
-import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { randomBytes, scrypt, timingSafeEqual, createHmac } from "crypto";
 import { promisify } from "util";
 import * as db from "./db.js";
 import { cacheGet, cacheSet, cacheDel } from "./cache.js";
@@ -50,7 +50,7 @@ export async function setPassword(login, password) {
 }
 
 // Log in by username OR email.
-export async function login(identifier, password) {
+export async function login(identifier, password, code, meta) {
   identifier = String(identifier || "").trim().toLowerCase();
   let u = null;
   if (EMAIL_RE.test(identifier)) {
@@ -65,12 +65,18 @@ export async function login(identifier, password) {
   if (u.banned) throw new Error("account_banned");
   const rbu = Number(u.report_ban_until) || 0;
   if (rbu && rbu > Date.now()) throw new Error("report_banned:" + rbu);
-  return issueToken(u.login);
+  // Second factor last: the password is already known-good, so "totp_required" can't be used
+  // to probe which accounts exist.
+  if (u.totp_enabled && u.totp_secret) {
+    if (!code) throw new Error("totp_required");
+    if (!totpVerify(u.totp_secret, code)) throw new Error("totp_invalid");
+  }
+  return issueToken(u.login, meta);
 }
 
-async function issueToken(loginName) {
+async function issueToken(loginName, meta) {
   const token = randomBytes(32).toString("hex");
-  await db.saveSession(token, loginName);
+  await db.saveSession(token, loginName, meta && meta.ua, meta && meta.ip);
   const u = await db.getUser(loginName);
   const profile = profileOf(u);
   await cacheSet("sess:" + token, JSON.stringify(profile), SESS_TTL);
@@ -115,4 +121,47 @@ function profileOf(u) {
            reportBanMs: unstable ? (u.report_ban_ms == null ? null : Number(u.report_ban_ms)) : null,
            reportBanUntil: Number(u.report_ban_until) || 0,
            banned: !!u.banned, admin: isAdmin(u.login) };
+}
+
+// ---------- TOTP (RFC 6238, SHA-1 / 6 digits / 30s — what every authenticator app assumes) ----------
+const B32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+export function newTotpSecret() {
+  const buf = randomBytes(20);            // 160 bits, the RFC 4226 recommendation
+  let bits = "", out = "";
+  for (const b of buf) bits += b.toString(2).padStart(8, "0");
+  for (let i = 0; i + 5 <= bits.length; i += 5) out += B32_ALPHABET[parseInt(bits.slice(i, i + 5), 2)];
+  return out;
+}
+function b32decode(s) {
+  const clean = String(s || "").toUpperCase().replace(/[^A-Z2-7]/g, "");
+  let bits = "";
+  for (const c of clean) bits += B32_ALPHABET.indexOf(c).toString(2).padStart(5, "0");
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(bytes);
+}
+function totpAt(secret, counter) {
+  const key = b32decode(secret);
+  const buf = Buffer.alloc(8);
+  buf.writeUInt32BE(Math.floor(counter / 2 ** 32), 0);
+  buf.writeUInt32BE(counter >>> 0, 4);
+  const h = createHmac("sha1", key).update(buf).digest();
+  const off = h[h.length - 1] & 0x0f;
+  const bin = ((h[off] & 0x7f) << 24) | (h[off + 1] << 16) | (h[off + 2] << 8) | h[off + 3];
+  return String(bin % 1e6).padStart(6, "0");
+}
+// ±1 step of drift, compared in constant time so a wrong code leaks nothing by timing.
+export function totpVerify(secret, code, window = 1) {
+  const c = String(code || "").replace(/\D/g, "");
+  if (c.length !== 6 || !secret) return false;
+  const step = Math.floor(Date.now() / 30000);
+  for (let i = -window; i <= window; i++) {
+    const expect = Buffer.from(totpAt(secret, step + i));
+    const given = Buffer.from(c);
+    if (expect.length === given.length && timingSafeEqual(expect, given)) return true;
+  }
+  return false;
+}
+export function totpUri(login, secret, issuer = "Dialog") {
+  return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(login)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }

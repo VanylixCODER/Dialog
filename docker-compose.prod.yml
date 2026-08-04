@@ -6,10 +6,13 @@ services:
     env_file: .env
     environment:
       - HOST_REPO_PATH=/repo
+      - UPLOAD_DIR=/data/uploads
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/ubuntu/.ssh:/root/.ssh:ro
       - /home/ubuntu/dialog:/repo
+      # Message attachments live here as files (hash-named), NOT as base64 in MySQL.
+      - dialog-uploads:/data/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -73,6 +76,7 @@ services:
       - dialog-redis-data:/data
 
 volumes:
+  dialog-uploads:
   dialog-mysql-data:
   dialog-redis-data:
   dialog-certs:

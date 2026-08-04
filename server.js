@@ -24,7 +24,7 @@ import { createServer as createHttps } from "https";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { statfs } from "fs/promises";
 import { exec } from "child_process";
 import { networkInterfaces, totalmem, freemem, loadavg, uptime as osUptime } from "os";
@@ -54,6 +54,12 @@ import {
   isIpBanned, banIp, unbanIp, listBannedIps,
   createReport, listReports, getReport, resolveReport, countPendingReports,
   setUserReportBan, clearUserReport, setEmailWithStamp,
+  messagesFrom, firstMessageIdAtOrAfter, searchMessages, pinMessage, getPinned, replySnippet,
+  listSessions, deleteSessionOf, deleteOtherSessions, touchSession,
+  setTotpSecret, enableTotp, disableTotp, getTotp,
+  setGroupPublic, setBotPublic, listPublicGroups, listPublicBots,
+  createScheduled, listScheduled, dueScheduled, markScheduledSent, deleteScheduled,
+  exportAccount,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -214,6 +220,75 @@ app.use((req, res, next) => {
 // page owns "/", the messenger SPA lives at /login and /{lang}/... routes.
 app.use(express.static(join(__dirname, "public"), { index: false }));
 
+// ---------- Uploaded media (files live on disk, NOT in MySQL) ----------
+// A 75 MB attachment used to be stored as ~100 MB of base64 in messages.media and re-read in
+// full on every history load. Now deliverMessage() writes the bytes once, keyed by content
+// hash, and the row keeps a /uploads/<hash>.<ext> URL. Old data: rows still render as-is.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || join(__dirname, ".uploads");
+try { mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (e) { console.error("[uploads] mkdir", e.message); }
+// Extension → what we're willing to hand back, and how. Anything not listed is served as an
+// opaque download: never let user bytes come back as text/html or image/svg+xml, both of which
+// execute script on our own origin.
+const UPLOAD_TYPES = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", bmp: "image/bmp",
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mkv: "video/x-matroska",
+  mp3: "audio/mpeg", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg",
+  wav: "audio/wav", m4a: "audio/mp4", weba: "audio/webm",
+};
+const MIME_EXT = {
+  "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
+  "image/avif": "avif", "image/bmp": "bmp",
+  "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/x-matroska": "mkv",
+  "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "audio/x-wav": "wav",
+  "audio/mp4": "m4a", "audio/webm": "weba", "audio/opus": "opus",
+};
+app.get("/uploads/:file", (req, res) => {
+  const name = String(req.params.file || "");
+  // Hash-derived names only — no traversal, no guessing at other people's paths.
+  const m = /^([a-f0-9]{64})\.([a-z0-9]{1,5})$/.exec(name);
+  if (!m) return res.status(404).end();
+  const p = join(UPLOAD_DIR, name);
+  if (!existsSync(p)) return res.status(404).end();
+  const type = UPLOAD_TYPES[m[2]];
+  res.setHeader("Content-Type", type || "application/octet-stream");
+  if (!type) res.setHeader("Content-Disposition", "attachment");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); // content-addressed: never changes
+  res.sendFile(p);
+});
+// Write a data: URL to disk and return its public URL. Returns the input unchanged for
+// anything that isn't worth offloading (already a URL, or small enough that a file costs more
+// than the row does). Never throws — a failed write just falls back to storing the data: URL.
+const OFFLOAD_MIN_BYTES = 64 * 1024;
+function offloadMedia(media) {
+  try {
+    if (typeof media !== "string" || !media.startsWith("data:")) return media;
+    const comma = media.indexOf(",");
+    if (comma < 0) return media;
+    const header = media.slice(5, comma);
+    if (!/;base64$/i.test(header)) return media;
+    const mime = header.replace(/;base64$/i, "").toLowerCase().split(";")[0];
+    const b64 = media.slice(comma + 1);
+    if (Math.floor(b64.length * 3 / 4) < OFFLOAD_MIN_BYTES) return media;
+    const buf = Buffer.from(b64, "base64");
+    if (!buf.length) return media;
+    const ext = MIME_EXT[mime] || "bin";
+    const hash = crypto.createHash("sha256").update(buf).digest("hex");
+    const file = `${hash}.${ext}`;
+    const p = join(UPLOAD_DIR, file);
+    if (!existsSync(p)) writeFileSync(p, buf);   // content-addressed → identical files dedupe
+    return { media: "/uploads/" + file, size: buf.length };
+  } catch (e) { console.error("[uploads] offload", e.message); return media; }
+}
+// Wrapper so callers get a uniform { media, size } no matter which branch ran.
+function offloadResult(media) {
+  const out = offloadMedia(media);
+  if (out && typeof out === "object") return out;
+  return { media: out, size: typeof out === "string" && out.startsWith("data:") ? Math.floor((out.length - out.indexOf(",") - 1) * 3 / 4) : 0 };
+}
+
 // Public marketing pages (must be registered before the SPA fallback below).
 app.get("/", (_req, res) =>
   res.sendFile(join(__dirname, "public", "landing.html"))
@@ -254,8 +329,9 @@ app.post("/api/register", async (req, res) => {
 });
 app.post("/api/login", async (req, res) => {
   try {
-    const { login, password } = req.body;
-    const out = await auth.login(login, password);
+    const { login, password, code } = req.body;
+    // ua/ip are stamped on the session row so Settings → Account can list real devices.
+    const out = await auth.login(login, password, code, { ua: req.headers["user-agent"], ip: normIp(req.ip) });
     setUserLastIp(out.profile.login, normIp(req.ip)).catch(() => {});
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -263,6 +339,9 @@ app.post("/api/login", async (req, res) => {
 app.get("/api/me", async (req, res) => {
   const me = await authUser(req);
   if (!me) return res.status(401).json({ error: "unauth" });
+  // One write per app load keeps the device list's "last active" honest without taxing
+  // every authenticated request.
+  touchSession(bearer(req)).catch(() => {});
   res.json({ profile: me });
 });
 app.post("/api/logout", async (req, res) => { await auth.logout(bearer(req)); res.json({ ok: true }); });
@@ -571,7 +650,7 @@ app.get("/api/groups/:id", async (req, res) => {
     const g = await getGroup(id); if (!g) return res.status(404).json({ error: "not found" });
     const members = await getGroupMembersDetailed(id);
     const hook = (g.channel && g.owner === me.login && g.hook_secret) ? `${APP_ORIGIN}/api/hook/${g.id}/${g.hook_secret}` : null;
-    res.json({ ok: true, id: g.id, name: g.name, owner: g.owner, members, channel: !!g.channel, hook });
+    res.json({ ok: true, id: g.id, name: g.name, owner: g.owner, members, channel: !!g.channel, hook, isPublic: !!g.is_public, about: g.about || "" });
   } catch (e) { console.error("group get", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.post("/api/groups", async (req, res) => {
@@ -1669,16 +1748,30 @@ function normalizeButtons(input) {
 const pendingCb = new Map();
 setInterval(() => { const now = Date.now(); for (const [k, v] of pendingCb) if (now - v.ts > 120000) pendingCb.delete(k); }, 60000);
 
-async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId, buttons }) {
+async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId, buttons, replyTo, fwdFrom, fwdName }) {
+  const off = media ? offloadResult(media) : { media: null, size: 0 };
   const payload = {
     from: from || fromLogin, fromLogin, name, ts: Date.now(),
     type: media ? (type || "file") : "text",
     // Keep the caption on media too (was previously dropped) — up to 1024 chars, Telegram-style.
     text: String(text || "").slice(0, media ? 1024 : 4000),
-    media: media || null, mediaName: (mediaName || "").slice(0, 255),
+    media: off.media, mediaSize: off.size || null, mediaName: (mediaName || "").slice(0, 255),
     buttons: buttons || null,
+    replyTo: Number(replyTo) > 0 ? Number(replyTo) : null,
+    fwdFrom: fwdFrom ? String(fwdFrom).slice(0, 24) : null,
+    fwdName: fwdName ? String(fwdName).slice(0, 64) : null,
     localId: localId || null,
   };
+  // Resolve the quote once, here, so every listener gets the snippet with the message and the
+  // client never has to fetch a parent that's outside its loaded window. A parent in another
+  // room (or gone) simply drops the reply link.
+  if (payload.replyTo) {
+    try {
+      const rs = await replySnippet(payload.replyTo);
+      if (rs && rs.room === room) { payload.replyName = rs.name; payload.replyType = rs.type; payload.replyText = rs.text; }
+      else payload.replyTo = null;
+    } catch { payload.replyTo = null; }
+  }
   try { payload.id = await saveMessage({ room, ...payload }); } catch (e) { console.error("saveMessage", e.message); }
   if (!payload.id) return null;
   io.to(room).emit("message", payload);
@@ -1901,6 +1994,7 @@ io.on("connection", (socket) => {
     catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", [...peers.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, ...v })));
     socket.emit("call-state", callStatePayload(currentRoom)); // идёт ли тут звонок прямо сейчас
+    try { socket.emit("pinned", { room: currentRoom, pinned: await getPinned(currentRoom) }); } catch {}
     // Снимок курсоров доставки/просмотра комнаты — чтобы клиент сразу показал,
     // какие из его сообщений уже доставлены / прочитаны собеседниками.
     try {
@@ -1919,6 +2013,20 @@ io.on("connection", (socket) => {
       const msgs = await messagesBefore(currentRoom, before, HISTORY_LIMIT);
       socket.emit("more-messages", { msgs, before });
     } catch (e) { console.error("load-more", e.message); }
+  });
+
+  // Load a window of history starting at `id` (jump to date, or jumping to a quoted message
+  // that scrolled out of the loaded window). The client replaces its list with this window.
+  socket.on("jump-to", async ({ id } = {}) => {
+    if (!currentRoom || !userLogin) return;
+    const from = Number(id) || 0;
+    if (from <= 0) return;
+    try {
+      // A little context above the anchor so it doesn't land glued to the top edge.
+      const before = await messagesBefore(currentRoom, from, 8);
+      const after = await messagesFrom(currentRoom, from, HISTORY_LIMIT);
+      socket.emit("jump-result", { msgs: [...before, ...after], anchorId: from });
+    } catch (e) { console.error("jump-to", e.message); }
   });
 
   socket.on("message", async (msg) => {
@@ -1969,6 +2077,7 @@ io.on("connection", (socket) => {
     const payload = await deliverMessage({
       room: currentRoom, fromLogin: userLogin, name: userName, from: socket.id,
       type: msg.type, text: msg.text, media, mediaName, localId: msg.localId,
+      replyTo: msg.replyTo, fwdFrom: msg.fwdFrom, fwdName: msg.fwdName,
     });
     // Сообщаем только после успешного сохранения: если БД не приняла медиа (max_allowed_packet),
     // не шлём ни broadcast, ни ACK, и отправляем отправителю ошибку.
@@ -2172,6 +2281,206 @@ io.on("connection", (socket) => {
     if (userLogin) { removeUserSocket(userLogin, socket.id); if (!userSockets.has(userLogin)) broadcastPresence(userLogin); }
   });
 });
+
+// ---------- Room access (shared by search / jump / pin / schedule) ----------
+// A DM room encodes both participants; a group room has to be checked against membership.
+async function canAccessRoom(login, room) {
+  if (!login || typeof room !== "string") return false;
+  if (room.startsWith("@dm:")) return room.slice(4).split("~").includes(login);
+  if (room.startsWith("@grp:")) { try { return await isGroupMember(room.slice(5), login); } catch { return false; } }
+  return false;
+}
+
+// ---------- REST: in-chat search + jump to date ----------
+app.get("/api/search", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.query.room || ""), q = String(req.query.q || "").trim();
+    if (!q || q.length < 2) return res.json({ results: [] });
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    res.json({ results: await searchMessages(room, q, 40) });
+  } catch (e) { console.error("search", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Resolve a picked day (local midnight, sent as epoch ms) to the first message id on/after it.
+app.get("/api/jump", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.query.room || ""), ts = Number(req.query.ts) || 0;
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    res.json({ id: await firstMessageIdAtOrAfter(room, ts) });
+  } catch (e) { console.error("jump", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: pinned message ----------
+// Groups/channels: owner only. DMs: either participant. Passing id=null unpins.
+app.post("/api/pin", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.body.room || ""); const id = req.body.id ? Number(req.body.id) : null;
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    if (room.startsWith("@grp:") && !(await isGroupOwner(room.slice(5), me.login))) return res.status(403).json({ error: "owner_only" });
+    await pinMessage(room, id);
+    const pinned = await getPinned(room);
+    io.to(room).emit("pinned", { room, pinned });
+    res.json({ ok: true, pinned });
+  } catch (e) { console.error("pin", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: signed-in devices ----------
+app.get("/api/sessions", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const cur = bearer(req);
+    const rows = await listSessions(me.login);
+    res.json({ sessions: rows.map((s) => ({
+      id: s.token.slice(0, 12),          // never hand the full token back to the page
+      current: s.token === cur,
+      ua: s.ua || "", ip: s.ip || "", lastSeen: Number(s.lastSeen) || 0, createdAt: Number(s.createdAt) || 0,
+    })) });
+  } catch (e) { console.error("sessions", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/sessions/revoke", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const cur = bearer(req);
+    if (req.body.others) {
+      const rows = await listSessions(me.login);
+      for (const s of rows) if (s.token !== cur) await auth.logout(s.token); // clears the Redis copy too
+      return res.json({ ok: true, revoked: await deleteOtherSessions(me.login, cur) });
+    }
+    const id = String(req.body.id || "");
+    const rows = await listSessions(me.login);
+    const target = rows.find((s) => s.token.slice(0, 12) === id);
+    if (!target) return res.status(404).json({ error: "not_found" });
+    if (target.token === cur) return res.status(400).json({ error: "current_session" });
+    await auth.logout(target.token);
+    await deleteSessionOf(me.login, target.token);
+    res.json({ ok: true });
+  } catch (e) { console.error("revoke", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: two-factor (TOTP) ----------
+app.get("/api/2fa", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const t = await getTotp(me.login);
+    res.json({ enabled: !!(t && t.enabled) });
+  } catch { res.status(500).json({ error: "server error" }); }
+});
+// Hands back a fresh secret + otpauth URI. Nothing is enforced until /enable verifies a code,
+// so abandoning setup here can never lock the account.
+app.post("/api/2fa/setup", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const secret = auth.newTotpSecret();
+    await setTotpSecret(me.login, secret);
+    res.json({ secret, uri: auth.totpUri(me.login, secret) });
+  } catch (e) { console.error("2fa setup", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/2fa/enable", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const t = await getTotp(me.login);
+    if (!t || !t.secret) return res.status(400).json({ error: "no_setup" });
+    if (!auth.totpVerify(t.secret, req.body.code)) return res.status(400).json({ error: "bad_code" });
+    await enableTotp(me.login);
+    res.json({ ok: true });
+  } catch (e) { console.error("2fa enable", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Turning 2FA off re-checks the password: a borrowed unlocked session shouldn't be able to
+// quietly strip the second factor.
+app.post("/api/2fa/disable", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const u = await getUser(me.login);
+    if (!u || !(await auth.verifyPassword(u, String(req.body.password || "")))) return res.status(400).json({ error: "bad_password" });
+    await disableTotp(me.login);
+    res.json({ ok: true });
+  } catch (e) { console.error("2fa disable", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: data export ----------
+app.get("/api/export", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const data = await exportAccount(me.login);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="dialog-${me.login}-export.json"`);
+    res.end(JSON.stringify(data, null, 2));
+  } catch (e) { console.error("export", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: public directory (opt-in channels + bots) ----------
+app.get("/api/directory", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const [groups, bots] = await Promise.all([listPublicGroups(60), listPublicBots(60)]);
+    res.json({ groups, bots });
+  } catch (e) { console.error("directory", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/groups/:id/public", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
+    if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "owner_only" });
+    await setGroupPublic(id, !!req.body.on, req.body.about);
+    res.json({ ok: true });
+  } catch (e) { console.error("group public", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/bots/:login/public", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const ok = await setBotPublic(String(req.params.login || "").toLowerCase(), me.login, !!req.body.on);
+    if (!ok) return res.status(403).json({ error: "not_your_bot" });
+    res.json({ ok: true });
+  } catch (e) { console.error("bot public", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: scheduled channel posts ----------
+app.get("/api/schedule", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.query.room || "");
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    res.json({ posts: await listScheduled(room) });
+  } catch (e) { console.error("schedule list", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/schedule", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.body.room || ""), text = String(req.body.text || "").trim();
+    const due = Number(req.body.due) || 0;
+    if (!text) return res.status(400).json({ error: "empty" });
+    if (due < Date.now() - 60000) return res.status(400).json({ error: "past" });
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    // Same posting rule as live messages: in a channel only the owner may publish.
+    if (room.startsWith("@grp:")) {
+      const g = await getGroup(room.slice(5));
+      if (g && g.channel && g.owner !== me.login) return res.status(403).json({ error: "channel_readonly" });
+    }
+    const id = await createScheduled(room, me.login, me.name, text, due);
+    res.json({ ok: true, id });
+  } catch (e) { console.error("schedule add", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.delete("/api/schedule/:id", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const ok = await deleteScheduled(Number(req.params.id) || 0, me.login);
+    res.json({ ok });
+  } catch (e) { console.error("schedule del", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Sweeper: publishes anything whose time has come. 30s granularity is plenty for "post later"
+// and costs one indexed query per tick.
+setInterval(async () => {
+  try {
+    const due = await dueScheduled(Date.now(), 20);
+    for (const p of due) {
+      await markScheduledSent(p.id);   // mark first: a delivery failure must not loop forever
+      await deliverMessage({ room: p.room, fromLogin: p.fromLogin, name: p.name, type: "text", text: p.text });
+    }
+  } catch (e) { console.error("schedule sweep", e.message); }
+}, 30000);
 
 // SPA fallback — serve index.html for all non-API paths (needed for /en/@user, /ru/group/1, etc.)
 app.get(/^\/(?!api\/|src\/|js\/|css\/|socket\.io\/)/, (req, res) => {
