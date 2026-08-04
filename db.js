@@ -107,6 +107,10 @@ export async function initSchema() {
   // code verifies, so an abandoned setup never locks anyone out.
   try { await pool.query("ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN totp_enabled TINYINT NOT NULL DEFAULT 0"); } catch {}
+  // Why an account was banned — shown to the user on the login screen.
+  try { await pool.query("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(300) NULL"); } catch {}
+  // Rich presence: the master switch, plus the live activity payload (JSON) we broadcast.
+  try { await pool.query("ALTER TABLE users ADD COLUMN pref_rich_presence TINYINT NOT NULL DEFAULT 1"); } catch {}
   try { await pool.query("CREATE INDEX idx_users_bot_token ON users (bot_token_hash)"); } catch {}
   // Pending updates for bots that long-poll getUpdates (id doubles as Telegram update_id).
   await pool.query(`CREATE TABLE IF NOT EXISTS bot_updates (
@@ -261,6 +265,23 @@ export async function initSchema() {
     updated_at BIGINT NOT NULL,
     KEY idx_themes_owner (owner),
     KEY idx_themes_pub (published, installs)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // People who must not see what you're playing/listening to — the per-person opt-out that
+  // sits next to the master Rich Presence switch.
+  await pool.query(`CREATE TABLE IF NOT EXISTS presence_hidden (
+    login VARCHAR(24) NOT NULL, target VARCHAR(24) NOT NULL,
+    PRIMARY KEY (login, target), KEY idx_ph_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Group add requests: being added to a group is now an INVITATION the target accepts. A row
+  // lives here until they answer (the popup is just a live view of it), so a missed popup
+  // becomes a pending item in Settings → Group instead of vanishing.
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_add_requests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT NOT NULL, from_login VARCHAR(24) NOT NULL, to_login VARCHAR(24) NOT NULL,
+    ts BIGINT NOT NULL,
+    UNIQUE KEY uniq_gar (group_id, to_login), KEY idx_gar_to (to_login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
   // Scheduled channel posts — the sweeper in server.js publishes rows whose `due` has passed.
@@ -782,6 +803,8 @@ export async function acceptFriend(me, other) { // me принимает зая�
   await setRelation(other, me, "friend");
 }
 export async function declineFriend(me, other) { await execute("DELETE FROM relations WHERE login=? AND target=? AND type='request'", [other, me]); }
+// Withdraw a request YOU sent: same table, opposite direction from declineFriend.
+export async function cancelFriendRequest(me, other) { await execute("DELETE FROM relations WHERE login=? AND target=? AND type='request'", [me, other]); }
 export async function removeFriend(me, other) {
   await execute("DELETE FROM relations WHERE login=? AND target=? AND type='friend'", [me, other]);
   await execute("DELETE FROM relations WHERE login=? AND target=? AND type='friend'", [other, me]);
@@ -1174,4 +1197,53 @@ export async function exportAccount(login) {
      FROM messages WHERE from_login=? ORDER BY id ASC LIMIT 20000`, [login]
   );
   return { exportedAt: Date.now(), user, groups, contacts, messages };
+}
+
+
+// ---------- Group add requests (invitation → consent) ----------
+export async function createGroupAddRequest(groupId, fromLogin, toLogin) {
+  await execute("INSERT IGNORE INTO group_add_requests (group_id, from_login, to_login, ts) VALUES (?,?,?,?)",
+    [groupId, fromLogin, toLogin, Date.now()]);
+  const r = await query("SELECT id FROM group_add_requests WHERE group_id=? AND to_login=?", [groupId, toLogin]);
+  return r[0] ? r[0].id : null;
+}
+export async function listGroupAddRequests(login) {
+  return await query(
+    `SELECT r.id, r.group_id AS groupId, r.from_login AS fromLogin, r.ts, g.name AS groupName, g.channel
+     FROM group_add_requests r JOIN chat_groups g ON g.id = r.group_id
+     WHERE r.to_login=? ORDER BY r.ts DESC`, [login]
+  );
+}
+export async function getGroupAddRequest(id, login) {
+  const r = await query("SELECT id, group_id AS groupId, from_login AS fromLogin, to_login AS toLogin FROM group_add_requests WHERE id=? AND to_login=?", [id, login]);
+  return r[0] || null;
+}
+export async function deleteGroupAddRequest(id) { await execute("DELETE FROM group_add_requests WHERE id=?", [id]); }
+export async function deleteGroupAddRequestsFor(groupId, login) { await execute("DELETE FROM group_add_requests WHERE group_id=? AND to_login=?", [groupId, login]); }
+
+// ---------- Ban reasons ----------
+export async function setUserBannedWithReason(login, banned, reason) {
+  await execute("UPDATE users SET banned=?, ban_reason=? WHERE login=?", [banned ? 1 : 0, banned ? (reason || null) : null, login]);
+}
+export async function getBanReason(login) {
+  const r = await query("SELECT ban_reason AS reason FROM users WHERE login=?", [login]);
+  return r[0] ? r[0].reason : null;
+}
+
+
+// ---------- Rich presence ----------
+export async function getRichPresencePref(login) {
+  const r = await query("SELECT pref_rich_presence AS on_ FROM users WHERE login=?", [login]);
+  return r[0] ? !!r[0].on_ : true;
+}
+export async function setRichPresencePref(login, on) {
+  await execute("UPDATE users SET pref_rich_presence=? WHERE login=?", [on ? 1 : 0, login]);
+}
+export async function listPresenceHidden(login) {
+  const r = await query("SELECT target FROM presence_hidden WHERE login=?", [login]);
+  return r.map((x) => x.target);
+}
+export async function setPresenceHidden(login, target, hidden) {
+  if (hidden) await execute("INSERT IGNORE INTO presence_hidden (login, target) VALUES (?,?)", [login, target]);
+  else await execute("DELETE FROM presence_hidden WHERE login=? AND target=?", [login, target]);
 }

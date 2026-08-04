@@ -635,7 +635,13 @@ document.querySelectorAll(".auth-tab").forEach((tab) => tab.onclick = () => {
 function authErr(code) {
   if (!code) return t("err_login_failed");
   if (code === "bad_credentials") return t("err_login_failed");
-  if (code === "account_banned") return t("account_banned");
+  if (String(code).startsWith("account_banned")) {
+    // "account_banned[:reason]" — guideline codes render localized, free text shows as typed.
+    const raw = String(code).slice("account_banned".length + 1);
+    if (!raw) return t("account_banned");
+    const known = ["ban_spam", "ban_harassment", "ban_nsfw", "ban_scam", "ban_evasion", "ban_illegal", "ban_underage"];
+    return t("account_banned") + " — " + (known.includes(raw) ? t(raw) : raw);
+  }
   if (String(code).startsWith("report_banned:")) {
     const until = Number(String(code).split(":")[1]) || 0;
     return t("report_banned_until", { date: new Date(until).toLocaleString() });
@@ -1403,14 +1409,65 @@ let dirTab = "channels", dirData = { groups: [], bots: [] };
 async function openDirectory() {
   $("directoryModal").classList.remove("hidden");
   $("dirList").innerHTML = "";
+  dirQuery = ""; const ds = $("dirSearch"); if (ds) ds.value = "";
   const { ok, data } = await api("/api/directory", null, "GET");
   dirData = ok ? { groups: data.groups || [], bots: data.bots || [] } : { groups: [], bots: [] };
   renderDirectory();
 }
+// Search ranks by where the hit is (name beats description) and offers keyword chips built
+// from what's actually listed — so the suggestions lead somewhere instead of guessing.
+let dirQuery = "";
+function dirScore(r, q) {
+  const name = String(r.name || "").toLowerCase();
+  const login = String(r.login || "").toLowerCase();
+  const about = String(r.about || r.description || "").toLowerCase();
+  if (name.startsWith(q) || login.startsWith(q)) return 3;
+  if (name.includes(q) || login.includes(q)) return 2;
+  if (about.includes(q)) return 1;
+  return 0;
+}
+// Keyword chips: the most common words across every listing, minus noise and anything already
+// typed. Tapping one searches for it.
+function dirKeywords() {
+  const stop = new Set(["the","and","for","with","your","you","this","that","are","from","all","bot","channel","канал","бот","для","это","все"]);
+  const freq = new Map();
+  for (const r of [...dirData.groups, ...dirData.bots]) {
+    const text = `${r.name || ""} ${r.about || r.description || ""}`.toLowerCase();
+    for (const w of text.split(/[^\p{L}\p{N}]+/u)) {
+      if (w.length < 3 || stop.has(w)) continue;
+      freq.set(w, (freq.get(w) || 0) + 1);
+    }
+  }
+  return [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([w]) => w).slice(0, 8);
+}
+function renderDirSuggest() {
+  const box = $("dirSuggest"); if (!box) return;
+  box.innerHTML = "";
+  const words = dirKeywords().filter((w) => !dirQuery || w.startsWith(dirQuery));
+  for (const w of words.slice(0, 6)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "dir-chip"; b.textContent = w;
+    b.onclick = () => { $("dirSearch").value = w; dirQuery = w; renderDirectory(); };
+    box.appendChild(b);
+  }
+  box.classList.toggle("hidden", !box.children.length);
+}
+$("dirSearch") && ($("dirSearch").oninput = (e) => { dirQuery = e.target.value.trim().toLowerCase(); renderDirectory(); });
 function renderDirectory() {
   const box = $("dirList"); if (!box) return;
   box.innerHTML = "";
-  const rows = dirTab === "channels" ? dirData.groups : dirData.bots;
+  renderDirSuggest();
+  let rows = dirTab === "channels" ? dirData.groups : dirData.bots;
+  if (dirQuery) {
+    // A query searches BOTH tabs and auto-switches if the other one is where the hits are.
+    const here = rows.map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
+    const other = (dirTab === "channels" ? dirData.bots : dirData.groups).map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
+    if (!here.length && other.length) {
+      dirTab = dirTab === "channels" ? "bots" : "channels";
+      $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b.dataset.dirtab === dirTab));
+      rows = other.sort((a, b) => b[1] - a[1]).map(([r]) => r);
+    } else rows = here.sort((a, b) => b[1] - a[1]).map(([r]) => r);
+  }
   $("dirEmpty").classList.toggle("hidden", rows.length > 0);
   for (const r of rows) {
     const row = document.createElement("button");
@@ -1486,6 +1543,169 @@ $("schAdd") && ($("schAdd").onclick = async () => {
   refreshScheduleList();
 });
 
+// ================== Rich Presence ==================
+// What you're doing rides along with the normal presence broadcast, filtered per recipient on
+// the server. The client just declares it; the privacy rules are not the client's business.
+// (`myActivity` is the manual profile status text — this is the live one.)
+let myRichPresence = null;
+function setActivity(type, name, detail) {
+  myRichPresence = type && name ? { type, name, detail: detail || "", since: Date.now() } : null;
+  socket.emit("presence-activity", myRichPresence);
+}
+window.dialogSetActivity = setActivity;   // native shells / mini-apps can report a game or track
+// Friends' activities, for the chat list and profiles.
+const activities = new Map();             // login -> {type,name,detail,since}
+function activityLine(a) {
+  if (!a) return "";
+  const verb = a.type === "playing" ? t("rp_playing") : a.type === "listening" ? t("rp_listening") : t("rp_watching");
+  return verb + " " + a.name + (a.detail ? " — " + a.detail : "");
+}
+
+// ---- Privacy UI (Settings → Preferences) ----
+let rpHidden = new Set();
+async function refreshPresencePrivacy() {
+  const { ok, data } = await api("/api/presence-privacy", null, "GET");
+  if (!ok) return;
+  const sw = $("prefRichPresence"); if (sw) sw.checked = !!data.on;
+  rpHidden = new Set(data.hidden || []);
+  renderRpHideList("");
+  const row = $("rpHideRow"); if (row) row.classList.toggle("hidden", !data.on);
+}
+function renderRpHideList(filter) {
+  const box = $("rpHideList"); if (!box) return;
+  box.innerHTML = "";
+  const q = (filter || "").toLowerCase();
+  for (const l of (relations.friends || [])) {
+    if (q && !l.toLowerCase().includes(q)) continue;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "fp-chip" + (rpHidden.has(l) ? " on" : "");
+    b.textContent = l;
+    b.onclick = async () => {
+      const hide = !rpHidden.has(l);
+      if (hide) rpHidden.add(l); else rpHidden.delete(l);
+      b.classList.toggle("on", hide);
+      await api("/api/presence-privacy", { target: l, hidden: hide });
+    };
+    box.appendChild(b);
+  }
+}
+$("rpHideSearch") && ($("rpHideSearch").oninput = (e) => renderRpHideList(e.target.value));
+$("prefRichPresence") && ($("prefRichPresence").addEventListener("change", async (e) => {
+  await api("/api/presence-privacy", { on: e.target.checked });
+  const row = $("rpHideRow"); if (row) row.classList.toggle("hidden", !e.target.checked);
+}));
+
+// ---------- Ban reason picker (admin) ----------
+// The common cases are one tap; anything else is typed. The chosen code is stored on the user
+// and echoed back at login, so a banned account is told WHY instead of just being refused.
+const BAN_PRESETS = ["ban_spam", "ban_harassment", "ban_nsfw", "ban_scam", "ban_evasion", "ban_illegal", "ban_underage"];
+let banTarget = null, banPreset = null;
+function openBanModal(login) {
+  banTarget = login; banPreset = null;
+  $("banWho").textContent = t("adm_confirm_ban", { login });
+  $("banOther").value = "";
+  const box = $("banPresets"); box.innerHTML = "";
+  for (const code of BAN_PRESETS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ban-preset"; b.textContent = t(code); b.dataset.code = code;
+    b.onclick = () => {
+      banPreset = banPreset === code ? null : code;
+      box.querySelectorAll(".ban-preset").forEach((x) => x.classList.toggle("on", x.dataset.code === banPreset));
+      if (banPreset) $("banOther").value = "";     // a preset and free text are mutually exclusive
+    };
+    box.appendChild(b);
+  }
+  $("banModal").classList.remove("hidden");
+}
+$("banOther") && ($("banOther").oninput = () => {
+  if (!$("banOther").value.trim()) return;
+  banPreset = null;
+  $("banPresets").querySelectorAll(".ban-preset").forEach((x) => x.classList.remove("on"));
+});
+$("banClose") && ($("banClose").onclick = () => $("banModal").classList.add("hidden"));
+$("banCancel") && ($("banCancel").onclick = () => $("banModal").classList.add("hidden"));
+$("banModal") && $("banModal").addEventListener("click", (e) => { if (e.target === $("banModal")) $("banModal").classList.add("hidden"); });
+$("banConfirm") && ($("banConfirm").onclick = async () => {
+  const reason = banPreset || $("banOther").value.trim();
+  if (!reason) { notify(t("ban_reason_required")); return; }
+  const login = banTarget;
+  $("banModal").classList.add("hidden");
+  const { ok, data } = await api("/api/admin/ban", { login, banned: true, reason });
+  if (!ok) { notify((data && data.error) || "error"); return; }
+  notify(t("adm_done_ban", { login }));
+  window.dispatchEvent(new CustomEvent("admin-refresh"));
+});
+
+// ================== Group invitations (add requests) ==================
+// Being added to a group is a request now. It arrives live as a popup; ignoring the popup for a
+// minute just closes it — the request itself stays pending and shows up in Settings → Group.
+const GROUP_INVITE_TIMEOUT = 60000;
+let giQueue = [], giCurrent = null, giTimer = null, giTick = null;
+function showGroupInvite(inv) {
+  giQueue.push(inv);
+  if (!giCurrent) nextGroupInvite();
+}
+function nextGroupInvite() {
+  clearTimeout(giTimer); clearInterval(giTick);
+  giCurrent = giQueue.shift() || null;
+  const modal = $("groupInviteModal"); if (!modal) return;
+  if (!giCurrent) { modal.classList.add("hidden"); return; }
+  $("giName").textContent = giCurrent.groupName || t("group");
+  $("giFrom").textContent = t("group_invite_from", { name: giCurrent.fromName || giCurrent.fromLogin });
+  $("giAva").innerHTML = `<img src="/api/group-avatar/${giCurrent.groupId}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
+  modal.classList.remove("hidden");
+  // Visible countdown so the popup closing itself doesn't look like a bug.
+  let left = Math.round(GROUP_INVITE_TIMEOUT / 1000);
+  const paint = () => { const el = $("giTimer"); if (el) el.textContent = t("group_invite_timer", { n: left }); };
+  paint();
+  giTick = setInterval(() => { left--; paint(); if (left <= 0) clearInterval(giTick); }, 1000);
+  giTimer = setTimeout(() => { closeGroupInvite(); notify(t("group_invite_moved")); }, GROUP_INVITE_TIMEOUT);
+}
+function closeGroupInvite() {
+  clearTimeout(giTimer); clearInterval(giTick);
+  giCurrent = null;
+  $("groupInviteModal") && $("groupInviteModal").classList.add("hidden");
+  refreshGroupInvites();
+  if (giQueue.length) setTimeout(nextGroupInvite, 260);
+}
+async function answerGroupInvite(id, action) {
+  const { ok, data } = await api(`/api/group-invites/${id}/${action}`, {});
+  if (ok && action === "accept") {
+    await loadGroups();
+    notify(t("group_invite_accepted"));
+    const c = chats.get("@grp:" + (data.groupId || ""));
+    if (c) openChat(c);
+  }
+  refreshGroupInvites();
+}
+$("giAccept") && ($("giAccept").onclick = async () => { const inv = giCurrent; closeGroupInvite(); if (inv) await answerGroupInvite(inv.id, "accept"); });
+$("giDeny") && ($("giDeny").onclick = async () => { const inv = giCurrent; closeGroupInvite(); if (inv) await answerGroupInvite(inv.id, "decline"); });
+$("giClose") && ($("giClose").onclick = () => closeGroupInvite());     // close ≠ answer: it stays pending
+$("groupInviteModal") && $("groupInviteModal").addEventListener("click", (e) => { if (e.target === $("groupInviteModal")) closeGroupInvite(); });
+socket.on("group-invite", (inv) => { if (inv && inv.id) showGroupInvite(inv); });
+
+// The same requests, listed at the top of Settings → Group.
+async function refreshGroupInvites() {
+  const box = $("gsInviteList"); if (!box) return;
+  const { ok, data } = await api("/api/group-invites", null, "GET");
+  const rows = (ok && data.invites) || [];
+  box.innerHTML = "";
+  $("gsInviteEmpty") && $("gsInviteEmpty").classList.toggle("hidden", rows.length > 0);
+  $("gsInviteCard") && $("gsInviteCard").classList.toggle("hidden", false);
+  for (const r of rows) {
+    const row = document.createElement("div"); row.className = "contact-row";
+    row.innerHTML = `<div class="avatar grp" style="width:32px;height:32px"><img src="/api/group-avatar/${r.groupId}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'"></div>` +
+      `<span class="c-name">${escapeHtml(r.groupName || "")}</span><span class="c-mutual">${escapeHtml(t("group_invite_from", { name: r.fromLogin }))}</span>`;
+    const ok2 = document.createElement("button"); ok2.className = "c-icon-btn"; ok2.title = t("accept_request"); ok2.innerHTML = window.ICON.check || "✓";
+    ok2.onclick = () => answerGroupInvite(r.id, "accept");
+    const no = document.createElement("button"); no.className = "c-icon-btn danger"; no.title = t("decline"); no.innerHTML = window.ICON.close || "✕";
+    no.onclick = () => answerGroupInvite(r.id, "decline");
+    row.appendChild(ok2); row.appendChild(no);
+    box.appendChild(row);
+  }
+}
+
 // ---------- Открытие чата ----------
 function openChat(c) {
   c = upsertChat(c);
@@ -1511,7 +1731,9 @@ function openChat(c) {
     $("chatSub").textContent = t("room_sub_group");
   } else {
     const st = presence.get(c.login);
-    $("chatSub").textContent = st ? t("status_" + st) : t("room_sub_dm");
+    const act = activities.get(c.login);
+    // A friend's activity is more interesting than "online" — show it when we have one.
+    $("chatSub").textContent = act ? activityLine(act) : (st ? t("status_" + st) : t("room_sub_dm"));
   }
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
@@ -1704,6 +1926,7 @@ $("amConfirm").onclick = async () => {
 let gsId = null, gsOwner = false, gsAvatar = null, gsAdd = new Set();
 // Заполняет пейн groups в #settingsOverlay. Если группа не открыта — показывает placeholder.
 async function populateGroupSettingsPane() {
+  refreshGroupInvites();   // invitations show regardless of whether a group is open
   const placeholder = $("groupPanelPlaceholder"); const body = $("groupSettingsBody");
   if (curKind !== "group") {
     if (placeholder) placeholder.classList.remove("hidden");
@@ -2334,7 +2557,9 @@ function renderContacts() {
     if (mc > 0) { const s = row.querySelector(".c-name"); if (s) s.insertAdjacentHTML("afterend", `<span class="c-mutual" title="${t("mutual_friends", { n: mc })}">${window.ICON.users || ""}<span>${mc}</span></span>`); }
     fL.appendChild(row);
   });
-  if (sL) sent.forEach((l) => sL.appendChild(contactRow(l, [[t("pending"), () => {}]])));
+  if (sL) sent.forEach((l) => sL.appendChild(contactRow(l, [
+    [t("cancel_request"), () => friend(l, "cancel"), true, window.ICON.close || "✕"],
+  ])));
 
   // Counts show the TRUE totals (not the filtered view) so the tabs stay stable.
   const setN = (id, n) => { const e = $(id); if (e) { e.textContent = n; e.classList.toggle("zero", !n); } };
@@ -2464,7 +2689,12 @@ function updateDots() {
     }
   }
 }
-socket.on("presence", ({ login, status }) => {
+socket.on("presence", ({ login, status, activity }) => {
+  if (activity) activities.set(login, activity); else activities.delete(login);
+  if (curKind === "dm" && myRoom && myRoom.includes(login)) {
+    const sub = $("chatSub");
+    if (sub) sub.textContent = activity ? activityLine(activity) : (status ? t("status_" + status) : t("room_sub_dm"));
+  }
   presence.set(login, status); updateDots();
   if (curKind === "dm" && myRoom && login === myRoom.slice(4).split("~").find((l) => l !== profile.login)) {
     $("chatSub").textContent = t("status_" + status);
@@ -2538,6 +2768,8 @@ function applyChannelUI() {
   if (!notice) { notice = document.createElement("div"); notice.id = "channelNotice"; notice.className = "channel-notice hidden"; const pane = $("chatPane"); if (pane) pane.appendChild(notice); }
   if (notice) { notice.textContent = "🔒 " + t("channel_readonly"); notice.classList.toggle("hidden", !readOnly); }
   const head = $("chatHead"); if (head) head.classList.toggle("is-channel", curKind === "group" && curChannel);
+  // A channel is a broadcast room — calling into it makes no sense, so the button goes away.
+  const callBtn = $("startCallBtn"); if (callBtn) callBtn.classList.toggle("hidden", curKind === "group" && curChannel);
   if (curKind === "group" && curChannel) { const sub = $("chatSub"); if (sub) sub.textContent = t("channel_sub"); }
   const hookCard = $("gsHookCard");
   if (hookCard) {
@@ -2884,6 +3116,7 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
 });
 socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
 socket.on("channel-readonly", () => notify(t("channel_readonly")));
+socket.on("call-refused", ({ reason } = {}) => notify(reason === "channel" ? t("no_calls_in_channel") : t("err_generic")));
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); if (/(^|\s)@all(?![\w-])/.test(x)) return true; return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
 function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
@@ -4163,7 +4396,13 @@ function addScreenTile(id, name, mediaTrack) {
     // Clicks are handled by the delegated handler on vGrid (zoom / spotlight).
     if (vGrid.classList.contains("has-focus")) relocateNewTile(tile);
   }
-  const v = tile.querySelector("video"); if (mediaTrack) mediaTrack.attach(v); v.play().catch(() => {});
+  const v = tile.querySelector("video");
+  // LiveKit tracks had .attach(); P2P hands us a raw MediaStreamTrack (or a MediaStream).
+  if (mediaTrack) {
+    if (typeof mediaTrack.attach === "function") mediaTrack.attach(v);
+    else v.srcObject = (typeof MediaStream !== "undefined" && mediaTrack instanceof MediaStream) ? mediaTrack : new MediaStream([mediaTrack]);
+  }
+  v.play().catch(() => {});
   scheduleFsLayout();
 }
 // Spotlight: show one stream big, everyone else in a strip under it.
@@ -4557,6 +4796,8 @@ function p2pEnsurePeer(login, name) {
   call.peers.set(login, m);
   ensureTile(login, m.name, false);
   if (call.localStream) for (const track of call.localStream.getTracks()) { try { pc.addTrack(track, call.localStream); } catch {} }
+  // Already sharing when they joined → publish the screen to them as well.
+  if (call.screenStream) { p2pAttachScreen(m); socket.emit("rtc-signal", { to: login, data: { screen: call.screenStream.id } }); }
   if (rnnOn && call._rnn && call._rnn.processed) { const s = pc.getSenders().find((x) => x.track && x.track.kind === "audio"); if (s) s.replaceTrack(call._rnn.processed).catch(() => {}); }
   pc.onicecandidate = ({ candidate }) => { if (candidate) socket.emit("rtc-signal", { to: login, data: { candidate } }); };
   pc.onnegotiationneeded = async () => {
@@ -4623,6 +4864,17 @@ async function p2pRestartPeer(login) {
 }
 function p2pOnTrack(login, m, e) {
   const stream = e.streams[0]; if (!stream) return;
+  // Remember what came from which stream: the "this one is a screen" signal may land after
+  // the track itself, and then we promote it (see p2pOnScreenSignal).
+  if (e.track.kind === "video") { (m.videoByStream = m.videoByStream || new Map()).set(stream.id, e.track); }
+  else { (m.audioByStream = m.audioByStream || new Map()).set(stream.id, e.track); }
+  if (m.screenStreamId && stream.id === m.screenStreamId) {
+    if (e.track.kind === "video") {
+      addScreenTile(login, m.name, e.track);
+      e.track.onended = () => removeTile("screen-" + lkTile(login));
+    } else p2pPlayScreenAudio(login, e.track);
+    return;
+  }
   if (e.track.kind === "video") {
     const tile = ensureTile(login, m.name, false);
     const v = tile.querySelector("video"); if (v) v.srcObject = stream;
@@ -4642,6 +4894,8 @@ async function p2pOnSignal({ from, fromName, data }) {
   if (!call.active || !from || !data) return;
   const m = p2pEnsurePeer(from, fromName); if (!m) return;
   if (data.mic !== undefined) { setMicIndicator(lkTile(from), !data.mic); return; }  // remote mute indicator
+  if (data.screen) { p2pOnScreenSignal(from, data.screen); return; }
+  if (data.screenOff) { p2pOnScreenOff(from); return; }
   const pc = m.pc;
   try {
     if (data.description) {
@@ -4662,6 +4916,7 @@ async function p2pOnSignal({ from, fromName, data }) {
 socket.on("rtc-signal", p2pOnSignal);
 function p2pClosePeer(login) {
   const _m = call.peers && call.peers.get(login); if (_m) clearTimeout(_m.stuckT);
+  p2pOnScreenOff(login);
   const m = call.peers && call.peers.get(login); if (!m) return;
   clearTimeout(m.restartT);
   try { m.pc.close(); } catch {}
@@ -4736,6 +4991,7 @@ function endCall() {
   $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
+  if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
   krispNode = null; stopCallMatrix();
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
@@ -4925,9 +5181,12 @@ function fsRestore(el) { if (el && el._homeParent && el.parentElement !== el._ho
 function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; fsReparent(m); m.classList.remove("hidden"); }
 function closeScreenModal() { const m = $("screenModal"); if (m) { m.classList.add("hidden"); fsRestore(m); const cb = $("ssIncludeAudio"); if (cb) cb.checked = false; } }
 function setShareActive(on) { call.sharing = on; $("shareScreen").classList.toggle("active", on); }
+// ---------- Screen share over P2P ----------
+// The screen travels as its own MediaStream (separate from the mic/camera stream), and a tiny
+// `{screen: <streamId>}` signal tells peers which arriving stream is a screen rather than a
+// webcam. Track and signal can arrive in either order, so both paths re-check the other.
 async function startScreenShare() {
-  const LK = window.LivekitClient;
-  if (!call.room || !LK) return;
+  if (!call.active || !call.peers) return;
   const q = screenQuality;
   const includeAudio = $("ssIncludeAudio") && $("ssIncludeAudio").checked;
   let stream;
@@ -4940,52 +5199,66 @@ async function startScreenShare() {
         // don't replay captured audio through our own speakers → no feedback loop
         suppressLocalAudioPlayback: true,
       } : false,
-      // don't offer the Dialog tab itself as a source (so its audio — other
-      // participants' voices — can never be captured/echoed back)
+      // don't offer the Dialog tab itself as a source (so its audio — other participants'
+      // voices — can never be captured/echoed back)
       selfBrowserSurface: "exclude",
       systemAudio: includeAudio ? "include" : "exclude",
     });
-  } catch { closeScreenModal(); setShareActive(false); return; } // пользователь отменил выбор
+  } catch { closeScreenModal(); setShareActive(false); return; } // user cancelled the picker
   const vTrack = stream.getVideoTracks()[0];
-  if (!vTrack) { stream.getTracks().forEach((t) => { try { t.stop(); } catch {} }); closeScreenModal(); setShareActive(false); return; }
+  if (!vTrack) { stream.getTracks().forEach((tr) => { try { tr.stop(); } catch {} }); closeScreenModal(); setShareActive(false); return; }
   const aTrack = stream.getAudioTracks()[0] || null;
-  const lp = call.room.localParticipant;
-  try {
-    const lkVideo = new LK.LocalVideoTrack(vTrack);
-    await lp.publishTrack(lkVideo, {
-      source: LK.Track.Source.ScreenShare,
-      videoEncoding: { maxBitrate: q.h >= 1440 ? 6000000 : q.h >= 1080 ? 3000000 : 1500000, maxFramerate: q.fps },
-      simulcast: false,
-    });
-    screenTrack = lkVideo;
-    // Аудио — опционально: если пользователь не поделился звуком, просто нет дорожки.
-    if (aTrack) {
-      try {
-        const lkAudio = new LK.LocalAudioTrack(aTrack);
-        await lp.publishTrack(lkAudio, { source: LK.Track.Source.ScreenShareAudio, dtx: false, red: false, audioBitrate: 128000 });
-        screenAudioTrack = lkAudio;
-        aTrack.addEventListener("ended", () => { if (screenAudioTrack && call.room) { try { call.room.localParticipant.unpublishTrack(screenAudioTrack, true); } catch {} screenAudioTrack = null; } });
-      } catch { try { aTrack.stop(); } catch {} } // видео оставляем, даже если звук не опубликовался
-    }
-    setShareActive(true);
-    vTrack.addEventListener("ended", () => stopScreenShare()); // браузерная кнопка «Stop sharing»
-    closeScreenModal();
-  } catch {
-    $("ssError").textContent = t("screen_share_failed");
-    try { vTrack.stop(); } catch {} if (aTrack) { try { aTrack.stop(); } catch {} }
-    setShareActive(false);
-  }
+  call.screenStream = stream; screenTrack = vTrack; screenAudioTrack = aTrack;
+  for (const m of call.peers.values()) p2pAttachScreen(m);
+  p2pBroadcast({ screen: stream.id });
+  addScreenTile("me", myName + " " + t("you_suffix"), vTrack);
+  setShareActive(true);
+  vTrack.addEventListener("ended", () => stopScreenShare());   // browser's own "Stop sharing"
+  closeScreenModal();
+}
+// Publish the current screen to one peer (used on start and for anyone who joins mid-share).
+function p2pAttachScreen(m) {
+  if (!call.screenStream || !m || !m.pc) return;
+  try { if (!m.scrSender && screenTrack) m.scrSender = m.pc.addTrack(screenTrack, call.screenStream); } catch {}
+  try { if (!m.scrASender && screenAudioTrack) m.scrASender = m.pc.addTrack(screenAudioTrack, call.screenStream); } catch {}
 }
 async function stopScreenShare() {
-  const lp = call.room && call.room.localParticipant;
-  if (lp) {
-    if (screenTrack) { try { await lp.unpublishTrack(screenTrack, true); } catch {} }
-    if (screenAudioTrack) { try { await lp.unpublishTrack(screenAudioTrack, true); } catch {} }
+  if (call.peers) {
+    for (const m of call.peers.values()) {
+      if (m.scrSender) { try { m.pc.removeTrack(m.scrSender); } catch {} m.scrSender = null; }
+      if (m.scrASender) { try { m.pc.removeTrack(m.scrASender); } catch {} m.scrASender = null; }
+    }
+    p2pBroadcast({ screenOff: true });
   }
-  screenTrack = null; screenAudioTrack = null; setShareActive(false);
+  if (call.screenStream) for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} }
+  call.screenStream = null; screenTrack = null; screenAudioTrack = null;
+  removeTile("screen-me");
+  setShareActive(false);
+}
+// A peer told us which of their streams is a screen — promote any video we already have from
+// it, and remember the id for tracks that arrive later.
+function p2pOnScreenSignal(login, streamId) {
+  const m = call.peers && call.peers.get(login); if (!m) return;
+  m.screenStreamId = streamId;
+  const pending = m.videoByStream && m.videoByStream.get(streamId);
+  if (pending) { addScreenTile(login, m.name, pending); scheduleFsLayout(); }
+  const pendingAudio = m.audioByStream && m.audioByStream.get(streamId);
+  if (pendingAudio) p2pPlayScreenAudio(login, pendingAudio);
+}
+function p2pOnScreenOff(login) {
+  const m = call.peers && call.peers.get(login); if (m) m.screenStreamId = null;
+  removeTile("screen-" + lkTile(login));
+  const a = screenAudioEls.get(login); if (a) { try { a.srcObject = null; a.remove(); } catch {} screenAudioEls.delete(login); }
+}
+// Shared-screen audio plays through its own element so the tile's volume control and the
+// deafen toggle can treat it separately from the person's voice.
+function p2pPlayScreenAudio(login, track) {
+  let a = screenAudioEls.get(login);
+  if (!a) { a = document.createElement("audio"); a.autoplay = true; document.body.appendChild(a); screenAudioEls.set(login, a); }
+  a.srcObject = new MediaStream([track]); applySinkId(a); a.muted = call.deaf;
 }
 $("shareScreen").onclick = () => {
-  if (!call.room) return;
+  if (!call.active) return;
   if (call.sharing) { stopScreenShare(); return; }
   if (!canStartStream()) return;
   openScreenModal();
@@ -6134,6 +6407,7 @@ function setFeedbackNote() {
 
 // ---------- Preferences tab ----------
 async function refreshPrefsPane() {
+  refreshPresencePrivacy();
   if (!profile) return;
   // Load the REAL saved prefs (previously the pane showed defaults until you toggled).
   const { ok, data } = await api("/api/prefs", null, "GET");
@@ -6579,15 +6853,19 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     });
   }
 
+  window.addEventListener("admin-refresh", () => { loadAdminUsers(); loadAdminStats(); });
   async function adminAction(act, login, el) {
     if (act === "ban") {
       const u = usersCache.find((x) => x.login === login);
       const banned = !(u && u.banned);
-      if (banned && !confirm(t("adm_confirm_ban", { login }))) return;
-      const { ok, data } = await aapi("/api/admin/ban", { login, banned });
-      if (!ok) return notify((data && data.error) || "error");
-      notify(banned ? t("adm_done_ban", { login }) : t("adm_done_unban", { login }));
-      loadAdminUsers(); loadAdminStats();
+      if (!banned) {   // unban needs no reason
+        const { ok, data } = await aapi("/api/admin/ban", { login, banned: false });
+        if (!ok) return notify((data && data.error) || "error");
+        notify(t("adm_done_unban", { login }));
+        loadAdminUsers(); loadAdminStats();
+        return;
+      }
+      openBanModal(login);
     } else if (act === "banip") {
       if (!confirm(t("adm_confirm_banip", { login }))) return;
       const { ok, data } = await aapi("/api/admin/ban-ip", { login });
