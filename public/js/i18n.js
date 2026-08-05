@@ -138,6 +138,21 @@ const I18N = {
     // ── Message actions, search, drafts, pins ──
     // ── Group invitations, bans, discover search ──
     // ── Activities (watch together + games) ──
+    // ── Servers ──
+    srv_new: "New server", srv_new_prompt: "Server name?", srv_browse: "Public servers",
+    srv_settings: "Server settings", srv_name_ph: "Server name", srv_public: "List publicly",
+    srv_rules: "Rules", srv_text: "Text channels", srv_news: "News", srv_voice: "Voice channels",
+    srv_add_channel: "Add channel", srv_add_channel_prompt: "Channel name?",
+    srv_my_voice: "Open my voice room", srv_auto_voice: "Temporary — closes when its owner leaves",
+    srv_no_create_voice: "A moderator hasn't allowed members to open voice rooms here.",
+    srv_voice_hint: "Voice channel — start the call to talk.",
+    srv_members: "Members ({n})", srv_roles: "Roles", srv_role_add: "Add role",
+    srv_role_count: "{n} of {max} used", srv_role_limit: "Role limit reached ({n} per server).",
+    srv_new_role: "New role", srv_leave: "Leave server", srv_delete: "Delete server",
+    srv_leave_confirm: "Leave this server?", srv_delete_confirm: "Delete this server for everyone?",
+    srv_invite_only: "That server is invite-only.",
+    perm_manage_server: "Manage server", perm_manage_roles: "Manage roles", perm_kick: "Kick members",
+    perm_create_voice: "Open voice rooms", perm_post_news: "Post in news",
     act_launch: "Activities", act_stop: "End activity", act_ended: "Activity ended.",
     act_busy: "{name} is already running an activity.", act_need_call: "Start a call first — activities are shared with the people in it.",
     act_watch: "Watch Together", act_gartic: "Draw Telephone", act_golf: "Mini Golf",
@@ -458,6 +473,21 @@ const I18N = {
     // ── Действия с сообщениями, поиск, черновики, закрепления ──
     // ── Приглашения в группу, баны, поиск в «Обзоре» ──
     // ── Активности (совместный просмотр + игры) ──
+    // ── Серверы ──
+    srv_new: "Новый сервер", srv_new_prompt: "Название сервера?", srv_browse: "Публичные серверы",
+    srv_settings: "Настройки сервера", srv_name_ph: "Название сервера", srv_public: "Показывать публично",
+    srv_rules: "Правила", srv_text: "Текстовые каналы", srv_news: "Новости", srv_voice: "Голосовые каналы",
+    srv_add_channel: "Добавить канал", srv_add_channel_prompt: "Название канала?",
+    srv_my_voice: "Открыть свою голосовую", srv_auto_voice: "Временный — закроется, когда владелец выйдет",
+    srv_no_create_voice: "Модератор не разрешил участникам создавать голосовые каналы.",
+    srv_voice_hint: "Голосовой канал — начните звонок, чтобы говорить.",
+    srv_members: "Участники ({n})", srv_roles: "Роли", srv_role_add: "Добавить роль",
+    srv_role_count: "{n} из {max}", srv_role_limit: "Достигнут лимит ролей ({n} на сервер).",
+    srv_new_role: "Новая роль", srv_leave: "Покинуть сервер", srv_delete: "Удалить сервер",
+    srv_leave_confirm: "Покинуть этот сервер?", srv_delete_confirm: "Удалить сервер у всех?",
+    srv_invite_only: "Сервер только по приглашениям.",
+    perm_manage_server: "Управление сервером", perm_manage_roles: "Управление ролями", perm_kick: "Исключать участников",
+    perm_create_voice: "Создавать голосовые", perm_post_news: "Публиковать новости",
     act_launch: "Активности", act_stop: "Завершить", act_ended: "Активность завершена.",
     act_busy: "{name} уже запустил(а) активность.", act_need_call: "Сначала начните звонок — активности общие для участников.",
     act_watch: "Смотреть вместе", act_gartic: "Испорченный телефон", act_golf: "Мини-гольф",

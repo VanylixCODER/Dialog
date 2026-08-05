@@ -935,7 +935,9 @@ async function savePins() {
   pinnedKeys = new Set([...chats.values()].filter((c) => c.pinned).map((c) => c.key));
   await api("/api/pins", { keys: [...pinnedKeys] });
 }
-function upsertChat(c) { const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
+function upsertChat(c) {
+  // Channels live in the server panel, not the contact list — don't persist them as chats.
+  if (c && c.type === "channel") { activeKey = c.key; return c; } const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
 async function syncDMsFromServer() {
   const { ok, data } = await api("/api/dms", null, "GET");
   if (!ok || !Array.isArray(data)) return;
@@ -1727,7 +1729,10 @@ function openChat(c) {
   $("messages").innerHTML = "";
   showMsgSkeletons(); // placeholder until history arrives
   $("chatTitle").textContent = c.name;
-  if (c.type === "group") {
+  if (c.type === "channel") {
+    // Server channel: the subtitle names the kind rather than pretending it's a group.
+    $("chatSub").textContent = c.kind === "voice" ? t("srv_voice") : c.kind === "rules" ? t("srv_rules") : c.kind === "news" ? t("srv_news") : t("srv_text");
+  } else if (c.type === "group") {
     $("chatSub").textContent = t("room_sub_group");
   } else {
     const st = presence.get(c.login);
@@ -1735,9 +1740,11 @@ function openChat(c) {
     // A friend's activity is more interesting than "online" — show it when we have one.
     $("chatSub").textContent = act ? activityLine(act) : (st ? t("status_" + st) : t("room_sub_dm"));
   }
-  $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
+  $("chatAva").className = "avatar ch-ava" + (c.type === "group" || c.type === "channel" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
-  if (c.type === "group") {
+  if (c.type === "channel") {
+    $("chatAva").innerHTML = `<span class="ch-ava-ico">${c.kind === "voice" ? "🔊" : c.kind === "rules" ? "📜" : c.kind === "news" ? "📰" : "#"}</span>`;
+  } else if (c.type === "group") {
     $("chatAva").innerHTML = `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
   } else {
     const st = presence.get(c.login);

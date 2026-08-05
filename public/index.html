@@ -106,9 +106,13 @@
         <button class="vb-btn" id="vbDeafen" data-i18n-title="t_deafen" title="Deafen"></button>
         <button class="vb-btn end" id="vbHang" data-i18n-title="t_hangup" title="Leave"></button>
       </div>
+      <!-- Server rail: a HORIZONTAL strip, not a left-hand bar. -->
+      <div id="serverRail" class="srv-rail"></div>
       <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
       <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="online" data-i18n="filter_online">Online</button><button class="clf-btn" data-filter="pinned" data-i18n="filter_pinned">Pinned</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
       <ul id="chatList" class="chats"></ul>
+      <!-- Channels take over this column while a server is open. -->
+      <div id="serverPanel" class="srv-panel hidden"></div>
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
         <button id="emptyNewGroup" class="btn-primary" data-i18n="btn_new_group">Create group</button>
@@ -1001,6 +1005,39 @@
     </div>
   </div>
 
+  <!-- Server settings: identity, listing, and the five roles. -->
+  <div id="srvSettingsModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card wide">
+      <button id="srvSetClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="srv_settings">Server settings</div>
+      <div class="acc-row">
+        <input id="srvSetName" class="field" maxlength="64" data-i18n-ph="srv_name_ph" />
+        <button id="srvIconBtn" class="btn-ghost btn-sm" data-i18n="upload_avatar">Icon</button>
+        <input id="srvIconFile" type="file" accept="image/*" hidden />
+      </div>
+      <input id="srvSetAbout" class="field" maxlength="190" data-i18n-ph="about_ph" />
+      <label class="pref-row"><input type="checkbox" id="srvSetPublic" /><span data-i18n="srv_public">List publicly</span></label>
+      <button id="srvSetSave" class="btn-ghost btn-sm" data-i18n="save">Save</button>
+
+      <div class="uppercase-tag"><span data-i18n="srv_roles">Roles</span> · <span id="srvRoleCount"></span></div>
+      <div id="srvRoles" class="srv-roles"></div>
+      <button id="srvRoleAdd" class="btn-ghost btn-sm" data-i18n="srv_role_add">Add role</button>
+
+      <div class="modal-actions">
+        <button id="srvLeave" class="btn-ghost danger hidden" type="button" data-i18n="srv_leave">Leave server</button>
+        <button id="srvDelete" class="btn-ghost danger hidden" type="button" data-i18n="srv_delete">Delete server</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="srvBrowseModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card wide">
+      <button id="srvBrowseClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="srv_browse">Public servers</div>
+      <div id="srvBrowseList" class="dir-list"></div>
+    </div>
+  </div>
+
   <div id="lightbox" class="lightbox hidden">
     <div class="lb-bar">
       <span id="lbName" class="lb-name"></span>
@@ -1137,5 +1174,6 @@
   <script src="/js/router.js"></script>
   <script src="/app.js"></script>
   <script src="/js/activities.js"></script>
+  <script src="/js/servers.js"></script>
 </body>
 </html>
