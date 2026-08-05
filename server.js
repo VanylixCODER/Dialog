@@ -1879,6 +1879,16 @@ function effectiveStatus(login) {
   const s = userStatus.get(login) || "online";
   return s === "invisible" ? "offline" : s;
 }
+// room -> { kind, host, hostName, state, ts }. In memory: an activity is a live session, not
+// something worth surviving a restart.
+const roomActivity = new Map();
+const actPayload = (a) => (a ? { kind: a.kind, host: a.host, hostName: a.hostName, state: a.state } : null);
+// The host leaving ends the session — everyone else is a viewer of their state.
+function endActivityIfHost(room, login) {
+  const cur = room && roomActivity.get(room);
+  if (cur && cur.host === login) { roomActivity.delete(room); io.to(room).emit("activity", null); }
+}
+
 // login -> { type, name, detail, since } — what someone is playing/listening to right now.
 // Deliberately in memory only: it's ephemeral by nature and worthless after a disconnect.
 const richPresence = new Map();
@@ -2005,6 +2015,7 @@ io.on("connection", (socket) => {
 
   function doLeave() {
     if (!currentRoom) return;
+    endActivityIfHost(currentRoom, userLogin);   // host walked out → the session goes with them
     callLeave();
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
@@ -2039,6 +2050,7 @@ io.on("connection", (socket) => {
     socket.emit("peers", [...peers.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, ...v })));
     socket.emit("call-state", callStatePayload(currentRoom)); // идёт ли тут звонок прямо сейчас
     try { socket.emit("pinned", { room: currentRoom, pinned: await getPinned(currentRoom) }); } catch {}
+    { const a = roomActivity.get(currentRoom); if (a) socket.emit("activity", actPayload(a)); }
     // Снимок курсоров доставки/просмотра комнаты — чтобы клиент сразу показал,
     // какие из его сообщений уже доставлены / прочитаны собеседниками.
     try {
@@ -2128,6 +2140,44 @@ io.on("connection", (socket) => {
     if (!payload) { socket.emit("file-rejected", { reason: "save_failed" }); return; }
     // Возвращаем автору ACK с id, чтобы клиент снял статус «отправляется».
     socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
+  });
+
+  // ---------- Activities (watch together / games) ----------
+  // The server is a dumb, authenticated relay: it remembers WHICH activity a room is running
+  // and who hosts it, and stamps every message with the sender's real login + display name so
+  // a client can't put words in someone else's mouth. All game rules live in the host's client.
+  socket.on("activity-start", ({ kind } = {}) => {
+    if (!currentRoom || !userLogin) return;
+    if (!["watch", "gartic", "golf"].includes(kind)) return;
+    const cur = roomActivity.get(currentRoom);
+    if (cur && cur.host !== userLogin) { socket.emit("activity-busy", { kind: cur.kind, hostName: cur.hostName }); return; }
+    const act = { kind, host: userLogin, hostName: userName, state: null, ts: Date.now() };
+    roomActivity.set(currentRoom, act);
+    io.to(currentRoom).emit("activity", actPayload(act));
+  });
+  socket.on("activity-stop", () => {
+    if (!currentRoom) return;
+    const cur = roomActivity.get(currentRoom);
+    if (!cur || cur.host !== userLogin) return;
+    roomActivity.delete(currentRoom);
+    io.to(currentRoom).emit("activity", null);
+  });
+  // Only the host publishes state — that's what makes the host authoritative for playback
+  // position, round numbers and whose turn it is.
+  socket.on("activity-state", (state) => {
+    if (!currentRoom) return;
+    const cur = roomActivity.get(currentRoom);
+    if (!cur || cur.host !== userLogin) return;
+    cur.state = state && typeof state === "object" ? state : null;
+    cur.ts = Date.now();
+    socket.to(currentRoom).emit("activity-state", cur.state);
+  });
+  // Everyone may send input (a guess, a drawing, a putt). Relayed to the room as-is.
+  socket.on("activity-msg", (msg) => {
+    if (!currentRoom || !userLogin) return;
+    const cur = roomActivity.get(currentRoom); if (!cur) return;
+    if (!msg || typeof msg !== "object") return;
+    io.to(currentRoom).emit("activity-msg", { ...msg, from: userLogin, fromName: userName });
   });
 
   // Rich presence in/out. Sending null clears it.

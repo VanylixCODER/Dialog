@@ -137,6 +137,17 @@ const I18N = {
     gc_create_btn: "Create",
     // ── Message actions, search, drafts, pins ──
     // ── Group invitations, bans, discover search ──
+    // ── Activities (watch together + games) ──
+    act_launch: "Activities", act_stop: "End activity", act_ended: "Activity ended.",
+    act_busy: "{name} is already running an activity.", act_need_call: "Start a call first — activities are shared with the people in it.",
+    act_watch: "Watch Together", act_gartic: "Draw Telephone", act_golf: "Mini Golf",
+    act_watch_load: "Load", act_watch_host: "You're the host — everyone follows your playback.",
+    act_watch_guest: "Following {name}'s playback.", act_watch_badurl: "Paste a YouTube link.",
+    act_ga_round: "Round {n} / {of}", act_ga_waiting: "Waiting for the others…",
+    act_ga_write: "Write a sentence", act_ga_describe: "What is this?", act_ga_submit: "Submit",
+    act_ga_clear: "Clear", act_ga_reveal: "Reveal", act_ga_next_book: "Next book",
+    act_gf_hole: "Hole {n} · par {par}", act_gf_your_turn: "Your putt — drag back from the ball",
+    act_gf_turn: "{name} is putting",
     invite_sent_to: "Invitation sent to {names}",
     group_invite_title: "Group invitation", group_invite_from: "from {name}",
     group_invite_timer: "Closes in {n}s — it stays in Settings → Group",
@@ -446,6 +457,17 @@ const I18N = {
     gc_create_btn: "Создать",
     // ── Действия с сообщениями, поиск, черновики, закрепления ──
     // ── Приглашения в группу, баны, поиск в «Обзоре» ──
+    // ── Активности (совместный просмотр + игры) ──
+    act_launch: "Активности", act_stop: "Завершить", act_ended: "Активность завершена.",
+    act_busy: "{name} уже запустил(а) активность.", act_need_call: "Сначала начните звонок — активности общие для участников.",
+    act_watch: "Смотреть вместе", act_gartic: "Испорченный телефон", act_golf: "Мини-гольф",
+    act_watch_load: "Загрузить", act_watch_host: "Вы ведущий — воспроизведение синхронизируется по вам.",
+    act_watch_guest: "Синхронизация по {name}.", act_watch_badurl: "Вставьте ссылку на YouTube.",
+    act_ga_round: "Раунд {n} / {of}", act_ga_waiting: "Ждём остальных…",
+    act_ga_write: "Напишите фразу", act_ga_describe: "Что это?", act_ga_submit: "Отправить",
+    act_ga_clear: "Очистить", act_ga_reveal: "Результаты", act_ga_next_book: "Следующая история",
+    act_gf_hole: "Лунка {n} · пар {par}", act_gf_your_turn: "Ваш удар — тяните от мяча назад",
+    act_gf_turn: "Бьёт {name}",
     invite_sent_to: "Приглашение отправлено: {names}",
     group_invite_title: "Приглашение в группу", group_invite_from: "от {name}",
     group_invite_timer: "Закроется через {n} с — останется в Настройках → Группа",
