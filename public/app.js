@@ -1267,6 +1267,12 @@ function applyChatListChrome() {
 $("clCollapse") && ($("clCollapse").onclick = () => {
   clCollapsed = !clCollapsed; localStorage.setItem("dialog_cl_collapsed", clCollapsed ? "1" : "0"); applyChatListChrome();
 });
+// Let other modules open the list back up (the collapsed rail's "servers" button does this —
+// a 76px column has no room for server pills AND channels).
+window.dialogExpandChatList = () => {
+  if (!clCollapsed) return;
+  clCollapsed = false; localStorage.setItem("dialog_cl_collapsed", "0"); applyChatListChrome();
+};
 (function () {                                                          // drag the divider between list ↔ chat to resize
   const rz = $("clResizer"), app = $("app"); if (!rz || !app) return;
   let dragging = false;
