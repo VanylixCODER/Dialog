@@ -137,6 +137,7 @@ const I18N = {
     gc_create_btn: "Create",
     // ── Message actions, search, drafts, pins ──
     // ── Group invitations, bans, discover search ──
+    invite_sent_to: "Invitation sent to {names}",
     group_invite_title: "Group invitation", group_invite_from: "from {name}",
     group_invite_timer: "Closes in {n}s — it stays in Settings → Group",
     group_invite_moved: "Invitation moved to Settings → Group.", group_invite_accepted: "Joined.",
@@ -445,6 +446,7 @@ const I18N = {
     gc_create_btn: "Создать",
     // ── Действия с сообщениями, поиск, черновики, закрепления ──
     // ── Приглашения в группу, баны, поиск в «Обзоре» ──
+    invite_sent_to: "Приглашение отправлено: {names}",
     group_invite_title: "Приглашение в группу", group_invite_from: "от {name}",
     group_invite_timer: "Закроется через {n} с — останется в Настройках → Группа",
     group_invite_moved: "Приглашение перенесено в Настройки → Группа.", group_invite_accepted: "Вы вступили.",

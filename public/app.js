@@ -1908,7 +1908,7 @@ $("amConfirm").onclick = async () => {
     const payload = { add: [...gmAdd] };
     const { ok, data } = await api("/api/groups/" + id + "/members", payload);
     if (!ok) { $("amError").textContent = data.error || "Couldn't add members"; return; }
-    notify(t("add_member_btn") + ": " + payload.add.join(", "));
+    notify(t("invite_sent_to", { names: payload.add.join(", ") }));   // they must accept now
   } else {
     // suggest: comma-list на сервере перебирает и молча пропускает уже-участников / несуществующих.
     const payload = { target: [...gmAdd].join(",") };
