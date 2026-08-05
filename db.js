@@ -284,6 +284,42 @@ export async function initSchema() {
     UNIQUE KEY uniq_gar (group_id, to_login), KEY idx_gar_to (to_login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // ── Servers: a space with its own channels, roles and members. Channel rooms are
+  // "@ch:<id>", which slots straight into the existing message/call pipeline. ──
+  await pool.query(`CREATE TABLE IF NOT EXISTS servers (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(64) NOT NULL, owner VARCHAR(24) NOT NULL,
+    icon LONGTEXT NULL, about VARCHAR(190) NULL,
+    is_public TINYINT NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL,
+    KEY idx_srv_owner (owner), KEY idx_srv_pub (is_public)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS server_members (
+    server_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL, joined_at BIGINT NOT NULL,
+    PRIMARY KEY (server_id, login), KEY idx_sm_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // kind: text | voice | rules | news. auto_owner marks a self-service voice room that is
+  // deleted the moment its creator leaves it.
+  await pool.query(`CREATE TABLE IF NOT EXISTS server_channels (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    server_id BIGINT NOT NULL, name VARCHAR(48) NOT NULL,
+    kind VARCHAR(8) NOT NULL DEFAULT 'text', position INT NOT NULL DEFAULT 0,
+    auto_owner VARCHAR(24) NULL, created_at BIGINT NOT NULL,
+    KEY idx_sc_server (server_id, position), KEY idx_sc_auto (auto_owner)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  // perms is a bitmask — see SERVER_PERMS in server.js. Five roles per server, deliberately.
+  await pool.query(`CREATE TABLE IF NOT EXISTS server_roles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    server_id BIGINT NOT NULL, name VARCHAR(32) NOT NULL,
+    color VARCHAR(9) NOT NULL DEFAULT '#00ff5a', perms INT NOT NULL DEFAULT 0,
+    position INT NOT NULL DEFAULT 0,
+    KEY idx_sr_server (server_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS server_member_roles (
+    server_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL, role_id BIGINT NOT NULL,
+    PRIMARY KEY (server_id, login, role_id), KEY idx_smr_role (role_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Scheduled channel posts — the sweeper in server.js publishes rows whose `due` has passed.
   await pool.query(`CREATE TABLE IF NOT EXISTS scheduled_posts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1246,4 +1282,151 @@ export async function listPresenceHidden(login) {
 export async function setPresenceHidden(login, target, hidden) {
   if (hidden) await execute("INSERT IGNORE INTO presence_hidden (login, target) VALUES (?,?)", [login, target]);
   else await execute("DELETE FROM presence_hidden WHERE login=? AND target=?", [login, target]);
+}
+
+
+// ============================ Servers ============================
+export const SERVER_ROLE_LIMIT = 5;   // per server — raise it behind a subscription later
+
+export async function createServer(name, owner) {
+  const r = await execute("INSERT INTO servers (name, owner, created_at) VALUES (?,?,?)", [name, owner, Date.now()]);
+  const id = r.insertId;
+  await execute("INSERT INTO server_members (server_id, login, joined_at) VALUES (?,?,?)", [id, owner, Date.now()]);
+  // Every server starts usable: somewhere to talk, somewhere to speak, and the two
+  // read-mostly channels people expect.
+  const now = Date.now();
+  await execute(
+    `INSERT INTO server_channels (server_id, name, kind, position, created_at) VALUES
+     (?,?,'rules',0,?), (?,?,'text',1,?), (?,?,'news',2,?), (?,?,'voice',3,?)`,
+    [id, "rules", now, id, "general", now, id, "news", now, id, "General voice", now]
+  );
+  return id;
+}
+export async function getServer(id) {
+  const r = await query("SELECT id, name, owner, about, is_public AS isPublic, created_at AS createdAt FROM servers WHERE id=?", [id]);
+  return r[0] || null;
+}
+export async function getServerIcon(id) {
+  const r = await query("SELECT icon FROM servers WHERE id=?", [id]);
+  return r[0] ? r[0].icon : null;
+}
+export async function setServerIcon(id, icon) { await execute("UPDATE servers SET icon=? WHERE id=?", [icon, id]); }
+export async function updateServer(id, { name, about, isPublic }) {
+  const sets = [], vals = [];
+  if (name !== undefined) { sets.push("name=?"); vals.push(String(name).slice(0, 64)); }
+  if (about !== undefined) { sets.push("about=?"); vals.push(String(about).slice(0, 190)); }
+  if (isPublic !== undefined) { sets.push("is_public=?"); vals.push(isPublic ? 1 : 0); }
+  if (!sets.length) return;
+  vals.push(id);
+  await execute(`UPDATE servers SET ${sets.join(", ")} WHERE id=?`, vals);
+}
+export async function deleteServer(id) {
+  for (const tbl of ["server_member_roles", "server_roles", "server_channels", "server_members"]) {
+    await execute(`DELETE FROM ${tbl} WHERE server_id=?`, [id]);
+  }
+  await execute("DELETE FROM servers WHERE id=?", [id]);
+}
+export async function listUserServers(login) {
+  return await query(
+    `SELECT s.id, s.name, s.owner, s.about FROM servers s
+     JOIN server_members m ON m.server_id = s.id WHERE m.login=? ORDER BY s.id ASC`, [login]
+  );
+}
+export async function listPublicServers(limit = 40) {
+  const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 40));
+  return await query(
+    `SELECT s.id, s.name, s.about, s.owner,
+            (SELECT COUNT(*) FROM server_members m WHERE m.server_id = s.id) AS members
+     FROM servers s WHERE s.is_public=1 ORDER BY members DESC, s.id DESC LIMIT ${lim}`
+  );
+}
+export async function isServerMember(id, login) {
+  const r = await query("SELECT 1 FROM server_members WHERE server_id=? AND login=?", [id, login]);
+  return r.length > 0;
+}
+export async function joinServer(id, login) {
+  await execute("INSERT IGNORE INTO server_members (server_id, login, joined_at) VALUES (?,?,?)", [id, login, Date.now()]);
+}
+export async function leaveServer(id, login) {
+  await execute("DELETE FROM server_members WHERE server_id=? AND login=?", [id, login]);
+  await execute("DELETE FROM server_member_roles WHERE server_id=? AND login=?", [id, login]);
+}
+export async function listServerMembers(id) {
+  return await query(
+    `SELECT m.login, u.name, u.status,
+            (SELECT GROUP_CONCAT(r.role_id) FROM server_member_roles r WHERE r.server_id=m.server_id AND r.login=m.login) AS roleIds
+     FROM server_members m JOIN users u ON u.login = m.login WHERE m.server_id=? ORDER BY u.name ASC`, [id]
+  );
+}
+
+// ---- Channels ----
+export async function listChannels(serverId) {
+  return await query(
+    "SELECT id, name, kind, position, auto_owner AS autoOwner FROM server_channels WHERE server_id=? ORDER BY position ASC, id ASC",
+    [serverId]
+  );
+}
+export async function getChannel(id) {
+  const r = await query("SELECT id, server_id AS serverId, name, kind, auto_owner AS autoOwner FROM server_channels WHERE id=?", [id]);
+  return r[0] || null;
+}
+export async function createChannel(serverId, name, kind, autoOwner = null) {
+  const pos = await query("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM server_channels WHERE server_id=?", [serverId]);
+  const r = await execute(
+    "INSERT INTO server_channels (server_id, name, kind, position, auto_owner, created_at) VALUES (?,?,?,?,?,?)",
+    [serverId, String(name).slice(0, 48), kind, pos[0].p, autoOwner, Date.now()]
+  );
+  return r.insertId;
+}
+export async function renameChannel(id, name) { await execute("UPDATE server_channels SET name=? WHERE id=?", [String(name).slice(0, 48), id]); }
+export async function deleteChannel(id) {
+  await execute("DELETE FROM server_channels WHERE id=?", [id]);
+  await execute("DELETE FROM messages WHERE room=?", ["@ch:" + id]);
+  await cacheDel("hist:@ch:" + id);
+}
+// Someone's self-service voice room, if they have one open.
+export async function autoChannelOf(serverId, login) {
+  const r = await query("SELECT id FROM server_channels WHERE server_id=? AND auto_owner=?", [serverId, login]);
+  return r[0] ? r[0].id : null;
+}
+
+// ---- Roles ----
+export async function listRoles(serverId) {
+  return await query("SELECT id, name, color, perms, position FROM server_roles WHERE server_id=? ORDER BY position ASC, id ASC", [serverId]);
+}
+export async function countRoles(serverId) {
+  const r = await query("SELECT COUNT(*) AS n FROM server_roles WHERE server_id=?", [serverId]);
+  return Number(r[0].n) || 0;
+}
+export async function createRole(serverId, name, color, perms) {
+  const r = await execute(
+    "INSERT INTO server_roles (server_id, name, color, perms, position) VALUES (?,?,?,?,?)",
+    [serverId, String(name).slice(0, 32), String(color || "#00ff5a").slice(0, 9), Number(perms) || 0, await countRoles(serverId)]
+  );
+  return r.insertId;
+}
+export async function updateRole(id, { name, color, perms }) {
+  const sets = [], vals = [];
+  if (name !== undefined) { sets.push("name=?"); vals.push(String(name).slice(0, 32)); }
+  if (color !== undefined) { sets.push("color=?"); vals.push(String(color).slice(0, 9)); }
+  if (perms !== undefined) { sets.push("perms=?"); vals.push(Number(perms) || 0); }
+  if (!sets.length) return;
+  vals.push(id);
+  await execute(`UPDATE server_roles SET ${sets.join(", ")} WHERE id=?`, vals);
+}
+export async function deleteRole(id) {
+  await execute("DELETE FROM server_member_roles WHERE role_id=?", [id]);
+  await execute("DELETE FROM server_roles WHERE id=?", [id]);
+}
+export async function setMemberRole(serverId, login, roleId, on) {
+  if (on) await execute("INSERT IGNORE INTO server_member_roles (server_id, login, role_id) VALUES (?,?,?)", [serverId, login, roleId]);
+  else await execute("DELETE FROM server_member_roles WHERE server_id=? AND login=? AND role_id=?", [serverId, login, roleId]);
+}
+// Everything a member is allowed to do here, OR-ed across their roles.
+export async function memberPerms(serverId, login) {
+  const r = await query(
+    `SELECT COALESCE(BIT_OR(r.perms), 0) AS p FROM server_member_roles mr
+     JOIN server_roles r ON r.id = mr.role_id WHERE mr.server_id=? AND mr.login=?`, [serverId, login]
+  );
+  return Number(r[0] ? r[0].p : 0) || 0;
 }
