@@ -963,7 +963,8 @@
       <input id="dirSearch" class="field" data-i18n-ph="dir_search_ph" autocomplete="off" />
       <div id="dirSuggest" class="dir-suggest"></div>
       <div class="settings-subtabs cont-subtabs">
-        <button class="settings-subtab active" data-dirtab="channels" data-i18n="dir_channels">Channels</button>
+        <button class="settings-subtab active" data-dirtab="servers" data-i18n="dir_servers">Servers</button>
+        <button class="settings-subtab" data-dirtab="channels" data-i18n="dir_channels">Channels</button>
         <button class="settings-subtab" data-dirtab="bots" data-i18n="dir_bots">Bots</button>
       </div>
       <div id="dirList" class="dir-list"></div>
@@ -1015,6 +1016,7 @@
         <button id="srvIconBtn" class="btn-ghost btn-sm" data-i18n="upload_avatar">Icon</button>
         <input id="srvIconFile" type="file" accept="image/*" hidden />
       </div>
+      <input id="srvSetTags" class="field" maxlength="190" data-i18n-ph="srv_tags_ph" />
       <input id="srvSetAbout" class="field" maxlength="190" data-i18n-ph="about_ph" />
       <label class="pref-row"><input type="checkbox" id="srvSetPublic" /><span data-i18n="srv_public">List publicly</span></label>
       <button id="srvSetSave" class="btn-ghost btn-sm" data-i18n="save">Save</button>
@@ -1026,6 +1028,26 @@
       <div class="modal-actions">
         <button id="srvLeave" class="btn-ghost danger hidden" type="button" data-i18n="srv_leave">Leave server</button>
         <button id="srvDelete" class="btn-ghost danger hidden" type="button" data-i18n="srv_delete">Delete server</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create a server: name, icon and the tags people will search it by. -->
+  <div id="srvNewModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="srvNewClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="srv_new">New server</div>
+      <div class="srv-new-top">
+        <button id="srvNewIconBtn" class="srv-new-icon" type="button" data-i18n-title="upload_avatar" title="Icon"><span id="srvNewIconPrev"></span><span class="srv-new-plus">+</span></button>
+        <input id="srvNewIconFile" type="file" accept="image/*" hidden />
+        <input id="srvNewName" class="field" maxlength="64" data-i18n-ph="srv_name_ph" />
+      </div>
+      <input id="srvNewTags" class="field" maxlength="190" data-i18n-ph="srv_tags_ph" />
+      <input id="srvNewAbout" class="field" maxlength="190" data-i18n-ph="about_ph" />
+      <label class="pref-row"><input type="checkbox" id="srvNewPublic" /><span data-i18n="srv_public">List publicly</span></label>
+      <div class="modal-actions">
+        <button id="srvNewCancel" class="btn-ghost" type="button" data-i18n="cancel">Cancel</button>
+        <button id="srvNewCreate" class="btn-primary" type="button" data-i18n="btn_create_group">Create</button>
       </div>
     </div>
   </div>

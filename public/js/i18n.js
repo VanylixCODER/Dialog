@@ -140,6 +140,14 @@ const I18N = {
     // ── Activities (watch together + games) ──
     // ── Servers ──
     ok: "OK",
+    dir_servers: "Servers",
+    srv_tags_ph: "Tags — gaming, art, study (used for search)",
+    srv_in_call: "In call", srv_channel_tools: "Channel tools", srv_rename_channel: "Rename channel",
+    srv_delete_channel: "Delete channel", srv_delete_channel_confirm: "Delete #{name} and its messages?",
+    srv_restrict_none: "Everyone can see and post", srv_restrict_post: "Only staff can post",
+    srv_restrict_view: "Only staff can see it", srv_hook_create: "Create webhook URL",
+    srv_hook_copy: "Copy webhook URL", srv_hook_revoke: "Revoke webhook", srv_hook_created: "Webhook URL copied.",
+    srv_voice_confirm: "Join the call in {name}?",
     srv_new: "New server", srv_new_prompt: "Server name?", srv_browse: "Public servers",
     srv_settings: "Server settings", srv_name_ph: "Server name", srv_public: "List publicly",
     srv_rules: "Rules", srv_text: "Text channels", srv_news: "News", srv_voice: "Voice channels",
@@ -476,6 +484,14 @@ const I18N = {
     // ── Активности (совместный просмотр + игры) ──
     // ── Серверы ──
     ok: "ОК",
+    dir_servers: "Серверы",
+    srv_tags_ph: "Теги — игры, арт, учёба (для поиска)",
+    srv_in_call: "В звонке", srv_channel_tools: "Действия с каналом", srv_rename_channel: "Переименовать канал",
+    srv_delete_channel: "Удалить канал", srv_delete_channel_confirm: "Удалить #{name} вместе с сообщениями?",
+    srv_restrict_none: "Все видят и пишут", srv_restrict_post: "Пишут только модераторы",
+    srv_restrict_view: "Видят только модераторы", srv_hook_create: "Создать webhook-URL",
+    srv_hook_copy: "Скопировать webhook-URL", srv_hook_revoke: "Отозвать webhook", srv_hook_created: "Webhook-URL скопирован.",
+    srv_voice_confirm: "Присоединиться к звонку в «{name}»?",
     srv_new: "Новый сервер", srv_new_prompt: "Название сервера?", srv_browse: "Публичные серверы",
     srv_settings: "Настройки сервера", srv_name_ph: "Название сервера", srv_public: "Показывать публично",
     srv_rules: "Правила", srv_text: "Текстовые каналы", srv_news: "Новости", srv_voice: "Голосовые каналы",

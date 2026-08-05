@@ -27,41 +27,75 @@
   }
   function renderRail() {
     const rail = railEl(); if (!rail) return;
-    rail.innerHTML = "";
+    // Pills scroll inside their own strip; "+" is pinned outside it so it can never be
+    // pushed off the edge no matter how many servers you're in. (Browsing public servers
+    // lives in Discover now — one place to find things.)
+    rail.innerHTML = `<div class="srv-scroll" id="srvScroll"></div><button class="srv-pill srv-add" id="srvAddBtn" title="${escapeHtml(t("srv_new"))}">+</button>`;
+    const scroll = $("srvScroll");
     for (const srv of S.list) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "srv-pill" + (S.cur === srv.id ? " on" : "");
       b.title = srv.name;
+      b.setAttribute("aria-label", srv.name);
       b.innerHTML = `<img src="/api/server-icon/${srv.id}" onerror="this.remove()"><span>${escapeHtml((srv.name || "?").slice(0, 2).toUpperCase())}</span>`;
       b.onclick = () => openServer(srv.id);
-      rail.appendChild(b);
+      scroll.appendChild(b);
     }
-    const add = document.createElement("button");
-    add.type = "button"; add.className = "srv-pill srv-add"; add.title = t("srv_new");
-    add.textContent = "+";
-    add.onclick = createServerFlow;
-    rail.appendChild(add);
-    const browse = document.createElement("button");
-    browse.type = "button"; browse.className = "srv-pill srv-browse"; browse.title = t("srv_browse");
-    browse.textContent = "◎";
-    browse.onclick = browseServers;
-    rail.appendChild(browse);
-    rail.classList.toggle("hidden", false);
+    $("srvAddBtn").onclick = createServerFlow;
+    rail.classList.toggle("empty", !S.list.length);
   }
 
-  async function createServerFlow() {
-    const name = await askText(t("srv_new_prompt"), "", t("srv_name_ph"));
-    if (!name || !name.trim()) return;
-    const { ok, data } = await api("/api/servers", { name: name.trim() });
-    // Surface what actually went wrong instead of a blanket "error".
+  let newIcon = null;
+  function createServerFlow() {
+    newIcon = null;
+    $("srvNewName").value = ""; $("srvNewTags").value = ""; $("srvNewAbout").value = "";
+    $("srvNewPublic").checked = false;
+    $("srvNewIconPrev").innerHTML = "";
+    $("srvNewModal").classList.remove("hidden");
+    setTimeout(() => $("srvNewName").focus(), 40);
+  }
+  $("srvNewIconBtn") && ($("srvNewIconBtn").onclick = () => $("srvNewIconFile").click());
+  $("srvNewIconFile") && ($("srvNewIconFile").onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 3 * 1024 * 1024) { notify(t("err_avatar_too_big")); return; }
+    const r = new FileReader();
+    r.onload = () => { newIcon = r.result; $("srvNewIconPrev").innerHTML = `<img src="${newIcon}" alt="">`; };
+    r.readAsDataURL(f);
+  });
+  $("srvNewCancel") && ($("srvNewCancel").onclick = () => $("srvNewModal").classList.add("hidden"));
+  $("srvNewClose") && ($("srvNewClose").onclick = () => $("srvNewModal").classList.add("hidden"));
+  $("srvNewModal") && $("srvNewModal").addEventListener("click", (e) => { if (e.target === $("srvNewModal")) $("srvNewModal").classList.add("hidden"); });
+  $("srvNewCreate") && ($("srvNewCreate").onclick = async () => {
+    const name = $("srvNewName").value.trim();
+    if (!name) { $("srvNewName").focus(); return; }
+    const body = {
+      name,
+      tags: $("srvNewTags").value.trim(),
+      about: $("srvNewAbout").value.trim(),
+      isPublic: $("srvNewPublic").checked,
+    };
+    if (newIcon) body.icon = newIcon;
+    const { ok, data } = await api("/api/servers", body);
     if (!ok) { notify((data && data.error) ? t("err_generic") + " (" + data.error + ")" : t("err_generic")); return; }
+    $("srvNewModal").classList.add("hidden");
     await loadServers();
     openServer(data.id);
-  }
-  async function browseServers() {
+  });
+
+  // Discover asks for these; the rail no longer carries a browse button.
+  async function publicServers() {
     const { ok, data } = await api("/api/servers/public", null, "GET");
-    const rows = (ok && data.servers) || [];
+    return (ok && data.servers) || [];
+  }
+  window.dialogPublicServers = publicServers;
+  window.dialogJoinServer = async (id) => {
+    const r = await api(`/api/servers/${id}/join`, {});
+    if (!r.ok) { notify(t("srv_invite_only")); return false; }
+    await loadServers(); openServer(id); return true;
+  };
+  async function browseServers() {
+    const rows = await publicServers();
     const box = $("srvBrowseList"); if (!box) return;
     box.innerHTML = rows.length ? "" : `<div class="dir-empty">${t("dir_empty")}</div>`;
     for (const srv of rows) {
@@ -102,27 +136,46 @@
   window.dialogCloseServer = closeServer;
 
   // ---- Channel column ----
+  const voiceUsers = new Map();   // channelId -> [{login,name}] pushed live by the server
+  function chIcon(kind) { return kind === "voice" ? "🔊" : kind === "rules" ? "📜" : kind === "news" ? "📰" : "#"; }
   function renderChannels() {
     const panel = panelEl(); if (!panel || !S.data) return;
     const groups = { rules: [], news: [], text: [], voice: [] };
     for (const c of S.data.channels) (groups[c.kind] || groups.text).push(c);
-    const sec = (label, items, kind) => {
-      if (!items.length && !(kind === "voice" && can(P.CREATE_VOICE))) return "";
-      return `<div class="ch-sec"><div class="ch-sec-h">${label}` +
-        (kind === "voice" && can(P.CREATE_VOICE) ? `<button class="ch-add" data-mkvoice="1" title="${t("srv_my_voice")}">+</button>` : "") +
-        (kind !== "voice" && can(P.MANAGE_SERVER) ? `<button class="ch-add" data-mk="${kind}" title="${t("srv_add_channel")}">+</button>` : "") +
-        `</div>` +
-        items.map((c) => `<button class="ch-row${S.channel === c.id ? " on" : ""}" data-ch="${c.id}">` +
-          `<span class="ch-ico">${c.kind === "voice" ? "🔊" : c.kind === "rules" ? "📜" : c.kind === "news" ? "📰" : "#"}</span>` +
+    const manage = can(P.MANAGE_SERVER);
+    const row = (c) => {
+      const occ = voiceUsers.get(c.id) || (c.voice || []);
+      const live = c.kind === "voice" && occ.length;
+      return `<div class="ch-item${S.channel === c.id ? " on" : ""}${live ? " live" : ""}">` +
+        `<button class="ch-row" data-ch="${c.id}">` +
+          `<span class="ch-ico">${chIcon(c.kind)}</span>` +
           `<span class="ch-name">${escapeHtml(c.name)}</span>` +
-          (c.autoOwner ? `<span class="ch-auto" title="${t("srv_auto_voice")}">⏳</span>` : "") +
-          `</button>`).join("") + `</div>`;
+          (c.restrictMode === "view" ? `<span class="ch-lock" title="${escapeHtml(t("srv_restrict_view"))}">🙈</span>` : "") +
+          (c.restrictMode === "post" ? `<span class="ch-lock" title="${escapeHtml(t("srv_restrict_post"))}">🔒</span>` : "") +
+          (c.autoOwner ? `<span class="ch-auto" title="${escapeHtml(t("srv_auto_voice"))}">⏳</span>` : "") +
+          (live ? `<span class="ch-live" title="${escapeHtml(t("srv_in_call"))}">●<b>${occ.length}</b></span>` : "") +
+        `</button>` +
+        (manage || c.autoOwner === profile.login ? `<button class="ch-cog" data-chcog="${c.id}" title="${escapeHtml(t("srv_channel_tools"))}">⋯</button>` : "") +
+        // Who's in the voice channel right now, by face — the point of a voice list.
+        (live ? `<div class="ch-faces">` + occ.slice(0, 8).map((u) =>
+            `<span class="avatar ch-face" data-login="${escapeHtml(u.login)}" title="${escapeHtml(u.name || u.login)}">` +
+            `<img src="${avaUrl(u.login)}" onerror="this.remove()">${escapeHtml(initials(u.name || u.login))}</span>`).join("") +
+          (occ.length > 8 ? `<span class="ch-face-more">+${occ.length - 8}</span>` : "") + `</div>` : "") +
+        `</div>`;
+    };
+    const sec = (label, items, kind) => {
+      const canAdd = kind === "voice" ? (can(P.CREATE_VOICE) || manage) : manage;
+      if (!items.length && !canAdd) return "";
+      return `<div class="ch-sec"><div class="ch-sec-h"><span>${label}</span>` +
+        (kind === "voice" && can(P.CREATE_VOICE) ? `<button class="ch-add" data-mkvoice="1" title="${escapeHtml(t("srv_my_voice"))}">+</button>` : "") +
+        (kind !== "voice" && manage ? `<button class="ch-add" data-mk="${kind}" title="${escapeHtml(t("srv_add_channel"))}">+</button>` : "") +
+        `</div>` + items.map(row).join("") + `</div>`;
     };
     panel.innerHTML =
       `<div class="srv-head">
-         <button class="srv-back" id="srvBack" title="${t("back")}">‹</button>
+         <button class="srv-back" id="srvBack" title="${escapeHtml(t("back"))}">‹</button>
          <div class="srv-name" title="${escapeHtml(S.data.server.name)}">${escapeHtml(S.data.server.name)}</div>
-         <button class="srv-gear" id="srvGear" title="${t("srv_settings")}">⚙</button>
+         <button class="srv-gear" id="srvGear" title="${escapeHtml(t("srv_settings"))}">⚙</button>
        </div>
        <div class="ch-list">
          ${sec(t("srv_rules"), groups.rules, "rules")}
@@ -130,15 +183,71 @@
          ${sec(t("srv_news"), groups.news, "news")}
          ${sec(t("srv_voice"), groups.voice, "voice")}
        </div>
-       <div class="srv-foot"><button class="btn-ghost btn-sm" id="srvMembers">${t("srv_members", { n: S.data.members.length })}</button></div>`;
+       <div class="srv-foot"><button class="btn-ghost btn-sm" id="srvMembers">${escapeHtml(t("srv_members", { n: S.data.members.length }))}</button></div>`;
     panel.querySelectorAll("[data-ch]").forEach((b) => (b.onclick = () => openChannel(Number(b.dataset.ch))));
     panel.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = () => addChannel(b.dataset.mk)));
     panel.querySelectorAll("[data-mkvoice]").forEach((b) => (b.onclick = makeMyVoice));
+    panel.querySelectorAll("[data-chcog]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); channelTools(Number(b.dataset.chcog), b); }));
     $("srvBack") && ($("srvBack").onclick = closeServer);
     $("srvGear") && ($("srvGear").onclick = openServerSettings);
     $("srvMembers") && ($("srvMembers").onclick = showMembers);
     panel.classList.remove("hidden");
   }
+
+  // Moderator tools for one channel: rename, webhook, who-can-see/post, delete. Rules and
+  // news channels are deletable like any other — that was the ask.
+  function channelTools(id, anchor) {
+    const ch = (S.data.channels || []).find((c) => c.id === id); if (!ch) return;
+    let menu = $("chMenu");
+    if (!menu) { menu = document.createElement("div"); menu.id = "chMenu"; menu.className = "chat-menu hidden"; document.body.appendChild(menu); }
+    menu.innerHTML = "";
+    const item = (label, fn, danger) => {
+      const b = document.createElement("button");
+      if (danger) b.className = "danger";
+      b.innerHTML = `<span>${label}</span>`;
+      b.onclick = () => { menu.classList.add("hidden"); fn(); };
+      menu.appendChild(b);
+    };
+    item(t("srv_rename_channel"), async () => {
+      const name = await askText(t("srv_add_channel_prompt"), ch.name);
+      if (!name) return;
+      await api("/api/channels/" + id, { name });
+      refresh();
+    });
+    if (can(P.MANAGE_SERVER)) {
+      if (ch.kind === "text") {
+        item(ch.hook ? t("srv_hook_copy") : t("srv_hook_create"), async () => {
+          if (ch.hook) { copyToClipboard(ch.hook); notify(t("copied")); return; }
+          const { ok, data } = await api(`/api/channels/${id}/hook`, {});
+          if (ok && data.hook) { copyToClipboard(data.hook); notify(t("srv_hook_created")); refresh(); }
+        });
+        if (ch.hook) item(t("srv_hook_revoke"), async () => { await api(`/api/channels/${id}/hook`, { off: true }); refresh(); }, true);
+      }
+      const modes = [["none", t("srv_restrict_none")], ["post", t("srv_restrict_post")], ["view", t("srv_restrict_view")]];
+      for (const [mode, label] of modes) {
+        if (mode === (ch.restrictMode || "none")) continue;
+        item("→ " + label, async () => { await api(`/api/channels/${id}/restrict`, { mode }); refresh(); });
+      }
+      item(t("srv_delete_channel"), async () => {
+        if (!confirm(t("srv_delete_channel_confirm", { name: ch.name }))) return;
+        await api("/api/channels/" + id, null, "DELETE");
+        if (S.channel === id) S.channel = null;
+        refresh();
+      }, true);
+    } else if (ch.autoOwner === profile.login) {
+      item(t("srv_delete_channel"), async () => { await api("/api/channels/" + id, null, "DELETE"); refresh(); }, true);
+    }
+    menu.classList.remove("hidden");
+    menu._openedAt = Date.now();
+    const r = anchor.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - (menu.offsetWidth || 200) - 8)) + "px";
+    menu.style.top = Math.min(r.bottom + 4, innerHeight - (menu.offsetHeight || 200) - 8) + "px";
+  }
+  document.addEventListener("click", (e) => {
+    const m = $("chMenu"); if (!m || m.classList.contains("hidden")) return;
+    if (Date.now() - (m._openedAt || 0) < 250) return;
+    if (!e.target.closest("#chMenu")) m.classList.add("hidden");
+  });
 
   async function addChannel(kind) {
     const name = await askText(t("srv_add_channel_prompt"), "", kind);
@@ -154,8 +263,12 @@
     openChannel(data.id);
   }
 
-  function openChannel(id) {
+  async function openChannel(id) {
     const ch = (S.data.channels || []).find((c) => c.id === id); if (!ch) return;
+    // A voice channel means joining a call — say so before turning anyone's mic on.
+    if (ch.kind === "voice" && !(call && call.active && call.roomKey === "@ch:" + id)) {
+      if (!confirm(t("srv_voice_confirm", { name: ch.name }))) return;
+    }
     S.channel = id;
     renderChannels();
     // A channel is just a room — hand it to the normal chat opener.
@@ -165,8 +278,19 @@
     const sub = $("chatSub");
     if (sub) sub.textContent = S.data.server.name + " · " + (ch.kind === "voice" ? t("srv_voice") : ch.kind === "rules" ? t("srv_rules") : ch.kind === "news" ? t("srv_news") : t("srv_text"));
     const stage = document.getElementById("chatPane");
-    stage && stage.classList.toggle("ch-readonly", ch.kind === "rules" || (ch.kind === "news" && !can(P.POST_NEWS) && !S.data.owner));
-    if (ch.kind === "voice") notify(t("srv_voice_hint"));
+    stage && stage.classList.toggle("ch-readonly", !canPost(ch));
+    if (ch.kind === "voice") {
+      // Join for real once the room switch has settled (joinCall reads myRoom).
+      setTimeout(() => { if (!call.active) $("startCallBtn") && $("startCallBtn").click(); }, 420);
+    }
+  }
+  // Mirrors the server's rule so the composer isn't offered when posting would be refused.
+  function canPost(ch) {
+    if (!ch) return false;
+    if (ch.kind === "rules") return !!S.data.staff;
+    if (ch.kind === "news") return !!(S.data.staff || can(P.POST_NEWS));
+    if (ch.restrictMode === "post" || ch.restrictMode === "view") return !!S.data.staff;
+    return true;
   }
 
   function showMembers() {
@@ -195,9 +319,10 @@
     const m = $("srvSettingsModal"); if (!m || !S.data) return;
     $("srvSetName").value = S.data.server.name || "";
     $("srvSetAbout").value = S.data.server.about || "";
+    $("srvSetTags").value = S.data.server.tags || "";
     $("srvSetPublic").checked = !!S.data.server.isPublic;
     const manage = can(P.MANAGE_SERVER);
-    ["srvSetName", "srvSetAbout", "srvSetPublic", "srvSetSave", "srvIconBtn"].forEach((id) => { const e = $(id); if (e) e.disabled = !manage; });
+    ["srvSetName", "srvSetAbout", "srvSetTags", "srvSetPublic", "srvSetSave", "srvIconBtn"].forEach((id) => { const e = $(id); if (e) e.disabled = !manage; });
     renderRoles();
     $("srvDelete").classList.toggle("hidden", !S.data.owner);
     $("srvLeave").classList.toggle("hidden", !!S.data.owner);
@@ -262,7 +387,7 @@
     refresh(true);
   });
   $("srvSetSave") && ($("srvSetSave").onclick = async () => {
-    await api("/api/servers/" + S.cur, { name: $("srvSetName").value.trim(), about: $("srvSetAbout").value.trim(), isPublic: $("srvSetPublic").checked });
+    await api("/api/servers/" + S.cur, { name: $("srvSetName").value.trim(), about: $("srvSetAbout").value.trim(), tags: $("srvSetTags").value.trim(), isPublic: $("srvSetPublic").checked });
     notify(t("saved")); refresh(true); loadServers();
   });
   $("srvIconBtn") && ($("srvIconBtn").onclick = () => $("srvIconFile").click());
@@ -290,6 +415,10 @@
   [$("srvSettingsModal"), $("srvBrowseModal")].forEach((m) => m && m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); }));
 
   socket.on("server-updated", ({ id }) => { if (S.cur && Number(id) === Number(S.cur)) refresh(true); });
+  socket.on("server-voice", ({ channelId, users }) => {
+    voiceUsers.set(Number(channelId), users || []);
+    if (S.cur) renderChannels();
+  });
   socket.on("servers-changed", () => { loadServers(); if (S.cur) refresh(); });
 
   // Boot once the session is up (app.js sets `profile` after checkSession).
