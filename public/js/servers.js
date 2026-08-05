@@ -30,8 +30,22 @@
     // Pills scroll inside their own strip; "+" is pinned outside it so it can never be
     // pushed off the edge no matter how many servers you're in. (Browsing public servers
     // lives in Discover now — one place to find things.)
-    rail.innerHTML = `<div class="srv-scroll" id="srvScroll"></div><button class="srv-pill srv-add" id="srvAddBtn" title="${escapeHtml(t("srv_new"))}">+</button>`;
+    rail.innerHTML =
+      `<button class="srv-pill srv-expand" id="srvExpandBtn" title="${escapeHtml(t("srv_show"))}">` +
+        `<span class="srv-exp-ico">▦</span>${S.list.length ? `<b class="srv-exp-n">${S.list.length}</b>` : ""}</button>` +
+      `<div class="srv-scroll" id="srvScroll"></div>` +
+      `<button class="srv-pill srv-add" id="srvAddBtn" title="${escapeHtml(t("srv_new"))}">+</button>`;
+    // Collapsed list → one button that opens the list back up, because 76px can't hold a rail.
+    $("srvExpandBtn").onclick = () => { window.dialogExpandChatList && window.dialogExpandChatList(); };
     const scroll = $("srvScroll");
+    // A plain mouse wheel scrolls vertically, which does nothing over a horizontal strip —
+    // servers past the edge looked unreachable. Map wheel-Y onto scroll-X.
+    scroll.addEventListener("wheel", (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;          // real horizontal gesture: leave it alone
+      if (scroll.scrollWidth <= scroll.clientWidth + 1) return;      // nothing to scroll
+      e.preventDefault();
+      scroll.scrollLeft += e.deltaY;
+    }, { passive: false });
     for (const srv of S.list) {
       const b = document.createElement("button");
       b.type = "button";
@@ -44,6 +58,9 @@
     }
     $("srvAddBtn").onclick = createServerFlow;
     rail.classList.toggle("empty", !S.list.length);
+    // Re-rendering resets scrollLeft — bring the open server back into view.
+    const on = scroll.querySelector(".srv-pill.on");
+    if (on) requestAnimationFrame(() => on.scrollIntoView({ block: "nearest", inline: "nearest" }));
   }
 
   let newIcon = null;

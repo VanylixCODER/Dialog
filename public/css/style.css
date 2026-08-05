@@ -5596,15 +5596,22 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .srv-scroll {
   flex: 1 1 auto; min-width: 0;
   display: flex; gap: 6px; align-items: center;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  overflow-x: auto; overflow-y: hidden;
+  /* Thin, and only visible while the pointer is in the rail: enough to say "this scrolls"
+     without a permanent bar under the pills. */
+  scrollbar-width: thin; scrollbar-color: transparent transparent;
   scroll-snap-type: x proximity;
   /* Fade the right edge so "there is more over there" is visible without a scrollbar. */
   -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
           mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
 }
-.srv-scroll::-webkit-scrollbar { display: none; }
+.srv-scroll::-webkit-scrollbar { height: 4px; }
+.srv-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.srv-rail:hover .srv-scroll { scrollbar-color: var(--border-2) transparent; }
+.srv-rail:hover .srv-scroll::-webkit-scrollbar-thumb { background: var(--border-2); }
 .srv-scroll > .srv-pill { scroll-snap-align: start; }
 .srv-rail > .srv-add { flex: 0 0 auto; }
+.srv-expand { display: none; }
 .srv-pill {
   position: relative; flex: 0 0 auto;
   width: 38px; height: 38px; border-radius: 13px;
@@ -5675,16 +5682,19 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 
 /* ---- Server rail in minimized (collapsed) list mode ----
-   The column is a narrow avatar rail there, so the horizontal strip has no room: stack the
-   pills vertically and let THAT scroll instead. */
-.app.cl-collapsed .srv-rail { flex-direction: column; gap: 5px; padding: 8px 0 0; align-items: center; }
-.app.cl-collapsed .srv-scroll {
-  flex-direction: column; overflow-x: hidden; overflow-y: auto;
-  max-height: 46vh; width: 100%; align-items: center;
-  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 18px), transparent 100%);
-          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+   76px can hold neither a strip of servers nor a channel column, so the rail becomes ONE
+   button that opens the list back up. */
+.app.cl-collapsed .srv-rail { justify-content: center; padding: 8px 0 0; }
+.app.cl-collapsed .srv-scroll, .app.cl-collapsed .srv-add { display: none; }
+.app.cl-collapsed .srv-expand { display: grid; position: relative; width: 40px; height: 40px; }
+.srv-expand .srv-exp-ico { font-size: 15px; line-height: 1; }
+.srv-expand .srv-exp-n {
+  position: absolute; right: -3px; bottom: -3px;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  display: grid; place-items: center; border-radius: 8px;
+  background: var(--accent-400); color: var(--on-accent);
+  font-size: 9.5px; font-weight: 800;
 }
-.app.cl-collapsed .srv-pill { width: 34px; height: 34px; border-radius: 11px; font-size: 11px; }
 /* Collapsed + inside a server: the channel column can't fit, so the rail is the whole UI. */
 .app.cl-collapsed .srv-panel { display: none; }
 
