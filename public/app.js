@@ -255,6 +255,30 @@ function refreshOnAccent() {
   let lum = 0.5;
   if (rgb) { const p = rgb.split(",").map((n) => Number(n.trim())); if (p.length === 3 && p.every((x) => !isNaN(x))) lum = relLumRgb(p[0], p[1], p[2]); }
   document.documentElement.style.setProperty("--on-accent", lum > 0.42 ? "#0a1512" : "#ffffff");
+  refreshBadgeColor();
+}
+// Notification pings wear the theme's SECONDARY colour. On a light secondary (white being the
+// obvious case) white digits vanish, so the number goes red instead.
+function refreshBadgeColor() {
+  const cs = getComputedStyle(document.body);
+  // User themes publish --secondary-rgb; the built-in palettes carry it as --accent-300.
+  const sec = cs.getPropertyValue("--secondary-rgb").trim();
+  let p = null;
+  if (sec) { const v = sec.split(",").map((n) => Number(n.trim())); if (v.length === 3 && v.every((x) => !isNaN(x))) p = v; }
+  if (!p) {
+    const raw = cs.getPropertyValue("--accent-300").trim();
+    if (raw.startsWith("#")) p = hexToRgb(raw);
+    else { const m = raw.match(/\d+/g); if (m && m.length >= 3) p = m.slice(0, 3).map(Number); }
+  }
+  if (!p) return;
+  const root = document.documentElement.style;
+  root.setProperty("--badge-bg", `rgb(${p[0]}, ${p[1]}, ${p[2]})`);
+  // "Is it white" is a channel test, not a luminance one: a mint green is bright but nowhere
+  // near white, and red digits on it would be arbitrary. White (or near-white) → red digits,
+  // as asked. Otherwise pick whichever of dark/white the background can actually carry.
+  const whiteish = Math.min(p[0], p[1], p[2]) >= 225;
+  const lum = relLumRgb(p[0], p[1], p[2]);
+  root.setProperty("--badge-fg", whiteish ? "var(--danger)" : lum > 0.55 ? "#0a1512" : "#ffffff");
 }
 function applyTheme(key, animate = false) {
   // Legacy "contrast"/"high_contrast" and the retired "dracula"/"midnight" → matrix (migration

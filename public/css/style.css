@@ -556,7 +556,7 @@ a:focus-visible {
   min-width: 16px; height: 16px;
   padding: 0 4px; box-sizing: border-box;
   display: none; align-items: center; justify-content: center;
-  background: var(--danger); color: #fff;
+  background: var(--badge-bg, var(--danger)); color: var(--badge-fg, #fff);
   font-size: 10px; font-weight: 700; line-height: 1;
   border-radius: 9px; border: 2px solid var(--bg-1);
   pointer-events: none;
@@ -5632,9 +5632,11 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .tab-badge {
   display: none; place-items: center;
   min-width: 17px; height: 17px; margin-left: auto; padding: 0 5px;
-  background: var(--danger); color: #fff;
+  /* Theme's secondary colour; the digits flip to red when that colour is too light for
+     white to read on (see refreshBadgeColor). Falls back to danger before JS runs. */
+  background: var(--badge-bg, var(--danger)); color: var(--badge-fg, #fff);
   font-size: 10px; font-weight: 800; line-height: 1;
-  border-radius: 9px; box-shadow: 0 0 0 2px rgba(255, 82, 82, 0.18);
+  border-radius: 9px; box-shadow: 0 0 0 2px rgba(var(--secondary-rgb, 255, 82, 82), 0.18);
 }
 .tab-badge.show { display: inline-grid; }
 /* Desktop sidebar / mobile list: the label takes the slack so the badge hugs the right edge. */
