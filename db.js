@@ -308,6 +308,12 @@ export async function initSchema() {
     KEY idx_sc_server (server_id, position), KEY idx_sc_auto (auto_owner)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
   // perms is a bitmask — see SERVER_PERMS in server.js. Five roles per server, deliberately.
+  // Searchable tags for the public listing, and per-channel controls: a webhook secret and
+  // a restriction (none | post = only staff may write | view = only staff may even see it).
+  try { await pool.query("ALTER TABLE servers ADD COLUMN tags VARCHAR(190) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE server_channels ADD COLUMN hook_secret CHAR(32) NULL"); } catch {}
+  try { await pool.query("ALTER TABLE server_channels ADD COLUMN restrict_mode VARCHAR(8) NOT NULL DEFAULT 'none'"); } catch {}
+
   await pool.query(`CREATE TABLE IF NOT EXISTS server_roles (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     server_id BIGINT NOT NULL, name VARCHAR(32) NOT NULL,
@@ -1303,7 +1309,7 @@ export async function createServer(name, owner) {
   return id;
 }
 export async function getServer(id) {
-  const r = await query("SELECT id, name, owner, about, is_public AS isPublic, created_at AS createdAt FROM servers WHERE id=?", [id]);
+  const r = await query("SELECT id, name, owner, about, tags, is_public AS isPublic, created_at AS createdAt FROM servers WHERE id=?", [id]);
   return r[0] || null;
 }
 export async function getServerIcon(id) {
@@ -1311,10 +1317,11 @@ export async function getServerIcon(id) {
   return r[0] ? r[0].icon : null;
 }
 export async function setServerIcon(id, icon) { await execute("UPDATE servers SET icon=? WHERE id=?", [icon, id]); }
-export async function updateServer(id, { name, about, isPublic }) {
+export async function updateServer(id, { name, about, isPublic, tags }) {
   const sets = [], vals = [];
   if (name !== undefined) { sets.push("name=?"); vals.push(String(name).slice(0, 64)); }
   if (about !== undefined) { sets.push("about=?"); vals.push(String(about).slice(0, 190)); }
+  if (tags !== undefined) { sets.push("tags=?"); vals.push(String(tags).slice(0, 190)); }
   if (isPublic !== undefined) { sets.push("is_public=?"); vals.push(isPublic ? 1 : 0); }
   if (!sets.length) return;
   vals.push(id);
@@ -1335,7 +1342,7 @@ export async function listUserServers(login) {
 export async function listPublicServers(limit = 40) {
   const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 40));
   return await query(
-    `SELECT s.id, s.name, s.about, s.owner,
+    `SELECT s.id, s.name, s.about, s.tags, s.owner,
             (SELECT COUNT(*) FROM server_members m WHERE m.server_id = s.id) AS members
      FROM servers s WHERE s.is_public=1 ORDER BY members DESC, s.id DESC LIMIT ${lim}`
   );
@@ -1362,12 +1369,13 @@ export async function listServerMembers(id) {
 // ---- Channels ----
 export async function listChannels(serverId) {
   return await query(
-    "SELECT id, name, kind, position, auto_owner AS autoOwner FROM server_channels WHERE server_id=? ORDER BY position ASC, id ASC",
+    `SELECT id, name, kind, position, auto_owner AS autoOwner, restrict_mode AS restrictMode, hook_secret AS hookSecret
+     FROM server_channels WHERE server_id=? ORDER BY position ASC, id ASC`,
     [serverId]
   );
 }
 export async function getChannel(id) {
-  const r = await query("SELECT id, server_id AS serverId, name, kind, auto_owner AS autoOwner FROM server_channels WHERE id=?", [id]);
+  const r = await query("SELECT id, server_id AS serverId, name, kind, auto_owner AS autoOwner, restrict_mode AS restrictMode, hook_secret AS hookSecret FROM server_channels WHERE id=?", [id]);
   return r[0] || null;
 }
 export async function createChannel(serverId, name, kind, autoOwner = null) {
@@ -1429,4 +1437,13 @@ export async function memberPerms(serverId, login) {
      JOIN server_roles r ON r.id = mr.role_id WHERE mr.server_id=? AND mr.login=?`, [serverId, login]
   );
   return Number(r[0] ? r[0].p : 0) || 0;
+}
+
+export async function setChannelRestrict(id, mode) {
+  await execute("UPDATE server_channels SET restrict_mode=? WHERE id=?", [["none", "post", "view"].includes(mode) ? mode : "none", id]);
+}
+export async function setChannelHook(id, secret) { await execute("UPDATE server_channels SET hook_secret=? WHERE id=?", [secret, id]); }
+export async function getChannelByHook(id, secret) {
+  const r = await query("SELECT id, server_id AS serverId, name, kind, hook_secret AS hookSecret FROM server_channels WHERE id=? AND hook_secret=?", [id, secret]);
+  return r[0] || null;
 }

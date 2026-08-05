@@ -67,6 +67,7 @@ import {
   listUserServers, listPublicServers, isServerMember, joinServer, leaveServer, listServerMembers,
   listChannels, getChannel, createChannel, renameChannel, deleteChannel, autoChannelOf,
   listRoles, countRoles, createRole, updateRole, deleteRole, setMemberRole, memberPerms,
+  setChannelRestrict, setChannelHook, getChannelByHook,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -1678,7 +1679,25 @@ function callStatePayload(room) {
   const meta = callMeta.get(room);
   return { room, count: logins.length, logins, locked: !!(meta && meta.locked), muteOnEntry: !!(meta && meta.muteOnEntry) };
 }
-function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
+// Who is currently in a room's call, with display names — the server panel shows these
+// under a voice channel, so it needs names rather than a bare count.
+function voiceOccupancy(room) {
+  const c = callRooms.get(room);
+  if (!c) return [];
+  const seen = new Map();
+  for (const v of c.values()) if (!seen.has(v.login)) seen.set(v.login, { login: v.login, name: v.name });
+  return [...seen.values()];
+}
+function broadcastCallState(room) {
+  io.to(room).emit("call-state", callStatePayload(room));
+  // A voice channel's occupancy is interesting to everyone in the server, not just the
+  // people already inside the room.
+  if (room.startsWith("@ch:")) {
+    getChannel(room.slice(4)).then((ch) => {
+      if (ch) notifyServer(ch.serverId, "server-voice", { channelId: ch.id, users: voiceOccupancy(room) });
+    }).catch(() => {});
+  }
+}
 // Remove one socket from a call room, running the same end-of-call bookkeeping
 // (system message + meta cleanup) as a normal leave when the room empties.
 function removeFromCall(room, sid) {
@@ -2041,9 +2060,9 @@ io.on("connection", (socket) => {
       const gid = newRoom.slice(5);
       if (!/^\d+$/.test(gid) || !(await isGroupMember(gid, p.login))) { socket.emit("auth-error", "No access"); return; }
     } else if (newRoom.startsWith("@ch:")) {
-      // Server channel: membership of the owning server is the gate.
+      // Server channel: membership of the owning server, plus the channel's own visibility.
       const ch = await getChannel(newRoom.slice(4));
-      if (!ch || !(await isServerMember(ch.serverId, p.login))) { socket.emit("auth-error", "No access"); return; }
+      if (!ch || !(await canSeeChannel(ch, p.login))) { socket.emit("auth-error", "No access"); return; }
     }
     if (currentRoom && currentRoom !== newRoom) doLeave();
     currentRoom = newRoom; socketRoom.set(socket.id, newRoom);
@@ -2113,6 +2132,12 @@ io.on("connection", (socket) => {
         notifyUser(dmTo, "relations-changed", {}); notifyUser(userLogin, "relations-changed", {});
         return;
       }
+    }
+    // Server channel: rules are read-only, news needs POST_NEWS, and a "post"-restricted
+    // channel is staff-only. Same shape as the group-channel rule below.
+    if (currentRoom.startsWith("@ch:")) {
+      const ch = await getChannel(currentRoom.slice(4));
+      if (ch && !(await canPostChannel(ch, userLogin))) { socket.emit("channel-readonly", { room: currentRoom }); return; }
     }
     // Channel (broadcast) group: only the owner + bots may post; everyone else is read-only.
     if (currentRoom.startsWith("@grp:")) {
@@ -2412,6 +2437,24 @@ async function srvPerms(serverId, login) {
   return { srv, perms: await memberPerms(serverId, login), owner: false };
 }
 const hasPerm = (p, bit) => p.owner || (p.perms & bit) === bit;
+// Channel restrictions key off "is this person staff here", not off a specific bit: a
+// view-locked channel is for the people who run the server.
+const isStaff = (p) => p.owner || (p.perms & (SERVER_PERMS.MANAGE_SERVER | SERVER_PERMS.MANAGE_ROLES | SERVER_PERMS.KICK)) !== 0;
+// Can this person even open the channel? (view-restricted channels are staff-only)
+async function canSeeChannel(ch, login) {
+  if (!ch) return false;
+  if (!(await isServerMember(ch.serverId, login))) return false;
+  if (ch.restrictMode !== "view") return true;
+  return isStaff(await srvPerms(ch.serverId, login));
+}
+// Can they post in it? (rules are always read-only; "post" restriction is staff-only)
+async function canPostChannel(ch, login) {
+  if (!ch) return false;
+  if (ch.kind === "rules") return isStaff(await srvPerms(ch.serverId, login));
+  if (ch.kind === "news") { const p = await srvPerms(ch.serverId, login); return p.owner || (p.perms & SERVER_PERMS.POST_NEWS) === SERVER_PERMS.POST_NEWS || isStaff(p); }
+  if (ch.restrictMode === "post" || ch.restrictMode === "view") return isStaff(await srvPerms(ch.serverId, login));
+  return true;
+}
 
 app.get("/api/servers", async (req, res) => {
   try {
@@ -2425,6 +2468,11 @@ app.post("/api/servers", async (req, res) => {
     const name = String(req.body.name || "").trim();
     if (!name) return res.status(400).json({ error: "bad_name" });
     const id = await createServer(name.slice(0, 64), me.login);
+    // Icon and tags come in with the create call so the whole thing is one dialog.
+    if (typeof req.body.icon === "string" && req.body.icon.startsWith("data:")) await setServerIcon(id, req.body.icon.slice(0, 3_000_000));
+    if (req.body.tags || req.body.about || req.body.isPublic !== undefined) {
+      await updateServer(id, { tags: req.body.tags, about: req.body.about, isPublic: req.body.isPublic });
+    }
     res.json({ ok: true, id });
   } catch (e) { console.error("server create", e.message); res.status(500).json({ error: "server error" }); }
 });
@@ -2441,9 +2489,19 @@ app.get("/api/servers/:id", async (req, res) => {
     const p = await srvPerms(id, me.login);
     if (!p.srv) return res.status(404).json({ error: "not_found" });
     if (p.outsider) return res.status(403).json({ error: "not_member" });
-    const [channels, roles, members] = await Promise.all([listChannels(id), listRoles(id), listServerMembers(id)]);
+    const [chAll, roles, members] = await Promise.all([listChannels(id), listRoles(id), listServerMembers(id)]);
+    const staff = isStaff(p);
+    const channels = chAll
+      .filter((c) => c.restrictMode !== "view" || staff)          // hidden channels stay hidden
+      .map((c) => ({
+        ...c,
+        // The webhook URL is a secret — only staff ever see it.
+        hook: staff && c.kind === "text" && c.hookSecret ? `${APP_ORIGIN}/api/hook/ch/${c.id}/${c.hookSecret}` : null,
+        hookSecret: undefined,
+        voice: c.kind === "voice" ? voiceOccupancy("@ch:" + c.id) : undefined,
+      }));
     res.json({
-      ok: true, server: p.srv, owner: p.owner, perms: p.owner ? -1 : p.perms,
+      ok: true, server: p.srv, owner: p.owner, perms: p.owner ? -1 : p.perms, staff,
       permBits: SERVER_PERMS, roleLimit: SERVER_ROLE_LIMIT,
       channels,
       roles,
@@ -2458,7 +2516,7 @@ app.post("/api/servers/:id", async (req, res) => {
     const p = await srvPerms(id, me.login);
     if (!p.srv) return res.status(404).json({ error: "not_found" });
     if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
-    await updateServer(id, { name: req.body.name, about: req.body.about, isPublic: req.body.isPublic });
+    await updateServer(id, { name: req.body.name, about: req.body.about, isPublic: req.body.isPublic, tags: req.body.tags });
     if (typeof req.body.icon === "string") await setServerIcon(id, req.body.icon.slice(0, 3_000_000));
     notifyServer(id, "server-updated", { id: Number(id) });
     res.json({ ok: true });
@@ -2561,6 +2619,49 @@ app.post("/api/channels/:id", async (req, res) => {
     notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
     res.json({ ok: true });
   } catch (e) { console.error("channel patch", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Restriction + webhook management for one channel (moderator tools).
+app.post("/api/channels/:id/restrict", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
+    const p = await srvPerms(ch.serverId, me.login);
+    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
+    await setChannelRestrict(ch.id, String(req.body.mode || "none"));
+    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
+    res.json({ ok: true });
+  } catch (e) { console.error("channel restrict", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/channels/:id/hook", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
+    const p = await srvPerms(ch.serverId, me.login);
+    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
+    if (ch.kind !== "text") return res.status(400).json({ error: "text_only" });
+    // `off` revokes; anything else (re)issues, which also rotates a leaked URL.
+    const secret = req.body.off ? null : crypto.randomBytes(16).toString("hex");
+    await setChannelHook(ch.id, secret);
+    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
+    res.json({ ok: true, hook: secret ? `${APP_ORIGIN}/api/hook/ch/${ch.id}/${secret}` : null });
+  } catch (e) { console.error("channel hook", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Incoming webhook for a text channel — same contract as the group-channel hook.
+app.post("/api/hook/ch/:id/:secret", async (req, res) => {
+  const id = req.params.id; if (!/^\d+$/.test(id)) return res.status(404).json({ error: "not_found" });
+  const ch = await getChannelByHook(id, req.params.secret);
+  if (!ch) return res.status(404).json({ error: "not_found" });
+  const key = "ch" + id;
+  if (Date.now() - (_hookLast.get(key) || 0) < 800) return res.status(429).json({ error: "rate_limited" });
+  const text = String(req.body?.text || "").trim(); if (!text) return res.status(400).json({ error: "empty" });
+  _hookLast.set(key, Date.now());
+  const srv = await getServer(ch.serverId);
+  const name = String(req.body?.name || ch.name || "Webhook").slice(0, 64);
+  const buttons = normalizeButtons(req.body?.reply_markup || req.body?.buttons);
+  try {
+    await deliverMessage({ room: "@ch:" + id, fromLogin: srv ? srv.owner : null, name, type: "text", text: text.slice(0, 4000), buttons });
+    res.json({ ok: true });
+  } catch (e) { console.error("ch hook", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.delete("/api/channels/:id", async (req, res) => {
   try {
@@ -2686,7 +2787,7 @@ async function canAccessRoom(login, room) {
   if (room.startsWith("@dm:")) return room.slice(4).split("~").includes(login);
   if (room.startsWith("@grp:")) { try { return await isGroupMember(room.slice(5), login); } catch { return false; } }
   if (room.startsWith("@ch:")) {
-    try { const ch = await getChannel(room.slice(4)); return !!ch && await isServerMember(ch.serverId, login); } catch { return false; }
+    try { return await canSeeChannel(await getChannel(room.slice(4)), login); } catch { return false; }
   }
   return false;
 }

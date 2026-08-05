@@ -5589,11 +5589,22 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
    across the top of the contact column, the channel list takes over that same
    column, and members reuse the info panel on the right.
    ========================================================================= */
-.srv-rail {
+/* The rail: pills scroll inside their own strip, "+" is pinned outside it. Scrolling the
+   whole row is what pushed the last button off the edge once you joined a few servers. */
+.srv-rail { display: flex; gap: 6px; align-items: center; padding: 8px 12px 0; min-width: 0; }
+.srv-rail.empty .srv-scroll { display: none; }
+.srv-scroll {
+  flex: 1 1 auto; min-width: 0;
   display: flex; gap: 6px; align-items: center;
-  padding: 8px 12px 0; overflow-x: auto; scrollbar-width: none;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  /* Fade the right edge so "there is more over there" is visible without a scrollbar. */
+  -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+          mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
 }
-.srv-rail::-webkit-scrollbar { display: none; }
+.srv-scroll::-webkit-scrollbar { display: none; }
+.srv-scroll > .srv-pill { scroll-snap-align: start; }
+.srv-rail > .srv-add { flex: 0 0 auto; }
 .srv-pill {
   position: relative; flex: 0 0 auto;
   width: 38px; height: 38px; border-radius: 13px;
@@ -5661,4 +5672,63 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   .srv-rail { padding: 8px 10px 0; }
   .role-row { grid-template-columns: 1fr 44px; }
   .role-acts { grid-column: 1 / -1; }
+}
+
+/* ---- Server rail in minimized (collapsed) list mode ----
+   The column is a narrow avatar rail there, so the horizontal strip has no room: stack the
+   pills vertically and let THAT scroll instead. */
+.app.cl-collapsed .srv-rail { flex-direction: column; gap: 5px; padding: 8px 0 0; align-items: center; }
+.app.cl-collapsed .srv-scroll {
+  flex-direction: column; overflow-x: hidden; overflow-y: auto;
+  max-height: 46vh; width: 100%; align-items: center;
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+}
+.app.cl-collapsed .srv-pill { width: 34px; height: 34px; border-radius: 11px; font-size: 11px; }
+/* Collapsed + inside a server: the channel column can't fit, so the rail is the whole UI. */
+.app.cl-collapsed .srv-panel { display: none; }
+
+/* ---- Channel rows: tools, restriction badges, live call + faces ---- */
+.ch-item { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; margin-bottom: 2px; }
+.ch-item .ch-row { grid-column: 1; margin-bottom: 0; }
+.ch-cog {
+  grid-column: 2; width: 24px; height: 24px; display: grid; place-items: center;
+  background: transparent; border: 0; color: var(--text-dim); border-radius: var(--r-2);
+  cursor: pointer; opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+.ch-item:hover .ch-cog, .ch-item.on .ch-cog { opacity: 1; }
+.ch-cog:hover { background: var(--surface-2); color: var(--accent-200); }
+.ch-item.on .ch-row { background: var(--accent-faint); color: var(--accent-200); }
+.ch-lock, .ch-auto { flex: none; font-size: 11px; opacity: 0.75; }
+.ch-live { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: var(--accent-400); }
+.ch-live b { font-weight: 800; }
+.ch-item.live .ch-ico { color: var(--accent-300); }
+/* Faces of whoever is in the voice channel right now. */
+.ch-faces { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 6px 30px; }
+.ch-face {
+  width: 22px; height: 22px; border-radius: 7px; font-size: 9px;
+  border: 1px solid var(--accent-400); overflow: hidden; position: relative;
+  display: grid; place-items: center; background: var(--surface-2); color: var(--accent-200);
+}
+.ch-face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ch-face-more { font-size: 10px; color: var(--text-dim); align-self: center; }
+
+/* ---- Create-server dialog + Discover tags ---- */
+.srv-new-top { display: flex; gap: 10px; align-items: center; }
+.srv-new-top .field { flex: 1; min-width: 0; }
+.srv-new-icon {
+  position: relative; width: 52px; height: 52px; flex: none;
+  border-radius: 16px; border: 1px dashed var(--border-2); background: var(--surface-1);
+  color: var(--text-dim); font-size: 20px; cursor: pointer; overflow: hidden;
+  display: grid; place-items: center;
+}
+.srv-new-icon:hover { border-color: var(--accent-400); color: var(--accent-300); }
+.srv-new-icon #srvNewIconPrev { position: absolute; inset: 0; }
+.srv-new-icon #srvNewIconPrev img { width: 100%; height: 100%; object-fit: cover; }
+.srv-new-icon #srvNewIconPrev:not(:empty) + .srv-new-plus { display: none; }
+.dir-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.dir-tag {
+  padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--surface-2); border: 1px solid var(--border-1);
+  font-size: 10.5px; color: var(--accent-300);
 }
