@@ -794,7 +794,6 @@ app.post("/api/groups/:id/members", async (req, res) => {
     }
     if (blocked.length && !logins.length) { res.json({ ok: false, error: "add_blocked", blocked }); return; }
     req._blockedAdds = blocked;
-    req._invited = logins;
   }
   if (req.body.remove) {
     const login = String(req.body.remove).toLowerCase();
