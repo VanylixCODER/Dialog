@@ -36,6 +36,8 @@
       <div id="loginAuth" class="login-auth hidden">
         <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
         <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
+        <!-- A rotating "did you know" — the sign-in screen is dead air otherwise. -->
+        <p class="boot-hint" id="bootHint"></p>
         <button type="button" class="auth-link hidden" id="addAcctBack" data-i18n="back_to_app">← Back to app</button>
         <div class="auth-tabs">
           <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
@@ -505,6 +507,17 @@
             <button class="settings-subtab" data-csub="sent" role="tab"><span data-i18n="sent_requests">Sent</span><span class="cs-count" id="cntSent">0</span></button>
           </div>
           <input id="contactSearch" class="field cont-search" data-i18n-ph="contacts_search" autocomplete="off" />
+          <!-- Friend filters: state first (what most people sort by), device last. -->
+          <div class="fr-filters" id="friendFilters">
+            <button class="fr-f active" data-frf="all" data-i18n="frf_all">All</button>
+            <button class="fr-f" data-frf="online" data-i18n="frf_online">Online</button>
+            <button class="fr-f" data-frf="ingame" data-i18n="frf_ingame">In game</button>
+            <button class="fr-f" data-frf="samegame" data-i18n="frf_samegame">Same game</button>
+            <button class="fr-f" data-frf="incall" data-i18n="frf_incall">In call</button>
+            <button class="fr-f" data-frf="offline" data-i18n="frf_offline">Offline</button>
+            <button class="fr-f" data-frf="mobile" data-i18n="frf_mobile">Mobile</button>
+            <button class="fr-f" data-frf="desktop" data-i18n="frf_desktop">Desktop</button>
+          </div>
 
           <div class="cont-subpane active" data-csub="friends">
             <div id="friendsListEl" class="contacts-list"></div>
@@ -703,6 +716,7 @@
     <div class="profile-login" id="mpLogin">login</div>
     <div class="mp-status" id="mpStatus"></div>
     <div class="mp-activity hidden" id="mpActivity"></div>
+    <div class="award-row hidden" id="mpAwards"></div>
     <div class="mp-desc" id="mpDesc"></div>
     <div class="mp-mutual hidden" id="mpMutual"></div>
     <div class="mp-joined" id="mpJoined"></div>
@@ -1018,6 +1032,20 @@
     </div>
   </div>
 
+  <!-- DM settings (⋮ → DM settings): auto-clear window for your own view of this chat. -->
+  <div id="dmSettingsModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="dmSetClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" data-i18n="dm_settings">Chat settings</div>
+      <div class="uppercase-tag" data-i18n="dm_autoclear">Auto-clear history</div>
+      <div class="acc-hint" data-i18n="dm_autoclear_hint">Hides messages older than this in YOUR view. The other person keeps their copy.</div>
+      <div class="dm-clear-opts" id="dmClearOpts"></div>
+      <div class="modal-actions">
+        <button id="dmSetDone" class="btn-primary" type="button" data-i18n="ok">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="lightbox" class="lightbox hidden">
     <div class="lb-bar">
       <span id="lbName" class="lb-name"></span>
@@ -1109,9 +1137,23 @@
         <button class="settings-tab active" data-atab="users" role="tab">Users</button>
         <button class="settings-tab" data-atab="reports" role="tab"><span data-i18n="adm_reports">Reports</span><span class="rep-badge hidden" id="repBadge">0</span></button>
         <button class="settings-tab" data-atab="ips" role="tab">IP bans</button>
+        <button class="settings-tab" data-atab="awards" role="tab" data-i18n="adm_awards">Awards</button>
         <button class="settings-tab" data-atab="logs" role="tab">Logs</button>
       </nav>
       <div class="admin-body">
+        <!-- Awards: mint a badge, then hand it to one person or paste a whole list. -->
+        <section class="admin-pane" data-apane="awards">
+          <div class="aw-new">
+            <input id="awCode" class="field" maxlength="32" data-i18n-ph="aw_code_ph" />
+            <input id="awName" class="field" maxlength="48" data-i18n-ph="aw_name_ph" />
+            <input id="awIcon" class="field aw-icon-in" maxlength="8" value="🏅" />
+            <input id="awColor" type="color" class="aw-color" value="#00ff5a" />
+            <button id="awCreate" class="btn-primary btn-sm" data-i18n="aw_create">Create</button>
+          </div>
+          <input id="awDesc" class="field" maxlength="190" data-i18n-ph="aw_desc_ph" />
+          <div class="form-error" id="awError"></div>
+          <div id="awList" class="aw-list"></div>
+        </section>
         <section class="admin-pane" data-apane="reports">
           <div class="rep-toolbar">
             <div class="rep-filters" id="repFilters">
