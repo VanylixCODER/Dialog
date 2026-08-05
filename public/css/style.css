@@ -5641,3 +5641,84 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .tab-badge.show { display: inline-grid; }
 /* Desktop sidebar / mobile list: the label takes the slack so the badge hugs the right edge. */
 #settingsOverlay .settings-tab .stab-label { flex: 1 1 auto; }
+
+/* ---- Activity panel: resizable, maximized, fullscreen ---- */
+.act-panel { min-width: 320px; min-height: 220px; }
+.act-grip {
+  position: absolute; left: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nesw-resize; opacity: 0.5;
+  background:
+    linear-gradient(45deg, transparent 45%, var(--border-2) 45%, var(--border-2) 55%, transparent 55%),
+    linear-gradient(45deg, transparent 65%, var(--border-2) 65%, var(--border-2) 75%, transparent 75%);
+}
+.act-grip:hover { opacity: 1; }
+/* Maximized. Fixed to the viewport rather than the call stage: the stage's height varies
+   with the call layout (docked, fullscreen, mobile), and "maximize" should mean the screen. */
+.act-panel.max {
+  position: fixed; left: 12px; right: 12px; top: 12px; bottom: 12px; z-index: 260;
+  width: auto !important; height: auto !important; max-height: none; transform: none;
+}
+/* Real fullscreen (Fullscreen API puts it on top of everything). */
+.act-panel.fs { width: 100% !important; height: 100% !important; max-height: none; border-radius: 0; left: 0; transform: none; }
+.act-panel.fs .act-body, .act-panel.max .act-body { display: flex; flex-direction: column; }
+.act-panel.fs .wt-stage, .act-panel.max .wt-stage { flex: 1; aspect-ratio: auto; min-height: 0; }
+.act-panel.fs .act-grip { display: none; }
+/* Canvas games fill whatever room the panel has. */
+.act-panel.fs #gfCanvas, .act-panel.max #gfCanvas,
+.act-panel.fs #rcCanvas, .act-panel.max #rcCanvas,
+.act-panel.fs #gaCanvas, .act-panel.max #gaCanvas { max-width: 100%; max-height: 100%; width: auto; height: auto; flex: 1; object-fit: contain; }
+
+/* ---- Uno ---- */
+.uno-wrap { display: flex; flex-direction: column; gap: 10px; }
+.uno-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--accent-200); flex-wrap: wrap; }
+.uno-players { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: var(--text-dim); }
+.uno-players .on { color: var(--accent-300); font-weight: 700; }
+.uno-table { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 6px 0; }
+.uno-pile { position: relative; display: flex; align-items: center; gap: 8px; }
+.uno-color { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35); }
+.uno-card {
+  display: inline-grid; place-items: center;
+  min-width: 34px; height: 48px; padding: 0 6px; border-radius: 7px;
+  color: #fff; font-weight: 800; font-size: 15px;
+  border: 2px solid rgba(255,255,255,.35); cursor: default; text-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.uno-hand { display: flex; flex-wrap: wrap; gap: 6px; }
+.uno-hand .uno-card.ok { cursor: pointer; }
+.uno-hand .uno-card.ok:hover { transform: translateY(-4px); }
+.uno-hand .uno-card.no { opacity: 0.45; }
+.uno-pick { flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.uno-pick-l { font-size: 12px; color: var(--text-dim); }
+.uno-sw { width: 26px; height: 26px; border-radius: 7px; border: 2px solid rgba(255,255,255,.35); cursor: pointer; }
+
+/* ---- Poker ---- */
+.pk-wrap { display: flex; flex-direction: column; gap: 10px; }
+.pk-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--accent-200); }
+.pk-pot { font-size: 12px; color: var(--text-dim); }
+.pk-board, .pk-mine { display: flex; gap: 6px; align-items: center; min-height: 46px; }
+.pk-card {
+  display: inline-grid; place-items: center; min-width: 32px; height: 44px; padding: 0 5px;
+  background: #f8fafc; color: #0b0f0d; border-radius: 6px; font-weight: 800; font-size: 14px;
+}
+.pk-card.red { color: #dc2626; }
+.pk-card.back { background: repeating-linear-gradient(45deg, #1f2937, #1f2937 4px, #111827 4px, #111827 8px); }
+.pk-seats { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-dim); }
+.pk-seat.on { color: var(--accent-300); }
+.pk-seat.out { opacity: 0.45; text-decoration: line-through; }
+.pk-seat i { color: var(--accent-400); font-style: normal; }
+.pk-acts { display: flex; gap: 8px; }
+.pk-note { font-size: 12px; color: var(--text-dim); }
+
+/* ---- Race ---- */
+.rc-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.rc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; font-size: 13px; color: var(--accent-200); }
+.rc-lap { font-size: 12px; color: var(--text-dim); }
+.rc-order { flex-basis: 100%; font-size: 11.5px; color: var(--accent-300); }
+#rcCanvas { width: 100%; max-width: 600px; touch-action: none; border: 1px solid var(--border-2); border-radius: var(--r-2); background: #07120c; }
+.rc-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.rc-pick { display: flex; gap: 4px; }
+.rc-t {
+  padding: 5px 10px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600; cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border-1); color: var(--text-dim);
+}
+.rc-t.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
+.rc-note { font-size: 11.5px; color: var(--text-dim); }

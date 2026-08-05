@@ -2180,7 +2180,7 @@ io.on("connection", (socket) => {
   // a client can't put words in someone else's mouth. All game rules live in the host's client.
   socket.on("activity-start", ({ kind } = {}) => {
     if (!currentRoom || !userLogin) return;
-    if (!["watch", "gartic", "golf"].includes(kind)) return;
+    if (!["watch", "gartic", "golf", "uno", "poker", "race"].includes(kind)) return;
     const cur = roomActivity.get(currentRoom);
     if (cur && cur.host !== userLogin) { socket.emit("activity-busy", { kind: cur.kind, hostName: cur.hostName }); return; }
     const act = { kind, host: userLogin, hostName: userName, state: null, ts: Date.now() };
@@ -2204,12 +2204,24 @@ io.on("connection", (socket) => {
     cur.ts = Date.now();
     socket.to(currentRoom).emit("activity-state", cur.state);
   });
-  // Everyone may send input (a guess, a drawing, a putt). Relayed to the room as-is.
+  // Everyone may send input (a guess, a drawing, a putt). Relayed to the room as-is, unless
+  // `to` names one player — card games need to deal a hand that only its owner can see, and a
+  // room-wide broadcast would put everyone's cards in everyone's client.
   socket.on("activity-msg", (msg) => {
     if (!currentRoom || !userLogin) return;
     const cur = roomActivity.get(currentRoom); if (!cur) return;
     if (!msg || typeof msg !== "object") return;
-    io.to(currentRoom).emit("activity-msg", { ...msg, from: userLogin, fromName: userName });
+    const stamped = { ...msg, from: userLogin, fromName: userName };
+    if (msg.to) {
+      // Only the host may whisper, and only to someone actually in this room.
+      if (cur.host !== userLogin) return;
+      const target = String(msg.to);
+      for (const sid of userSockets.get(target) || []) {
+        if (socketRoom.get(sid) === currentRoom) io.to(sid).emit("activity-msg", stamped);
+      }
+      return;
+    }
+    io.to(currentRoom).emit("activity-msg", stamped);
   });
 
   // Rich presence in/out. Sending null clears it.

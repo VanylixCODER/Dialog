@@ -175,9 +175,13 @@
           <div class="act-head">
             <span class="act-title" id="actTitle"></span>
             <button id="actMin" class="act-btn" data-i18n-title="minimize" title="Minimize">▾</button>
+            <button id="actMax" class="act-btn" data-i18n-title="act_maximize" title="Maximize">⤢</button>
+            <button id="actFull" class="act-btn" data-i18n-title="act_fullscreen" title="Fullscreen">⛶</button>
             <button id="actStop" class="act-btn danger hidden" data-i18n-title="act_stop" title="End">✕</button>
           </div>
           <div class="act-body" id="actBody"></div>
+          <!-- Drag to resize: activities range from a chat-sized panel to a whole screen. -->
+          <div class="act-grip" id="actGrip" title="Resize"></div>
         </div>
         <div id="pingMeter"><span id="pingValue">--</span><span id="pingUnit" data-i18n="ping_ms">ms</span></div>
         <div class="call-bar">
