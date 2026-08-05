@@ -1545,6 +1545,34 @@ $("schAdd") && ($("schAdd").onclick = async () => {
   refreshScheduleList();
 });
 
+// ---------- askText(): the in-app replacement for window.prompt() ----------
+// prompt() is unimplemented in Electron and cancelled by the Android WebView (its
+// WebChromeClient doesn't override onJsPrompt), so every prompt-based flow silently did
+// nothing in the desktop and Android apps. Everything that needs a line of text goes
+// through here instead.
+let _askResolve = null;
+function askText(title, value = "", placeholder = "") {
+  const m = $("askModal");
+  if (!m) return Promise.resolve(window.prompt ? window.prompt(title, value) : null);
+  $("askTitle").textContent = title || "";
+  const inp = $("askInput");
+  inp.value = value || ""; inp.placeholder = placeholder || "";
+  m.classList.remove("hidden");
+  setTimeout(() => { inp.focus(); inp.select(); }, 40);
+  return new Promise((resolve) => {
+    _askResolve = (v) => { _askResolve = null; m.classList.add("hidden"); resolve(v); };
+  });
+}
+window.askText = askText;
+$("askOk") && ($("askOk").onclick = () => { if (_askResolve) _askResolve($("askInput").value.trim() || null); });
+$("askCancel") && ($("askCancel").onclick = () => { if (_askResolve) _askResolve(null); });
+$("askClose") && ($("askClose").onclick = () => { if (_askResolve) _askResolve(null); });
+$("askModal") && $("askModal").addEventListener("click", (e) => { if (e.target === $("askModal") && _askResolve) _askResolve(null); });
+$("askInput") && ($("askInput").onkeydown = (e) => {
+  if (e.key === "Enter") { e.preventDefault(); if (_askResolve) _askResolve($("askInput").value.trim() || null); }
+  if (e.key === "Escape") { e.preventDefault(); if (_askResolve) _askResolve(null); }
+});
+
 // ================== Rich Presence ==================
 // What you're doing rides along with the normal presence broadcast, filtered per recipient on
 // the server. The client just declares it; the privacy rules are not the client's business.
@@ -6892,13 +6920,13 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       box.classList.remove("hidden");
     } else if (act === "rename") {
       const u = usersCache.find((x) => x.login === login);
-      const name = prompt(t("adm_new_name"), (u && u.name) || "");
+      const name = await askText(t("adm_new_name"), (u && u.name) || "");
       if (name == null || !name.trim()) return;
       const { ok, data } = await aapi("/api/admin/rename", { login, name: name.trim() });
       notify(ok ? t("adm_done_rename") : ((data && data.error) || "error")); loadAdminUsers();
     } else if (act === "email") {
       const u = usersCache.find((x) => x.login === login);
-      const email = prompt(t("adm_new_email"), (u && u.email) || "");
+      const email = await askText(t("adm_new_email"), (u && u.email) || "");
       if (email == null || !email.trim()) return;
       const { ok, data } = await aapi("/api/admin/set-email", { login, email: email.trim() });
       notify(ok ? t("adm_done_email") : ((data && data.error) || "error")); loadAdminUsers();

@@ -139,6 +139,7 @@ const I18N = {
     // ── Group invitations, bans, discover search ──
     // ── Activities (watch together + games) ──
     // ── Servers ──
+    ok: "OK",
     srv_new: "New server", srv_new_prompt: "Server name?", srv_browse: "Public servers",
     srv_settings: "Server settings", srv_name_ph: "Server name", srv_public: "List publicly",
     srv_rules: "Rules", srv_text: "Text channels", srv_news: "News", srv_voice: "Voice channels",
@@ -474,6 +475,7 @@ const I18N = {
     // ── Приглашения в группу, баны, поиск в «Обзоре» ──
     // ── Активности (совместный просмотр + игры) ──
     // ── Серверы ──
+    ok: "ОК",
     srv_new: "Новый сервер", srv_new_prompt: "Название сервера?", srv_browse: "Публичные серверы",
     srv_settings: "Настройки сервера", srv_name_ph: "Название сервера", srv_public: "Показывать публично",
     srv_rules: "Правила", srv_text: "Текстовые каналы", srv_news: "Новости", srv_voice: "Голосовые каналы",

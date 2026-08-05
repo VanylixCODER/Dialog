@@ -51,10 +51,11 @@
   }
 
   async function createServerFlow() {
-    const name = prompt(t("srv_new_prompt"));
+    const name = await askText(t("srv_new_prompt"), "", t("srv_name_ph"));
     if (!name || !name.trim()) return;
     const { ok, data } = await api("/api/servers", { name: name.trim() });
-    if (!ok) { notify(t("err_generic")); return; }
+    // Surface what actually went wrong instead of a blanket "error".
+    if (!ok) { notify((data && data.error) ? t("err_generic") + " (" + data.error + ")" : t("err_generic")); return; }
     await loadServers();
     openServer(data.id);
   }
@@ -140,10 +141,10 @@
   }
 
   async function addChannel(kind) {
-    const name = prompt(t("srv_add_channel_prompt"));
+    const name = await askText(t("srv_add_channel_prompt"), "", kind);
     if (!name || !name.trim()) return;
-    const { ok } = await api(`/api/servers/${S.cur}/channels`, { name: name.trim(), kind });
-    if (!ok) notify(t("err_generic")); else refresh();
+    const { ok, data } = await api(`/api/servers/${S.cur}/channels`, { name: name.trim(), kind });
+    if (!ok) notify((data && data.error) ? t("err_generic") + " (" + data.error + ")" : t("err_generic")); else refresh();
   }
   // "1 voice channel per user" — the server hands back the existing one if you already have it.
   async function makeMyVoice() {
