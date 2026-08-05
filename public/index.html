@@ -569,17 +569,17 @@
         <!-- Group (заполняется в openGroupSettings()) -->
         <section class="settings-pane" data-pane="groups" role="tabpanel">
           <h3 data-i18n="group_section">Manage groups</h3>            <!-- Inline Create Group CTA. Раньше тут жила «голая» форма с #gcName/#gcDesc/
+                 #gcMemberPick/#gcPreview, но JS её не обрабатывал — кнопки «Create group» и
+                 «Cancel» не делали ничего (i18n-ключи gc_* ещё остаются в словаре на случай
+                 будущего inline-режима; вся актуальная форма переехала в #createGroupModal
+                 — аватар + поиск + мультивыбор). Здесь остаётся только CTA-кнопка,
+                 открывающая ту же модалку, что используется из #newGroupBtn. -->
           <!-- Invitations waiting on you — the popup's persistent home. -->
           <div class="gs-card" id="gsInviteCard">
             <div class="gs-sec-title" data-i18n="group_add_requests">Group add requests</div>
             <div id="gsInviteList" class="contacts-list"></div>
             <div id="gsInviteEmpty" class="contacts-empty" data-i18n="group_add_requests_empty">No pending invitations</div>
           </div>
-                 #gcMemberPick/#gcPreview, но JS её не обрабатывал — кнопки «Create group» и
-                 «Cancel» не делали ничего (i18n-ключи gc_* ещё остаются в словаре на случай
-                 будущего inline-режима; вся актуальная форма переехала в #createGroupModal
-                 — аватар + поиск + мультивыбор). Здесь остаётся только CTA-кнопка,
-                 открывающая ту же модалку, что используется из #newGroupBtn. -->
             <div id="groupCreateBox" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 0 14px">
               <div class="pick-label" data-i18n="gc_create_title">Create a group</div>
               <button id="gcCreateBtn" class="btn-primary" data-i18n="gc_create_btn">Create group</button>
