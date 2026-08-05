@@ -5510,3 +5510,76 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .pref-row.pref-col { flex-direction: column; align-items: stretch; gap: 8px; }
 .rp-hide-wrap { display: flex; flex-direction: column; gap: 8px; }
 .rp-hide-wrap .friend-pick { max-height: 160px; overflow-y: auto; }
+
+/* ============================================================================
+   Activities panel (watch together / games) — docked over the call grid.
+   ========================================================================= */
+.act-panel {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: 92px; z-index: 6;
+  width: min(600px, calc(100% - 24px));
+  max-height: min(70%, 560px);
+  display: flex; flex-direction: column;
+  background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-3);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.act-panel.min .act-body { display: none; }
+.act-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px 8px 14px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.1), transparent);
+  border-bottom: 1px solid var(--border-1);
+}
+.act-title { flex: 1; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent-200); }
+.act-btn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-2);
+  color: var(--text-dim); cursor: pointer;
+}
+.act-btn:hover { background: var(--surface-2); color: var(--accent-200); }
+.act-btn.danger:hover { color: var(--danger); }
+.act-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+#actMenu .act-ico { width: 18px; display: inline-block; text-align: center; }
+
+/* Watch Together */
+.wt-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+.wt-bar .field { flex: 1; min-width: 0; }
+.wt-stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r-2); overflow: hidden; }
+.wt-stage iframe, .wt-stage > div { width: 100%; height: 100%; border: 0; }
+.wt-note { margin-top: 8px; font-size: 11.5px; color: var(--text-dim); }
+
+/* Draw Telephone */
+.ga-wrap { display: flex; flex-direction: column; gap: 10px; }
+.ga-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--accent-200); }
+.ga-count { font-size: 11.5px; color: var(--text-dim); }
+.ga-stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ga-seed, .ga-prompt {
+  width: 100%; padding: 10px 12px; text-align: center;
+  background: var(--surface-1); border: 1px solid var(--border-1); border-radius: var(--r-2);
+  font-size: 14px; color: var(--accent-100);
+}
+.ga-prev { max-width: 100%; border-radius: var(--r-2); border: 1px solid var(--border-1); }
+#gaCanvas { width: 100%; max-width: 520px; touch-action: none; background: #0b0f0d; border: 1px solid var(--border-2); border-radius: var(--r-2); cursor: crosshair; }
+.ga-foot { display: flex; align-items: center; gap: 8px; }
+.ga-foot .field { flex: 1; min-width: 0; }
+.ga-tools { display: flex; align-items: center; gap: 8px; flex: 1; }
+.ga-wait { padding: 22px; color: var(--text-dim); font-size: 13px; }
+.ga-book { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.ga-book-owner { font-weight: 800; color: var(--accent-300); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+.ga-book figure { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.ga-book figcaption, .ga-line small { font-size: 11px; color: var(--text-dim); }
+.ga-line { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--surface-1); border-radius: var(--r-2); }
+
+/* Mini golf */
+.gf-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.gf-head { display: flex; align-items: center; justify-content: space-between; width: 100%; font-size: 13px; color: var(--accent-200); }
+.gf-turn { font-size: 11.5px; color: var(--text-dim); }
+#gfCanvas { width: 100%; max-width: 560px; touch-action: none; border: 1px solid var(--border-2); border-radius: var(--r-2); cursor: crosshair; }
+.gf-score { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; font-size: 12px; color: var(--text-dim); }
+.gf-score .gf-p.on { color: var(--accent-300); font-weight: 700; }
+
+@media (max-width: 720px) {
+  .act-panel { bottom: 84px; width: calc(100% - 12px); max-height: 62%; }
+  .act-body { padding: 10px; }
+}

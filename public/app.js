@@ -4999,6 +4999,7 @@ function endCall() {
   stopKeepAlive(); updateCallButton(); stopCallTimer();
   if (NATIVE && NATIVE.callEnded) { try { NATIVE.callEnded(); } catch (e) {} }
   if (wasActive) sfx.end();
+  try { window.dispatchEvent(new CustomEvent("dialog-call-ended")); } catch {}
   stopPing();
 }
 // ---- Mobile call header: live duration timer ----
