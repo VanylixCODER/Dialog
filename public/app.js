@@ -935,9 +935,7 @@ async function savePins() {
   pinnedKeys = new Set([...chats.values()].filter((c) => c.pinned).map((c) => c.key));
   await api("/api/pins", { keys: [...pinnedKeys] });
 }
-function upsertChat(c) {
-  // Channels live in the server panel, not the contact list — don't persist them as chats.
-  if (c && c.type === "channel") { activeKey = c.key; return c; } const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
+function upsertChat(c) { const ex = chats.get(c.key); if (ex) { Object.assign(ex, { name: c.name || ex.name, ts: c.ts || ex.ts }); return ex; } chats.set(c.key, c); return c; }
 async function syncDMsFromServer() {
   const { ok, data } = await api("/api/dms", null, "GET");
   if (!ok || !Array.isArray(data)) return;
@@ -1267,12 +1265,6 @@ function applyChatListChrome() {
 $("clCollapse") && ($("clCollapse").onclick = () => {
   clCollapsed = !clCollapsed; localStorage.setItem("dialog_cl_collapsed", clCollapsed ? "1" : "0"); applyChatListChrome();
 });
-// Let other modules open the list back up (the collapsed rail's "servers" button does this —
-// a 76px column has no room for server pills AND channels).
-window.dialogExpandChatList = () => {
-  if (!clCollapsed) return;
-  clCollapsed = false; localStorage.setItem("dialog_cl_collapsed", "0"); applyChatListChrome();
-};
 (function () {                                                          // drag the divider between list ↔ chat to resize
   const rz = $("clResizer"), app = $("app"); if (!rz || !app) return;
   let dragging = false;
@@ -1413,17 +1405,13 @@ function openSavedMessages() {
 }
 
 // ---- Discover: opt-in channels + bots ----
-let dirTab = "servers", dirData = { groups: [], bots: [], servers: [] };
+let dirTab = "channels", dirData = { groups: [], bots: [] };
 async function openDirectory() {
   $("directoryModal").classList.remove("hidden");
   $("dirList").innerHTML = "";
   dirQuery = ""; const ds = $("dirSearch"); if (ds) ds.value = "";
-  const [dir, servers] = await Promise.all([
-    api("/api/directory", null, "GET"),
-    // Public servers live here now instead of on the rail — one place to find things.
-    window.dialogPublicServers ? window.dialogPublicServers() : Promise.resolve([]),
-  ]);
-  dirData = dir.ok ? { groups: dir.data.groups || [], bots: dir.data.bots || [], servers } : { groups: [], bots: [], servers };
+  const { ok, data } = await api("/api/directory", null, "GET");
+  dirData = ok ? { groups: data.groups || [], bots: data.bots || [] } : { groups: [], bots: [] };
   renderDirectory();
 }
 // Search ranks by where the hit is (name beats description) and offers keyword chips built
@@ -1433,12 +1421,9 @@ function dirScore(r, q) {
   const name = String(r.name || "").toLowerCase();
   const login = String(r.login || "").toLowerCase();
   const about = String(r.about || r.description || "").toLowerCase();
-  const tags = String(r.tags || "").toLowerCase();
   if (name.startsWith(q) || login.startsWith(q)) return 3;
   if (name.includes(q) || login.includes(q)) return 2;
-  // An exact tag hit ranks with the name — tags exist precisely to be searched.
-  if (tags.split(/[\s,]+/).includes(q)) return 3;
-  if (about.includes(q) || tags.includes(q)) return 1;
+  if (about.includes(q)) return 1;
   return 0;
 }
 // Keyword chips: the most common words across every listing, minus noise and anything already
@@ -1446,8 +1431,8 @@ function dirScore(r, q) {
 function dirKeywords() {
   const stop = new Set(["the","and","for","with","your","you","this","that","are","from","all","bot","channel","канал","бот","для","это","все"]);
   const freq = new Map();
-  for (const r of [...dirData.groups, ...dirData.bots, ...(dirData.servers || [])]) {
-    const text = `${r.name || ""} ${r.about || r.description || ""} ${r.tags || ""}`.toLowerCase();
+  for (const r of [...dirData.groups, ...dirData.bots]) {
+    const text = `${r.name || ""} ${r.about || r.description || ""}`.toLowerCase();
     for (const w of text.split(/[^\p{L}\p{N}]+/u)) {
       if (w.length < 3 || stop.has(w)) continue;
       freq.set(w, (freq.get(w) || 0) + 1);
@@ -1472,17 +1457,13 @@ function renderDirectory() {
   const box = $("dirList"); if (!box) return;
   box.innerHTML = "";
   renderDirSuggest();
-  let rows = dirTab === "channels" ? dirData.groups : dirTab === "bots" ? dirData.bots : (dirData.servers || []);
+  let rows = dirTab === "channels" ? dirData.groups : dirData.bots;
   if (dirQuery) {
     // A query searches BOTH tabs and auto-switches if the other one is where the hits are.
     const here = rows.map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
-    // Nothing here but hits elsewhere → follow them to the tab that has them.
-    const tabs = ["servers", "channels", "bots"];
-    const pool = { servers: dirData.servers || [], channels: dirData.groups, bots: dirData.bots };
-    const otherTab = tabs.find((k) => k !== dirTab && pool[k].some((r) => dirScore(r, dirQuery) > 0));
-    const other = otherTab ? pool[otherTab].map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0) : [];
+    const other = (dirTab === "channels" ? dirData.bots : dirData.groups).map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
     if (!here.length && other.length) {
-      dirTab = otherTab;
+      dirTab = dirTab === "channels" ? "bots" : "channels";
       $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b.dataset.dirtab === dirTab));
       rows = other.sort((a, b) => b[1] - a[1]).map(([r]) => r);
     } else rows = here.sort((a, b) => b[1] - a[1]).map(([r]) => r);
@@ -1491,20 +1472,14 @@ function renderDirectory() {
   for (const r of rows) {
     const row = document.createElement("button");
     row.type = "button"; row.className = "dir-row";
-    const sub = dirTab === "bots" ? (r.description || "@" + r.login)
-      : (r.about || t("dir_members", { n: r.members || 0 }));
-    const ava = dirTab === "servers"
-      ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/server-icon/${r.id}" onerror="this.remove()">${escapeHtml((r.name || "?").slice(0, 2).toUpperCase())}</div>`
-      : dirTab === "channels"
+    const sub = dirTab === "channels" ? (r.about || t("dir_members", { n: r.members || 0 })) : (r.description || "@" + r.login);
+    const ava = dirTab === "channels"
       ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/group-avatar/${r.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'"></div>`
       : `<div class="avatar" style="width:36px;height:36px;font-size:14px"><img src="${avaUrl(r.login)}" onerror="this.remove()">${initials(r.name)}</div>`;
-    const tagHtml = r.tags ? `<div class="dir-tags">` + String(r.tags).split(/[\s,]+/).filter(Boolean).slice(0, 5)
-      .map((x) => `<span class="dir-tag">${escapeHtml(x)}</span>`).join("") + `</div>` : "";
-    row.innerHTML = ava + `<div class="dir-body"><div class="dir-name">${escapeHtml(r.name)}</div><div class="dir-sub">${escapeHtml(sub)}</div>${tagHtml}</div>`;
+    row.innerHTML = ava + `<div class="dir-body"><div class="dir-name">${escapeHtml(r.name)}</div><div class="dir-sub">${escapeHtml(sub)}</div></div>`;
     row.onclick = () => {
       $("directoryModal").classList.add("hidden");
-      if (dirTab === "servers") { window.dialogJoinServer && window.dialogJoinServer(r.id); }
-      else if (dirTab === "channels") {
+      if (dirTab === "channels") {
         const key = "@grp:" + r.id;
         const existing = chats.get(key);
         if (existing) openChat(existing);
@@ -1780,10 +1755,7 @@ function openChat(c) {
   $("messages").innerHTML = "";
   showMsgSkeletons(); // placeholder until history arrives
   $("chatTitle").textContent = c.name;
-  if (c.type === "channel") {
-    // Server channel: the subtitle names the kind rather than pretending it's a group.
-    $("chatSub").textContent = c.kind === "voice" ? t("srv_voice") : c.kind === "rules" ? t("srv_rules") : c.kind === "news" ? t("srv_news") : t("srv_text");
-  } else if (c.type === "group") {
+  if (c.type === "group") {
     $("chatSub").textContent = t("room_sub_group");
   } else {
     const st = presence.get(c.login);
@@ -1791,11 +1763,9 @@ function openChat(c) {
     // A friend's activity is more interesting than "online" — show it when we have one.
     $("chatSub").textContent = act ? activityLine(act) : (st ? t("status_" + st) : t("room_sub_dm"));
   }
-  $("chatAva").className = "avatar ch-ava" + (c.type === "group" || c.type === "channel" ? " grp" : "");
+  $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
-  if (c.type === "channel") {
-    $("chatAva").innerHTML = `<span class="ch-ava-ico">${c.kind === "voice" ? "🔊" : c.kind === "rules" ? "📜" : c.kind === "news" ? "📰" : "#"}</span>`;
-  } else if (c.type === "group") {
+  if (c.type === "group") {
     $("chatAva").innerHTML = `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
   } else {
     const st = presence.get(c.login);

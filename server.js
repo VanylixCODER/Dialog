@@ -63,11 +63,6 @@ import {
   createGroupAddRequest, listGroupAddRequests, getGroupAddRequest, deleteGroupAddRequest, deleteGroupAddRequestsFor,
   setUserBannedWithReason, getBanReason,
   getRichPresencePref, setRichPresencePref, listPresenceHidden, setPresenceHidden,
-  SERVER_ROLE_LIMIT, createServer, getServer, getServerIcon, setServerIcon, updateServer, deleteServer,
-  listUserServers, listPublicServers, isServerMember, joinServer, leaveServer, listServerMembers,
-  listChannels, getChannel, createChannel, renameChannel, deleteChannel, autoChannelOf,
-  listRoles, countRoles, createRole, updateRole, deleteRole, setMemberRole, memberPerms,
-  setChannelRestrict, setChannelHook, getChannelByHook,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -1679,25 +1674,7 @@ function callStatePayload(room) {
   const meta = callMeta.get(room);
   return { room, count: logins.length, logins, locked: !!(meta && meta.locked), muteOnEntry: !!(meta && meta.muteOnEntry) };
 }
-// Who is currently in a room's call, with display names — the server panel shows these
-// under a voice channel, so it needs names rather than a bare count.
-function voiceOccupancy(room) {
-  const c = callRooms.get(room);
-  if (!c) return [];
-  const seen = new Map();
-  for (const v of c.values()) if (!seen.has(v.login)) seen.set(v.login, { login: v.login, name: v.name });
-  return [...seen.values()];
-}
-function broadcastCallState(room) {
-  io.to(room).emit("call-state", callStatePayload(room));
-  // A voice channel's occupancy is interesting to everyone in the server, not just the
-  // people already inside the room.
-  if (room.startsWith("@ch:")) {
-    getChannel(room.slice(4)).then((ch) => {
-      if (ch) notifyServer(ch.serverId, "server-voice", { channelId: ch.id, users: voiceOccupancy(room) });
-    }).catch(() => {});
-  }
-}
+function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
 // Remove one socket from a call room, running the same end-of-call bookkeeping
 // (system message + meta cleanup) as a normal leave when the room empties.
 function removeFromCall(room, sid) {
@@ -2039,7 +2016,6 @@ io.on("connection", (socket) => {
   function doLeave() {
     if (!currentRoom) return;
     endActivityIfHost(currentRoom, userLogin);   // host walked out → the session goes with them
-    sweepAutoChannel(currentRoom, userLogin);    // self-service voice room dies with its owner
     callLeave();
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
@@ -2059,10 +2035,6 @@ io.on("connection", (socket) => {
     } else if (newRoom.startsWith("@grp:")) {
       const gid = newRoom.slice(5);
       if (!/^\d+$/.test(gid) || !(await isGroupMember(gid, p.login))) { socket.emit("auth-error", "No access"); return; }
-    } else if (newRoom.startsWith("@ch:")) {
-      // Server channel: membership of the owning server, plus the channel's own visibility.
-      const ch = await getChannel(newRoom.slice(4));
-      if (!ch || !(await canSeeChannel(ch, p.login))) { socket.emit("auth-error", "No access"); return; }
     }
     if (currentRoom && currentRoom !== newRoom) doLeave();
     currentRoom = newRoom; socketRoom.set(socket.id, newRoom);
@@ -2132,12 +2104,6 @@ io.on("connection", (socket) => {
         notifyUser(dmTo, "relations-changed", {}); notifyUser(userLogin, "relations-changed", {});
         return;
       }
-    }
-    // Server channel: rules are read-only, news needs POST_NEWS, and a "post"-restricted
-    // channel is staff-only. Same shape as the group-channel rule below.
-    if (currentRoom.startsWith("@ch:")) {
-      const ch = await getChannel(currentRoom.slice(4));
-      if (ch && !(await canPostChannel(ch, userLogin))) { socket.emit("channel-readonly", { room: currentRoom }); return; }
     }
     // Channel (broadcast) group: only the owner + bots may post; everyone else is read-only.
     if (currentRoom.startsWith("@grp:")) {
@@ -2426,313 +2392,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ============================ REST: Servers ============================
-// Permission bits. Owner implicitly has all of them; everyone else gets the OR of their roles.
-const SERVER_PERMS = { MANAGE_SERVER: 1, MANAGE_ROLES: 2, KICK: 4, CREATE_VOICE: 8, POST_NEWS: 16 };
-async function srvPerms(serverId, login) {
-  const srv = await getServer(serverId);
-  if (!srv) return { srv: null, perms: 0, owner: false };
-  if (srv.owner === login) return { srv, perms: -1, owner: true };   // -1 = every bit set
-  if (!(await isServerMember(serverId, login))) return { srv, perms: 0, owner: false, outsider: true };
-  return { srv, perms: await memberPerms(serverId, login), owner: false };
-}
-const hasPerm = (p, bit) => p.owner || (p.perms & bit) === bit;
-// Channel restrictions key off "is this person staff here", not off a specific bit: a
-// view-locked channel is for the people who run the server.
-const isStaff = (p) => p.owner || (p.perms & (SERVER_PERMS.MANAGE_SERVER | SERVER_PERMS.MANAGE_ROLES | SERVER_PERMS.KICK)) !== 0;
-// Can this person even open the channel? (view-restricted channels are staff-only)
-async function canSeeChannel(ch, login) {
-  if (!ch) return false;
-  if (!(await isServerMember(ch.serverId, login))) return false;
-  if (ch.restrictMode !== "view") return true;
-  return isStaff(await srvPerms(ch.serverId, login));
-}
-// Can they post in it? (rules are always read-only; "post" restriction is staff-only)
-async function canPostChannel(ch, login) {
-  if (!ch) return false;
-  if (ch.kind === "rules") return isStaff(await srvPerms(ch.serverId, login));
-  if (ch.kind === "news") { const p = await srvPerms(ch.serverId, login); return p.owner || (p.perms & SERVER_PERMS.POST_NEWS) === SERVER_PERMS.POST_NEWS || isStaff(p); }
-  if (ch.restrictMode === "post" || ch.restrictMode === "view") return isStaff(await srvPerms(ch.serverId, login));
-  return true;
-}
-
-app.get("/api/servers", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    res.json({ servers: await listUserServers(me.login) });
-  } catch (e) { console.error("servers", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/servers", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const name = String(req.body.name || "").trim();
-    if (!name) return res.status(400).json({ error: "bad_name" });
-    const id = await createServer(name.slice(0, 64), me.login);
-    // Icon and tags come in with the create call so the whole thing is one dialog.
-    if (typeof req.body.icon === "string" && req.body.icon.startsWith("data:")) await setServerIcon(id, req.body.icon.slice(0, 3_000_000));
-    if (req.body.tags || req.body.about || req.body.isPublic !== undefined) {
-      await updateServer(id, { tags: req.body.tags, about: req.body.about, isPublic: req.body.isPublic });
-    }
-    res.json({ ok: true, id });
-  } catch (e) { console.error("server create", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.get("/api/servers/public", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    res.json({ servers: await listPublicServers(40) });
-  } catch (e) { console.error("servers pub", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.get("/api/servers/:id", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const id = req.params.id; if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
-    const p = await srvPerms(id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (p.outsider) return res.status(403).json({ error: "not_member" });
-    const [chAll, roles, members] = await Promise.all([listChannels(id), listRoles(id), listServerMembers(id)]);
-    const staff = isStaff(p);
-    const channels = chAll
-      .filter((c) => c.restrictMode !== "view" || staff)          // hidden channels stay hidden
-      .map((c) => ({
-        ...c,
-        // The webhook URL is a secret — only staff ever see it.
-        hook: staff && c.kind === "text" && c.hookSecret ? `${APP_ORIGIN}/api/hook/ch/${c.id}/${c.hookSecret}` : null,
-        hookSecret: undefined,
-        voice: c.kind === "voice" ? voiceOccupancy("@ch:" + c.id) : undefined,
-      }));
-    res.json({
-      ok: true, server: p.srv, owner: p.owner, perms: p.owner ? -1 : p.perms, staff,
-      permBits: SERVER_PERMS, roleLimit: SERVER_ROLE_LIMIT,
-      channels,
-      roles,
-      members: members.map((m) => ({ login: m.login, name: m.name, status: m.status, roles: (m.roleIds || "").split(",").filter(Boolean).map(Number) })),
-    });
-  } catch (e) { console.error("server get", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/servers/:id", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const id = req.params.id;
-    const p = await srvPerms(id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
-    await updateServer(id, { name: req.body.name, about: req.body.about, isPublic: req.body.isPublic, tags: req.body.tags });
-    if (typeof req.body.icon === "string") await setServerIcon(id, req.body.icon.slice(0, 3_000_000));
-    notifyServer(id, "server-updated", { id: Number(id) });
-    res.json({ ok: true });
-  } catch (e) { console.error("server patch", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.delete("/api/servers/:id", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const p = await srvPerms(req.params.id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!p.owner) return res.status(403).json({ error: "owner_only" });
-    const members = await listServerMembers(req.params.id);
-    await deleteServer(req.params.id);
-    for (const m of members) notifyUser(m.login, "servers-changed", {});
-    res.json({ ok: true });
-  } catch (e) { console.error("server delete", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.get("/api/server-icon/:id", async (req, res) => {
-  try {
-    const icon = await getServerIcon(req.params.id);
-    if (!icon) return res.status(404).end();
-    const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(icon);
-    if (!m) return res.status(404).end();
-    res.setHeader("Content-Type", m[1]);
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.end(Buffer.from(m[2], "base64"));
-  } catch { res.status(404).end(); }
-});
-app.post("/api/servers/:id/join", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const srv = await getServer(req.params.id);
-    if (!srv) return res.status(404).json({ error: "not_found" });
-    if (!srv.isPublic) return res.status(403).json({ error: "invite_only" });
-    await joinServer(srv.id, me.login);
-    notifyServer(srv.id, "server-updated", { id: srv.id });
-    res.json({ ok: true, id: srv.id });
-  } catch (e) { console.error("server join", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/servers/:id/leave", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const p = await srvPerms(req.params.id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (p.owner) return res.status(400).json({ error: "owner_cannot_leave" });
-    await cleanupAutoChannels(req.params.id, me.login);
-    await leaveServer(req.params.id, me.login);
-    notifyServer(req.params.id, "server-updated", { id: Number(req.params.id) });
-    res.json({ ok: true });
-  } catch (e) { console.error("server leave", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/servers/:id/kick", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const p = await srvPerms(req.params.id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!hasPerm(p, SERVER_PERMS.KICK)) return res.status(403).json({ error: "forbidden" });
-    const target = String(req.body.login || "").toLowerCase();
-    if (target === p.srv.owner) return res.status(400).json({ error: "cannot_kick_owner" });
-    await cleanupAutoChannels(req.params.id, target);
-    await leaveServer(req.params.id, target);
-    notifyUser(target, "servers-changed", {});
-    notifyServer(req.params.id, "server-updated", { id: Number(req.params.id) });
-    res.json({ ok: true });
-  } catch (e) { console.error("server kick", e.message); res.status(500).json({ error: "server error" }); }
-});
-
-// ---- Channels ----
-app.post("/api/servers/:id/channels", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const id = req.params.id;
-    const p = await srvPerms(id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (p.outsider) return res.status(403).json({ error: "not_member" });
-    const kind = ["text", "voice", "rules", "news"].includes(req.body.kind) ? req.body.kind : "text";
-    const auto = !!req.body.auto;
-    // Self-service voice rooms: allowed with CREATE_VOICE (what moderators hand to "common
-    // mortals"), one per person, and swept away when they leave it. Anything else needs
-    // MANAGE_SERVER.
-    if (auto) {
-      if (kind !== "voice") return res.status(400).json({ error: "auto_voice_only" });
-      if (!hasPerm(p, SERVER_PERMS.CREATE_VOICE)) return res.status(403).json({ error: "no_create_voice" });
-      const existing = await autoChannelOf(id, me.login);
-      if (existing) return res.json({ ok: true, id: existing, existed: true });
-    } else if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
-    const name = String(req.body.name || "").trim().slice(0, 48) || (auto ? me.name : kind);
-    const chId = await createChannel(id, name, kind, auto ? me.login : null);
-    notifyServer(id, "server-updated", { id: Number(id) });
-    res.json({ ok: true, id: chId });
-  } catch (e) { console.error("channel create", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/channels/:id", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
-    const p = await srvPerms(ch.serverId, me.login);
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER) && ch.autoOwner !== me.login) return res.status(403).json({ error: "forbidden" });
-    if (req.body.name) await renameChannel(ch.id, req.body.name);
-    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
-    res.json({ ok: true });
-  } catch (e) { console.error("channel patch", e.message); res.status(500).json({ error: "server error" }); }
-});
-// Restriction + webhook management for one channel (moderator tools).
-app.post("/api/channels/:id/restrict", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
-    const p = await srvPerms(ch.serverId, me.login);
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
-    await setChannelRestrict(ch.id, String(req.body.mode || "none"));
-    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
-    res.json({ ok: true });
-  } catch (e) { console.error("channel restrict", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/channels/:id/hook", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
-    const p = await srvPerms(ch.serverId, me.login);
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER)) return res.status(403).json({ error: "forbidden" });
-    if (ch.kind !== "text") return res.status(400).json({ error: "text_only" });
-    // `off` revokes; anything else (re)issues, which also rotates a leaked URL.
-    const secret = req.body.off ? null : crypto.randomBytes(16).toString("hex");
-    await setChannelHook(ch.id, secret);
-    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
-    res.json({ ok: true, hook: secret ? `${APP_ORIGIN}/api/hook/ch/${ch.id}/${secret}` : null });
-  } catch (e) { console.error("channel hook", e.message); res.status(500).json({ error: "server error" }); }
-});
-// Incoming webhook for a text channel — same contract as the group-channel hook.
-app.post("/api/hook/ch/:id/:secret", async (req, res) => {
-  const id = req.params.id; if (!/^\d+$/.test(id)) return res.status(404).json({ error: "not_found" });
-  const ch = await getChannelByHook(id, req.params.secret);
-  if (!ch) return res.status(404).json({ error: "not_found" });
-  const key = "ch" + id;
-  if (Date.now() - (_hookLast.get(key) || 0) < 800) return res.status(429).json({ error: "rate_limited" });
-  const text = String(req.body?.text || "").trim(); if (!text) return res.status(400).json({ error: "empty" });
-  _hookLast.set(key, Date.now());
-  const srv = await getServer(ch.serverId);
-  const name = String(req.body?.name || ch.name || "Webhook").slice(0, 64);
-  const buttons = normalizeButtons(req.body?.reply_markup || req.body?.buttons);
-  try {
-    await deliverMessage({ room: "@ch:" + id, fromLogin: srv ? srv.owner : null, name, type: "text", text: text.slice(0, 4000), buttons });
-    res.json({ ok: true });
-  } catch (e) { console.error("ch hook", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.delete("/api/channels/:id", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const ch = await getChannel(req.params.id); if (!ch) return res.status(404).json({ error: "not_found" });
-    const p = await srvPerms(ch.serverId, me.login);
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_SERVER) && ch.autoOwner !== me.login) return res.status(403).json({ error: "forbidden" });
-    await deleteChannel(ch.id);
-    notifyServer(ch.serverId, "server-updated", { id: ch.serverId });
-    res.json({ ok: true });
-  } catch (e) { console.error("channel delete", e.message); res.status(500).json({ error: "server error" }); }
-});
-
-// ---- Roles ----
-app.post("/api/servers/:id/roles", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const id = req.params.id;
-    const p = await srvPerms(id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_ROLES)) return res.status(403).json({ error: "forbidden" });
-    if (await countRoles(id) >= SERVER_ROLE_LIMIT) return res.status(400).json({ error: "role_limit", limit: SERVER_ROLE_LIMIT });
-    const roleId = await createRole(id, req.body.name || "role", req.body.color, req.body.perms);
-    notifyServer(id, "server-updated", { id: Number(id) });
-    res.json({ ok: true, id: roleId });
-  } catch (e) { console.error("role create", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.post("/api/servers/:id/roles/:roleId", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const p = await srvPerms(req.params.id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_ROLES)) return res.status(403).json({ error: "forbidden" });
-    if (req.body.assign !== undefined) await setMemberRole(req.params.id, String(req.body.login || "").toLowerCase(), Number(req.params.roleId), !!req.body.assign);
-    else await updateRole(Number(req.params.roleId), { name: req.body.name, color: req.body.color, perms: req.body.perms });
-    notifyServer(req.params.id, "server-updated", { id: Number(req.params.id) });
-    res.json({ ok: true });
-  } catch (e) { console.error("role patch", e.message); res.status(500).json({ error: "server error" }); }
-});
-app.delete("/api/servers/:id/roles/:roleId", async (req, res) => {
-  try {
-    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const p = await srvPerms(req.params.id, me.login);
-    if (!p.srv) return res.status(404).json({ error: "not_found" });
-    if (!hasPerm(p, SERVER_PERMS.MANAGE_ROLES)) return res.status(403).json({ error: "forbidden" });
-    await deleteRole(Number(req.params.roleId));
-    notifyServer(req.params.id, "server-updated", { id: Number(req.params.id) });
-    res.json({ ok: true });
-  } catch (e) { console.error("role delete", e.message); res.status(500).json({ error: "server error" }); }
-});
-
-// Tell every member of a server that something changed.
-async function notifyServer(id, event, payload) {
-  try { for (const m of await listServerMembers(id)) notifyUser(m.login, event, payload); } catch {}
-}
-// Drop the self-service voice rooms someone owns here (they left, were kicked, or hung up).
-async function cleanupAutoChannels(serverId, login) {
-  try {
-    const chId = await autoChannelOf(serverId, login);
-    if (chId) { await deleteChannel(chId); notifyServer(serverId, "server-updated", { id: Number(serverId) }); }
-  } catch {}
-}
-// The one an auto-room really depends on: leaving the voice room deletes it.
-async function sweepAutoChannel(room, login) {
-  if (!room || !room.startsWith("@ch:")) return;
-  try {
-    const ch = await getChannel(room.slice(4));
-    if (ch && ch.autoOwner === login) { await deleteChannel(ch.id); notifyServer(ch.serverId, "server-updated", { id: ch.serverId }); }
-  } catch {}
-}
-
 // ---------- REST: rich presence privacy ----------
 app.get("/api/presence-privacy", async (req, res) => {
   try {
@@ -2786,9 +2445,6 @@ async function canAccessRoom(login, room) {
   if (!login || typeof room !== "string") return false;
   if (room.startsWith("@dm:")) return room.slice(4).split("~").includes(login);
   if (room.startsWith("@grp:")) { try { return await isGroupMember(room.slice(5), login); } catch { return false; } }
-  if (room.startsWith("@ch:")) {
-    try { return await canSeeChannel(await getChannel(room.slice(4)), login); } catch { return false; }
-  }
   return false;
 }
 
