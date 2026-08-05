@@ -1038,6 +1038,20 @@
     </div>
   </div>
 
+  <!-- Text input dialog. window.prompt() does not exist in Electron and is cancelled by the
+       Android WebView, so anything built on it silently did nothing in two of our three shells. -->
+  <div id="askModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="askClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
+      <div class="modal-title" id="askTitle"></div>
+      <input id="askInput" class="field" maxlength="120" autocomplete="off" />
+      <div class="modal-actions">
+        <button id="askCancel" class="btn-ghost" type="button" data-i18n="cancel">Cancel</button>
+        <button id="askOk" class="btn-primary" type="button" data-i18n="ok">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="lightbox" class="lightbox hidden">
     <div class="lb-bar">
       <span id="lbName" class="lb-name"></span>
