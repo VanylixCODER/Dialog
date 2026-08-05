@@ -63,6 +63,8 @@ import {
   createGroupAddRequest, listGroupAddRequests, getGroupAddRequest, deleteGroupAddRequest, deleteGroupAddRequestsFor,
   setUserBannedWithReason, getBanReason,
   getRichPresencePref, setRichPresencePref, listPresenceHidden, setPresenceHidden,
+  listAwards, getAwardByCode, createAward, deleteAward, grantAward, revokeAward, userAwards, hasAward, awardStats,
+  getDmSettings, setDmAutoClear, allDmAutoClear,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -336,6 +338,7 @@ app.post("/api/login", async (req, res) => {
     // ua/ip are stamped on the session row so Settings → Account can list real devices.
     const out = await auth.login(login, password, code, { ua: req.headers["user-agent"], ip: normIp(req.ip) });
     setUserLastIp(out.profile.login, normIp(req.ip)).catch(() => {});
+    evaluateAwards(out.profile.login).catch(() => {});
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -1719,10 +1722,23 @@ async function saveSystemMessage(room, fromLogin, name, type, text) {
 // Which participants a message @-mentions. `@all` (word-boundary) → everyone but the sender;
 // otherwise the @login tokens that match an actual participant. recips is already scoped to the
 // room (DM = the partner, group = its members), so DM mentions can only ever hit the DM partner.
-function resolveMentions(text, recips, fromLogin) {
+// Group mentions: @all plus state-based ones the server can actually answer, since only it
+// knows who is online, playing something, or sitting in a call right now.
+const GROUP_MENTIONS = {
+  all: () => true,
+  online: (l) => effectiveStatus(l) === "online" || effectiveStatus(l) === "dnd",
+  offline: (l) => effectiveStatus(l) === "offline",
+  ingame: (l) => { const a = richPresence.get(l); return !!a && a.type === "playing"; },
+  incall: (l) => { for (const c of callRooms.values()) for (const v of c.values()) if (v.login === l) return true; return false; },
+};
+function resolveMentions(text, recips, fromLogin, room) {
   const s = String(text || "");
   const out = new Set();
-  if (/(^|\s)@all(?![\w-])/i.test(s)) { for (const l of recips) if (l !== fromLogin) out.add(l); return out; }
+  for (const [key, test] of Object.entries(GROUP_MENTIONS)) {
+    if (!new RegExp("(^|\\s)@" + key + "(?![\\w-])", "i").test(s)) continue;
+    for (const l of recips) if (l !== fromLogin && test(l, room)) out.add(l);
+  }
+  if (out.size) return out;
   const toks = new Set((s.match(/@([a-z0-9_.]+)/gi) || []).map((x) => x.slice(1).toLowerCase()));
   if (!toks.size) return out;
   for (const l of recips) if (l !== fromLogin && toks.has(String(l).toLowerCase())) out.add(l);
@@ -1797,7 +1813,7 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   const dmTo = dmPartner(room, fromLogin);
   if (dmTo) recips = [dmTo];
   else if (room.startsWith("@grp:")) { try { recips = await getGroupMembers(room.slice(5)); } catch {} }
-  const mentions = resolveMentions(payload.text, recips, fromLogin);
+  const mentions = resolveMentions(payload.text, recips, fromLogin, room);
   for (const login of recips) {
     if (login === fromLogin) continue;
     const mentioned = mentions.has(login);
@@ -1904,6 +1920,15 @@ async function rpSettings(login) {
   return v;
 }
 function rpInvalidate(login) { rpPrefCache.delete(login); }
+// login -> "mobile" | "desktop" | "web", from the UA of whatever socket connected. Used by
+// the friend-list filters; harmless if we guess wrong.
+const userDevice = new Map();
+function deviceFromUa(ua) {
+  const u = String(ua || "");
+  if (/DialogApp|Android|iPhone|iPad|Mobile/i.test(u)) return "mobile";
+  if (/Electron/i.test(u)) return "desktop";
+  return "web";
+}
 async function broadcastPresence(login) {
   const status = effectiveStatus(login);
   let friends = []; try { friends = await getFriendLogins(login); } catch {}
@@ -1913,7 +1938,7 @@ async function broadcastPresence(login) {
   for (const f of friends) {
     // The activity is filtered per recipient — the status itself always goes out.
     const activity = act && rp.on && !rp.hidden.has(f) ? act : null;
-    notifyUser(f, "presence", { login, status, activity });
+    notifyUser(f, "presence", { login, status, activity, device: userDevice.get(login) || null });
   }
 }
 // The client pushes what it's doing (a game, a track, watching together). Anything else is
@@ -2009,6 +2034,7 @@ io.on("connection", (socket) => {
     socket._token = token; socket._authLogin = userLogin;
     setUserLastIp(userLogin, sockIp).catch(() => {});
     addUserSocket(userLogin, socket.id);
+    userDevice.set(userLogin, deviceFromUa(socket.handshake.headers["user-agent"]));
     if (!userStatus.has(userLogin)) { try { userStatus.set(userLogin, await getStatus(userLogin)); } catch {} }
     broadcastPresence(userLogin);
   });
@@ -2045,8 +2071,12 @@ io.on("connection", (socket) => {
     const peers = getPeers(currentRoom);
     socket.join(currentRoom);
     peers.set(socket.id, { name: userName, login: userLogin });
-    try { socket.emit("history", await recentMessages(currentRoom, HISTORY_LIMIT)); }
-    catch (e) { console.error("history", e.message); socket.emit("history", []); }
+    try {
+      let hist = await recentMessages(currentRoom, HISTORY_LIMIT);
+      const ac = (await getDmSettings(userLogin, currentRoom)).autoClearMs;
+      if (ac) hist = hist.filter((m) => m.ts >= Date.now() - ac);   // your window, your view
+      socket.emit("history", hist);
+    } catch (e) { console.error("history", e.message); socket.emit("history", []); }
     socket.emit("peers", [...peers.entries()].filter(([id]) => id !== socket.id).map(([id, v]) => ({ id, ...v })));
     socket.emit("call-state", callStatePayload(currentRoom)); // идёт ли тут звонок прямо сейчас
     try { socket.emit("pinned", { room: currentRoom, pinned: await getPinned(currentRoom) }); } catch {}
@@ -2066,7 +2096,9 @@ io.on("connection", (socket) => {
   socket.on("load-more", async ({ before }) => {
     if (!currentRoom || !userLogin) return;
     try {
-      const msgs = await messagesBefore(currentRoom, before, HISTORY_LIMIT);
+      let msgs = await messagesBefore(currentRoom, before, HISTORY_LIMIT);
+      const ac = (await getDmSettings(userLogin, currentRoom)).autoClearMs;
+      if (ac) msgs = msgs.filter((m) => m.ts >= Date.now() - ac);
       socket.emit("more-messages", { msgs, before });
     } catch (e) { console.error("load-more", e.message); }
   });
@@ -2390,6 +2422,120 @@ io.on("connection", (socket) => {
       if (!userSockets.has(userLogin)) { richPresence.delete(userLogin); broadcastPresence(userLogin); }
     }
   });
+});
+
+// ============================ Awards ============================
+// Automatic awards are rules, evaluated cheaply and only when someone's profile is looked at
+// (or on sign-in) — not on every request. Manual ones are handed out by an admin.
+const AUTO_AWARDS = [
+  { code: "founder",    name: "Founder",      icon: "🌱", color: "#00ff5a", description: "Here in the first month",       test: (st) => st.createdAt < FOUNDER_CUTOFF },
+  { code: "verified",   name: "Verified",     icon: "✅", color: "#4ade80", description: "Email verified",                test: (st) => st.emailVerified },
+  { code: "chatty",     name: "Chatty",       icon: "💬", color: "#38bdf8", description: "1000 messages sent",            test: (st) => st.messages >= 1000 },
+  { code: "sociable",   name: "Sociable",     icon: "🤝", color: "#f59e0b", description: "10 friends",                    test: (st) => st.friends >= 10 },
+  { code: "organiser",  name: "Organiser",    icon: "🗂", color: "#a78bfa", description: "In 5 groups",                   test: (st) => st.groups >= 5 },
+  { code: "artist",     name: "Theme artist", icon: "🎨", color: "#ec4899", description: "Published a theme",             test: (st) => st.themesPublished >= 1 },
+  { code: "botwright",  name: "Botwright",    icon: "🤖", color: "#22d3ee", description: "Built a bot",                   test: (st) => st.bots >= 1 },
+];
+// Anyone who signed up in Dialog's first month.
+const FOUNDER_CUTOFF = Date.parse("2026-09-01T00:00:00Z");
+let autoAwardsReady = null;
+async function ensureAutoAwards() {
+  if (autoAwardsReady) return autoAwardsReady;
+  autoAwardsReady = (async () => {
+    const map = new Map();
+    for (const a of AUTO_AWARDS) {
+      let row = await getAwardByCode(a.code);
+      if (!row) { await createAward({ ...a, auto: 1 }); row = await getAwardByCode(a.code); }
+      if (row) map.set(a.code, row.id);
+    }
+    return map;
+  })();
+  return autoAwardsReady;
+}
+// Grant whatever this account has newly earned. Safe to call often; it only writes on a change.
+async function evaluateAwards(login) {
+  try {
+    const ids = await ensureAutoAwards();
+    const st = await awardStats(login);
+    const granted = [];
+    for (const a of AUTO_AWARDS) {
+      const id = ids.get(a.code); if (!id) continue;
+      if (!a.test(st)) continue;
+      if (await hasAward(login, id)) continue;
+      await grantAward(login, id, null);
+      granted.push(a);
+    }
+    // Tell them, once, when something new lands.
+    for (const a of granted) notifyUser(login, "award", { icon: a.icon, name: a.name, description: a.description });
+    return granted.length;
+  } catch (e) { console.error("awards", e.message); return 0; }
+}
+app.get("/api/awards", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    await ensureAutoAwards();
+    res.json({ awards: await listAwards() });
+  } catch (e) { console.error("awards list", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.get("/api/awards/:login", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const login = String(req.params.login || "").toLowerCase();
+    if (login === me.login) await evaluateAwards(login);   // refresh your own on the way past
+    res.json({ awards: await userAwards(login) });
+  } catch (e) { console.error("user awards", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Admin: mint an award, or hand one to a person / a whole batch of people at once.
+app.post("/api/admin/awards", async (req, res) => {
+  const me = await requireAdmin(req, res); if (!me) return;
+  try {
+    const code = String(req.body.code || "").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 32);
+    if (!code || !String(req.body.name || "").trim()) return res.status(400).json({ error: "bad_input" });
+    if (await getAwardByCode(code)) return res.status(400).json({ error: "code_taken" });
+    const id = await createAward({ code, name: req.body.name, icon: req.body.icon, color: req.body.color, description: req.body.description, auto: 0 });
+    res.json({ ok: true, id });
+  } catch (e) { console.error("award create", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.delete("/api/admin/awards/:id", async (req, res) => {
+  const me = await requireAdmin(req, res); if (!me) return;
+  try { await deleteAward(Number(req.params.id) || 0); res.json({ ok: true }); }
+  catch (e) { console.error("award delete", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/admin/awards/:id/grant", async (req, res) => {
+  const me = await requireAdmin(req, res); if (!me) return;
+  try {
+    const id = Number(req.params.id) || 0;
+    // A comma/space separated list — handing one badge to a whole group is the common case.
+    const logins = String(req.body.logins || "").toLowerCase().split(/[\s,]+/).filter(Boolean).slice(0, 200);
+    const revoke = !!req.body.revoke;
+    let n = 0;
+    for (const l of logins) {
+      if (!(await getUser(l))) continue;
+      if (revoke) await revokeAward(l, id); else { await grantAward(l, id, me.login); notifyUser(l, "award-granted", {}); }
+      n++;
+    }
+    res.json({ ok: true, n });
+  } catch (e) { console.error("award grant", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ============================ DM settings ============================
+// Auto-clear HIDES messages older than the window for the person who set it. It is
+// deliberately per-user: one side of a conversation must not be able to wipe the other's copy.
+app.get("/api/dm-settings", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    if (req.query.room) return res.json(await getDmSettings(me.login, String(req.query.room)));
+    res.json({ autoClear: await allDmAutoClear(me.login) });
+  } catch (e) { console.error("dm settings", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/dm-settings", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.body.room || "");
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    await setDmAutoClear(me.login, room, req.body.autoClearMs);
+    res.json({ ok: true });
+  } catch (e) { console.error("dm settings set", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: rich presence privacy ----------

@@ -689,7 +689,7 @@ $("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
   sw.querySelectorAll("button").forEach((b) => b.onclick = () => { if (window.setLang) setLang(b.dataset.lang); mark(); updateTerminal(); });
   mark();
 })();
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); rememberAccount(p, tk); playAuthSuccess(); }
+function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); rememberAccount(p, tk); stopBootHints(); playAuthSuccess(); }
 
 // ---------- Multi-account (switch account, max 2 per device) ----------
 const MAX_ACCOUNTS = 2;
@@ -1571,6 +1571,76 @@ $("askInput") && ($("askInput").onkeydown = (e) => {
   if (e.key === "Escape") { e.preventDefault(); if (_askResolve) _askResolve(null); }
 });
 
+// ================== DM settings (auto-clear) ==================
+// Windows people actually think in. 0 = keep everything.
+const DM_CLEAR_OPTS = [
+  [0, "dm_keep"], [4 * 3600e3, "dm_4h"], [12 * 3600e3, "dm_12h"], [24 * 3600e3, "dm_1d"],
+  [3 * 86400e3, "dm_3d"], [7 * 86400e3, "dm_7d"], [35 * 86400e3, "dm_5w"], [365 * 86400e3, "dm_1y"],
+];
+async function openDmSettings() {
+  if (!myRoom) return;
+  const { ok, data } = await api("/api/dm-settings?room=" + encodeURIComponent(myRoom), null, "GET");
+  const cur = ok ? Number(data.autoClearMs) || 0 : 0;
+  const box = $("dmClearOpts"); if (!box) return;
+  box.innerHTML = "";
+  for (const [ms, key] of DM_CLEAR_OPTS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "dm-clear-opt" + (ms === cur ? " on" : "");
+    b.textContent = t(key);
+    b.onclick = async () => {
+      await api("/api/dm-settings", { room: myRoom, autoClearMs: ms });
+      box.querySelectorAll(".dm-clear-opt").forEach((x) => x.classList.toggle("on", x === b));
+      notify(ms ? t("dm_autoclear_set", { window: t(key) }) : t("dm_autoclear_off"));
+      // Re-join so history comes back filtered by the new window.
+      socket.emit("join", { token, room: myRoom });
+    };
+    box.appendChild(b);
+  }
+  $("dmSettingsModal").classList.remove("hidden");
+}
+$("dmSetClose") && ($("dmSetClose").onclick = () => $("dmSettingsModal").classList.add("hidden"));
+$("dmSetDone") && ($("dmSetDone").onclick = () => $("dmSettingsModal").classList.add("hidden"));
+$("dmSettingsModal") && $("dmSettingsModal").addEventListener("click", (e) => { if (e.target === $("dmSettingsModal")) $("dmSettingsModal").classList.add("hidden"); });
+
+// ================== Loading hints ==================
+// Settings people never find because nothing points at them. The sign-in screen and the
+// reconnect banner both have dead air; put a rotating one there.
+const HINTS = [
+  "hint_theme", "hint_pin", "hint_reply", "hint_search", "hint_draft", "hint_saved",
+  "hint_mute", "hint_2fa", "hint_devices", "hint_export", "hint_activities", "hint_presence",
+  "hint_forward", "hint_jump", "hint_select", "hint_bots",
+];
+let hintTimer = null;
+function startBootHints() {
+  const el = $("bootHint"); if (!el) return;
+  let i = Math.floor(Math.random() * HINTS.length);
+  const paint = () => { el.textContent = "💡 " + t(HINTS[i % HINTS.length]); i++; };
+  paint();
+  clearInterval(hintTimer);
+  hintTimer = setInterval(paint, 7000);
+}
+function stopBootHints() { clearInterval(hintTimer); hintTimer = null; }
+
+// ================== Awards ==================
+// Badges on a profile. Automatic ones are granted server-side by rule; the rest are handed
+// out by an admin. Rendering is the same either way.
+function renderAwards(box, awards) {
+  if (!box) return;
+  const list = awards || [];
+  box.innerHTML = list.map((a) =>
+    `<span class="award" style="border-color:${escapeHtml(a.color || "#00ff5a")};color:${escapeHtml(a.color || "#00ff5a")}" title="${escapeHtml(a.name)}${a.description ? " — " + escapeHtml(a.description) : ""}">` +
+    `<span class="aw-ico">${escapeHtml(a.icon || "🏅")}</span><span class="aw-name">${escapeHtml(a.name)}</span></span>`).join("");
+  box.classList.toggle("hidden", !list.length);
+}
+async function loadAwards(login, box) {
+  const { ok, data } = await api("/api/awards/" + encodeURIComponent(login), null, "GET");
+  renderAwards(box, ok ? data.awards : []);
+}
+// A newly earned badge announces itself once.
+socket.on("award", (a) => { if (a && a.name) notify(`${a.icon || "🏅"} ${t("award_earned", { name: a.name })}`); });
+socket.on("award-granted", () => { if (profile) loadAwards(profile.login, $("profileAwards")); });
+
 // ================== Rich Presence ==================
 // What you're doing rides along with the normal presence broadcast, filtered per recipient on
 // the server. The client just declares it; the privacy rules are not the client's business.
@@ -1583,6 +1653,11 @@ function setActivity(type, name, detail) {
 window.dialogSetActivity = setActivity;   // native shells / mini-apps can report a game or track
 // Friends' activities, for the chat list and profiles.
 const activities = new Map();             // login -> {type,name,detail,since}
+// Logins known to be bots. A bot is an account but not a user, so it never counts toward
+// "how many friends do I have".
+const botLoginCache = new Set();
+const devices = new Map();                // login -> "mobile" | "desktop" | "web"
+const inCallLogins = new Set();           // logins currently sitting in a call I can see
 function activityLine(a) {
   if (!a) return "";
   const verb = a.type === "playing" ? t("rp_playing") : a.type === "listening" ? t("rp_listening") : t("rp_watching");
@@ -1832,7 +1907,17 @@ function exitChatToList() {
 window.exitChatToList = exitChatToList; // router.js (popstate) calls it across files
 $("backBtnMobile").onclick = $("esBackBtn").onclick = exitChatToList;
 $("muteBtn").onclick = () => { if (!myRoom) return; openMuteMenu($("muteBtn"), myRoom); };
-$("infoBtn").onclick = () => { if (!myRoom) return; renderMembers(); $("infoTitle").textContent = t("info"); $("infoPanel").classList.toggle("hidden"); };
+$("infoBtn").onclick = () => {
+  if (!myRoom) return;
+  renderMembers();
+  // A bot is an account, not a member of the conversation — count them apart.
+  const bots = (groupMembers || []).filter((m) => m.is_bot).length;
+  const people = Math.max(0, (groupMembers || []).length - bots);
+  $("infoTitle").textContent = curKind === "group"
+    ? t("members_count", { n: people }) + (bots ? " · " + t("bots_count", { n: bots }) : "")
+    : t("info");
+  $("infoPanel").classList.toggle("hidden");
+};
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
 
 // ---------- Меню чата (⋮) ----------
@@ -1866,6 +1951,7 @@ $("chatMenuBtn").onclick = (e) => {
     item(t("chat_wallpaper"), "image", () => openChatBgModal());
     item(isB ? t("unblock_user") : t("block_user"), "block", () => block(partner, isB ? "unblock" : "block"), !isB);
     // Close = hide the DM but keep the history (reopening restores it); Delete wipes it.
+    item(t("dm_settings"), "sliders", () => openDmSettings());
     if (c) item(t("close_dm"), "close", () => closeDm(c));
     item(t("delete_chat"), "trash", () => { if (c) deleteChat(c); }, true);
   }
@@ -2561,6 +2647,32 @@ let mutualCountCache = {};
 function loadMutualCounts() {
   api("/api/mutuals", null, "GET").then(({ ok, data }) => { if (ok) { mutualCountCache = data.counts || {}; renderContacts(); } });
 }
+let friendFilter = "all";
+// What the filter chips actually test. "Same game" compares against MY activity, so it only
+// matches when I'm playing something too.
+function friendMatchesFilter(l) {
+  if (friendFilter === "all") return true;
+  const st = presence.get(l) || "offline";
+  const act = activities.get(l);
+  const dev = devices.get(l);
+  switch (friendFilter) {
+    case "online": return st === "online" || st === "dnd";
+    case "offline": return st === "offline";
+    case "ingame": return !!act && act.type === "playing";
+    case "samegame": return !!act && act.type === "playing" && !!myRichPresence && myRichPresence.type === "playing" &&
+      String(act.name).toLowerCase() === String(myRichPresence.name).toLowerCase();
+    case "incall": return inCallLogins.has(l);
+    case "mobile": return dev === "mobile";
+    case "desktop": return dev === "desktop" || dev === "web";
+    default: return true;
+  }
+}
+$("friendFilters") && $("friendFilters").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-frf]"); if (!b) return;
+  friendFilter = b.dataset.frf;
+  $("friendFilters").querySelectorAll("[data-frf]").forEach((x) => x.classList.toggle("active", x === b));
+  renderContacts();
+});
 function renderContacts() {
   updateReqBadge();
   const reqList = $("reqList"); if (!reqList) return;
@@ -2568,7 +2680,7 @@ function renderContacts() {
   reqList.innerHTML = ""; if (fL) fL.innerHTML = ""; if (sL) sL.innerHTML = "";
   const q = contactFilter.trim().toLowerCase();
   const match = (l) => !q || l.toLowerCase().includes(q);
-  const friends = (relations.friends || []).filter(match);
+  const friends = (relations.friends || []).filter(match).filter(friendMatchesFilter);
   const incoming = (relations.incoming || []).filter(match);
   const sent = (relations.sent || []).filter(match);
 
@@ -2591,7 +2703,8 @@ function renderContacts() {
 
   // Counts show the TRUE totals (not the filtered view) so the tabs stay stable.
   const setN = (id, n) => { const e = $(id); if (e) { e.textContent = n; e.classList.toggle("zero", !n); } };
-  setN("cntFriends", (relations.friends || []).length);
+  const botFriends = (relations.friends || []).filter((l) => botLoginCache.has(l)).length;
+  setN("cntFriends", (relations.friends || []).length - botFriends);
   setN("cntReq", (relations.incoming || []).length);
   setN("cntSent", (relations.sent || []).length);
   const setEmpty = (id, shown, none) => { const e = $(id); if (e) { e.classList.toggle("hidden", shown > 0); e.textContent = none ? t(id === "friendsEmpty" ? "no_friends" : id === "reqEmpty" ? "no_requests" : "no_sent") : t("contacts_no_match"); } };
@@ -2617,7 +2730,9 @@ async function openMiniProfile(login) {
   if (!ok) return;
   $("mpModal").classList.remove("hidden");
   $("mpAva").setAttribute("data-login", login);
+  loadAwards(login, $("mpAwards"));
   $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
+  if (data.isBot) botLoginCache.add(login); else botLoginCache.delete(login);
   $("mpName").innerHTML = escapeHtml(data.name) + (data.isBot ? ' <span class="bot-badge">BOT</span>' : ""); $("mpLogin").textContent = data.login;
   const banner = $("mpBanner"), bannerImg = $("mpBannerImg");
   bannerImg.onload = () => banner.classList.remove("hidden");
@@ -3782,7 +3897,14 @@ function mentionCandidates(query) {
   if (curKind === "group") people = (groupMembers || []).filter((m) => m.login !== (profile && profile.login));
   else if (curKind === "dm" && cc && cc.login) people = [{ login: cc.login, name: cc.name }];
   const list = [];
-  if ("all".startsWith(q) || t("mention_all").toLowerCase().startsWith(q)) list.push({ login: "all", name: t("mention_all"), all: true });
+  // Group mentions the server can resolve — who's online, playing, or in a call right now.
+  const groups = [
+    ["all", t("mention_all")], ["online", t("mention_online")], ["ingame", t("mention_ingame")],
+    ["incall", t("mention_incall")], ["offline", t("mention_offline")],
+  ];
+  for (const [key, label] of groups) {
+    if (!q || key.startsWith(q) || label.toLowerCase().startsWith(q)) list.push({ login: key, name: label, all: true });
+  }
   for (const m of people) if (!q || m.login.toLowerCase().includes(q) || (m.name || "").toLowerCase().includes(q)) list.push(m);
   return list.slice(0, 8);
 }
@@ -4701,6 +4823,9 @@ $("startCallBtn").onclick = () => {
 // Состояние звонка в комнате (для кнопки «войти» и боковой панели)
 socket.on("call-state", ({ room, count, logins, locked, muteOnEntry }) => {
   if (count > 0) activeCalls.set(room, { count, logins }); else activeCalls.delete(room);
+  // Keep a flat set of "who is in a call" for the friend-list filter.
+  inCallLogins.clear();
+  for (const c of activeCalls.values()) for (const l of (c.logins || [])) inCallLogins.add(l);
   if (call.active && room === call.roomKey) {   // reflect owner lock / mute-on-entry state on the toggles
     const lt = $("lockToggle"); if (lt) lt.classList.toggle("on", !!locked);
     const mt = $("moeToggle"); if (mt) mt.classList.toggle("on", !!muteOnEntry);
@@ -6653,7 +6778,7 @@ window.addEventListener("resize", fitAllTabInds);
 window.addEventListener("langchange", () => setTimeout(fitAllTabInds, 40));
 
 // ---------- Старт ----------
-loadSavedTheme(); refreshOnAccent(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); checkSession();
+loadSavedTheme(); refreshOnAccent(); applyAppearance(); initAppearanceControls(); initLang(); setIcons(); updateSendMode(); startBootHints(); checkSession();
 window.addEventListener("popstate", onPopState);
 
 // Contextual "back" for the native Android app. The router pushes a history entry per
@@ -6754,6 +6879,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     ov.querySelectorAll(".settings-tab").forEach((b) => b.classList.toggle("active", b.dataset.atab === name));
     ov.querySelectorAll(".admin-pane").forEach((p) => p.classList.toggle("active", p.dataset.apane === name));
     if (name === "logs") loadAdminLogs();
+    if (name === "awards") loadAdminAwards();
     if (name === "ips") loadAdminIps();
     if (name === "reports") loadAdminReports();
   }
@@ -6830,10 +6956,48 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     if (!ok) return;
     const box = $("adminStats");
     const cell = (k, v) => `<div class="astat"><span class="astat-n">${v}</span><span class="astat-l">${k}</span></div>`;
-    box.innerHTML = cell(t("adm_users"), data.users) + cell(t("adm_online"), data.online) + cell(t("adm_banned"), data.banned)
+    box.innerHTML = cell(t("adm_users"), data.users) + cell(t("adm_bots"), data.bots || 0) + cell(t("adm_online"), data.online) + cell(t("adm_banned"), data.banned)
       + cell(t("adm_verified"), data.verified) + cell(t("adm_reports"), data.reports || 0) + cell(t("adm_messages"), data.messages)
       + cell(t("adm_groups"), data.groups) + cell(t("adm_ip_bans"), data.banned_ips);
   }
+
+  // ---- Awards ----
+  async function loadAdminAwards() {
+    const { ok, data } = await aapi("/api/awards", null, "GET");
+    const box = $("awList"); if (!box) return;
+    box.innerHTML = "";
+    if (!ok) return;
+    for (const a of data.awards || []) {
+      const row = document.createElement("div"); row.className = "aw-row";
+      row.innerHTML = `<span class="award" style="border-color:${escapeHtml(a.color)};color:${escapeHtml(a.color)}">` +
+        `<span class="aw-ico">${escapeHtml(a.icon)}</span><span class="aw-name">${escapeHtml(a.name)}</span></span>` +
+        `<span class="aw-meta">${a.auto ? t("aw_auto") : t("aw_manual")}${a.description ? " · " + escapeHtml(a.description) : ""}</span>`;
+      if (!a.auto) {
+        // One badge, many people: paste a list.
+        const who = document.createElement("input");
+        who.className = "field aw-who"; who.placeholder = t("aw_logins_ph");
+        const give = document.createElement("button"); give.className = "btn-ghost btn-sm"; give.textContent = t("aw_grant");
+        give.onclick = async () => {
+          const { ok: k, data: d } = await aapi(`/api/admin/awards/${a.id}/grant`, { logins: who.value });
+          notify(k ? t("aw_granted", { n: d.n }) : t("err_generic")); who.value = "";
+        };
+        const take = document.createElement("button"); take.className = "btn-ghost btn-sm danger"; take.textContent = t("aw_revoke");
+        take.onclick = async () => { await aapi(`/api/admin/awards/${a.id}/grant`, { logins: who.value, revoke: true }); who.value = ""; notify(t("saved")); };
+        const del = document.createElement("button"); del.className = "btn-ghost btn-sm danger"; del.textContent = t("ts_delete");
+        del.onclick = async () => { await aapi("/api/admin/awards/" + a.id, null, "DELETE"); loadAdminAwards(); };
+        row.appendChild(who); row.appendChild(give); row.appendChild(take); row.appendChild(del);
+      }
+      box.appendChild(row);
+    }
+  }
+  $("awCreate") && ($("awCreate").onclick = async () => {
+    $("awError").textContent = "";
+    const body = { code: $("awCode").value, name: $("awName").value, icon: $("awIcon").value, color: $("awColor").value, description: $("awDesc").value };
+    const { ok, data } = await aapi("/api/admin/awards", body);
+    if (!ok) { $("awError").textContent = (data && data.error) === "code_taken" ? t("aw_code_taken") : t("err_generic"); return; }
+    $("awCode").value = ""; $("awName").value = ""; $("awDesc").value = "";
+    loadAdminAwards();
+  });
 
   let usersCache = [];
   async function loadAdminUsers() {

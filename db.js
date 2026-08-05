@@ -284,6 +284,31 @@ export async function initSchema() {
     UNIQUE KEY uniq_gar (group_id, to_login), KEY idx_gar_to (to_login)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // ── Awards: badges on a profile. `auto` ones are granted by a rule (see AUTO_AWARDS in
+  // server.js); the rest are handed out by an admin to one person or a whole batch. ──
+  await pool.query(`CREATE TABLE IF NOT EXISTS awards (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(32) NOT NULL UNIQUE,
+    name VARCHAR(48) NOT NULL, icon VARCHAR(8) NOT NULL DEFAULT '🏅',
+    color VARCHAR(9) NOT NULL DEFAULT '#00ff5a',
+    description VARCHAR(190) NULL,
+    auto TINYINT NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_awards (
+    login VARCHAR(24) NOT NULL, award_id INT NOT NULL,
+    granted_at BIGINT NOT NULL, granted_by VARCHAR(24) NULL,
+    PRIMARY KEY (login, award_id), KEY idx_ua_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Per-user DM settings. Auto-clear HIDES messages older than the window for the person who
+  // set it — one side of a conversation must not be able to wipe the other's history.
+  await pool.query(`CREATE TABLE IF NOT EXISTS dm_settings (
+    login VARCHAR(24) NOT NULL, room VARCHAR(64) NOT NULL,
+    auto_clear_ms BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (login, room)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Scheduled channel posts — the sweeper in server.js publishes rows whose `due` has passed.
   await pool.query(`CREATE TABLE IF NOT EXISTS scheduled_posts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1015,9 +1040,12 @@ export async function adminListUsers(q = "", limit = 100) {
 export async function adminStats() {
   const one = async (sql) => { const r = await query(sql); return Number(r[0] ? r[0].n : 0); };
   return {
-    users: await one("SELECT COUNT(*) n FROM users"),
-    banned: await one("SELECT COUNT(*) n FROM users WHERE banned=1"),
-    verified: await one("SELECT COUNT(*) n FROM users WHERE email_verified=1"),
+    // is_bot=0 everywhere: a bot is an account, but it is not a user and shouldn't inflate
+    // the numbers people read as "how many humans are here".
+    users: await one("SELECT COUNT(*) n FROM users WHERE is_bot=0"),
+    bots: await one("SELECT COUNT(*) n FROM users WHERE is_bot=1"),
+    banned: await one("SELECT COUNT(*) n FROM users WHERE banned=1 AND is_bot=0"),
+    verified: await one("SELECT COUNT(*) n FROM users WHERE email_verified=1 AND is_bot=0"),
     messages: await one("SELECT COUNT(*) n FROM messages"),
     groups: await one("SELECT COUNT(*) n FROM chat_groups"),
     sessions: await one("SELECT COUNT(*) n FROM sessions"),
@@ -1249,3 +1277,74 @@ export async function setPresenceHidden(login, target, hidden) {
 }
 
 
+
+
+// ============================ Awards ============================
+export async function listAwards() {
+  return await query("SELECT id, code, name, icon, color, description, auto FROM awards ORDER BY auto DESC, id ASC");
+}
+export async function getAwardByCode(code) {
+  const r = await query("SELECT id, code, name, icon, color, description, auto FROM awards WHERE code=?", [code]);
+  return r[0] || null;
+}
+export async function createAward({ code, name, icon, color, description, auto }) {
+  const r = await execute(
+    "INSERT INTO awards (code, name, icon, color, description, auto, created_at) VALUES (?,?,?,?,?,?,?)",
+    [String(code).slice(0, 32), String(name).slice(0, 48), String(icon || "🏅").slice(0, 8),
+     String(color || "#00ff5a").slice(0, 9), (description || "").slice(0, 190) || null, auto ? 1 : 0, Date.now()]
+  );
+  return r.insertId;
+}
+export async function deleteAward(id) {
+  await execute("DELETE FROM user_awards WHERE award_id=?", [id]);
+  await execute("DELETE FROM awards WHERE id=?", [id]);
+}
+export async function grantAward(login, awardId, by) {
+  await execute("INSERT IGNORE INTO user_awards (login, award_id, granted_at, granted_by) VALUES (?,?,?,?)",
+    [login, awardId, Date.now(), by || null]);
+}
+export async function revokeAward(login, awardId) {
+  await execute("DELETE FROM user_awards WHERE login=? AND award_id=?", [login, awardId]);
+}
+export async function userAwards(login) {
+  return await query(
+    `SELECT a.id, a.code, a.name, a.icon, a.color, a.description, ua.granted_at AS grantedAt
+     FROM user_awards ua JOIN awards a ON a.id = ua.award_id WHERE ua.login=? ORDER BY ua.granted_at ASC`, [login]
+  );
+}
+export async function hasAward(login, awardId) {
+  const r = await query("SELECT 1 FROM user_awards WHERE login=? AND award_id=?", [login, awardId]);
+  return r.length > 0;
+}
+// Inputs the automatic rules are judged against.
+export async function awardStats(login) {
+  const one = async (sql, params) => { const r = await query(sql, params); return Number(r[0] ? r[0].n : 0); };
+  const u = await getUser(login);
+  return {
+    messages: await one("SELECT COUNT(*) n FROM messages WHERE from_login=?", [login]),
+    friends: await one("SELECT COUNT(*) n FROM relations WHERE login=? AND type='friend'", [login]),
+    groups: await one("SELECT COUNT(*) n FROM group_members WHERE login=?", [login]),
+    themesPublished: await one("SELECT COUNT(*) n FROM themes WHERE owner=? AND published=1", [login]),
+    bots: await one("SELECT COUNT(*) n FROM users WHERE bot_owner=?", [login]),
+    createdAt: u && u.created_at ? new Date(u.created_at).getTime() : Date.now(),
+    emailVerified: !!(u && u.email_verified),
+  };
+}
+
+// ============================ DM settings ============================
+export async function getDmSettings(login, room) {
+  const r = await query("SELECT auto_clear_ms AS autoClearMs FROM dm_settings WHERE login=? AND room=?", [login, room]);
+  return r[0] ? { autoClearMs: Number(r[0].autoClearMs) || 0 } : { autoClearMs: 0 };
+}
+export async function setDmAutoClear(login, room, ms) {
+  await execute(
+    "INSERT INTO dm_settings (login, room, auto_clear_ms) VALUES (?,?,?) ON DUPLICATE KEY UPDATE auto_clear_ms=VALUES(auto_clear_ms)",
+    [login, room, Math.max(0, Number(ms) || 0)]
+  );
+}
+export async function allDmAutoClear(login) {
+  const rows = await query("SELECT room, auto_clear_ms AS autoClearMs FROM dm_settings WHERE login=? AND auto_clear_ms>0", [login]);
+  const out = {};
+  for (const r of rows) out[r.room] = Number(r.autoClearMs) || 0;
+  return out;
+}
