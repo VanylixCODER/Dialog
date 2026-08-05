@@ -5626,3 +5626,16 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 .dm-clear-opt:hover { color: var(--accent-200); border-color: var(--accent-400); }
 .dm-clear-opt.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
+
+/* Pending-count badge on a settings tab (Group ← group add requests). Mirrors .req-badge,
+   but inline: the tab is a row, not a square icon, so it sits after the label. */
+.tab-badge {
+  display: none; place-items: center;
+  min-width: 17px; height: 17px; margin-left: auto; padding: 0 5px;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 800; line-height: 1;
+  border-radius: 9px; box-shadow: 0 0 0 2px rgba(255, 82, 82, 0.18);
+}
+.tab-badge.show { display: inline-grid; }
+/* Desktop sidebar / mobile list: the label takes the slack so the badge hugs the right edge. */
+#settingsOverlay .settings-tab .stab-label { flex: 1 1 auto; }
