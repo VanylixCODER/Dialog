@@ -1786,13 +1786,25 @@ $("giAccept") && ($("giAccept").onclick = async () => { const inv = giCurrent; c
 $("giDeny") && ($("giDeny").onclick = async () => { const inv = giCurrent; closeGroupInvite(); if (inv) await answerGroupInvite(inv.id, "decline"); });
 $("giClose") && ($("giClose").onclick = () => closeGroupInvite());     // close ≠ answer: it stays pending
 $("groupInviteModal") && $("groupInviteModal").addEventListener("click", (e) => { if (e.target === $("groupInviteModal")) closeGroupInvite(); });
-socket.on("group-invite", (inv) => { if (inv && inv.id) showGroupInvite(inv); });
+socket.on("group-invite", (inv) => { if (inv && inv.id) { showGroupInvite(inv); refreshGroupInviteCount(); } });
 
+// The badge on the Group settings tab. Kept in its own function so it can run at startup
+// and on every invite event — not only while the pane is open.
+function setGroupInviteBadge(n) {
+  const b = $("groupTabBadge"); if (!b) return;
+  b.textContent = n > 99 ? "99+" : String(n);
+  b.classList.toggle("show", n > 0);
+}
+async function refreshGroupInviteCount() {
+  const { ok, data } = await api("/api/group-invites", null, "GET");
+  setGroupInviteBadge(ok ? ((data.invites || []).length) : 0);
+}
 // The same requests, listed at the top of Settings → Group.
 async function refreshGroupInvites() {
-  const box = $("gsInviteList"); if (!box) return;
   const { ok, data } = await api("/api/group-invites", null, "GET");
   const rows = (ok && data.invites) || [];
+  setGroupInviteBadge(rows.length);
+  const box = $("gsInviteList"); if (!box) return;
   box.innerHTML = "";
   $("gsInviteEmpty") && $("gsInviteEmpty").classList.toggle("hidden", rows.length > 0);
   $("gsInviteCard") && $("gsInviteCard").classList.toggle("hidden", false);
@@ -2307,6 +2319,7 @@ function readInviteFromUrl() {
 }
 async function redeemStoredInvite() {
   installSharedTheme().catch(() => {});
+  refreshGroupInviteCount().catch(() => {});   // badge is right from the first paint
   let code;
   try { code = sessionStorage.getItem("dialog_inv"); } catch {}
   if (!code) return;
