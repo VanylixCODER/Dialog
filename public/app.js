@@ -2129,7 +2129,13 @@ async function populateGroupSettingsPane() {
   return { ok: true };
 }
 $("gsAvaBtn").onclick = () => $("gsAvaFile").click();
-$("gsAvaFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 5 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; } const r = new FileReader(); r.onload = () => { gsAvatar = r.result; $("gsAvaImg").src = r.result; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none"; }; r.readAsDataURL(f); };
+$("gsAvaFile").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; }
+  const out = await editImage(f, { shape: "square", sizes: [128, 256, 512], size: 256 });
+  if (!out) return;
+  gsAvatar = out; $("gsAvaImg").src = out; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none";
+};
 $("gsSave").onclick = async () => {
   if (!gsOwner) return;
   const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
@@ -2584,13 +2590,15 @@ async function openDM(login) {
 let pendingAvatar = null;
 // Click the avatar itself to change it (the camera overlay hints at it on hover).
 $("peAva") && ($("peAva").onclick = () => $("avaFile").click());
-$("avaFile") && ($("avaFile").onchange = (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
-  const r = new FileReader();
-  r.onload = () => { pendingAvatar = r.result; const img = $("profileAvaImg"); img.src = r.result; img.style.display = "block"; $("profileAvaInit").style.display = "none"; };
-  r.readAsDataURL(f);
-  e.target.value = "";
+$("avaFile") && ($("avaFile").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
+  // Frame and, above all, RESIZE before upload — a phone photo used to travel as several
+  // megabytes of base64 to be shown at 40 px.
+  const out = await editImage(f, { shape: "square", sizes: [128, 256, 512], size: 256 });
+  if (!out) return;
+  pendingAvatar = out;
+  const img = $("profileAvaImg"); img.src = out; img.style.display = "block"; $("profileAvaInit").style.display = "none";
 });
 // Banner: click the banner strip to change it. pendingBanner stays `undefined` while
 // unchanged; an explicit "" (Remove banner) or a data URL (new upload) both flag a
@@ -2598,13 +2606,13 @@ $("avaFile") && ($("avaFile").onchange = (e) => {
 // a deliberate edit, unlike leaving the field untouched).
 let pendingBanner;
 $("peBanner") && ($("peBanner").onclick = () => $("bannerFile").click());
-$("bannerFile") && ($("bannerFile").onchange = (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  if (f.size > 5 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
-  const r = new FileReader();
-  r.onload = () => { pendingBanner = r.result; $("profileBannerImg").src = r.result; $("peBanner").classList.add("has-banner"); $("bannerRemoveBtn").classList.remove("hidden"); };
-  r.readAsDataURL(f);
-  e.target.value = "";
+$("bannerFile") && ($("bannerFile").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { $("profileError").textContent = t("err_avatar_too_big"); return; }
+  const out = await editImage(f, { shape: "free", sizes: [512, 1024, 1600], size: 1024 });
+  if (!out) return;
+  pendingBanner = out;
+  $("profileBannerImg").src = out; $("peBanner").classList.add("has-banner"); $("bannerRemoveBtn").classList.remove("hidden");
 });
 $("bannerRemoveBtn") && ($("bannerRemoveBtn").onclick = (e) => {
   e.stopPropagation(); // don't also fire the banner's "change" click
@@ -3476,6 +3484,57 @@ function startReply(wrap) {
 }
 function clearReply() { replyTarget = null; const bar = $("replyBar"); if (bar) bar.classList.add("hidden"); }
 $("replyCancel") && ($("replyCancel").onclick = clearReply);
+
+// ---- Swipe a message: left to reply, right to forward ----
+// Only after the gesture is clearly horizontal, so it never steals a scroll. The bubble
+// follows the finger and an icon fades in, so it's obvious what will happen on release.
+(function initMessageSwipe() {
+  const TRIGGER = 64, SLOP = 12;
+  let sw = null;
+  messagesEl.addEventListener("touchstart", (e) => {
+    if (selectMode || e.touches.length !== 1) return;
+    const wrap = e.target.closest(".msg");
+    if (!wrap || !wrap.dataset.id) return;
+    const p = e.touches[0];
+    sw = { wrap, x: p.clientX, y: p.clientY, dx: 0, locked: null };
+  }, { passive: true });
+  messagesEl.addEventListener("touchmove", (e) => {
+    if (!sw) return;
+    const p = e.touches[0];
+    const dx = p.clientX - sw.x, dy = p.clientY - sw.y;
+    if (!sw.locked) {
+      if (Math.abs(dy) > SLOP && Math.abs(dy) > Math.abs(dx)) { reset(); return; }   // vertical → let it scroll
+      if (Math.abs(dx) < SLOP) return;
+      sw.locked = "x";
+      sw.wrap.classList.add("swiping");
+    }
+    e.preventDefault();
+    // Resist past the trigger so the travel stays small and the intent stays legible.
+    sw.dx = Math.abs(dx) > TRIGGER ? Math.sign(dx) * (TRIGGER + (Math.abs(dx) - TRIGGER) * 0.25) : dx;
+    sw.wrap.style.transform = `translateX(${sw.dx}px)`;
+    sw.wrap.dataset.swipe = sw.dx < 0 ? "reply" : "forward";
+    sw.wrap.classList.toggle("swipe-armed", Math.abs(sw.dx) >= TRIGGER);
+  }, { passive: false });
+  const end = () => {
+    if (!sw) return;
+    const { wrap, dx } = sw;
+    if (Math.abs(dx) >= TRIGGER) {
+      const id = Number(wrap.dataset.id);
+      if (dx < 0) startReply(wrap); else openForward([id]);
+      if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
+    }
+    reset();
+  };
+  function reset() {
+    if (!sw) return;
+    sw.wrap.style.transform = "";
+    sw.wrap.classList.remove("swiping", "swipe-armed");
+    delete sw.wrap.dataset.swipe;
+    sw = null;
+  }
+  messagesEl.addEventListener("touchend", end);
+  messagesEl.addEventListener("touchcancel", reset);
+})();
 
 // ---- Jump to a message (quote click, search hit, date pick) ----
 // In the DOM → scroll + flash it. Otherwise ask the server for a window around it; the
