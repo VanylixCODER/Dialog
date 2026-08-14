@@ -11,6 +11,11 @@
 // not another branch of the chat.
 // ============================================================================
 (function () {
+  // Activities are OFF: the launcher is hidden and nothing here binds. Flip this to true (and
+  // unhide #activityBtn in the CSS) to bring Watch Together and the games back.
+  const ENABLED = false;
+  if (!ENABLED) { const b = document.getElementById("activityBtn"); if (b) b.remove(); return; }
+
   const ACT = { kind: null, host: null, hostName: "", state: null, mod: null };
   const isHost = () => !!(ACT.kind && profile && ACT.host === profile.login);
 

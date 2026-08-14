@@ -2042,7 +2042,9 @@ io.on("connection", (socket) => {
   function doLeave() {
     if (!currentRoom) return;
     endActivityIfHost(currentRoom, userLogin);   // host walked out → the session goes with them
-    callLeave();
+    // NOT callLeave(): doLeave also runs when you simply open another chat, and a call must
+    // outlive that — the client already supports a call running in a room you're not viewing.
+    // Actually leaving a call is the explicit "call-leave" event, or a disconnect.
     const peers = rooms.get(currentRoom);
     if (peers) { peers.delete(socket.id); if (!peers.size) rooms.delete(currentRoom); }
     socket.leave(currentRoom);
@@ -2296,12 +2298,18 @@ io.on("connection", (socket) => {
   });
 
   // ----- Звонок: только ringing (медиа — через LiveKit SFU) -----
+  // Which room this socket's call is in. Tracked separately from currentRoom now that you can
+  // walk into another chat while the call keeps running.
+  let callRoom = null;
   function callLeave() {
-    if (!currentRoom) return;
-    removeFromCall(currentRoom, socket.id);
+    const room = callRoom || currentRoom;
+    if (!room) return;
+    callRoom = null;
+    removeFromCall(room, socket.id);
   }
   socket.on("call-join", async ({ title } = {}) => {
     if (!currentRoom || !userLogin) return;
+    callRoom = currentRoom;
     // Channels are broadcast rooms — no calls in them. The UI hides the button; this is the
     // rule a hand-rolled client can't skip.
     if (currentRoom.startsWith("@grp:")) {
@@ -2428,6 +2436,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    callLeave();     // the socket is gone for good — this one IS a call exit
     doLeave();
     if (userLogin) {
       removeUserSocket(userLogin, socket.id);

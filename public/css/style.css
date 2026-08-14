@@ -5766,3 +5766,12 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 .ie-size.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
 .ie-note { text-align: center; font-size: 11.5px; color: var(--text-dim); margin-bottom: 4px; }
+
+/* Activities are disabled — keep the launcher out of the call bar. */
+#activityBtn { display: none !important; }
+/* Mic test + camera preview (Settings → Voice & Video) */
+.mt-row, .cp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0; }
+.mt-meter { flex: 1 1 120px; height: 8px; min-width: 100px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.mt-meter span { display: block; height: 100%; width: 0%; background: var(--accent-400); transition: width 0.08s linear; }
+.mt-audio { flex-basis: 100%; width: 100%; height: 34px; }
+.cp-video { flex-basis: 100%; width: 100%; max-width: 320px; border-radius: var(--r-2); border: 1px solid var(--border-1); background: #000; transform: scaleX(-1); }

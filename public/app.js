@@ -1959,6 +1959,11 @@ $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
 // ---------- Меню чата (⋮) ----------
 $("chatMenuBtn").onclick = (e) => {
   e.stopPropagation(); const menu = $("chatMenu");
+  // .chat-head keeps a transform (chatChromeIn fills forwards), and a transformed ancestor
+  // becomes the containing block for position:fixed — so this menu was being placed relative
+  // to the header and landed off-screen on desktop. Every other menu lives on <body>; so does
+  // this one now.
+  if (menu.parentElement !== document.body) document.body.appendChild(menu);
   if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
   menu.innerHTML = "";
   const item = (label, icon, fn, danger) => { const b = document.createElement("button"); if (danger) b.className = "danger"; b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { menu.classList.add("hidden"); fn(); }; menu.appendChild(b); };
@@ -3294,9 +3299,13 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
   if (myRoom !== room) {
     if (c) { c.unread = (c.unread || 0) + 1; if (mention) c.mentioned = true; }
     // Mentions ping through a mute (like Discord); ordinary messages respect it. DnD silences all.
-    if (!isDnd() && (mention || !isMuted(room))) {
-      if (mention) sfx.call(); else msgSfxForTheme()();
-      notify(mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName }), room);
+    const kind = mention ? "mention" : isDm ? "dm" : "group";
+    if (!isDnd() && (mention || !isMuted(room)) && ntAllows(kind)) {
+      ntSound(() => (mention ? sfx.call() : msgSfxForTheme()()));
+      ntVibrate(mention ? 60 : 25);
+      const line = mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName });
+      ntToast(line, room);
+      ntDesktop(fromName, line, room);
     }
   }
   if (isDm) persistDMs();
@@ -5188,7 +5197,9 @@ function p2pReconcile(logins) {
 async function joinCall() {
   ensureAudioCtx();
   let stream;
-  const micCon = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  // Echo cancellation stays (it stops you hearing yourself); the browser's own noise
+  // suppression is off so the single user-facing switch is the only thing shaping the mic.
+  const micCon = { echoCancellation: true, noiseSuppression: false, autoGainControl: true };
   if (call.audioInId) micCon.deviceId = { ideal: call.audioInId };
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: micCon, video: false }); }
   catch (e) { alert(t("err_media") + (e.message || "")); return; }
@@ -5201,7 +5212,7 @@ async function joinCall() {
   if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
-  $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on");
+  $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); 
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
   $("flipCam") && $("flipCam").classList.add("hidden"); // camera starts off
   populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
@@ -5243,7 +5254,7 @@ function endCall() {
   if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
   krispNode = null; stopCallMatrix();
-  $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active"); $("noiseToggle").classList.add("on"); $("micDropdown").classList.remove("open");
+  $("toggleMic").classList.remove("off"); $("toggleCam").classList.remove("off"); $("toggleDeafen").classList.remove("off"); $("shareScreen").classList.remove("active");  $("micDropdown").classList.remove("open");
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.camera; $("toggleDeafen").innerHTML = window.ICON.headphones; $("callStatus").textContent = "";
   stopKeepAlive(); updateCallButton(); stopCallTimer();
   if (NATIVE && NATIVE.callEnded) { try { NATIVE.callEnded(); } catch (e) {} }
@@ -5537,6 +5548,7 @@ function syncCallOwnerUI() {
   $("pttToggle") && $("pttToggle").classList.toggle("on", pttOn);
   $("blurToggle") && $("blurToggle").classList.toggle("on", blurOn);
   $("rnnToggle") && $("rnnToggle").classList.toggle("on", rnnOn);
+  $("settingsNoiseToggle") && $("settingsNoiseToggle").classList.toggle("on", rnnOn);
 }
 $("togglePtt") && ($("togglePtt").onclick = (e) => {
   e.stopPropagation(); pttOn = !pttOn; $("pttToggle").classList.toggle("on", pttOn);
@@ -5616,7 +5628,8 @@ $("toggleRnn") && ($("toggleRnn").onclick = async (e) => {
 $("toggleLock") && ($("toggleLock").onclick = (e) => { e.stopPropagation(); const on = !$("lockToggle").classList.contains("on"); $("lockToggle").classList.toggle("on", on); socket.emit("call-mod", { action: on ? "lock" : "unlock" }); });
 $("toggleMoe") && ($("toggleMoe").onclick = (e) => { e.stopPropagation(); const on = !$("moeToggle").classList.contains("on"); $("moeToggle").classList.toggle("on", on); socket.emit("call-mod", { action: on ? "moe-on" : "moe-off" }); });
 document.addEventListener("click", (e) => { if (!e.target.closest(".call-btn-group")) $("micDropdown").classList.remove("open"); });
-$("toggleNoise").onclick = (e) => { e.stopPropagation(); call.ns = !call.ns; $("noiseToggle").classList.toggle("on", call.ns); const snt = $("settingsNoiseToggle"); if (snt) snt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
+// (The browser's own suppression no longer has a switch — see the mic constraints in
+// joinCall. RNNoise is the single toggle, and it starts off.)
 // Усиленный шумодав Krisp (LiveKit Cloud). Грузим по требованию; при неудаче остаётся браузерный NS.
 let krispMod = null, krispNode = null;
 async function applyNoiseFilter(on) {
@@ -5634,6 +5647,131 @@ async function applyNoiseFilter(on) {
   } catch (e) { console.log("krisp:", e.message); }
 }
 function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
+
+// ================== Notification settings ==================
+// One place that decides whether a given event is allowed to make noise, flash a banner, or
+// raise a system notification — instead of the rules being scattered across each socket
+// handler. Everything defaults ON except quiet hours, so behaviour is unchanged until touched.
+const NT_KEY = "dialog_notif";
+const NT_DEFAULTS = {
+  dm: true, group: true, mention: true, call: true, friend: true, invite: true,
+  sound: true, toast: true, desktop: true, preview: true, vibrate: true,
+  quiet: false, quietFrom: "23:00", quietTo: "08:00",
+};
+let NT = { ...NT_DEFAULTS };
+try { NT = { ...NT_DEFAULTS, ...JSON.parse(localStorage.getItem(NT_KEY) || "{}") }; } catch {}
+function ntSave() { try { localStorage.setItem(NT_KEY, JSON.stringify(NT)); } catch {} }
+// Inside quiet hours? Handles windows that cross midnight.
+function ntQuietNow() {
+  if (!NT.quiet) return false;
+  const now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
+  const parse = (v) => { const [h, m] = String(v || "0:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const a = parse(NT.quietFrom), b = parse(NT.quietTo);
+  return a <= b ? mins >= a && mins < b : mins >= a || mins < b;
+}
+// `kind` is what happened; the caller says what it wants and this decides what it gets.
+function ntAllows(kind) { return NT[kind] !== false && !ntQuietNow(); }
+function ntSound(fn) { if (NT.sound && !ntQuietNow()) try { fn(); } catch {} }
+function ntVibrate(ms) { if (NT.vibrate && !ntQuietNow() && navigator.vibrate) try { navigator.vibrate(ms); } catch {} }
+function ntToast(text, room) { if (NT.toast && !ntQuietNow()) notify(text, room); }
+// System notification, only when Dialog isn't the window being looked at.
+function ntDesktop(title, body, room) {
+  if (!NT.desktop || ntQuietNow() || document.visibilityState === "visible") return;
+  try {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const n = new Notification(title, { body: NT.preview ? body : t("nt_hidden_body"), tag: "msg:" + (room || ""), silent: true });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {}
+}
+function ntRender() {
+  document.querySelectorAll("[data-nt]").forEach((el) => {
+    el.checked = NT[el.dataset.nt] !== false;
+    el.onchange = () => {
+      NT[el.dataset.nt] = el.checked; ntSave();
+      // Asking for permission at the moment they switch it on is the only honest time to ask.
+      if (el.dataset.nt === "desktop" && el.checked && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    };
+  });
+  const f = $("ntQuietFrom"), tt = $("ntQuietTo");
+  if (f) { f.value = NT.quietFrom; f.onchange = () => { NT.quietFrom = f.value; ntSave(); }; }
+  if (tt) { tt.value = NT.quietTo; tt.onchange = () => { NT.quietTo = tt.value; ntSave(); }; }
+}
+$("ntTest") && ($("ntTest").onclick = () => {
+  ntSound(() => msgSfxForTheme()());
+  ntVibrate(40);
+  ntToast(t("nt_test_body"));
+  ntDesktop("Dialog", t("nt_test_body"));
+});
+
+// ---------- Settings: microphone test + camera preview ----------
+// A three-second round trip: record, then play it back. Cheaper to reason about than a live
+// monitor, and it can't turn into a feedback loop through the speakers.
+let mtStream = null, mtRec = null, mtRaf = 0;
+$("micTestBtn") && ($("micTestBtn").onclick = async () => {
+  const btn = $("micTestBtn"), bar = $("micTestBar"), au = $("micTestAudio");
+  if (mtRec) return;
+  try {
+    const con = { echoCancellation: true, noiseSuppression: false, autoGainControl: true };
+    if (call.audioInId) con.deviceId = { ideal: call.audioInId };
+    mtStream = await navigator.mediaDevices.getUserMedia({ audio: con });
+  } catch { $("micTestHint").textContent = t("err_denied"); return; }
+  // Live level meter while it records, so a dead mic is obvious immediately.
+  const ctx = ensureAudioCtx();
+  const src = ctx.createMediaStreamSource(mtStream);
+  const an = ctx.createAnalyser(); an.fftSize = 512; src.connect(an);
+  const data = new Uint8Array(an.frequencyBinCount);
+  const tick = () => {
+    an.getByteFrequencyData(data);
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+    if (bar) bar.style.width = Math.min(100, avg * 1.6) + "%";
+    mtRaf = requestAnimationFrame(tick);
+  };
+  tick();
+  const chunks = [];
+  mtRec = new MediaRecorder(mtStream);
+  mtRec.ondataavailable = (e) => chunks.push(e.data);
+  mtRec.onstop = () => {
+    cancelAnimationFrame(mtRaf); if (bar) bar.style.width = "0%";
+    try { mtStream.getTracks().forEach((tr) => tr.stop()); } catch {}
+    mtStream = null; mtRec = null;
+    btn.textContent = t("mic_test_start"); btn.disabled = false;
+    const blob = new Blob(chunks, { type: chunks[0] ? chunks[0].type : "audio/webm" });
+    au.src = URL.createObjectURL(blob);
+    au.classList.remove("hidden");
+    au.play().catch(() => {});
+  };
+  btn.disabled = true; btn.textContent = t("mic_test_rec");
+  mtRec.start();
+  setTimeout(() => { try { mtRec && mtRec.stop(); } catch {} }, 3000);
+});
+// Camera preview — check framing and lighting without dialling anyone.
+let cpStream = null;
+$("camPrevBtn") && ($("camPrevBtn").onclick = async () => {
+  const v = $("camPrevVideo"), btn = $("camPrevBtn");
+  if (cpStream) {
+    try { cpStream.getTracks().forEach((tr) => tr.stop()); } catch {}
+    cpStream = null; v.srcObject = null; v.classList.add("hidden");
+    btn.textContent = t("cam_preview_start");
+    return;
+  }
+  try {
+    const con = { width: { ideal: 640 }, height: { ideal: 360 } };
+    if (call.camId) con.deviceId = { ideal: call.camId };
+    cpStream = await navigator.mediaDevices.getUserMedia({ video: con });
+  } catch { return; }
+  v.srcObject = cpStream; v.classList.remove("hidden");
+  btn.textContent = t("cam_preview_stop");
+});
+// Closing settings must not leave the camera light on.
+function stopSettingsMedia() {
+  if (cpStream) { try { cpStream.getTracks().forEach((tr) => tr.stop()); } catch {} cpStream = null;
+    const v = $("camPrevVideo"); if (v) { v.srcObject = null; v.classList.add("hidden"); }
+    const b = $("camPrevBtn"); if (b) b.textContent = t("cam_preview_start"); }
+  if (mtStream) { try { mtStream.getTracks().forEach((tr) => tr.stop()); } catch {} mtStream = null; }
+  cancelAnimationFrame(mtRaf);
+}
 
 // ---------- Mobile audio route: loudspeaker <-> earpiece ----------
 // Mobile browsers don't implement setSinkId, so routing is only actually possible
@@ -5715,7 +5853,13 @@ async function populateDeviceSettings() {
 $("settingsMicSelect").onchange = async () => { call.audioInId = $("settingsMicSelect").value; if (call.room) { try { await call.room.switchActiveDevice("audioinput", call.audioInId); } catch {} } saveDevicePrefs(); };
 $("settingsSpkSelect").onchange = () => { call.audioOutId = $("settingsSpkSelect").value; audioEls.forEach(applySinkId); if (call.room) call.room.switchActiveDevice("audiooutput", call.audioOutId).catch(() => {}); saveDevicePrefs(); };
 $("settingsCamSelect").onchange = async () => { call.camId = $("settingsCamSelect").value; if (call.room) { try { await call.room.switchActiveDevice("videoinput", call.camId); } catch {} } saveDevicePrefs(); };
-$("settingsNoiseToggle").onclick = () => { call.ns = !call.ns; $("settingsNoiseToggle").classList.toggle("on", call.ns); const nt = $("noiseToggle"); if (nt) nt.classList.toggle("on", call.ns); applyNoiseFilter(call.ns); saveDevicePrefs(); };
+$("settingsNoiseToggle") && ($("settingsNoiseToggle").onclick = async () => {
+  rnnOn = !rnnOn;
+  $("settingsNoiseToggle").classList.toggle("on", rnnOn);
+  const nt = $("rnnToggle"); if (nt) nt.classList.toggle("on", rnnOn);
+  localStorage.setItem("dialog_rnn", rnnOn ? "1" : "0");
+  await applyRnnoise(rnnOn);
+});
 
 // ⛶ Большой экран: звонок открывается в отдельном окне и разворачивается на весь экран.
 // Это заменяет и старый in-page фуллскрин, и кнопку поп-аута — теперь одна кнопка.
@@ -6194,7 +6338,7 @@ function dismissNotif(room) {
 // Все формы (профиль, контакты, темы, настройки группы, новый чат) живут в #settingsOverlay как пейны.
 // 5 вкладок: profile / contacts / themes / groups / newchat. Клик по фону или Esc → закрыть.
 let settingsOpen = false;
-const SETTINGS_TABS = ["profile", "account", "prefs", "contacts", "themes", "groups", "devices", "dev"];
+const SETTINGS_TABS = ["profile", "account", "prefs", "notif", "contacts", "themes", "groups", "devices", "dev"];
 // ---- Mobile settings: a section LIST that drills into a detail pane with a back button ----
 function isMobileView() { return window.matchMedia("(max-width: 720px)").matches; }
 function settingsCard() { return $("settingsOverlay") && $("settingsOverlay").querySelector(".settings-card"); }
@@ -6243,6 +6387,7 @@ function openSettings(tab, direct) {
   if (tab === "profile") refreshProfilePane();
   if (tab === "account") refreshAccountPane();
   if (tab === "prefs") refreshPrefsPane();
+  if (tab === "notif") ntRender();
   if (tab === "groups") populateGroupSettingsPane();
   if (tab === "devices") populateDeviceSettings();
   // (newchat tab removed 2014 friends-picker flow now lives in #createGroupModal)
@@ -6251,6 +6396,7 @@ function openSettings(tab, direct) {
 let settingsResetTimer = null;
 function closeSettings() {
   if (!settingsOpen) return;
+  stopSettingsMedia();
   const ov = $("settingsOverlay"); if (ov) ov.classList.add("hidden");
   settingsOpen = false;
   // Reset to the section list so the next open starts there (mobile) — but only once the
@@ -6276,6 +6422,7 @@ function hydratePane(tab) {
   if (tab === "profile") refreshProfilePane();
   else if (tab === "account") refreshAccountPane();
   else if (tab === "prefs") refreshPrefsPane();
+  else if (tab === "notif") ntRender();
   else if (tab === "contacts") { loadRelations(); loadMutualCounts(); }
   else if (tab === "groups") {
     // Сентинел `id: null` кеширует и режим «без активной группы» (placeholder), чтобы повторные клики

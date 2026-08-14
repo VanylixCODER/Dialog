@@ -196,8 +196,7 @@
                 <div class="dd-label" data-i18n="spk_device">Speaker</div>
                 <select class="dd-select" id="spkSelect"></select>
                 <div class="dd-sep"></div>
-                <button class="dd-item" id="toggleNoise"><span data-i18n="noise_suppression">Noise suppression</span><span class="dd-toggle on" id="noiseToggle"></span></button>
-                <button class="dd-item" id="toggleRnn"><span data-i18n="strong_ns">Strong noise cancel (beta)</span><span class="dd-toggle" id="rnnToggle"></span></button>
+                <button class="dd-item" id="toggleRnn"><span data-i18n="noise_suppression">Noise suppression</span><span class="dd-toggle" id="rnnToggle"></span></button>
                 <button class="dd-item" id="togglePtt"><span data-i18n="push_to_talk">Push to talk (hold Space)</span><span class="dd-toggle" id="pttToggle"></span></button>
                 <button class="dd-item" id="toggleBlur"><span data-i18n="bg_blur">Background blur</span><span class="dd-toggle" id="blurToggle"></span></button>
                 <div class="dd-sep owner-only-call hidden"></div>
@@ -338,6 +337,7 @@
         <button class="settings-tab active" data-tab="profile"  role="tab"><span class="stab-ico" data-ico="user"></span><span class="stab-label" data-i18n="tab_general">General</span></button>
         <button class="settings-tab"        data-tab="account"  role="tab"><span class="stab-ico" data-ico="key"></span><span class="stab-label" data-i18n="tab_account">Account</span></button>
         <button class="settings-tab"        data-tab="prefs"    role="tab"><span class="stab-ico" data-ico="sliders"></span><span class="stab-label" data-i18n="tab_prefs">Preferences</span></button>
+        <button class="settings-tab"        data-tab="notif"    role="tab"><span class="stab-ico" data-ico="bell"></span><span class="stab-label" data-i18n="tab_notif">Notifications</span></button>
         <button class="settings-tab"        data-tab="contacts" role="tab"><span class="stab-ico" data-ico="users"></span><span class="stab-label" data-i18n="tab_contacts">Contacts</span></button>
         <button class="settings-tab"        data-tab="themes"   role="tab"><span class="stab-ico" data-ico="palette"></span><span class="stab-label" data-i18n="tab_appearance">Appearances</span></button>
         <button class="settings-tab"        data-tab="groups"   role="tab"><span class="stab-ico" data-ico="messageSquare"></span><span class="stab-label" data-i18n="tab_groups">Group</span><span class="tab-badge" id="groupTabBadge">0</span></button>
@@ -494,6 +494,29 @@
           <div class="form-error" id="prefMsg"></div>
         </section>
         <!-- Contacts -->
+        <!-- Notifications: every channel of noise, individually switchable. -->
+        <section class="settings-pane" data-pane="notif" role="tabpanel">
+          <h3 data-i18n="tab_notif">Notifications</h3>
+          <div class="uppercase-tag" data-i18n="nt_what">What notifies you</div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_dm">Direct messages</b></div><label class="switch"><input type="checkbox" data-nt="dm"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_group">Group messages</b></div><label class="switch"><input type="checkbox" data-nt="group"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_mention">Mentions</b><small data-i18n="nt_mention_d">@you, @all and the group mentions</small></div><label class="switch"><input type="checkbox" data-nt="mention"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_call">Incoming calls</b></div><label class="switch"><input type="checkbox" data-nt="call"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_friend">Friend requests</b></div><label class="switch"><input type="checkbox" data-nt="friend"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_invite">Group invitations</b></div><label class="switch"><input type="checkbox" data-nt="invite"><span class="switch-track"></span></label></div>
+
+          <div class="uppercase-tag" data-i18n="nt_how">How it notifies</div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_sound">Sound</b></div><label class="switch"><input type="checkbox" data-nt="sound"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_toast">In-app banner</b></div><label class="switch"><input type="checkbox" data-nt="toast"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_desktop">System notifications</b><small data-i18n="nt_desktop_d">Shown when Dialog isn't the window you're looking at</small></div><label class="switch"><input type="checkbox" data-nt="desktop"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_preview">Show message text</b><small data-i18n="nt_preview_d">Off shows only who it's from</small></div><label class="switch"><input type="checkbox" data-nt="preview"><span class="switch-track"></span></label></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_vibrate">Vibrate</b></div><label class="switch"><input type="checkbox" data-nt="vibrate"><span class="switch-track"></span></label></div>
+
+          <div class="uppercase-tag" data-i18n="nt_quiet">Quiet hours</div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="nt_quiet_on">Silence between</b></div><label class="switch"><input type="checkbox" data-nt="quiet"><span class="switch-track"></span></label></div>
+          <div class="acc-row"><input type="time" id="ntQuietFrom" class="field"><input type="time" id="ntQuietTo" class="field"></div>
+          <button id="ntTest" class="btn-ghost btn-sm" data-i18n="nt_test">Test notification</button>
+        </section>
         <section class="settings-pane" data-pane="contacts" role="tabpanel">
           <h3 data-i18n="contacts">Contacts</h3>
           <div class="req-add">
@@ -671,7 +694,22 @@
           <div class="modal-sep"></div>
           <div class="settings-device-row" id="settingsNoiseRow">
             <span data-i18n="noise_suppression">Noise suppression</span>
-            <span class="dd-toggle on" id="settingsNoiseToggle"></span>
+            <span class="dd-toggle" id="settingsNoiseToggle"></span>
+          </div>
+          <div class="modal-sep"></div>
+          <!-- Hear yourself before anyone else has to. -->
+          <div class="uppercase-tag" data-i18n="mic_test">Test microphone</div>
+          <div class="mt-row">
+            <button id="micTestBtn" class="btn-ghost btn-sm" data-i18n="mic_test_start">Record 3s</button>
+            <div class="mt-meter"><span id="micTestBar"></span></div>
+            <audio id="micTestAudio" controls class="mt-audio hidden"></audio>
+          </div>
+          <div class="acc-hint" id="micTestHint" data-i18n="mic_test_hint">Records three seconds and plays it straight back.</div>
+          <div class="modal-sep"></div>
+          <div class="uppercase-tag" data-i18n="cam_preview">Camera preview</div>
+          <div class="cp-row">
+            <button id="camPrevBtn" class="btn-ghost btn-sm" data-i18n="cam_preview_start">Start preview</button>
+            <video id="camPrevVideo" class="cp-video hidden" autoplay playsinline muted></video>
           </div>
         </section>
         <!-- Developer / My Bots -->
