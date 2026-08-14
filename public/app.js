@@ -2354,6 +2354,7 @@ function readInviteFromUrl() {
 }
 async function redeemStoredInvite() {
   installSharedTheme().catch(() => {});
+  refreshSessionExpiry().catch(() => {});   // a deadline set elsewhere still applies here
   refreshGroupInviteCount().catch(() => {});   // badge is right from the first paint
   let code;
   try { code = sessionStorage.getItem("dialog_inv"); } catch {}
@@ -5648,6 +5649,80 @@ async function applyNoiseFilter(on) {
 }
 function applySinkId(el) { if (call.audioOutId && el.setSinkId) el.setSinkId(call.audioOutId).catch(() => {}); }
 
+// ================== Session self-destruct ==================
+// A deadline for THIS device. The server enforces it (the token stops resolving and the row is
+// deleted); the client wipes everything local at the same moment so nothing is left on disk.
+const SE_OPTS = [[0, "se_never"], [3600e3, "se_1h"], [8 * 3600e3, "se_8h"], [86400e3, "se_1d"], [7 * 86400e3, "se_7d"], [30 * 86400e3, "se_30d"]];
+let seAt = 0, seTimer = null;
+async function refreshSessionExpiry() {
+  const { ok, data } = await api("/api/session/expiry", null, "GET");
+  seAt = ok ? Number(data.at) || 0 : 0;
+  renderSessionExpiry();
+  armSessionExpiry();
+}
+function renderSessionExpiry() {
+  const box = $("seOpts"); if (!box) return;
+  box.innerHTML = "";
+  for (const [ms, key] of SE_OPTS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    // "Never" is the only one that can be identified exactly; the presets just set a new time.
+    b.className = "se-opt" + ((!ms && !seAt) ? " on" : "");
+    b.textContent = t(key);
+    b.onclick = () => setSessionExpiry(ms ? Date.now() + ms : 0);
+    box.appendChild(b);
+  }
+  const st = $("seState");
+  if (st) st.textContent = seAt ? t("se_state", { when: new Date(seAt).toLocaleString() }) : t("se_state_off");
+}
+async function setSessionExpiry(at) {
+  const { ok } = await api("/api/session/expiry", { at });
+  if (!ok) return;
+  seAt = at || 0;
+  renderSessionExpiry(); armSessionExpiry();
+  notify(at ? t("se_state", { when: new Date(at).toLocaleString() }) : t("se_state_off"));
+}
+$("seCustomSet") && ($("seCustomSet").onclick = () => {
+  const v = $("seCustom").value; if (!v) return;
+  const at = new Date(v).getTime();
+  if (!at || at < Date.now()) { notify(t("se_past")); return; }
+  setSessionExpiry(at);
+});
+function armSessionExpiry() {
+  clearTimeout(seTimer);
+  if (!seAt) return;
+  const left = seAt - Date.now();
+  if (left <= 0) { selfDestruct(); return; }
+  // setTimeout caps out around 24.8 days, so re-arm in chunks.
+  seTimer = setTimeout(armSessionExpiry, Math.min(left, 60000));
+}
+// Sign out and leave nothing behind: storage, caches, IndexedDB and the service worker.
+async function wipeLocalTraces() {
+  try { localStorage.clear(); } catch {}
+  try { sessionStorage.clear(); } catch {}
+  try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  try {
+    if (indexedDB && indexedDB.databases) {
+      for (const db of await indexedDB.databases()) if (db.name) indexedDB.deleteDatabase(db.name);
+    }
+  } catch {}
+  try {
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) await r.unregister();
+    }
+  } catch {}
+}
+async function selfDestruct(manual) {
+  clearTimeout(seTimer);
+  try { await fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }); } catch {}
+  await wipeLocalTraces();
+  location.replace("/login");
+}
+window.dialogSelfDestruct = selfDestruct;
+// A tab that was asleep past the deadline must not come back to a live session.
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && seAt && Date.now() >= seAt) selfDestruct(); });
+
 // ================== Notification settings ==================
 // One place that decides whether a given event is allowed to make noise, flash a banner, or
 // raise a system notification — instead of the rules being scattered across each socket
@@ -6737,7 +6812,7 @@ $("exportBtn") && ($("exportBtn").onclick = async () => {
 
 function refreshAccountPane() {
   if (!profile) return;
-  refresh2fa(); refreshDevices();
+  refresh2fa(); refreshDevices(); refreshSessionExpiry();
   // Account status card
   const st = profile.accountStatus || (profile.emailVerified ? "stable" : "unverified");
   const m = accStatusMeta(st);

@@ -65,6 +65,7 @@ import {
   getRichPresencePref, setRichPresencePref, listPresenceHidden, setPresenceHidden,
   listAwards, getAwardByCode, createAward, deleteAward, grantAward, revokeAward, userAwards, hasAward, awardStats,
   getDmSettings, setDmAutoClear, allDmAutoClear,
+  setSessionExpiry, getSessionExpiry, sweepExpiredSessions,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
 
@@ -225,6 +226,44 @@ app.use((req, res, next) => {
 // page owns "/", the messenger SPA lives at /login and /{lang}/... routes.
 app.use(express.static(join(__dirname, "public"), { index: false }));
 
+// ---------- Security headers ----------
+// Cheap, and they close real doors: HSTS keeps the browser on TLS after the first visit (a
+// downgrade is how a network attacker gets between you and the server), frame-ancestors stops
+// the app being embedded and clickjacked, and a strict referrer policy keeps room ids and
+// invite codes out of other sites' logs.
+app.use((req, res, next) => {
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+  res.setHeader("Permissions-Policy", "geolocation=(), payment=(), usb=()");
+  next();
+});
+
+// ---------- Auth rate limiting ----------
+// Brute force is the realistic attack on a login form, and there was nothing in the way.
+// Two buckets: per IP (someone spraying many accounts) and per login (someone grinding one).
+const authHits = new Map();   // key -> { n, until }
+function authLimited(key, max, windowMs) {
+  const now = Date.now();
+  const e = authHits.get(key);
+  if (!e || now > e.until) { authHits.set(key, { n: 1, until: now + windowMs }); return false; }
+  e.n++;
+  return e.n > max;
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of authHits) if (now > v.until) authHits.delete(k); }, 60000);
+function authGuard(req, res) {
+  const ip = normIp(req.ip) || "?";
+  const who = String(req.body && (req.body.login || req.body.email) || "").toLowerCase().slice(0, 24);
+  // 20 attempts / 5 min from one address, 8 / 5 min against one account.
+  if (authLimited("ip:" + ip, 20, 300000) || (who && authLimited("who:" + who, 8, 300000))) {
+    res.status(429).json({ error: "too_many_attempts" });
+    return true;
+  }
+  return false;
+}
+
 // ---------- Uploaded media (files live on disk, NOT in MySQL) ----------
 // A 75 MB attachment used to be stored as ~100 MB of base64 in messages.media and re-read in
 // full on every history load. Now deliverMessage() writes the bytes once, keyed by content
@@ -322,6 +361,7 @@ async function authUser(req) { return auth.userByToken(bearer(req)); }
 // ---------- REST: аутентификация ----------
 app.post("/api/register", async (req, res) => {
   try {
+    if (authGuard(req, res)) return;
     const { login, name, password, email } = req.body;
     const out = await auth.register(login, name, password, email);
     setUserLastIp(out.profile.login, normIp(req.ip)).catch(() => {});
@@ -334,6 +374,7 @@ app.post("/api/register", async (req, res) => {
 });
 app.post("/api/login", async (req, res) => {
   try {
+    if (authGuard(req, res)) return;
     const { login, password, code } = req.body;
     // ua/ip are stamped on the session row so Settings → Account can list real devices.
     const out = await auth.login(login, password, code, { ua: req.headers["user-agent"], ip: normIp(req.ip) });
@@ -2682,6 +2723,26 @@ app.post("/api/sessions/revoke", async (req, res) => {
     res.json({ ok: true });
   } catch (e) { console.error("revoke", e.message); res.status(500).json({ error: "server error" }); }
 });
+
+// ---------- REST: session self-destruct ----------
+// "This device signs itself out at X." Enforced server-side (the token stops resolving and the
+// row is deleted), with the client wiping its local state at the same moment.
+app.get("/api/session/expiry", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    res.json({ at: await getSessionExpiry(bearer(req)) });
+  } catch { res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/session/expiry", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const at = Number(req.body.at) || 0;
+    if (at && at < Date.now()) return res.status(400).json({ error: "past" });
+    await setSessionExpiry(bearer(req), at || null);
+    res.json({ ok: true, at });
+  } catch { res.status(500).json({ error: "server error" }); }
+});
+setInterval(() => { sweepExpiredSessions().catch(() => {}); }, 300000);
 
 // ---------- REST: two-factor (TOTP) ----------
 app.get("/api/2fa", async (req, res) => {

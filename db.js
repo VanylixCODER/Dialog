@@ -159,6 +159,8 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE sessions ADD COLUMN ua VARCHAR(255) NULL"); } catch {}
   try { await pool.query("ALTER TABLE sessions ADD COLUMN ip VARCHAR(45) NULL"); } catch {}
   try { await pool.query("ALTER TABLE sessions ADD COLUMN last_seen BIGINT NULL"); } catch {}
+  // Self-destruct: after this the token stops resolving and the row is swept.
+  try { await pool.query("ALTER TABLE sessions ADD COLUMN expires_at BIGINT NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS chat_groups (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL,
@@ -518,7 +520,7 @@ export async function saveSession(token, login, ua = null, ip = null) {
 // Signed-in devices, newest first. The caller marks which row is the current token.
 export async function listSessions(login) {
   return await query(
-    "SELECT token, ua, ip, last_seen AS lastSeen, UNIX_TIMESTAMP(created_at)*1000 AS createdAt FROM sessions WHERE login=? ORDER BY created_at DESC",
+    "SELECT token, ua, ip, last_seen AS lastSeen, expires_at AS expiresAt, UNIX_TIMESTAMP(created_at)*1000 AS createdAt FROM sessions WHERE login=? ORDER BY created_at DESC",
     [login]
   );
 }
@@ -531,7 +533,28 @@ export async function deleteOtherSessions(login, keepToken) {
   return r.affectedRows;
 }
 export async function touchSession(token) { await execute("UPDATE sessions SET last_seen=? WHERE token=?", [Date.now(), token]); }
-export async function sessionLogin(token) { const r = await query("SELECT login FROM sessions WHERE token=?", [token]); return r[0] ? r[0].login : null; }
+export async function sessionLogin(token) {
+  const r = await query("SELECT login, expires_at AS expiresAt FROM sessions WHERE token=?", [token]);
+  if (!r[0]) return null;
+  // Expired sessions are deleted on sight, not merely refused — no trace left behind.
+  if (r[0].expiresAt && Date.now() > Number(r[0].expiresAt)) {
+    await execute("DELETE FROM sessions WHERE token=?", [token]);
+    return null;
+  }
+  return r[0].login;
+}
+export async function setSessionExpiry(token, at) {
+  await execute("UPDATE sessions SET expires_at=? WHERE token=?", [at ? Number(at) : null, token]);
+}
+export async function getSessionExpiry(token) {
+  const r = await query("SELECT expires_at AS expiresAt FROM sessions WHERE token=?", [token]);
+  return r[0] && r[0].expiresAt ? Number(r[0].expiresAt) : 0;
+}
+// Housekeeping so dead rows don't linger.
+export async function sweepExpiredSessions() {
+  const r = await execute("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < ?", [Date.now()]);
+  return r.affectedRows || 0;
+}
 export async function deleteSession(token) { await execute("DELETE FROM sessions WHERE token=?", [token]); }
 export async function tokensForLogin(login) { const r = await query("SELECT token FROM sessions WHERE login=?", [login]); return r.map((x) => x.token); }
 

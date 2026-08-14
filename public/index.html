@@ -442,6 +442,16 @@
           </div>
           <div class="form-error" id="twofaMsg"></div>
 
+          <!-- Session self-destruct -->
+          <div class="uppercase-tag" data-i18n="se_title">Sign this device out automatically</div>
+          <div class="acc-hint" data-i18n="se_hint">When the time is up this device signs out and wipes its local Dialog data — messages cache, drafts, settings, service worker.</div>
+          <div class="se-opts" id="seOpts"></div>
+          <div class="acc-row">
+            <input id="seCustom" class="field" type="datetime-local" />
+            <button id="seCustomSet" class="btn-ghost btn-sm" data-i18n="se_set">Set</button>
+          </div>
+          <div class="acc-hint" id="seState"></div>
+
           <!-- Signed-in devices -->
           <div class="uppercase-tag" data-i18n="devices_title">Signed-in devices</div>
           <div id="devList" class="fwd-list"></div>
