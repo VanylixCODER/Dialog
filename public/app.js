@@ -4817,7 +4817,15 @@ function startCavaLoop() {
       cx.clearRect(0, 0, w, h); const bw = w / N; let sum = 0;
       cx.fillStyle = accent;
       for (let i = 0; i < N; i++) { const v = n.data[i] / 255; sum += v; const bh = Math.max(2, v * h * 0.9); cx.fillRect(i * bw + bw * 0.18, h - bh, bw * 0.64, bh); }
-      const tile = c.parentElement; if (tile) tile.classList.toggle("cava-live", sum / N > 0.05);
+      const tile = c.parentElement;
+      if (tile) {
+        const live = sum / N > 0.05;
+        tile.classList.toggle("cava-live", live);
+        // The green ring came from LiveKit's ActiveSpeakersChanged, which died with the P2P
+        // switch — and your own tile never had an analyser at all, so you could never see
+        // yourself talking. One measurement now drives both, for every tile.
+        tile.classList.toggle("speaking", live);
+      }
     });
   };
   cavaLoopRaf = requestAnimationFrame(tick);
@@ -5212,6 +5220,8 @@ async function joinCall() {
   applySpeaker(); // restore the saved loudspeaker/earpiece route (native mobile only)
   if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
+  // Your own mic feeds the same visualiser as everyone else's.
+  try { const mt = stream.getAudioTracks()[0]; if (mt) addTileCava("me", mt); } catch {}
   call.micOn = true; call.camOn = false; call.sharing = false; call.ns = true;
   $("toggleMic").classList.remove("off"); $("toggleCam").classList.add("off"); $("shareScreen").classList.remove("active"); 
   $("toggleMic").innerHTML = window.ICON.mic; $("toggleCam").innerHTML = window.ICON.cameraOff;
@@ -5593,7 +5603,7 @@ let rnnMod = null, rnnWasm = null, rnnWorkletAdded = false;
 let rnnOn = localStorage.getItem("dialog_rnn") === "1";
 function audioSenders() { const out = []; if (call.peers) for (const m of call.peers.values()) { const s = m.pc.getSenders().find((x) => x.track && x.track.kind === "audio"); if (s) out.push(s); } return out; }
 async function revertRnnoise() {
-  const raw = call._rawMic || (call.localStream && call.localStream.getAudioTracks()[0]); if (raw) { raw.enabled = call.micOn; for (const s of audioSenders()) { try { await s.replaceTrack(raw); } catch {} } }
+  const raw = call._rawMic || (call.localStream && call.localStream.getAudioTracks()[0]); if (raw) { raw.enabled = call.micOn; try { addTileCava("me", raw); } catch {} for (const s of audioSenders()) { try { await s.replaceTrack(raw); } catch {} } }
   if (call._rnn) { try { call._rnn.node.disconnect(); } catch {} try { call._rnn.src.disconnect(); } catch {} call._rnn = null; }
 }
 async function applyRnnoise(on) {
@@ -5613,6 +5623,7 @@ async function applyRnnoise(on) {
     const processed = dest.stream.getAudioTracks()[0]; if (!processed) throw new Error("no processed track");
     processed.enabled = call.micOn;
     call._rnn = { src, node, dest, processed };
+    try { addTileCava("me", processed); } catch {}   // keep the meter on the track actually sent
     for (const s of audioSenders()) { try { await s.replaceTrack(processed); } catch {} }
   } catch (err) {
     console.warn("rnnoise failed:", err.message);
@@ -7604,6 +7615,17 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       loadMine();
     }
   }
+
+  // ---- live preview (desktop / phone) ----
+  // The mock is plain markup styled by the same custom properties as the app, so every token
+  // edit shows up in it for free — no second theming path to keep in sync.
+  const pvTabs = document.querySelector(".ts-pv-tabs");
+  pvTabs && pvTabs.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pv]"); if (!b) return;
+    pvTabs.querySelectorAll("[data-pv]").forEach((x) => x.classList.toggle("active", x === b));
+    const pv = document.getElementById("tsPv");
+    if (pv) pv.className = "ts-pv " + b.dataset.pv;
+  });
 
   // ---- workshop ----
   async function loadWorkshop() {

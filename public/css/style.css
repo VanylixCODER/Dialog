@@ -5785,3 +5785,51 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 .se-opt:hover { color: var(--accent-200); border-color: var(--accent-400); }
 .se-opt.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
+
+/* ============ Theme studio: controls | live preview ============ */
+.ts-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 20px; align-items: start; }
+.ts-controls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ts-preview-col { position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ts-pv-tabs { display: flex; gap: 6px; }
+.ts-pv-tab {
+  flex: 1; padding: 6px 10px; border-radius: var(--r-pill); cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border-1);
+  color: var(--text-dim); font-size: 11.5px; font-weight: 600;
+}
+.ts-pv-tab.active { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
+
+/* The mock. Every colour below is a token, so it IS the theme, not an impression of it. */
+.ts-pv { border: 1px solid var(--border-2); border-radius: var(--r-3); overflow: hidden; background: var(--bg-0); }
+.ts-pv .pv-frame { display: grid; height: 300px; background: linear-gradient(180deg, var(--bg-2), var(--bg-1)); }
+.ts-pv.pc .pv-frame { grid-template-columns: 96px 1fr; }
+.ts-pv.phone { max-width: 190px; margin: 0 auto; border-radius: 22px; padding: 6px; }
+.ts-pv.phone .pv-frame { grid-template-columns: 1fr; border-radius: 16px; overflow: hidden; }
+.ts-pv.phone .pv-side { display: none; }
+.pv-side { border-right: 1px solid var(--border-1); padding: 8px 6px; display: flex; flex-direction: column; gap: 7px; background: var(--bg-2); }
+.pv-me, .pv-chat { display: flex; align-items: center; gap: 5px; }
+.pv-chat { padding: 4px; border-radius: 7px; }
+.pv-chat.on { background: var(--accent-faint); }
+.pv-ava { width: 16px; height: 16px; border-radius: 5px; background: var(--accent-400); flex: none; }
+.pv-ava.sm { width: 13px; height: 13px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-2); }
+.pv-lines, .pv-bars { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.pv-lines b, .pv-bars b { height: 4px; border-radius: 3px; background: var(--text); opacity: 0.75; }
+.pv-lines i, .pv-bars i { height: 3px; width: 60%; border-radius: 3px; background: var(--text-dim); opacity: 0.6; }
+.pv-search { height: 15px; border-radius: 6px; background: var(--surface-1); border: 1px solid var(--border-1); }
+.pv-main { display: flex; flex-direction: column; min-width: 0; }
+.pv-head { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-bottom: 1px solid var(--border-1); background: linear-gradient(180deg, rgba(var(--primary-rgb), .06), transparent); }
+.pv-msgs { flex: 1; padding: 9px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.pv-bubble {
+  max-width: 78%; padding: 5px 9px; border-radius: 11px; font-size: 10.5px; line-height: 1.35;
+  background: var(--surface-1); border: 1px solid var(--border-1); color: var(--text); align-self: flex-start;
+}
+.pv-bubble.out { align-self: flex-end; background: var(--accent-400); color: var(--on-accent); border-color: transparent; }
+.pv-bubble.short { width: 44%; height: 16px; padding: 0; }
+.pv-composer { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-top: 1px solid var(--border-1); }
+.pv-input { flex: 1; height: 18px; border-radius: 9px; background: var(--surface-1); border: 1px solid var(--border-1); }
+.pv-send { width: 18px; height: 18px; border-radius: 6px; background: var(--accent-400); flex: none; }
+
+@media (max-width: 900px) {
+  .ts-split { grid-template-columns: minmax(0, 1fr); }
+  .ts-preview-col { position: static; order: -1; }   /* preview first on a phone */
+  .ts-pv .pv-frame { height: 240px; }
+}

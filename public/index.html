@@ -1125,6 +1125,10 @@
       </nav>
       <div class="ts-body">
         <section class="ts-pane active" data-tspane="editor">
+          <!-- Two columns: the knobs on the left, a live mock of the real app on the right.
+               Editing colours you can't see applied is guesswork. -->
+          <div class="ts-split">
+          <div class="ts-controls">
           <label class="ts-row"><span data-i18n="ts_name">Theme name</span><input id="tsName" class="field" maxlength="48" /></label>
           <div class="ts-sub" data-i18n="ts_colors">Colors</div>
           <div class="ts-colors">
@@ -1139,12 +1143,6 @@
           <div class="ts-sub" data-i18n="ts_glass">Glass</div>
           <label class="ts-row ts-slider"><span><span data-i18n="ts_transparency">Transparency</span> <em id="tsAlphaV"></em></span><input type="range" id="tsAlpha" min="25" max="100" step="1" /></label>
           <div class="ts-row"><span data-i18n="ts_blur">Blur (30%)</span><label class="switch"><input type="checkbox" id="tsBlur" /><span class="switch-track"></span></label></div>
-          <div class="ts-sub" data-i18n="ts_preview">Preview</div>
-          <div class="ts-preview" id="tsPreview" aria-hidden="true">
-            <div class="tsp-row"><span class="tsp-ava"></span><div class="tsp-bub in">How's this theme?</div></div>
-            <div class="tsp-row out"><div class="tsp-bub out">Looks great 🎨</div></div>
-            <div class="tsp-input"><span data-i18n="ph_message">Write a message…</span></div>
-          </div>
           <div class="ts-sub" data-i18n="ts_typography">Typography</div>
           <label class="ts-row"><span data-i18n="ts_font">Google Font</span>
             <select id="tsFont" class="field">
@@ -1166,7 +1164,38 @@
             <button id="tsPublish" type="button" class="btn-ghost" data-i18n="ts_publish">Publish</button>
             <button id="tsReset" type="button" class="btn-ghost" data-i18n="ts_reset">Reset</button>
           </div>
-        </section>
+                  </div>
+          <div class="ts-preview-col">
+            <div class="ts-pv-tabs">
+              <button class="ts-pv-tab active" data-pv="pc" data-i18n="ts_pv_pc">Desktop</button>
+              <button class="ts-pv-tab" data-pv="phone" data-i18n="ts_pv_phone">Phone</button>
+            </div>
+            <!-- The mock is styled entirely by the same CSS variables the app uses, so it
+                 reflects every token change without a second styling path. -->
+            <div class="ts-pv pc" id="tsPv">
+              <div class="pv-frame">
+                <aside class="pv-side">
+                  <div class="pv-me"><span class="pv-ava"></span><span class="pv-bars"><b></b><i></i></span></div>
+                  <div class="pv-search"></div>
+                  <div class="pv-chat on"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
+                  <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
+                  <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
+                </aside>
+                <main class="pv-main">
+                  <div class="pv-head"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
+                  <div class="pv-msgs">
+                    <div class="pv-bubble in" data-i18n="ts_pv_in">Looks good?</div>
+                    <div class="pv-bubble out" data-i18n="ts_pv_out">That's the one.</div>
+                    <div class="pv-bubble in short"></div>
+                    <div class="pv-bubble out short"></div>
+                  </div>
+                  <div class="pv-composer"><span class="pv-input"></span><span class="pv-send"></span></div>
+                </main>
+              </div>
+            </div>
+          </div>
+          </div>
+</section>
         <section class="ts-pane" data-tspane="mine">
           <p class="ts-hint" id="tsMineHint"></p>
           <div id="tsMine" class="ts-list"></div>
