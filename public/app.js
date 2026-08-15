@@ -492,6 +492,7 @@ function applyAppearance() {
   document.body.classList.remove("custom-border");
 }
 function initAppearanceControls() {
+  renderBootSpeed();
   const subtabs = $("apSubtabs");
   if (subtabs) subtabs.querySelectorAll(".settings-subtab").forEach((b) => b.onclick = () => {
     subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
@@ -1626,6 +1627,36 @@ async function openDmSettings() {
 $("dmSetClose") && ($("dmSetClose").onclick = () => $("dmSettingsModal").classList.add("hidden"));
 $("dmSetDone") && ($("dmSetDone").onclick = () => $("dmSettingsModal").classList.add("hidden"));
 $("dmSettingsModal") && $("dmSettingsModal").addEventListener("click", (e) => { if (e.target === $("dmSettingsModal")) $("dmSettingsModal").classList.add("hidden"); });
+
+// ================== Boot screen pace ==================
+// The terminal splash is deliberately unhurried — it's the designed pace. Anyone who'd rather
+// be in the app can speed it up here; the desktop shell is told so its NEXT launch matches,
+// since that splash runs before this code exists.
+const BOOT_SPEEDS = [[1, "ld_cinematic"], [2, "ld_normal"], [4, "ld_fast"]];
+function bootSpeed() { const v = parseFloat(localStorage.getItem("dialog_boot_speed")); return v > 0 ? v : 1; }
+function setBootSpeed(v) {
+  localStorage.setItem("dialog_boot_speed", String(v));
+  try { window.dialogDesktop && window.dialogDesktop.setBootSpeed && window.dialogDesktop.setBootSpeed(v); } catch {}
+  try { window.Android && window.Android.setBootSpeed && window.Android.setBootSpeed(v); } catch {}
+  renderBootSpeed();
+}
+function renderBootSpeed() {
+  const box = $("ldOpts"); if (!box) return;
+  const cur = bootSpeed();
+  box.innerHTML = "";
+  for (const [v, key] of BOOT_SPEEDS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ld-opt" + (v === cur ? " on" : "");
+    b.textContent = t(key);
+    b.onclick = () => setBootSpeed(v);
+    box.appendChild(b);
+  }
+}
+// Tell both shells on boot as well, so a fresh install matches without visiting settings.
+try { setTimeout(() => { const v = bootSpeed();
+  if (window.dialogDesktop && window.dialogDesktop.setBootSpeed) window.dialogDesktop.setBootSpeed(v);
+  if (window.Android && window.Android.setBootSpeed) window.Android.setBootSpeed(v); }, 1500); } catch {}
 
 // ================== Loading hints ==================
 // Settings people never find because nothing points at them. The sign-in screen and the

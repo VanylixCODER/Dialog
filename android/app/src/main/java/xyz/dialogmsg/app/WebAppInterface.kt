@@ -31,6 +31,14 @@ class WebAppInterface(
         onReady()
     }
 
+    // Appearance → Loading screen. Kept in SharedPreferences because the boot splash runs
+    // before the WebView exists to be asked; the value applies from the next launch.
+    @JavascriptInterface
+    fun setBootSpeed(v: Float) {
+        context.getSharedPreferences("dialog", android.content.Context.MODE_PRIVATE)
+            .edit().putFloat("boot_speed", v.coerceIn(0.25f, 6f)).apply()
+    }
+
     // Background mode: keep the process (and its socket) alive while signed in so
     // messages/calls arrive when the app is off-screen. Called on login/logout and when
     // the user toggles "Run in background". During a call, CallService covers this, so we

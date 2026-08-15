@@ -1,119 +1,75 @@
 "use strict";
 
-// Fake "hacker boot" sequence + a live status line driven by the real
-// connectivity/auth events forwarded from the main process.
+// Terminal boot loader — one 42ms tick drives typing, then a jittered progress bar.
+// The jitter is the point: even pacing reads as fake. Real status events from the main
+// process replace the tail line so the screen still tells the truth about what's happening.
 
-const logEl = document.getElementById("log");
-const barFill = document.getElementById("barFill");
-const statusEl = document.getElementById("status");
-const statusText = document.getElementById("statusText");
-
-const STATUS_LABELS = {
-  connecting: "Connecting…",
-  authenticating: "Authenticating",
-  online: "Online",
-  offline: "No Internet Access"
-};
-
-let currentState = "connecting";
-
-function setStatus(state, detail) {
-  currentState = state;
-  statusEl.className = "status status--" + state;
-  statusText.textContent = detail || STATUS_LABELS[state] || state;
-}
-
-// Boot log lines. {t} text, {c} class, {d} delay(ms) before printing,
-// {tag} optional trailing status tag printed after a short pause.
-const SCRIPT = [
-  { t: "[ DIALOG SECURE SHELL v1.0.0 ]", c: "hl", d: 120 },
-  { t: "booting kernel modules", d: 220, tag: "OK" },
-  { t: "mounting encrypted volume /dev/dlg0", d: 260, tag: "OK" },
-  { t: "initializing crypto core (aes-256-gcm)", d: 240, tag: "OK" },
-  { t: "loading certificate chain", d: 200, tag: "OK" },
-  { t: "probing network interfaces", d: 220, tag: "OK" },
-  { t: "resolving relay @ dialogmsg.xyz", d: 260, tag: "OK" },
-  { t: "establishing relay tunnel", d: 300, tag: "OK" },
-  { t: "performing TLS handshake", d: 280, tag: "OK" },
-  { t: "negotiating realtime socket", d: 260, tag: "OK" },
-  { t: "authenticating session token", d: 320, tag: "OK" },
-  { t: "syncing presence + channels", d: 260, tag: "OK" },
-  { t: "spawning interface", c: "hl", d: 220, tag: "READY" }
+const CMD = "dialog --boot --profile=desktop";
+const BOOT = [
+  ["[  OK  ]", "mounted /dev/dialog"],
+  ["[  OK  ]", "started session daemon"],
+  ["[  OK  ]", "keyring unlocked"],
+  ["[ INFO ]", "resolving relay endpoints"],
+  ["[  OK  ]", "handshake tls1.3 · 41ms"],
+  ["[ INFO ]", "syncing messages"],
+  ["[  OK  ]", "cache warm"],
+  ["[ INFO ]", "restoring threads"],
+  ["[  OK  ]", "presence online"],
 ];
+const TAILS = ["linking channels", "verifying signatures", "rebuilding index", "fetching avatars", "finalizing session"];
+const CELLS = 22;
 
-function line(text, cls) {
-  const span = document.createElement("span");
-  if (cls) span.className = cls;
-  span.textContent = text + "\n";
-  logEl.appendChild(span);
-  // keep view pinned to bottom
-  logEl.scrollTop = logEl.scrollHeight;
-  // trim very old lines to avoid overflow
-  while (logEl.childNodes.length > 60) logEl.removeChild(logEl.firstChild);
-}
+// Speed comes from the app (Appearance → Loading). 1 = the designed ~5s cinematic pace.
+let speed = 1;
+try {
+  const q = new URLSearchParams(location.search).get("speed");
+  if (q) speed = Math.max(0.25, Math.min(6, parseFloat(q) || 1));
+} catch {}
 
-function tag(node, label) {
-  const t = document.createElement("span");
-  const cls = label === "OK" || label === "READY" ? "ok" : "warn";
-  t.className = cls;
-  t.textContent = "  [ " + label + " ]";
-  node.appendChild(t);
-}
+const $ = (id) => document.getElementById(id);
+let typed = 0, pct = 0, override = null;
 
-let i = 0;
-let progress = 0;
-let booting = true;
-
-function step() {
-  if (!booting) return;
-  if (i >= SCRIPT.length) {
-    booting = false;
-    return;
+function render() {
+  $("cmd").textContent = CMD.slice(0, typed);
+  const shown = Math.min(BOOT.length, Math.floor((pct / 100) * (BOOT.length + 0.6)));
+  const lines = $("lines");
+  while (lines.children.length > shown) lines.removeChild(lines.lastChild);
+  for (let i = lines.children.length; i < shown; i++) {
+    const [tag, text] = BOOT[i];
+    const row = document.createElement("div");
+    const t = document.createElement("span");
+    t.className = tag.includes("OK") ? "tag-ok" : "tag-info";
+    t.textContent = tag;
+    const m = document.createElement("span");
+    m.className = "msg";
+    m.textContent = text;
+    row.appendChild(t); row.appendChild(m);
+    lines.appendChild(row);
   }
-  const item = SCRIPT[i];
-
-  // If we've gone offline mid-boot, pause the sequence and surface it.
-  if (currentState === "offline") {
-    line("network unreachable — retrying", "err");
-    setTimeout(step, 1400);
-    return;
-  }
-
-  const span = document.createElement("span");
-  if (item.c) span.className = item.c;
-  span.textContent = item.t;
-  logEl.appendChild(span);
-
-  setTimeout(() => {
-    if (item.tag) tag(span, item.tag);
-    span.appendChild(document.createTextNode("\n"));
-    logEl.scrollTop = logEl.scrollHeight;
-    while (logEl.childNodes.length > 60) logEl.removeChild(logEl.firstChild);
-
-    progress = Math.min(100, Math.round(((i + 1) / SCRIPT.length) * 100));
-    barFill.style.width = progress + "%";
-    i += 1;
-    setTimeout(step, item.d || 220);
-  }, 140);
+  const filled = Math.round((pct / 100) * CELLS);
+  $("bar").textContent = "[" + "█".repeat(filled) + "░".repeat(CELLS - filled) + "]";
+  const p = Math.floor(pct);
+  $("statusline").textContent = p >= 100 ? "100%  ready — press any key" : String(p).padStart(3, " ") + "%  loading dialog";
+  $("stripPct").textContent = Math.min(99, 84 + Math.floor(p / 8)) + "%";
+  $("tail").textContent = override || (p >= 100 ? "session established" : TAILS[Math.min(TAILS.length - 1, Math.floor(p / 20))] + "…");
 }
 
-// Kick off the boot animation.
-setStatus("connecting");
-setTimeout(step, 400);
+const tick = setInterval(() => {
+  if (typed < CMD.length) { typed += 1; render(); return; }   // phase 1: type the command
+  if (pct >= 100) { clearInterval(tick); return; }
+  pct = Math.min(100, pct + speed * (0.55 + Math.random() * 1.1));  // phase 2: jittered progress
+  render();
+}, 42);
+render();
 
-// --- React to real status from main ---------------------------------------
-if (window.loaderBridge) {
-  window.loaderBridge.onStatus(({ state, detail }) => {
-    setStatus(state, detail);
-
-    if (state === "online") {
-      // finish the bar and fade out
-      barFill.style.width = "100%";
-      line("interface ready — welcome to Dialog", "ok");
-      setTimeout(() => document.body.classList.add("done"), 5000);
-    }
-    if (state === "offline") {
-      barFill.style.width = Math.max(progress, 8) + "%";
-    }
+// Real status from the shell wins the tail line — a stalled connection must not look like
+// a healthy boot.
+const LABELS = { connecting: "connecting to relay", authenticating: "authenticating session", online: "session established", offline: "no route to host — retrying" };
+if (window.loaderBridge && window.loaderBridge.onStatus) {
+  window.loaderBridge.onStatus((p) => {
+    const state = (p && p.state) || p;
+    override = (p && p.detail) || LABELS[state] || null;
+    if (state === "offline") { document.body.style.color = "#ff6b6b"; }
+    render();
   });
 }

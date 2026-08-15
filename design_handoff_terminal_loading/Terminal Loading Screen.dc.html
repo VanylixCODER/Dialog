@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="nocturne/styles.css">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0a0e0b;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+a{color:#28e05a}a:hover{color:#7cf59c}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#07090a;padding:24px">
+<div style="width:390px;height:844px;background:#0a0e0b;border-radius:38px;overflow:hidden;position:relative;box-shadow:0 40px 90px rgba(0,0,0,.7),0 0 0 1px rgba(40,224,90,.16)">
+
+<div style="height:52px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 8px;font-size:12px;letter-spacing:.04em;color:#3aa85c">
+<span>tty1</span>
+<span style="display:flex;gap:10px"><span>▂▄▆</span><span>84%</span></span>
+</div>
+
+<div style="padding:10px 20px 0;font-size:12.5px;line-height:1.75;color:#28e05a">
+<div style="display:flex;gap:8px;color:#7cf59c"><span style="color:#3aa85c">root@dialog</span><span style="color:#1f6b3a">:~#</span><span>{{ command }}</span></div>
+<div style="height:14px"></div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ lines }}" as="line" hint-placeholder-count="7">
+<div style="display:flex;gap:8px;white-space:pre"><span style="color:{{ line.tagColor }}">{{ line.tag }}</span><span style="color:#4fb96f">{{ line.text }}</span></div>
+</sc-for>
+</div>
+</div>
+
+<div style="position:absolute;left:0;right:0;top:398px;display:flex;flex-direction:column;align-items:center;gap:26px">
+<img src="assets/3Dialog.gif" alt="Dialog" width="{{ logoSize }}" height="{{ logoSize }}" style="display:block;image-rendering:auto">
+<div style="display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12.5px;letter-spacing:.06em">
+<div style="color:#28e05a;white-space:pre">{{ bar }}</div>
+<div style="color:#3aa85c">{{ statusLine }}</div>
+</div>
+</div>
+
+<div style="position:absolute;left:20px;right:20px;bottom:34px;font-size:12.5px;line-height:1.75;color:#28e05a">
+<div style="display:flex;gap:8px;white-space:pre"><span style="color:#1f6b3a">--&gt;</span><span style="color:#4fb96f">{{ tail }}</span></div>
+<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span style="color:#3aa85c">root@dialog</span><span style="color:#1f6b3a">:~#</span><span style="width:8px;height:15px;background:#28e05a;animation:blink 1.05s step-end infinite"></span></div>
+<div style="margin-top:22px;height:5px;width:132px;border-radius:3px;background:#1c2a20;margin-left:auto;margin-right:auto"></div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:440,&quot;height&quot;:900},&quot;command&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;dialog --boot --profile=mobile&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.25,&quot;max&quot;:3,&quot;step&quot;:0.25,&quot;tsType&quot;:&quot;number&quot;},&quot;logoSize&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:132,&quot;min&quot;:80,&quot;max&quot;:220,&quot;step&quot;:4,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;}}">
+const BOOT = [
+  ["[  OK  ]", "mounted /dev/dialog"],
+  ["[  OK  ]", "started session daemon"],
+  ["[  OK  ]", "keyring unlocked"],
+  ["[ INFO ]", "resolving relay endpoints"],
+  ["[  OK  ]", "handshake tls1.3 · 41ms"],
+  ["[ INFO ]", "syncing 1,284 messages"],
+  ["[  OK  ]", "cache warm · 12.4 MB"],
+  ["[ INFO ]", "restoring 6 threads"],
+  ["[  OK  ]", "presence online"]
+];
+const TAILS = [
+  "linking channels",
+  "verifying signatures",
+  "rebuilding index",
+  "fetching avatars",
+  "finalizing session"
+];
+
+class Component extends DCLogic {
+  state = { pct: 0, shown: 0, typed: 0 };
+
+  componentDidMount() {
+    const cmd = this.cmd();
+    this.t = setInterval(() => {
+      this.setState(s => {
+        if (s.typed < cmd.length) return { typed: s.typed + 1 };
+        const speed = this.props.speed ?? 1;
+        const pct = Math.min(100, s.pct + speed * (0.55 + Math.random() * 1.1));
+        const shown = Math.min(BOOT.length, Math.floor(pct / 100 * (BOOT.length + 0.6)));
+        return { pct, shown };
+      });
+    }, 42);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+
+  cmd() { return this.props.command ?? "dialog --boot --profile=mobile"; }
+
+  renderVals() {
+    const { pct, shown, typed } = this.state;
+    const cmd = this.cmd();
+    const p = Math.floor(pct);
+    const filled = Math.round(p / 100 * 22);
+    return {
+      command: cmd.slice(0, typed),
+      logoSize: this.props.logoSize ?? 132,
+      lines: BOOT.slice(0, shown).map(([tag, text]) => ({
+        tag, text,
+        tagColor: tag.indexOf("OK") > -1 ? "#28e05a" : "#1f6b3a"
+      })),
+      bar: "[" + "█".repeat(filled) + "░".repeat(22 - filled) + "]",
+      statusLine: p < 100
+        ? String(p).padStart(3, " ") + "%  loading dialog"
+        : "100%  ready — press any key",
+      tail: p < 100 ? TAILS[Math.min(TAILS.length - 1, Math.floor(p / 20))] + "…" : "session established"
+    };
+  }
+}
+</script>
+</body>
+</html>

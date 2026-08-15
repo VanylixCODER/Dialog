@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         notifications = NotificationHelper(this)
-        loader = BootLoader(binding.loader)
+        loader = BootLoader(binding.loader, this)
 
         webView = binding.webview
         configureWebView()

@@ -12,6 +12,7 @@ const {
   shell
 } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const config = require("./config");
 const { createTray, updateTrayState } = require("./tray");
 const { setupAutoUpdate } = require("./updater");
@@ -92,6 +93,18 @@ function setStatus(state, detail) {
 // ---------------------------------------------------------------------------
 // Loader window (frameless, 3:4)
 // ---------------------------------------------------------------------------
+// Boot-splash pace, remembered between launches (the splash predates the web app, so it
+// cannot ask it). Defaults to the designed cinematic speed.
+function bootSpeedFile() { return path.join(app.getPath("userData"), "boot-speed"); }
+function readBootSpeed() {
+  try { const v = parseFloat(fs.readFileSync(bootSpeedFile(), "utf8")); return v > 0 ? Math.min(6, v) : 1; }
+  catch { return 1; }
+}
+function writeBootSpeed(v) {
+  const n = Math.max(0.25, Math.min(6, parseFloat(v) || 1));
+  try { fs.writeFileSync(bootSpeedFile(), String(n)); } catch {}
+}
+
 function createLoader() {
   loaderWin = new BrowserWindow({
     width: config.LOADER.width,
@@ -112,7 +125,10 @@ function createLoader() {
     }
   });
 
-  loaderWin.loadFile(path.join(__dirname, "loader", "loader.html"));
+  // The web app persists the user's "Loading" preference (Appearance settings) and reports it
+  // through the preload bridge; we keep the last value so the NEXT launch's splash — which
+  // runs before the web app exists — already paces the way they asked for.
+  loaderWin.loadFile(path.join(__dirname, "loader", "loader.html"), { search: "speed=" + readBootSpeed() });
   loaderWin.once("ready-to-show", () => loaderWin.show());
   loaderWin.on("closed", () => {
     loaderWin = null;
@@ -382,6 +398,7 @@ function setupPermissions() {
 function setupIpc() {
   // Page reports it is interactive (socket connected / UI ready).
   ipcMain.on("app-ready", () => revealApp());
+  ipcMain.on("boot-speed", (_e, v) => writeBootSpeed(v));
 
   // Page reports unread message count → tray badge.
   ipcMain.on("unread", (_e, count) => {

@@ -226,6 +226,9 @@ webFrame.executeJavaScript("(" + mainWorldInit.toString() + ")();");
 const api = {
   ready: () => ipcRenderer.send("app-ready"),
   isDesktop: true,
+  // The web app owns the "Loading" preference; the shell remembers it for the next launch,
+  // because the splash runs before the web app exists to be asked.
+  setBootSpeed: (v) => ipcRenderer.send("boot-speed", v),
   onNavigateChat: (cb) =>
     ipcRenderer.on("navigate-chat", (_e, room) => cb(room))
 };

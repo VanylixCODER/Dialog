@@ -5833,3 +5833,13 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   .ts-preview-col { position: static; order: -1; }   /* preview first on a phone */
   .ts-pv .pv-frame { height: 240px; }
 }
+
+/* Loading-screen pace picker (Appearance) */
+.ld-opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.ld-opt {
+  padding: 7px 13px; border-radius: var(--r-pill); cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border-1);
+  color: var(--text-dim); font-size: 12.5px; font-weight: 600;
+}
+.ld-opt:hover { color: var(--accent-200); border-color: var(--accent-400); }
+.ld-opt.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }

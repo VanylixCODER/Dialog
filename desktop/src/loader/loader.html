@@ -1,41 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
-    <title>Dialog</title>
-    <link rel="stylesheet" href="loader.css" />
-  </head>
-  <body>
-    <div class="crt">
-      <div class="scanlines"></div>
-      <div class="vignette"></div>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dialog</title>
+<link rel="stylesheet" href="loader.css" />
+</head>
+<!-- Terminal boot loader — the handoff design, edge-to-edge (no device frame here). -->
+<body>
+  <div class="strip"><span>tty1</span><span class="strip-r"><span>▂▄▆</span><span id="stripPct">84%</span></span></div>
 
-      <div class="stage">
-        <div class="logo-wrap">
-          <div class="logo glitch" data-text="DIALOG">
-            <span class="logo-main">DIALOG</span>
-          </div>
-          <div class="sub">SECURE SHELL</div>
-        </div>
+  <div class="log">
+    <div class="prompt"><span class="user">root@dialog</span><span class="sep">:~#</span><span class="cmd" id="cmd"></span></div>
+    <div class="gap"></div>
+    <div id="lines" class="lines"></div>
+  </div>
 
-        <!-- Live status line under the logo -->
-        <div id="status" class="status status--connecting">
-          <span class="dot"></span>
-          <span id="statusText">Booting…</span>
-        </div>
-
-        <div class="console">
-          <pre id="log" class="log"></pre>
-          <div class="cursorline"><span class="prompt">root@dialog:~#</span><span class="caret">█</span></div>
-        </div>
-
-        <div class="bar">
-          <div id="barFill" class="bar-fill"></div>
-        </div>
-      </div>
+  <div class="loader">
+    <img id="logo" src="boot.gif" alt="Dialog" width="132" height="132" />
+    <div class="progress">
+      <div class="bar" id="bar"></div>
+      <div class="statusline" id="statusline"></div>
     </div>
-    <script src="loader.js"></script>
-  </body>
+  </div>
+
+  <div class="footer">
+    <div class="tail"><span class="arrow">--&gt;</span><span class="tailtext" id="tail"></span></div>
+    <div class="prompt2"><span class="user">root@dialog</span><span class="sep">:~#</span><span class="cursor"></span></div>
+  </div>
+
+  <script src="loader.js"></script>
+</body>
 </html>
