@@ -3,10 +3,10 @@
 // hosted as GitHub Releases on the public Dialog repo, so links hit GitHub's
 // CDN directly.
 (function () {
-  const VERSION = "1.1.4";
-  // Android ships on its own cadence (1.1.5 adds avatars in notifications); desktop stays 1.1.4
-  // until its next release, so the Android APK link points at its own release tag.
-  const ANDROID_VERSION = "1.1.5";
+  const VERSION = "1.1.6";
+  // Android and desktop ship together again from 1.1.6 (terminal boot screen on both), so the
+  // APK link points at the same release tag.
+  const ANDROID_VERSION = VERSION;
   const BASE =
     "https://github.com/VanylixCODER/Dialog/releases/download/v" +
     VERSION +
