@@ -18,11 +18,20 @@ let listenersReady = false;
 let manualCheck = false; // true when the current check came from the tray
 let downloading = false;
 
-// Flatpak owns updating. /app is a read-only mount, so electron-updater cannot
-// replace anything, and Flathub rejects apps that ship their own updater —
-// users get new versions through `flatpak update`. FLATPAK_ID is exported into
-// every Flatpak sandbox, so it is the reliable way to detect one.
+// Two packagings cannot update themselves in place:
+//
+//   Flatpak  — /app is a read-only mount and Flathub rejects bundled updaters;
+//              users get new versions through `flatpak update`. FLATPAK_ID is
+//              exported into every Flatpak sandbox.
+//   Portable — the .exe unpacks into a temp directory and runs from there, so
+//              there is nothing stable to overwrite; replacing the file is the
+//              user's job. electron-builder sets PORTABLE_EXECUTABLE_DIR.
+//
+// Left unguarded, both would download an update on every launch and fail at the
+// install step.
 const IN_FLATPAK = !!process.env.FLATPAK_ID;
+const IN_PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;
+const SELF_UPDATE_OFF = IN_FLATPAK || IN_PORTABLE;
 
 function load() {
   if (autoUpdater) return autoUpdater;
@@ -114,7 +123,7 @@ function registerListeners(u) {
 // ctx.getMainWindow lets dialogs attach to the main window.
 function setupAutoUpdate(ctx) {
   if (ctx && ctx.getMainWindow) getMainWindow = ctx.getMainWindow;
-  if (IN_FLATPAK) return;
+  if (SELF_UPDATE_OFF) return;
   const u = load();
   if (!u) return;
   registerListeners(u);
@@ -131,13 +140,15 @@ function checkNow(ctx) {
 }
 
 function run(manual) {
-  if (IN_FLATPAK) {
+  if (SELF_UPDATE_OFF) {
     if (manual) {
       box({
         type: "info",
         title: "Updates",
-        message: "Dialog updates through Flatpak.",
-        detail: "Run `flatpak update xyz.dialogmsg.app`, or let your software centre do it.",
+        message: IN_FLATPAK ? "Dialog updates through Flatpak." : "This is the portable build.",
+        detail: IN_FLATPAK
+          ? "Run `flatpak update xyz.dialogmsg.app`, or let your software centre do it."
+          : "Portable builds do not update themselves — download the latest .exe from dialogmsg.xyz/download and replace this one.",
         buttons: ["OK"]
       });
     }

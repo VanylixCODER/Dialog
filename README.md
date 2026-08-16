@@ -65,9 +65,9 @@ it runs in the browser at **[dialogmsg.xyz](https://dialogmsg.xyz/login)**.
 
 | Platform | Format |
 |---|---|
-| Windows | `.exe` installer |
+| Windows | `.exe` installer · `.exe` portable (no install) |
 | macOS | `.dmg` / `.zip` (universal) |
-| Linux | AppImage · `.deb` · `.pacman` · Flatpak |
+| Linux | AppImage · `.deb` · `.pacman` · `.flatpak` |
 | Android | `.apk` |
 
 ## Tech stack

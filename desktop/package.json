@@ -79,7 +79,8 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "portable"
       ],
       "icon": "assets/icon.ico",
       "publisherName": "Dialog Messanger App",
@@ -92,6 +93,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     },
     "mac": {
       "target": [

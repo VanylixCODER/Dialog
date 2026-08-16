@@ -19,7 +19,23 @@ Commit + push these to `main` (deploys the updated download page).
 
 ### 2. Build the installers into `desktop/dist/`
 - **Linux** (local): `cd desktop && npm run dist` → AppImage + deb + pacman + `latest-linux.yml`.
-- **Windows**: `npm run dist:win` (needs Wine or a Windows box) → `.exe` + `latest.yml`.
+- **Windows**: `npm run dist:win` (needs Wine or a Windows box) → the `Dialog-Setup-X.Y.Z.exe`
+  installer, the `Dialog-Portable-X.Y.Z.exe` portable build, and `latest.yml`.
+- **Flatpak** (local): electron-builder's flatpak target needs a native
+  `flatpak-builder`. Where there isn't one, build the bundle from the Flathub
+  manifest instead — same manifest, so this doubles as a check that it still
+  builds:
+
+  ```bash
+  cd desktop/flatpak
+  B=../.fpbuild && rm -rf $B && mkdir -p $B
+  flatpak run org.flatpak.Builder --force-clean --user \
+    --state-dir=$B/state --repo=$B/repo $B/build xyz.dialogmsg.app.yml
+  flatpak build-bundle $B/repo ../dist/Dialog-X.Y.Z.flatpak xyz.dialogmsg.app
+  rm -rf $B
+  ```
+  The manifest pulls the payload tarball from the release, so publish that first
+  (see `desktop/flatpak/README.md`).
 - **macOS** (CI): push tag `mac-X.Y.Z` → the `Build macOS` workflow builds the
   universal `.dmg`/`.zip` + `latest-mac.yml`. Download the `dialog-macos`
   artifact and drop its files into `desktop/dist/`.
@@ -45,6 +61,15 @@ Creates release `vX.Y.Z` on the public Dialog repo and uploads every installer +
 - Download page: <https://dialogmsg.xyz/download> — each platform link resolves.
 - Auto-update: an installed older build prompts to update within a few minutes
   (or via tray → **Check for updates**).
+
+> **Never re-upload `latest*.yml` from a partial build.** Building a single
+> target (say `--win portable`) regenerates the feed listing only that artifact,
+> which would point every installed Windows client at the portable build.
+> Upload the `.yml` files only from a full `dist:win` / `dist` run.
+>
+> The portable and Flatpak builds do not self-update — `updater.js` disables
+> itself when `PORTABLE_EXECUTABLE_DIR` or `FLATPAK_ID` is set — so neither
+> belongs in a `latest*.yml` feed anyway.
 
 ---
 

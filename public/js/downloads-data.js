@@ -23,7 +23,10 @@
       icon: "windows",
       note: "Windows 10/11 · 64-bit",
       installers: [
-        { kind: "Installer (.exe)", file: "Dialog-Setup-" + VERSION + ".exe", primary: true }
+        { kind: "Installer (.exe)", file: "Dialog-Setup-" + VERSION + ".exe", primary: true },
+        // Portable: runs straight from the file, no install and no admin rights.
+        // It cannot auto-update — the updater is disabled in that build.
+        { kind: "Portable (.exe)", file: "Dialog-Portable-" + VERSION + ".exe" }
       ]
     },
     mac: {
@@ -42,7 +45,9 @@
       installers: [
         { kind: "AppImage (universal)", file: "Dialog-" + VERSION + ".AppImage", primary: true },
         { kind: "Debian / Ubuntu (.deb)", file: "dialog-desktop_" + VERSION + "_amd64.deb" },
-        { kind: "Arch (.pacman)", file: "dialog-desktop-" + VERSION + ".pacman" }
+        { kind: "Arch (.pacman)", file: "dialog-desktop-" + VERSION + ".pacman" },
+        // Sandboxed. Install with: flatpak install --user Dialog-<version>.flatpak
+        { kind: "Flatpak (.flatpak)", file: "Dialog-" + VERSION + ".flatpak" }
       ]
     },
     android: {
