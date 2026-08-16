@@ -6,7 +6,7 @@
   <summary>Chat, group calls and screen sharing</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>AGPL-3.0-or-later</project_license>
 
   <developer id="xyz.dialogmsg">
     <name>Dialog Messanger App</name>
@@ -14,16 +14,26 @@
 
   <description>
     <p>
-      Dialog is a fast, modern messenger for text chat, group voice and video
-      calls, and screen sharing. This desktop client gives you native
-      notifications, a system tray, and a frameless boot experience.
+      Dialog is a fast, no-nonsense messenger for text chat, group voice and
+      video calls, and screen sharing. The desktop client adds native
+      notifications, a system tray and deep links on top of the same app that
+      runs in the browser and on Android.
     </p>
-    <p>Features:</p>
+    <p>
+      Calls are peer-to-peer: audio, video and screen share flow directly
+      between participants over WebRTC, so no media server sits in the middle
+      of them. Messages travel over TLS and are stored on the server you or the
+      hosted instance runs — they are not end-to-end encrypted.
+    </p>
+    <p>What you get:</p>
     <ul>
-      <li>One-to-one and group messaging</li>
-      <li>Group voice and video calls</li>
-      <li>Screen sharing</li>
+      <li>Direct and group messaging with reactions, edits, replies, voice notes, GIFs and files</li>
+      <li>Peer-to-peer group voice and video calls</li>
+      <li>Whole-screen sharing inside a call</li>
       <li>Native desktop notifications and tray integration</li>
+      <li>Themes, including a built-in theme editor</li>
+      <li>Two-factor authentication and a session self-destruct timer</li>
+      <li>Fully self-hostable — run the whole stack yourself</li>
     </ul>
   </description>
 
@@ -31,11 +41,21 @@
 
   <url type="homepage">https://dialogmsg.xyz</url>
   <url type="bugtracker">https://github.com/VanylixCODER/Dialog/issues</url>
+  <url type="vcs-browser">https://github.com/VanylixCODER/Dialog</url>
+  <url type="contact">https://dialogmsg.xyz/privacy</url>
 
   <screenshots>
     <screenshot type="default">
-      <caption>Dialog secure boot screen</caption>
-      <image>https://github.com/VanylixCODER/Dialog/releases/download/v1.0.1/screenshot.png</image>
+      <caption>A call running beside the conversation</caption>
+      <image>https://github.com/VanylixCODER/Dialog/releases/download/v1.1.6/screenshot-call.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Sharing a screen inside a group call</caption>
+      <image>https://github.com/VanylixCODER/Dialog/releases/download/v1.1.6/screenshot-screenshare.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>A group chat with the member list open</caption>
+      <image>https://github.com/VanylixCODER/Dialog/releases/download/v1.1.6/screenshot-group.png</image>
     </screenshot>
   </screenshots>
 
@@ -50,6 +70,15 @@
   </branding>
 
   <releases>
+    <release version="1.1.6" date="2026-08-16">
+      <description>
+        <p>
+          Peer-to-peer calls, a rebuilt terminal boot screen, a tweakable theme
+          studio with a live desktop and phone preview, an in-app image editor,
+          notification controls and a session self-destruct timer.
+        </p>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-06-30">
       <description>
         <p>First release of the Dialog desktop client.</p>

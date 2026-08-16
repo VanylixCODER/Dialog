@@ -18,6 +18,12 @@ let listenersReady = false;
 let manualCheck = false; // true when the current check came from the tray
 let downloading = false;
 
+// Flatpak owns updating. /app is a read-only mount, so electron-updater cannot
+// replace anything, and Flathub rejects apps that ship their own updater —
+// users get new versions through `flatpak update`. FLATPAK_ID is exported into
+// every Flatpak sandbox, so it is the reliable way to detect one.
+const IN_FLATPAK = !!process.env.FLATPAK_ID;
+
 function load() {
   if (autoUpdater) return autoUpdater;
   try {
@@ -108,6 +114,7 @@ function registerListeners(u) {
 // ctx.getMainWindow lets dialogs attach to the main window.
 function setupAutoUpdate(ctx) {
   if (ctx && ctx.getMainWindow) getMainWindow = ctx.getMainWindow;
+  if (IN_FLATPAK) return;
   const u = load();
   if (!u) return;
   registerListeners(u);
@@ -124,6 +131,19 @@ function checkNow(ctx) {
 }
 
 function run(manual) {
+  if (IN_FLATPAK) {
+    if (manual) {
+      box({
+        type: "info",
+        title: "Updates",
+        message: "Dialog updates through Flatpak.",
+        detail: "Run `flatpak update xyz.dialogmsg.app`, or let your software centre do it.",
+        buttons: ["OK"]
+      });
+    }
+    return;
+  }
+
   const u = load();
   if (!u) {
     if (manual) {
