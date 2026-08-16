@@ -4504,8 +4504,33 @@ function buildEmoji() {
   show(cats[0]);
 }
 function insertEmoji(em) { const i = $("msgInput"); const s = i.selectionStart || i.value.length; i.value = i.value.slice(0, s) + em + i.value.slice(i.selectionEnd || s); i.focus(); }
-function toggleEmoji(e) { e.stopPropagation(); $("gifPanel").classList.add("hidden"); if (!picker.dataset.built) { buildEmoji(); picker.dataset.built = "1"; } picker.classList.toggle("hidden"); }
+
+// The picker holds both emoji and stickers behind a switcher at the top, so the
+// composer keeps one button for "things you drop into a message that aren't files".
+function setPickerMode(mode) {
+  pickerMode = mode;
+  picker.querySelectorAll(".ep-mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+  $("epEmoji").classList.toggle("hidden", mode !== "emoji");
+  $("epStickers").classList.toggle("hidden", mode !== "stickers");
+  if (mode === "stickers") loadStickers();
+}
+let pickerMode = "emoji";
+
+// mode is optional: the composer button reopens wherever you left off, while the
+// picker's own switcher forces a side.
+function openPicker(mode) {
+  $("gifPanel").classList.add("hidden");
+  if (!picker.dataset.built) { buildEmoji(); picker.dataset.built = "1"; }
+  const wasHidden = picker.classList.contains("hidden");
+  if (mode && !wasHidden && mode !== pickerMode) { setPickerMode(mode); return; }  // switch, don't close
+  picker.classList.toggle("hidden");
+  if (!picker.classList.contains("hidden")) setPickerMode(mode || pickerMode);
+}
+function toggleEmoji(e) { if (e) e.stopPropagation(); openPicker(); }
 $("emojiBtn").onclick = toggleEmoji;
+picker.querySelectorAll(".ep-mode").forEach((b) => {
+  b.onclick = (e) => { e.stopPropagation(); setPickerMode(b.dataset.mode); };
+});
 document.addEventListener("click", (e) => { if (!picker.contains(e.target) && e.target !== $("emojiBtn") && !e.target.closest("#composerMore")) picker.classList.add("hidden"); });
 
 const gifPanel = $("gifPanel"); let gifTimer;
@@ -4524,20 +4549,10 @@ document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && 
 // A sticker is an image the user saved under a name. Sending one is an ordinary
 // message with type "sticker"; the panel below is just a launcher. Favourites are
 // keyed by media URL, so you can star one somebody else sent you.
-const stickerPanel = $("stickerPanel");
-let stickers = { mine: [], favs: [] };   // cache, refreshed when the panel opens
+let stickers = { mine: [], favs: [] };   // cache, refreshed when the tab opens
 let stickerTab = "favs";
 
 function isFavSticker(media) { return stickers.favs.some((s) => s.media === media); }
-
-function toggleStickers(e) {
-  if (e) e.stopPropagation();
-  picker.classList.add("hidden"); gifPanel.classList.add("hidden");
-  const show = stickerPanel.classList.contains("hidden");
-  stickerPanel.classList.toggle("hidden");
-  if (show) loadStickers();
-}
-$("stickerBtn").onclick = toggleStickers;
 
 async function loadStickers() {
   const { ok, data } = await api("/api/stickers", null, "GET");
@@ -4548,7 +4563,7 @@ async function loadStickers() {
 function renderStickers() {
   const grid = $("stickerGrid"), note = $("stickerNote");
   const list = stickerTab === "mine" ? stickers.mine : stickers.favs;
-  stickerPanel.querySelectorAll(".stk-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === stickerTab));
+  picker.querySelectorAll(".stk-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === stickerTab));
   grid.innerHTML = "";
   if (!list.length) {
     note.textContent = t(stickerTab === "mine" ? "stk_none_mine" : "stk_none_favs");
@@ -4583,10 +4598,10 @@ function renderStickers() {
 function sendSticker(s) {
   // Close either way — leaving the panel open on a no-op chat reads as a broken tap.
   if (myRoom) socket.emit("message", { type: "sticker", media: s.media, mediaName: s.name || "sticker" });
-  stickerPanel.classList.add("hidden");
+  picker.classList.add("hidden");
 }
 
-stickerPanel.querySelectorAll(".stk-tab").forEach((b) => {
+picker.querySelectorAll(".stk-tab").forEach((b) => {
   b.onclick = (e) => { e.stopPropagation(); stickerTab = b.dataset.tab; renderStickers(); };
 });
 $("stkAdd").onclick = (e) => { e.stopPropagation(); $("stickerFile").click(); };
@@ -4616,8 +4631,6 @@ async function toggleFavSticker(media, name) {
   else stickers.favs = stickers.favs.filter((s) => s.media !== media);
 }
 
-document.addEventListener("click", (e) => { if (!stickerPanel.contains(e.target) && e.target !== $("stickerBtn") && !e.target.closest("#composerMore")) stickerPanel.classList.add("hidden"); });
-
 // Mobile composer more dropdown
 const moreBtn = $("moreBtn");
 const moreDropdown = $("composerMore");
@@ -4629,7 +4642,6 @@ if (moreBtn && moreDropdown) {
       const action = item.dataset.action;
       if (action === "emoji") $("emojiBtn").click();
       else if (action === "gif") $("gifBtn").click();
-      else if (action === "sticker") toggleStickers();
       else if (action === "attach") $("fileInput").click();
     };
   });
@@ -7162,7 +7174,6 @@ document.addEventListener("keydown", (e) => {
   if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
   if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
   if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
-  if (!$("stickerPanel").classList.contains("hidden")) { $("stickerPanel").classList.add("hidden"); return; }
   if (!$("composerMore").classList.contains("hidden")) { $("composerMore").classList.add("hidden"); return; }
   if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
   if (msgMenu && !msgMenu.classList.contains("hidden")) { msgMenu.classList.add("hidden"); return; }
@@ -7186,7 +7197,7 @@ function setIcons() {
   const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", discoverBtn: "compass", chatSearchBtn: "search", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
   // Settings-tab icons (mobile list + desktop tabs): fill each .stab-ico from its data-ico.
   document.querySelectorAll(".stab-ico[data-ico]").forEach((el) => { const ic = window.ICON[el.dataset.ico]; if (ic) el.innerHTML = ic; });
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "t_emoji", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "emoji_stickers", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
   // ALSO pop its own tooltip (that's the "two overlapping" doubling). EXCEPT inside
@@ -7270,7 +7281,7 @@ window.dialogOnBack = function () {
     return true;
   }
   // 4. Popovers / menus / pickers.
-  for (const id of ["emojiPicker", "gifPanel", "stickerPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
+  for (const id of ["emojiPicker", "gifPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
     if (vis(id)) { $(id).classList.add("hidden"); return true; }
   }
   const rp = document.querySelector(".react-picker:not(.hidden)"); if (rp) { rp.classList.add("hidden"); return true; }
