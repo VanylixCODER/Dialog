@@ -8,97 +8,153 @@
   <meta name="theme-color" content="#00ff5a" />
   <link rel="icon" href="/src/lil_dialog.webp" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/site.css" />
+  <style>
+    .dl-head {
+      position: relative; overflow: hidden;
+      background-image: linear-gradient(#151b17 1px, transparent 1px),
+                        linear-gradient(90deg, #151b17 1px, transparent 1px);
+      background-size: 56px 56px;
+    }
+    .dl-head::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(110% 70% at 20% 0%, rgba(0, 255, 90, .09), transparent 60%);
+    }
+    .dl-head .wrap { position: relative; }
+    .dl-foot { margin-top: 40px; text-align: center; font: 400 11px/1.9 var(--mono); letter-spacing: .06em; color: var(--dim); }
+    .dl-foot code { font-size: 11px; }
+  </style>
 </head>
 <body>
-  <div class="bg-glow"></div>
-  <div class="bg-grid"></div>
 
   <nav class="nav">
     <div class="wrap">
-      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
-      <div class="nav-links">
-        <a href="/#features">Features</a>
-        <a href="/download">Download</a>
-        <a href="/bots">Bot API</a>
+      <a class="brand-row" href="/"><img src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" /></a>
+      <div class="nav-links" id="navLinks">
+        <a href="/#app" data-t="nFeat">Features</a>
+        <a href="/#security" data-t="nSec">Security</a>
+        <a href="/download" style="color:var(--green)" data-t="nDl">Download</a>
+        <a href="/bots" data-t="nBots">Bots</a>
         <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
-        <a class="nav-cta" href="/login">Open Dialog</a>
+      </div>
+      <div class="nav-right">
+        <span class="lang-pick" id="langPick"></span>
+        <a class="btn btn-accent" href="/login" data-t="nOpen">Open Dialog</a>
+        <button class="nav-burger" id="burger" aria-label="Menu">☰</button>
       </div>
     </div>
   </nav>
 
-  <header class="hero wrap" style="padding-bottom:30px;">
-    <h1 style="font-size:clamp(32px,5vw,52px);">Download <span class="grad">Dialog</span></h1>
-    <p class="sub" id="recoLine">Pick your platform below — or use Dialog right in your browser.</p>
-    <div class="hero-cta">
-      <a class="btn btn-ghost" href="/login">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>
-        Use in browser instead
-      </a>
+  <header class="page-head dl-head">
+    <div class="wrap">
+      <div class="kicker">01 — <span data-t="kicker">DOWNLOADS</span></div>
+      <h1 data-t="h1">Get Dialog</h1>
+      <p class="lede" id="recoLine" data-t="reco_none">Pick your platform below — or use Dialog right in
+        your browser, with nothing to install.</p>
+      <div class="btn-row">
+        <a class="btn btn-accent" href="/login" data-t="use_web">Use in browser instead</a>
+        <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog/releases" target="_blank" rel="noopener" data-t="all_rel">All releases</a>
+      </div>
     </div>
   </header>
 
-  <section class="wrap" style="padding-top:20px;">
+  <section class="wrap" style="padding-top:8px">
     <div class="dl-grid" id="dlGrid"></div>
-    <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:34px;">
-      All builds are version <span id="ver"></span>. Linux AppImage runs on any distro
-      (<code>chmod +x</code> then run). On Flathub soon.
+    <p class="dl-foot" data-t-html="foot_note">
+      ALL BUILDS ARE VERSION <span id="ver"></span> · LINUX APPIMAGE RUNS ON ANY DISTRO
+      (<code>chmod +x</code> THEN RUN)
     </p>
   </section>
 
   <footer class="footer">
     <div class="wrap">
-      <span>© <span id="yr"></span> Dialog · v<span id="ver2"></span></span>
-      <div style="display:flex; gap:18px;">
-        <a href="/">Home</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/login">Sign in</a>
+      <span>© <span id="yr"></span> Dialog · v<span id="ver2"></span> · AGPL-3.0</span>
+      <div class="links">
+        <a href="/" data-t="fl0">Home</a>
+        <a href="/bots" data-t="nBots">Bots</a>
+        <a href="/privacy" data-t="fl2">Privacy</a>
+        <a href="/guidelines" data-t="fl3">Guidelines</a>
+        <a href="/login" data-t="fl4">Sign in</a>
       </div>
     </div>
   </footer>
 
   <script src="/js/downloads-data.js"></script>
+  <script src="/js/site-i18n.js"></script>
   <script>
+    document.getElementById("burger").onclick = () =>
+      document.getElementById("navLinks").classList.toggle("open");
+
     (function () {
       var D = window.DialogDownloads;
-      document.getElementById("ver").textContent = D.VERSION;
-      document.getElementById("ver2").textContent = D.VERSION;
+      var os = D.detectOS();
+      var grid = document.getElementById("dlGrid");
+
       document.getElementById("yr").textContent = new Date().getFullYear();
+      document.getElementById("ver2").textContent = D.VERSION;
 
       var DLICON = '<svg class="dl-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>';
 
-      var os = D.detectOS();
-      var grid = document.getElementById("dlGrid");
       var order = Object.keys(D.PLATFORMS);
       // Put the detected platform first.
       if (D.PLATFORMS[os]) order = [os].concat(order.filter(function (k) { return k !== os; }));
 
-      if (os === "ios") {
-        document.getElementById("recoLine").innerHTML =
-          "There's no iOS app yet — <a style=\"color:var(--green)\" href=\"/login\">use Dialog in your browser</a>. Native builds below.";
-      } else if (D.PLATFORMS[os]) {
-        document.getElementById("recoLine").innerHTML =
-          "We detected <b style=\"color:var(--green)\">" + D.PLATFORMS[os].label + "</b> — recommended download is highlighted.";
+      // Rebuilt on every language switch: the platform labels come from
+      // downloads-data.js, so only the chrome around them is translated.
+      function render(dict) {
+        grid.innerHTML = "";
+        order.forEach(function (key) {
+          var p = D.PLATFORMS[key];
+          var recommended = key === os;
+          var items = p.installers.map(function (i) {
+            return '<a class="dl-item ' + (i.primary ? "primary" : "") + '" href="' + D.url(i.file) + '" download>' +
+                   '<span>' + i.kind + '</span>' + DLICON + '</a>';
+          }).join("");
+          var card = document.createElement("div");
+          card.className = "dl-card" + (recommended ? " recommended" : "");
+          card.innerHTML =
+            (recommended ? '<span class="reco-tag">' + dict.reco_tag + '</span>' : "") +
+            '<div class="os-ic"><img src="/src/os/' + p.icon + '.png" alt="' + p.label + '" /></div>' +
+            "<h3>" + p.label + "</h3>" +
+            '<div class="note-l">' + p.note + "</div>" +
+            '<div class="dl-list">' + items + "</div>";
+          grid.appendChild(card);
+        });
+
+        var reco = document.getElementById("recoLine");
+        if (os === "ios") reco.innerHTML = dict.reco_ios;
+        else if (D.PLATFORMS[os]) reco.innerHTML = dict.reco_os.replace("{p}", D.PLATFORMS[os].label);
+        else reco.innerHTML = dict.reco_none;
+
+        document.getElementById("ver").textContent = D.VERSION;
       }
 
-      order.forEach(function (key) {
-        var p = D.PLATFORMS[key];
-        var recommended = key === os;
-        var items = p.installers.map(function (i) {
-          return '<a class="dl-item ' + (i.primary ? "primary" : "") + '" href="' + D.url(i.file) + '" download>' +
-                 '<span>' + i.kind + '</span>' + DLICON + '</a>';
-        }).join("");
-        var card = document.createElement("div");
-        card.className = "dl-card" + (recommended ? " recommended" : "");
-        card.innerHTML =
-          (recommended ? '<span class="reco-tag">RECOMMENDED FOR YOU</span>' : "") +
-          '<div class="os-ic"><img src="/src/os/' + p.icon + '.png" alt="' + p.label + '" /></div>' +
-          "<h3>" + p.label + "</h3>" +
-          '<div class="note">' + p.note + "</div>" +
-          '<div class="dl-list">' + items + "</div>";
-        grid.appendChild(card);
-      });
+      DialogI18n.init({
+        en: {
+          nFeat: "Features", nSec: "Security", nDl: "Download", nBots: "Bots", nOpen: "Open Dialog",
+          kicker: "DOWNLOADS", h1: "Get Dialog",
+          use_web: "Use in browser instead", all_rel: "All releases",
+          reco_none: "Pick your platform below — or use Dialog right in your browser, with nothing to install.",
+          reco_os: 'We detected <b style="color:var(--green)">{p}</b> — the recommended download is highlighted.',
+          reco_ios: 'There\'s no iOS app yet — <a href="/login" style="color:var(--green)">use Dialog in your browser</a>. Native builds are below.',
+          reco_tag: "RECOMMENDED FOR YOU",
+          foot_note: 'ALL BUILDS ARE VERSION <span id="ver"></span> · LINUX APPIMAGE RUNS ON ANY DISTRO (<code>chmod +x</code> THEN RUN)',
+          fl0: "Home", fl2: "Privacy", fl3: "Guidelines", fl4: "Sign in"
+        },
+        ru: {
+          nFeat: "Возможности", nSec: "Безопасность", nDl: "Скачать", nBots: "Боты", nOpen: "Открыть Dialog",
+          kicker: "ЗАГРУЗКИ", h1: "Скачать Dialog",
+          use_web: "Открыть в браузере", all_rel: "Все релизы",
+          reco_none: "Выберите свою платформу ниже — или откройте Dialog прямо в браузере, без установки.",
+          reco_os: 'Мы определили <b style="color:var(--green)">{p}</b> — рекомендованная загрузка выделена.',
+          reco_ios: 'Приложения для iOS пока нет — <a href="/login" style="color:var(--green)">откройте Dialog в браузере</a>. Нативные сборки ниже.',
+          reco_tag: "РЕКОМЕНДУЕМ ВАМ",
+          foot_note: 'ВСЕ СБОРКИ ВЕРСИИ <span id="ver"></span> · LINUX APPIMAGE РАБОТАЕТ НА ЛЮБОМ ДИСТРИБУТИВЕ (<code>chmod +x</code>, ЗАТЕМ ЗАПУСК)',
+          fl0: "Главная", fl2: "Приватность", fl3: "Правила", fl4: "Войти"
+        }
+      }, function (lang, dict) { render(dict); });
     })();
   </script>
 </body>

@@ -8,46 +8,38 @@
   <meta name="theme-color" content="#00ff5a" />
   <link rel="icon" href="/src/lil_dialog.webp" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/site.css" />
-  <style>
-    .legal { width: min(820px, 92vw); margin: 0 auto; padding: 40px 0 80px; }
-    .legal h1 { color: #fff; font-size: clamp(30px, 5vw, 46px); margin-bottom: 8px; }
-    .legal .updated { color: var(--muted); font-size: 13px; margin-bottom: 30px; }
-    .legal h2 { color: var(--green); font-size: 20px; margin: 34px 0 10px; }
-    .legal p, .legal li { color: var(--text); font-size: 15px; line-height: 1.7; }
-    .legal ul { margin: 8px 0 8px 22px; }
-    .legal li { margin-bottom: 6px; }
-    .legal a { color: var(--green); border-bottom: 1px dashed var(--green-dim); }
-    .legal strong { color: #fff; }
-    .legal .note { border-left: 2px solid var(--green-dim); padding: 10px 16px; background: var(--card); border-radius: 6px; margin: 16px 0; font-size: 14px; }
-    .rule { border: 1px solid var(--green-dim); border-radius: 12px; padding: 16px 18px; margin: 14px 0; background: var(--card); }
-    .rule h3 { color: #fff; font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
-    .rule .rn { color: var(--green); font-weight: 700; }
-    .rule p { margin: 0; color: var(--muted); font-size: 14px; }
-  </style>
 </head>
 <body>
-  <div class="bg-glow"></div>
-  <div class="bg-grid"></div>
 
   <nav class="nav">
     <div class="wrap">
-      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
-      <div class="nav-links">
-        <a href="/#features">Features</a>
+      <a class="brand-row" href="/"><img src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" /></a>
+      <div class="nav-links" id="navLinks">
+        <a href="/#app">Features</a>
+        <a href="/#security">Security</a>
         <a href="/download">Download</a>
-        <a href="/bots">Bot API</a>
+        <a href="/bots">Bots</a>
         <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
-        <a class="nav-cta" href="/login">Open Dialog</a>
+      </div>
+      <div class="nav-right">
+        <a class="btn btn-accent" href="/login">Open Dialog</a>
+        <button class="nav-burger" id="burger" aria-label="Menu">☰</button>
       </div>
     </div>
   </nav>
 
-  <main class="legal">
-    <h1>Dialog Community Guidelines</h1>
-    <div class="updated">The rules that keep Dialog a place people actually want to be.</div>
+  <header class="page-head doc-head">
+    <div class="wrap">
+      <div class="kicker">DCG</div>
+      <h1>Community Guidelines</h1>
+      <div class="updated">THE RULES THAT KEEP DIALOG A PLACE PEOPLE WANT TO BE</div>
+    </div>
+  </header>
 
+  <main class="doc">
     <p>Dialog is for chatting, calling, and hanging out with people you choose. These
       guidelines (the <strong>DCG</strong>) apply everywhere on Dialog — direct messages,
       group chats, calls, avatars, names and descriptions. Breaking them can get your
@@ -61,47 +53,47 @@
     <h2>The rules</h2>
 
     <div class="rule">
-      <h3><span class="rn">1.</span> No harassment or bullying</h3>
+      <h3><span class="rn">01</span> No harassment or bullying</h3>
       <p>No targeted insults, intimidation, or repeated unwanted contact. Disagreeing is
         fine; making someone's life miserable is not.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">2.</span> No hate speech or discrimination</h3>
+      <h3><span class="rn">02</span> No hate speech or discrimination</h3>
       <p>No attacks or slurs based on race, ethnicity, national origin, religion, gender,
         gender identity, sexual orientation, age, or disability.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">3.</span> No threats or violence</h3>
+      <h3><span class="rn">03</span> No threats or violence</h3>
       <p>Don't threaten harm, promote violence, or wish harm on anyone. Credible threats
         may be reported to the authorities.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">4.</span> No NSFW or inappropriate content</h3>
+      <h3><span class="rn">04</span> No NSFW or inappropriate content</h3>
       <p>No sexual, graphic, or explicit content shared without consent or context, and
         never involving minors.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">5.</span> No spam or scams</h3>
+      <h3><span class="rn">05</span> No spam or scams</h3>
       <p>No unsolicited advertising, phishing, malware, crypto/investment scams, or mass
         unsolicited messaging.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">6.</span> No doxxing or sharing private info</h3>
+      <h3><span class="rn">06</span> No doxxing or sharing private info</h3>
       <p>Don't post anyone's private information (address, phone, documents, real name if
         undisclosed) without their explicit consent.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">7.</span> No illegal content or activity</h3>
+      <h3><span class="rn">07</span> No illegal content or activity</h3>
       <p>Don't use Dialog for anything that breaks the law, or to share content that is
         illegal to possess or distribute.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">8.</span> No impersonation</h3>
+      <h3><span class="rn">08</span> No impersonation</h3>
       <p>Don't pretend to be another person, a brand, or Dialog staff in a way meant to
         deceive.</p>
     </div>
     <div class="rule">
-      <h3><span class="rn">9.</span> No self-harm or dangerous behavior</h3>
+      <h3><span class="rn">09</span> No self-harm or dangerous behavior</h3>
       <p>Don't encourage self-harm, suicide, eating disorders, or other dangerous acts.
         If you or someone you know is struggling, please reach out to local emergency
         services or a crisis line.</p>
@@ -128,7 +120,29 @@
     <p>Ideas, bugs, or thoughts on these rules? Send your username and message to
       <a href="mailto:feedback@dialogmsg.xyz">feedback@dialogmsg.xyz</a>.</p>
 
-    <p style="margin-top:28px"><a href="/login">← Back to Dialog</a></p>
+    <div class="btn-row">
+      <a class="btn btn-accent" href="/privacy">Privacy policy</a>
+      <a class="btn btn-line" href="/login">Back to Dialog</a>
+    </div>
   </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>© <span id="yr"></span> Dialog · AGPL-3.0</span>
+      <div class="links">
+        <a href="/">Home</a>
+        <a href="/download">Downloads</a>
+        <a href="/bots">Bots</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/login">Sign in</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById("yr").textContent = new Date().getFullYear();
+    document.getElementById("burger").onclick = () =>
+      document.getElementById("navLinks").classList.toggle("open");
+  </script>
 </body>
 </html>

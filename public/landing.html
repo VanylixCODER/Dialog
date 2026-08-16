@@ -1,223 +1,664 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dialog — Chat · Group calls · Screen share</title>
-  <meta name="description" content="Dialog is a fast, secure messenger with group voice & video calls and screen sharing. Use it in your browser or download the desktop and mobile apps." />
-  <meta name="theme-color" content="#00ff5a" />
-  <link rel="icon" href="/src/lil_dialog.webp" />
-  <meta property="og:title" content="Dialog — secure messenger" />
-  <meta property="og:description" content="Chat, group calls and screen sharing. Browser, desktop and mobile." />
-  <meta property="og:image" content="/src/preview.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/site.css" />
-  <style>
-    .lang-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: 1px; margin-left: 6px; }
-    .lang-pick button { background: none; border: none; color: #6f8a7b; cursor: pointer; font: inherit; padding: 2px 3px; }
-    .lang-pick button.active { color: #2ec96b; font-weight: 700; }
-    .lang-pick button:hover { color: #57e08d; }
-    .lang-pick .sep { color: #3c5346; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dialog — talk freely, nobody in between</title>
+<meta name="description" content="Chat, peer-to-peer group calls and screen sharing for communities that would rather run the thing themselves. Browser, desktop and Android. Open source under AGPL." />
+<meta name="theme-color" content="#00ff5a" />
+<link rel="icon" href="/src/lil_dialog.webp" />
+<meta property="og:title" content="Dialog" />
+<meta property="og:description" content="Chat, peer-to-peer group calls and screen sharing. Browser, desktop and Android. Self-hostable, AGPL." />
+<meta property="og:image" content="/src/landing/shot-call.webp" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/site.css" />
+<style>
+  /* Grid children default to min-width:auto — without this a wide <pre> or the
+     comparison table pushes the whole page sideways instead of scrolling. */
+  .hero-grid > *, .gal > *, .feat > *, .two > *, .road > * { min-width: 0; }
+
+  /* ---- Hero ------------------------------------------------------------ */
+  .hero {
+    position: relative; padding: 90px 0 0; overflow: hidden;
+    background-image: linear-gradient(#151b17 1px, transparent 1px),
+                      linear-gradient(90deg, #151b17 1px, transparent 1px);
+    background-size: 56px 56px; background-position: center top;
+  }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 70% at 18% 0%, rgba(0, 255, 90, .10), transparent 60%);
+  }
+  .hero .wrap { position: relative; }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 32px; align-items: center; }
+  .hero h1 { margin: 22px 0 0; font: 600 clamp(38px, 5.4vw, 68px)/1.02 Inter, sans-serif; letter-spacing: -.035em; }
+  .hero h1 .lit {
+    color: var(--green); text-decoration: underline; text-underline-offset: 6px;
+    text-shadow: 0 0 32px rgba(0, 255, 90, .45);
+  }
+  .hero-sub { margin: 20px 0 0; max-width: 56ch; font-size: 17px; line-height: 1.6; color: var(--muted); }
+  .hero-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 30px; }
+  .hero-note { font: 400 11px/1.4 var(--mono); color: var(--dim); margin-left: 6px; }
+  .hero-boot { width: 300px; display: block; margin-left: auto; animation: dgDrift 7s ease-in-out infinite; }
+
+  .stats { display: flex; flex-wrap: wrap; gap: 34px; margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line-2); }
+  .stats b { display: block; font: 500 22px/1 Inter, sans-serif; }
+  .stats span { display: block; margin-top: 5px; font: 400 11px/1.4 var(--mono); letter-spacing: .06em; color: var(--dim); }
+
+  .live { display: flex; align-items: center; gap: 6px; margin-top: 26px; height: 24px; }
+  .live b { font: 400 10px/1 var(--mono); letter-spacing: .14em; color: var(--dim); margin-right: 6px; }
+  .live i { width: 3px; height: 100%; background: var(--green); border-radius: 2px; animation: dgWave 1.1s ease-in-out infinite; }
+  .live i:nth-of-type(2) { animation-delay: .15s } .live i:nth-of-type(3) { animation-delay: .3s }
+  .live i:nth-of-type(4) { animation-delay: .45s } .live i:nth-of-type(5) { animation-delay: .6s }
+
+  /* ---- The draggable window frame around the hero shot ----------------- */
+  .win {
+    position: relative; z-index: 1; margin: 26px 0 0; padding: 6px; overflow: hidden;
+    border-radius: 9px;
+    background: linear-gradient(180deg, rgba(70, 95, 120, 0), rgba(24, 36, 48, .30));
+    backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: 0 22px 54px rgba(0, 0, 0, .62), inset 0 1px 0 rgba(255, 255, 255, .30);
+    transition: box-shadow .3s ease;
+  }
+  .win-bar {
+    position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 7px 7px 8px 12px; border-radius: 7px 7px 0 0;
+    background: linear-gradient(rgba(86, 110, 132, .55), rgba(38, 54, 70, .5) 47%, rgba(22, 34, 46, .62) 53%, rgba(52, 72, 92, .55));
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -1px 0 rgba(0, 0, 0, .35);
+    cursor: grab; touch-action: none; user-select: none;
+  }
+  .win-title { font: 12px/1 "Segoe UI", Tahoma, sans-serif; color: #eaf3fb;
+    text-shadow: 0 0 8px rgba(0, 0, 0, .85), 0 1px 0 rgba(0, 0, 0, .6); }
+  .win-btns { display: flex; gap: 3px; }
+  .win-btns button {
+    width: 29px; height: 19px; display: grid; place-items: center; cursor: pointer;
+    font: 10px/1 "Segoe UI", Tahoma, sans-serif; border-radius: 3px; color: #cfe3f2;
+    background: linear-gradient(rgba(255, 255, 255, .3), rgba(255, 255, 255, .04) 47%, rgba(90, 130, 165, .22) 53%, rgba(180, 215, 240, .14));
+    border: 1px solid rgba(190, 225, 250, .45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
+  }
+  .win-btns button.win-x {
+    width: 45px; color: #d9ffe8; border-color: var(--green);
+    background: linear-gradient(rgba(255, 255, 255, .55), rgba(255, 255, 255, .06) 47%, rgba(0, 120, 45, .42) 53%, rgba(110, 240, 160, .3));
+    box-shadow: inset 0 0 12px rgba(0, 255, 90, .55), inset 0 1px 0 rgba(255, 255, 255, .6), 0 0 14px rgba(0, 255, 90, .45);
+    text-shadow: 0 0 8px var(--green);
+  }
+  .win img { width: 100%; display: block; mix-blend-mode: lighten; }
+  .win-grip {
+    position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; z-index: 3;
+    cursor: nwse-resize; touch-action: none;
+    background:
+      linear-gradient(135deg, transparent 46%, rgba(255,255,255,.42) 47% 52%, transparent 53%),
+      linear-gradient(135deg, transparent 62%, rgba(255,255,255,.32) 63% 68%, transparent 69%),
+      linear-gradient(135deg, transparent 78%, rgba(255,255,255,.22) 79% 84%, transparent 85%);
+  }
+  .lightbox {
+    position: fixed; inset: 0; z-index: 999; display: grid; place-items: center; padding: 40px;
+    background: rgba(4, 10, 7, .88); backdrop-filter: blur(10px); cursor: zoom-out;
+    animation: dgFade .18s ease;
+  }
+  .lightbox img { max-width: 100%; max-height: 100%; display: block; border-radius: var(--r); box-shadow: 0 40px 120px rgba(0, 0, 0, .7); }
+  .lightbox span { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center;
+    font: 400 11px/1.4 var(--mono); letter-spacing: .14em; color: rgba(233, 237, 234, .6); }
+
+  /* ---- 02 · The app ---------------------------------------------------- */
+  .gal-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; flex-wrap: wrap; }
+  .gal-head p { margin: 0; max-width: 38ch; font-size: 14px; color: var(--muted); }
+  .gal { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; align-items: start; }
+  figure { margin: 0; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+  figure > .fr { background: #000; }
+  figure img { width: 100%; display: block; mix-blend-mode: lighten; }
+  figcaption { padding: 10px 14px; background: var(--page); border-top: 1px solid var(--line-2);
+    font: 400 11px/1.4 var(--mono); letter-spacing: .04em; color: var(--dim); }
+
+  /* ---- 03 · Security band ---------------------------------------------- */
+  .band { margin-top: 88px; padding: 64px 0; background: var(--band);
+    border-top: 1px solid var(--band-line); border-bottom: 1px solid var(--band-line); }
+  .band .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; }
+  .band .kicker { color: var(--green-2); }
+  .band h2 { color: var(--band-text); }
+  .band > .wrap > div > p { margin: 16px 0 0; max-width: 44ch; font-size: 15px; color: var(--band-muted); }
+  .band-rows { display: grid; gap: 1px; background: var(--band-line);
+    border: 1px solid var(--band-line); border-radius: var(--r); overflow: hidden; }
+  .band-rows > div { background: var(--band-card); padding: 18px 20px; }
+  .band-rows b { display: block; font: 500 15px/1.25 Inter, sans-serif; color: var(--band-text); }
+  .band-rows span { display: block; margin-top: 6px; font-size: 13px; color: var(--band-muted); }
+
+  /* ---- What it does ---------------------------------------------------- */
+  .feat { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 8fr); gap: 64px; }
+  .feat > div:first-child h2 { margin: 0; font: 500 15px/1.3 Inter, sans-serif; letter-spacing: .02em; }
+  .feat > div:first-child p { margin: 8px 0 0; font-size: 13px; color: var(--dim); }
+  .feat-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 56px; }
+  .feat-list div { padding: 22px 0; border-top: 1px solid var(--line-2); }
+  .feat-list h3 { margin: 0 0 6px; font: 500 19px/1.2 Inter, sans-serif; }
+  .feat-list p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* ---- 04 · Comparison ------------------------------------------------- */
+  .cmp-wrap { overflow-x: auto; }
+  .cmp { width: 100%; min-width: 620px; margin-top: 32px; border-collapse: collapse; font-size: 14px; }
+  .cmp th, .cmp td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line-2); }
+  .cmp thead th { padding: 12px 14px; border-bottom: 1px solid #2b332e;
+    font: 400 11px/1.5 var(--mono); letter-spacing: .12em; color: var(--dim); }
+  .cmp thead th.us { border-bottom-color: var(--green); font-weight: 500; font-size: 12px; color: var(--green); }
+  .cmp td { color: var(--text-2); }
+  .cmp td.us { color: var(--green); }
+  .cmp td.them { color: var(--dim-2); }
+  .cmp tbody tr:last-child td { border-bottom: 0; }
+
+  /* ---- Build / host ---------------------------------------------------- */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; }
+  .two h2 { margin: 0 0 8px; font: 500 25px/1.15 Inter, sans-serif; letter-spacing: -.015em; }
+  .two p { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+  .two pre { margin: 0; }
+  .two pre b { color: var(--green-2); font-weight: 400; }
+  .two .btn { margin-top: 18px; }
+
+  /* ---- 07 · Roadmap ---------------------------------------------------- */
+  .road { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 36px; }
+  .road > div { padding-top: 18px; border-top: 1px solid var(--line); }
+  .road > div:first-child { border-top-color: var(--green); }
+  .road > div:nth-child(2) { border-top-color: var(--line-3); }
+  .road h3 { margin: 0; font: 400 11px/1 var(--mono); letter-spacing: .14em; color: var(--dim); }
+  .road > div:first-child h3 { color: var(--green); }
+  .road > div:nth-child(2) h3 { color: var(--text-2); }
+  .road ul { margin: 14px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.9; color: var(--muted); }
+  .road > div:last-child ul { color: var(--dim-2); }
+
+  /* ---- 08 · FAQ -------------------------------------------------------- */
+  .faq-sec { width: min(820px, calc(100% - 80px)); margin: 0 auto; padding-top: 88px; }
+  .faq-sec h2 { margin: 14px 0 28px; }
+  .faq { display: grid; gap: 1px; background: var(--line-2);
+    border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+  .faq > div { background: var(--page); padding: 20px 0; }
+  .faq b { display: block; font: 500 16px/1.3 Inter, sans-serif; }
+  .faq p { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+
+  /* ---- Closing --------------------------------------------------------- */
+  .close { margin-top: 96px; padding: 80px 0; border-top: 1px solid var(--line-2); }
+  .close .wrap { display: flex; align-items: flex-end; justify-content: space-between; gap: 48px; flex-wrap: wrap; }
+  .close h2 { margin: 0; font: 500 clamp(34px, 5vw, 56px)/1.02 Inter, sans-serif; letter-spacing: -.035em; }
+  .close h2 span { color: var(--green); }
+  .close div { display: flex; gap: 12px; flex-wrap: wrap; }
+  .footer { margin-top: 0; }
+
+  @media (max-width: 900px) {
+    .hero { padding-top: 56px; }
+    .hero-grid, .gal, .feat, .band .wrap, .two, .road { grid-template-columns: 1fr; gap: 28px; }
+    .hero-boot { width: 190px; margin: 0 auto; }
+    .feat-list { grid-template-columns: 1fr; }
+    .band { margin-top: 64px; }
+    .faq-sec { width: calc(100% - 40px); padding-top: 64px; }
+    .win-grip { display: none; }        /* pointless without a mouse */
+  }
+</style>
 </head>
 <body>
-  <div class="bg-glow"></div>
-  <div class="bg-grid"></div>
 
-  <nav class="nav">
-    <div class="wrap">
-      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
-      <div class="nav-links">
-        <a href="#features" data-t="nav_features">Features</a>
-        <a href="/download" data-t="nav_download">Download</a>
-        <a href="/bots">Bot API</a>
-        <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
-        <a class="nav-cta" id="navOpen" href="/login" data-t="nav_open">Open Dialog</a>
-        <span class="lang-pick" id="langPick"><button data-lang="en">en</button><span class="sep">/</span><button data-lang="ru">ru</button></span>
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand-row" href="/"><img src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" /></a>
+    <div class="nav-links" id="navLinks">
+      <a href="#app" data-t="nFeat">Features</a>
+      <a href="#security" data-t="nSec">Security</a>
+      <a href="/bots" data-t="nBots">Bots</a>
+      <a href="#host" data-t="nSelf">Self-host</a>
+      <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="nav-right">
+      <span class="lang-pick" id="langPick"></span>
+      <a class="btn btn-accent" href="/login" data-t="nOpen">Open Dialog</a>
+      <button class="nav-burger" id="burger" aria-label="Menu">☰</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="chip" data-t="hBadge">FREE · OPEN SOURCE · NO PHONE NUMBER</span>
+        <h1><span data-t="hL1">Talk freely.</span><br /><span data-t="hL2">Nobody in</span><br /><span class="lit" data-t="hL3">between.</span></h1>
+        <p class="hero-sub" data-t="hSub">Chat, peer-to-peer group calls and screen share, built for communities
+          that would rather run the thing themselves. Call media goes straight between participants — there is no
+          server in the middle of it.</p>
+        <div class="hero-cta">
+          <a class="btn btn-accent" href="/download" data-t="bDl">Download Dialog</a>
+          <a class="btn btn-line" href="/login" data-t="bBr">Use in browser</a>
+          <span class="hero-note" data-t="bNote">no install · no phone number</span>
+        </div>
+      </div>
+      <img class="hero-boot" src="/src/landing/boot.webp" alt="" width="300" height="300" />
+    </div>
+
+    <div class="stats">
+      <div><b>P2P</b><span data-t="st1">CALL MEDIA — NO SERVER IN THE PATH</span></div>
+      <div><b>0</b><span data-t="st3">PHONE NUMBERS OR TRACKERS REQUIRED</span></div>
+      <div><b>AGPL</b><span data-t="st4">SOURCE PUBLISHED ON GITHUB</span></div>
+    </div>
+
+    <div class="live" aria-hidden="true">
+      <b data-t="lLive">LIVE CALLS</b><i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <figure class="win" id="win">
+      <div class="win-grip" data-grip></div>
+      <div class="win-bar" data-drag>
+        <span class="win-title">DialogCalls.png</span>
+        <span class="win-btns">
+          <button type="button" data-win="min" aria-label="Minimise">—</button>
+          <button type="button" data-win="max" aria-label="Enlarge">❐</button>
+          <button type="button" class="win-x" data-win="close" aria-label="Close">✕</button>
+        </span>
+      </div>
+      <img src="/src/landing/shot-call.webp" alt="A Dialog call running beside the conversation" />
+    </figure>
+  </div>
+</header>
+
+<!-- ── 02 · The app ─────────────────────────────────────────────────────── -->
+<section class="section" id="app">
+  <div class="wrap">
+    <div class="gal-head">
+      <div>
+        <div class="kicker">02 — <span data-t="kApp">THE APP</span></div>
+        <h2 class="sec-h" data-t="tTitle">See it running</h2>
+      </div>
+      <p data-t="tSub">Real screens from the desktop build — dense sidebar, glow-lined bubbles, the call docked
+        beside the conversation instead of on top of it.</p>
+    </div>
+    <div class="gal">
+      <figure>
+        <div class="fr"><img src="/src/landing/shot-screenshare.webp" alt="Screen share inside a group call" /></div>
+        <figcaption>01 — <span data-t="tCapBig">SCREEN SHARE IN A CALL</span></figcaption>
+      </figure>
+      <figure>
+        <div class="fr"><img src="/src/landing/shot-group.webp" alt="Group chat with the member list open" /></div>
+        <figcaption>02 — <span data-t="tCap2">GROUP CHAT + MEMBERS</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ── 03 · Security ────────────────────────────────────────────────────── -->
+<section class="band" id="security">
+  <div class="wrap">
+    <div>
+      <div class="kicker">03 — <span data-t="kSec">SECURITY</span></div>
+      <h2 class="sec-h" data-t="sTitle">Nobody in the middle of a call, and no fiction about the rest.</h2>
+      <p data-t="sSub">Call media never touches a server. Sessions can be told to expire and wipe the device.
+        What isn't encrypted yet is written down plainly rather than glossed over — the code is public, so
+        verify it instead of believing us.</p>
+      <a class="btn btn-accent" href="/privacy" style="margin-top:24px" data-t="sCta">Read the privacy notes</a>
+    </div>
+    <div class="band-rows">
+      <div><b data-t="sc1">Calls are peer-to-peer</b><span data-t="sc1b">Audio, video and screen share flow directly between participants over WebRTC. No media server sits in the middle, so no third party receives the stream.</span></div>
+      <div><b data-t="sc2">Messages are not E2E encrypted — yet</b><span data-t="sc2b">They travel over TLS and are stored on the server you or we run. End-to-end encrypted DMs are on the roadmap below, and this line changes when they ship.</span></div>
+      <div><b data-t="sc3">Self-destructing sessions</b><span data-t="sc3b">Set a device timer: when it runs out the account signs out and clears its local cache — storage, service worker and all.</span></div>
+      <div><b data-t="sc4">No phone number, no ad graph</b><span data-t="sc4b">A username is the whole identity. No contact upload, no tracking, no analytics SDKs.</span></div>
+      <div><b data-t="sc6">Auditable and self-hostable</b><span data-t="sc6b">Read the source, build it yourself, or run the whole stack on your own box under AGPL.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── What it does ─────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="wrap feat">
+    <div>
+      <h2 data-t="fTitle">Built for rooms, not for feeds</h2>
+      <p data-t="fSub">Six things, done properly.</p>
+    </div>
+    <div class="feat-list">
+      <div><h3 data-t="f1t">Instant messaging</h3><p data-t="f1b">Reactions, edits, replies, voice notes, GIFs and files in DMs or groups.</p></div>
+      <div><h3 data-t="f2t">Group voice &amp; video</h3><p data-t="f2b">Jump into the room in one tap. No lobby, no seat count, no waiting.</p></div>
+      <div><h3 data-t="f3t">Screen share</h3><p data-t="f3b">Whole-screen sharing for presenting, pairing and playing together.</p></div>
+      <div><h3 data-t="f4t">Native apps</h3><p data-t="f4b">Windows, macOS, Linux and Android — tray, badges, auto-updates.</p></div>
+      <div><h3 data-t="f5t">Bot API</h3><p data-t="f5b">One token, plain HTTP, webhooks. Ship a bot this afternoon.</p></div>
+      <div><h3 data-t="f6t">Self-hostable</h3><p data-t="f6b">One compose file: app, database, cache. Your box, your rules.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 04 · How it compares ─────────────────────────────────────────────── -->
+<section class="section">
+  <div class="wrap">
+    <div class="kicker">04 — <span data-t="kCmp">HOW IT COMPARES</span></div>
+    <h2 class="sec-h" data-t="cmpTitle">Pick your trade-offs deliberately</h2>
+    <p class="sec-p" data-t="cmpSub">Most messengers give you two of the three: privacy, group calls, or control
+      over the server. Dialog is built to give all three.</p>
+    <div class="cmp-wrap">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th data-t="thCap">CAPABILITY</th>
+            <th class="us">DIALOG</th>
+            <th data-t="thMain">MAINSTREAM MESSENGER</th>
+            <th data-t="thComm">COMMUNITY CHAT PLATFORM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td data-t="r1">Group calls with no server in the middle</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
+          <tr><td data-t="r2">Screen share in a call</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vLtd">Limited</td><td class="them" data-t="vYes">Yes</td></tr>
+          <tr><td data-t="r3">Sign up without a phone number</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vSome">Sometimes</td></tr>
+          <tr><td data-t="r4">Run your own server</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
+          <tr><td data-t="r5">Full source published</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vClient">Client only</td><td class="them" data-t="vNo">No</td></tr>
+          <tr><td data-t="r6">Bot API without a review queue</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vYes">Yes</td><td class="them" data-t="vAppr">With approval</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── Build on it / Host it yourself ───────────────────────────────────── -->
+<section class="section" id="host">
+  <div class="wrap two">
+    <div>
+      <h2 data-t="bldTitle">Build on it</h2>
+      <p data-t="bldSub">A token and an HTTP call is the whole onboarding.</p>
+<pre><b>POST</b> /bot&lt;token&gt;/sendMessage
+Content-Type: application/json
+
+{"chat_id":"@grp:12","text":"deploy ok"}</pre>
+      <a class="btn btn-line" href="/bots" data-t="bldCta">Read the Bot API</a>
+    </div>
+    <div>
+      <h2 data-t="hstTitle">Host it yourself</h2>
+      <p data-t="hstSub">App, database and cache in one compose file.</p>
+<pre><b>git clone</b> github.com/VanylixCODER/Dialog
+cp .env.example .env
+<b>docker compose up -d</b></pre>
+      <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener" data-t="hstCta">View the source</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── 07 · Roadmap ─────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="wrap">
+    <div class="kicker">07 — <span data-t="kRoad">ROADMAP</span></div>
+    <h2 class="sec-h" data-t="roadTitle">What's landed, what's next</h2>
+    <div class="road">
+      <div>
+        <h3 data-t="roadShipped">SHIPPED</h3>
+        <ul data-t-html="roadS"><li>Peer-to-peer voice, video and screen share</li><li>Desktop builds with auto-update</li><li>Android client</li><li>Bot API v1</li><li>Two-factor auth, session self-destruct</li></ul>
+      </div>
+      <div>
+        <h3 data-t="roadNext">IN PROGRESS</h3>
+        <ul data-t-html="roadN"><li>Encryption at rest for stored messages</li><li>Metadata reduction</li><li>iOS build</li></ul>
+      </div>
+      <div>
+        <h3 data-t="roadLater">LATER</h3>
+        <ul data-t-html="roadL"><li>End-to-end encrypted direct messages</li><li>Federation between self-hosted servers</li><li>Third-party security audit</li></ul>
       </div>
     </div>
-  </nav>
+  </div>
+</section>
 
-  <header class="hero wrap">
-    <span class="badge" data-t="badge">▲ CHAT · CALLS · SCREEN SHARE</span>
-    <h1><span data-t="h1a">Talk freely.</span><br /><span class="grad" data-t="h1b">Encrypted. Everywhere.</span></h1>
-    <p class="sub" data-t="sub">Dialog is a fast, no-nonsense messenger with group voice &amp; video calls and screen sharing — in your browser, on your desktop, and on your phone.</p>
-    <div class="hero-cta">
-      <a class="btn btn-primary" id="dlBtn" href="/download">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-        <span id="dlBtnLabel" data-t="dl_download">Download</span>
-      </a>
-      <a class="btn btn-ghost" id="browserBtn" href="/login" data-t="browser_btn">
-        Use in browser
-      </a>
-    </div>
-    <p class="hero-os" id="heroOs"></p>
+<!-- ── 08 · FAQ ─────────────────────────────────────────────────────────── -->
+<section class="faq-sec">
+  <div class="kicker">08 — <span data-t="kFaq">FAQ</span></div>
+  <h2 class="sec-h" data-t="fqTitle">Reasonable questions</h2>
+  <div class="faq">
+    <div><b data-t="q1">Is it end-to-end encrypted?</b><p data-t="a1">Call media is: audio, video and screen share go straight between participants and never reach a server. Messages are not — they travel over TLS and are stored on the instance you or we run. End-to-end encrypted DMs are on the roadmap, and we would rather say so than imply otherwise.</p></div>
+    <div><b data-t="q2">What does the server know about me?</b><p data-t="a2">A username, a hashed password, your messages, and the routing metadata needed to deliver them. No phone number, no address book, no analytics. Self-host and that server is yours.</p></div>
+    <div><b data-t="q3">How big can a call get?</b><p data-t="a3">Calls are a peer-to-peer mesh — every participant sends to every other one. Small groups are comfortable; very large rooms are not what it is built for.</p></div>
+    <div><b data-t="q4">Is it free?</b><p data-t="a4">Yes, and open source under AGPL. No paid tier gating calls or screen share. If you would rather not use the hosted instance, run your own — same code, same clients.</p></div>
+  </div>
+</section>
 
-    <div class="hero-shot reveal">
-      <img src="/src/preview.png" alt="Dialog app" onerror="this.closest('.hero-shot').style.display='none'" />
+<!-- ── Closing ──────────────────────────────────────────────────────────── -->
+<section class="close">
+  <div class="wrap">
+    <h2><span data-t="cTitle">Get Dialog</span><span>.</span></h2>
+    <div>
+      <a class="btn btn-accent" href="/download" data-t="cDl">Download the app</a>
+      <a class="btn btn-line" href="/login" data-t="cBr">Open in browser</a>
     </div>
-  </header>
+  </div>
+</section>
 
-  <section id="features" class="wrap">
-    <div class="section-head reveal">
-      <h2 data-t="feat_h2">Everything you need to stay in touch</h2>
-      <p data-t="feat_p">Built for speed and privacy, with the features you actually use.</p>
+<footer class="footer">
+  <div class="wrap">
+    <span>© <span id="yr"></span> Dialog · AGPL-3.0</span>
+    <div class="links">
+      <a href="/download" data-t="fl1">Downloads</a>
+      <a href="/bots" data-t="nBots">Bots</a>
+      <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
+      <a href="/privacy" data-t="fl2">Privacy</a>
+      <a href="/guidelines" data-t="fl3">Guidelines</a>
     </div>
-    <div class="features">
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <h3 data-t="f1h">Instant messaging</h3>
-        <p data-t="f1p">Direct messages and group chats with reactions, edits, replies, voice notes, GIFs and file sharing.</p>
-      </div>
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-        <h3 data-t="f2h">Group voice &amp; video</h3>
-        <p data-t="f2p">Crystal-clear group calls powered by a low-latency media server — jump in with one tap.</p>
-      </div>
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
-        <h3 data-t="f3h">Screen sharing</h3>
-        <p data-t="f3p">Share your whole screen in a call to present, pair, or game together — no extra software.</p>
-      </div>
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4"/></svg></div>
-        <h3 data-t="f4h">Native desktop apps</h3>
-        <p data-t="f4p">Real apps for Windows, macOS and Linux with a system tray, auto-updates and a slick boot screen.</p>
-      </div>
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
-        <h3 data-t="f5h">Notifications &amp; tray</h3>
-        <p data-t="f5p">Native OS notifications and unread badges keep you in the loop, even when Dialog is in the background.</p>
-      </div>
-      <div class="feature reveal">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
-        <h3 data-t="f6h">Works everywhere</h3>
-        <p data-t="f6p">Browser, desktop and Android — your chats, calls and contacts stay in sync across all of them.</p>
-      </div>
-    </div>
-  </section>
+  </div>
+</footer>
 
-  <section class="wrap">
-    <div class="section-head reveal">
-      <h2 data-t="get_h2">Get Dialog</h2>
-      <p data-t="get_p">Download the app for your platform, or just open it in your browser — no install required.</p>
-    </div>
-    <div class="hero-cta reveal">
-      <a class="btn btn-primary" id="dlBtn2" href="/download" data-t="get_dl">Download the app</a>
-      <a class="btn btn-ghost" href="/login" data-t="get_browser">Open in browser</a>
-    </div>
-  </section>
+<script src="/js/site-i18n.js"></script>
+<script>
+  document.getElementById("yr").textContent = new Date().getFullYear();
+  document.getElementById("burger").onclick = () =>
+    document.getElementById("navLinks").classList.toggle("open");
 
-  <footer class="footer">
-    <div class="wrap">
-      <span>© <span id="yr"></span> Dialog · v<span id="ver"></span></span>
-      <div style="display:flex; gap:18px;">
-        <a href="/download" data-t="foot_downloads">Downloads</a>
-        <a href="/bots">Bot API</a>
-        <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
-        <a href="/privacy" data-t="foot_privacy">Privacy</a>
-        <a href="/login" data-t="foot_signin">Sign in</a>
-      </div>
-    </div>
-  </footer>
+  /* ---- The hero window: drag it, resize it, blow it up, throw it away ----
+     Ported from the design handoff's own logic so the shot behaves the way it
+     did in the mock. Everything degrades to a plain figure without JS. */
+  (function () {
+    var win = document.getElementById("win");
+    if (!win) return;
+    var bar = win.querySelector("[data-drag]");
+    var grip = win.querySelector("[data-grip]");
+    var drag = null, resize = null;
 
-  <script src="/js/downloads-data.js"></script>
-  <script>
-    (function () {
-      // Self-contained EN/RU dictionary for the marketing page.
-      var L = {
-        en: {
-          nav_features: "Features", nav_download: "Download", nav_open: "Open Dialog",
-          badge: "▲ CHAT · CALLS · SCREEN SHARE", h1a: "Talk freely.", h1b: "Encrypted. Everywhere.",
-          sub: "Dialog is a fast, no-nonsense messenger with group voice & video calls and screen sharing — in your browser, on your desktop, and on your phone.",
-          browser_btn: "Use in browser", dl_download: "Download",
-          feat_h2: "Everything you need to stay in touch", feat_p: "Built for speed and privacy, with the features you actually use.",
-          f1h: "Instant messaging", f1p: "Direct messages and group chats with reactions, edits, replies, voice notes, GIFs and file sharing.",
-          f2h: "Group voice & video", f2p: "Crystal-clear group calls powered by a low-latency media server — jump in with one tap.",
-          f3h: "Screen sharing", f3p: "Share your whole screen in a call to present, pair, or game together — no extra software.",
-          f4h: "Native desktop apps", f4p: "Real apps for Windows, macOS and Linux with a system tray, auto-updates and a slick boot screen.",
-          f5h: "Notifications & tray", f5p: "Native OS notifications and unread badges keep you in the loop, even when Dialog is in the background.",
-          f6h: "Works everywhere", f6p: "Browser, desktop and Android — your chats, calls and contacts stay in sync across all of them.",
-          get_h2: "Get Dialog", get_p: "Download the app for your platform, or just open it in your browser — no install required.",
-          get_dl: "Download the app", get_browser: "Open in browser",
-          foot_downloads: "Downloads", foot_privacy: "Privacy", foot_signin: "Sign in",
-          dl_for: "Download for", open_browser: "Open in browser",
-          os_all: "All platforms · <a href=\"/download\">see all downloads</a>",
-          os_for: "For {p} · <a href=\"/download\">other platforms &amp; installers</a>",
-          ios_soon: "iOS app coming soon · <a href=\"/download\">other platforms</a>",
-          open_dialog_arrow: "Open Dialog ›"
-        },
-        ru: {
-          nav_features: "Возможности", nav_download: "Скачать", nav_open: "Открыть Dialog",
-          badge: "▲ ЧАТ · ЗВОНКИ · ДЕМОНСТРАЦИЯ", h1a: "Общайтесь свободно.", h1b: "Шифрованно. Везде.",
-          sub: "Dialog — быстрый мессенджер с групповыми аудио- и видеозвонками и демонстрацией экрана — в браузере, на компьютере и телефоне.",
-          browser_btn: "Открыть в браузере", dl_download: "Скачать",
-          feat_h2: "Всё, что нужно для общения", feat_p: "Скорость и приватность — и функции, которыми реально пользуются.",
-          f1h: "Мгновенные сообщения", f1p: "Личные и групповые чаты с реакциями, редактированием, ответами, голосовыми, GIF и файлами.",
-          f2h: "Групповые аудио и видео", f2p: "Кристально чистые групповые звонки на медиасервере с низкой задержкой — вход в один тап.",
-          f3h: "Демонстрация экрана", f3p: "Делитесь экраном в звонке — презентации, совместная работа, игры. Без лишних программ.",
-          f4h: "Нативные приложения", f4p: "Настоящие приложения для Windows, macOS и Linux с треем, автообновлением и стильной загрузкой.",
-          f5h: "Уведомления и трей", f5p: "Системные уведомления и счётчики непрочитанного держат в курсе, даже когда Dialog свёрнут.",
-          f6h: "Работает везде", f6p: "Браузер, десктоп и Android — чаты, звонки и контакты синхронизированы.",
-          get_h2: "Установите Dialog", get_p: "Скачайте приложение для своей платформы или откройте в браузере — без установки.",
-          get_dl: "Скачать приложение", get_browser: "Открыть в браузере",
-          foot_downloads: "Загрузки", foot_privacy: "Приватность", foot_signin: "Войти",
-          dl_for: "Скачать для", open_browser: "Открыть в браузере",
-          os_all: "Все платформы · <a href=\"/download\">все загрузки</a>",
-          os_for: "Для {p} · <a href=\"/download\">другие платформы и установщики</a>",
-          ios_soon: "Приложение для iOS скоро · <a href=\"/download\">другие платформы</a>",
-          open_dialog_arrow: "Открыть Dialog ›"
-        }
-      };
-      var D = window.DialogDownloads;
-      var lang = (function () { try { var s = localStorage.getItem("dialog_lang"); if (s === "en" || s === "ru") return s; } catch (e) {} return (navigator.language || "en").slice(0, 2) === "ru" ? "ru" : "en"; })();
-
-      function os_line(dict) {
-        var os = D.detectOS();
-        if (os === "ios") return dict.ios_soon;
-        if (D.PLATFORMS[os]) return dict.os_for.replace("{p}", D.PLATFORMS[os].label);
-        return dict.os_all;
+    win.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("[data-win]")) return;
+      if (e.target.closest("[data-grip]")) {
+        var r = win.getBoundingClientRect();
+        resize = { x: e.clientX, w: r.width };
+        win.style.width = r.width + "px";
+        grip.setPointerCapture && grip.setPointerCapture(e.pointerId);
+        e.preventDefault();
+        return;
       }
-      function dlLabel(dict) {
-        var os = D.detectOS();
-        if (os === "ios") return dict.open_browser;
-        if (D.PLATFORMS[os]) return dict.dl_for + " " + D.PLATFORMS[os].label;
-        return dict.dl_download;
+      if (!e.target.closest("[data-drag]")) return;
+      var cur = (win.dataset.pos || "0,0").split(",").map(Number);
+      drag = { x: e.clientX, y: e.clientY, ox: cur[0], oy: cur[1] };
+      win.style.transition = "none";
+      win.style.boxShadow = "0 26px 70px rgba(0,0,0,.6)";
+      bar.style.cursor = "grabbing";
+      bar.setPointerCapture && bar.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    window.addEventListener("pointermove", function (e) {
+      if (resize) {
+        win.style.width = Math.max(280, resize.w + (e.clientX - resize.x)) + "px";
+        win.style.maxWidth = "none";
+        return;
       }
-      function apply(l) {
-        lang = l; var dict = L[l] || L.en;
-        document.documentElement.lang = l;
-        document.querySelectorAll("[data-t]").forEach(function (el) { var k = el.getAttribute("data-t"); if (dict[k] != null) el.textContent = dict[k]; });
-        document.getElementById("heroOs").innerHTML = os_line(dict);
-        document.getElementById("dlBtnLabel").textContent = dlLabel(dict);
-        try { if (localStorage.getItem("dialog_token")) document.getElementById("navOpen").textContent = dict.open_dialog_arrow; } catch (e) {}
-        document.querySelectorAll("#langPick button").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-lang") === l); });
-        try { localStorage.setItem("dialog_lang", l); } catch (e) {}
+      if (!drag) return;
+      var nx = drag.ox + (e.clientX - drag.x), ny = drag.oy + (e.clientY - drag.y);
+      win.dataset.pos = nx + "," + ny;
+      win.style.transform = "translate(" + nx + "px," + ny + "px)";
+    });
+
+    window.addEventListener("pointerup", function () {
+      resize = null;
+      if (!drag) return;
+      bar.style.cursor = "grab";
+      win.style.transition = "box-shadow .3s ease";
+      win.style.boxShadow = "";
+      drag = null;
+    });
+
+    win.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-win]");
+      if (!btn) return;
+      e.preventDefault();
+
+      if (btn.dataset.win === "max") {
+        var img = win.querySelector("img");
+        var ov = document.createElement("div");
+        ov.className = "lightbox";
+        ov.innerHTML = '<img alt=""><span>click anywhere or press Esc to close</span>';
+        ov.querySelector("img").src = img.src;
+        ov.querySelector("img").alt = img.alt;
+        var close = function () { ov.remove(); document.removeEventListener("keydown", esc); };
+        var esc = function (ev) { if (ev.key === "Escape") close(); };
+        ov.addEventListener("click", close);
+        document.addEventListener("keydown", esc);
+        document.body.appendChild(ov);
+        return;
       }
-      document.querySelectorAll("#langPick button").forEach(function (b) { b.onclick = function () { apply(b.getAttribute("data-lang")); }; });
 
-      document.getElementById("ver").textContent = D.VERSION;
-      document.getElementById("yr").textContent = new Date().getFullYear();
+      win.style.transition = "opacity .18s ease, transform .18s ease";
+      win.style.transformOrigin = "center bottom";
+      win.style.opacity = "0";
+      win.style.transform = (win.style.transform || "") + " scale(.94)";
+      setTimeout(function () { win.remove(); }, 190);
+    });
+  })();
 
-      // OS-aware primary download button target (label handled by apply()).
-      var os = D.detectOS();
-      var btn = document.getElementById("dlBtn");
-      if (os === "ios") { btn.setAttribute("href", "/login"); }
-      else if (D.PLATFORMS[os]) {
-        var p = D.PLATFORMS[os];
-        var primary = p.installers.find(function (i) { return i.primary; }) || p.installers[0];
-        btn.setAttribute("href", D.url(primary.file)); btn.setAttribute("download", "");
-      }
+  /* ---- Copy — the design handoff's dictionary, corrected where it claimed
+     things Dialog does not actually do (E2E messages, a media relay). ---- */
+  DialogI18n.init({
+    en: {
+      nFeat: "Features", nSec: "Security", nBots: "Bots", nSelf: "Self-host", nOpen: "Open Dialog",
 
-      apply(lang);
+      hBadge: "FREE · OPEN SOURCE · NO PHONE NUMBER",
+      hL1: "Talk freely.", hL2: "Nobody in", hL3: "between.",
+      hSub: "Chat, peer-to-peer group calls and screen share, built for communities that would rather run the thing themselves. Call media goes straight between participants — there is no server in the middle of it.",
+      bDl: "Download Dialog", bBr: "Use in browser", bNote: "no install · no phone number",
+      st1: "CALL MEDIA — NO SERVER IN THE PATH",
+      st3: "PHONE NUMBERS OR TRACKERS REQUIRED",
+      st4: "SOURCE PUBLISHED ON GITHUB",
+      lLive: "LIVE CALLS",
 
-      // Reveal-on-scroll.
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
-      }, { threshold: 0.12 });
-      document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
-    })();
-  </script>
+      kApp: "THE APP", tTitle: "See it running",
+      tSub: "Real screens from the desktop build — dense sidebar, glow-lined bubbles, the call docked beside the conversation instead of on top of it.",
+      tCapBig: "SCREEN SHARE IN A CALL", tCap2: "GROUP CHAT + MEMBERS", tCap1: "CALL + CHAT",
+
+      kSec: "SECURITY",
+      sTitle: "Nobody in the middle of a call, and no fiction about the rest.",
+      sSub: "Call media never touches a server. Sessions can be told to expire and wipe the device. What isn't encrypted yet is written down plainly rather than glossed over — the code is public, so verify it instead of believing us.",
+      sCta: "Read the privacy notes",
+      sc1: "Calls are peer-to-peer",
+      sc1b: "Audio, video and screen share flow directly between participants over WebRTC. No media server sits in the middle, so no third party receives the stream.",
+      sc2: "Messages are not E2E encrypted — yet",
+      sc2b: "They travel over TLS and are stored on the server you or we run. End-to-end encrypted DMs are on the roadmap below, and this line changes when they ship.",
+      sc3: "Self-destructing sessions",
+      sc3b: "Set a device timer: when it runs out the account signs out and clears its local cache — storage, service worker and all.",
+      sc4: "No phone number, no ad graph",
+      sc4b: "A username is the whole identity. No contact upload, no tracking, no analytics SDKs.",
+      sc6: "Auditable and self-hostable",
+      sc6b: "Read the source, build it yourself, or run the whole stack on your own box under AGPL.",
+
+      fTitle: "Built for rooms, not for feeds", fSub: "Six things, done properly.",
+      f1t: "Instant messaging", f1b: "Reactions, edits, replies, voice notes, GIFs and files in DMs or groups.",
+      f2t: "Group voice & video", f2b: "Jump into the room in one tap. No lobby, no seat count, no waiting.",
+      f3t: "Screen share", f3b: "Whole-screen sharing for presenting, pairing and playing together.",
+      f4t: "Native apps", f4b: "Windows, macOS, Linux and Android — tray, badges, auto-updates.",
+      f5t: "Bot API", f5b: "One token, plain HTTP, webhooks. Ship a bot this afternoon.",
+      f6t: "Self-hostable", f6b: "One compose file: app, database, cache. Your box, your rules.",
+
+      kCmp: "HOW IT COMPARES", cmpTitle: "Pick your trade-offs deliberately",
+      cmpSub: "Most messengers give you two of the three: privacy, group calls, or control over the server. Dialog is built to give all three.",
+      thCap: "CAPABILITY", thMain: "MAINSTREAM MESSENGER", thComm: "COMMUNITY CHAT PLATFORM",
+      r1: "Group calls with no server in the middle", r2: "Screen share in a call",
+      r3: "Sign up without a phone number", r4: "Run your own server",
+      r5: "Full source published", r6: "Bot API without a review queue",
+      vYes: "Yes", vNo: "No", vLtd: "Limited", vSome: "Sometimes", vClient: "Client only", vAppr: "With approval",
+
+      bldTitle: "Build on it", bldSub: "A token and an HTTP call is the whole onboarding.", bldCta: "Read the Bot API",
+      hstTitle: "Host it yourself", hstSub: "App, database and cache in one compose file.", hstCta: "View the source",
+
+      kRoad: "ROADMAP", roadTitle: "What's landed, what's next",
+      roadShipped: "SHIPPED", roadNext: "IN PROGRESS", roadLater: "LATER",
+      roadS: "<li>Peer-to-peer voice, video and screen share</li><li>Desktop builds with auto-update</li><li>Android client</li><li>Bot API v1</li><li>Two-factor auth, session self-destruct</li>",
+      roadN: "<li>Encryption at rest for stored messages</li><li>Metadata reduction</li><li>iOS build</li>",
+      roadL: "<li>End-to-end encrypted direct messages</li><li>Federation between self-hosted servers</li><li>Third-party security audit</li>",
+
+      kFaq: "FAQ", fqTitle: "Reasonable questions",
+      q1: "Is it end-to-end encrypted?",
+      a1: "Call media is: audio, video and screen share go straight between participants and never reach a server. Messages are not — they travel over TLS and are stored on the instance you or we run. End-to-end encrypted DMs are on the roadmap, and we would rather say so than imply otherwise.",
+      q2: "What does the server know about me?",
+      a2: "A username, a hashed password, your messages, and the routing metadata needed to deliver them. No phone number, no address book, no analytics. Self-host and that server is yours.",
+      q3: "How big can a call get?",
+      a3: "Calls are a peer-to-peer mesh — every participant sends to every other one. Small groups are comfortable; very large rooms are not what it is built for.",
+      q4: "Is it free?",
+      a4: "Yes, and open source under AGPL. No paid tier gating calls or screen share. If you would rather not use the hosted instance, run your own — same code, same clients.",
+
+      cTitle: "Get Dialog", cDl: "Download the app", cBr: "Open in browser",
+      fl1: "Downloads", fl2: "Privacy", fl3: "Guidelines"
+    },
+    ru: {
+      nFeat: "Возможности", nSec: "Безопасность", nBots: "Боты", nSelf: "Свой сервер", nOpen: "Открыть Dialog",
+
+      hBadge: "БЕСПЛАТНО · ОТКРЫТЫЙ КОД · БЕЗ НОМЕРА ТЕЛЕФОНА",
+      hL1: "Говорите свободно.", hL2: "Никого", hL3: "посередине.",
+      hSub: "Чаты, групповые звонки напрямую и трансляция экрана — для сообществ, которые предпочитают держать всё у себя. Медиа звонка идёт прямо между участниками: сервера посередине нет.",
+      bDl: "Скачать Dialog", bBr: "Открыть в браузере", bNote: "без установки · без номера телефона",
+      st1: "МЕДИА ЗВОНКОВ — БЕЗ СЕРВЕРА В ЦЕПОЧКЕ",
+      st3: "НОМЕРОВ ТЕЛЕФОНА И ТРЕКЕРОВ НУЖНО",
+      st4: "КОДА ОПУБЛИКОВАНО ПОД AGPL",
+      lLive: "ИДЁТ ЗВОНОК",
+
+      kApp: "ПРИЛОЖЕНИЕ", tTitle: "Как это выглядит",
+      tSub: "Реальные экраны десктопной сборки — плотный сайдбар, светящиеся пузыри сообщений и звонок рядом с перепиской, а не поверх неё.",
+      tCapBig: "ТРАНСЛЯЦИЯ ЭКРАНА В ЗВОНКЕ", tCap2: "ГРУППОВОЙ ЧАТ + УЧАСТНИКИ", tCap1: "ЗВОНОК И ЧАТ",
+
+      kSec: "БЕЗОПАСНОСТЬ",
+      sTitle: "В звонке между вами никого — и никаких сказок про остальное.",
+      sSub: "Медиа звонков не проходит через сервер. Сессию можно заставить истечь и стереть устройство. То, что ещё не шифруется, написано прямо, а не спрятано — код открыт, так что проверьте сами.",
+      sCta: "Читать о приватности",
+      sc1: "Звонки идут напрямую",
+      sc1b: "Аудио, видео и трансляция экрана идут напрямую между участниками через WebRTC. Медиасервера посередине нет, поэтому поток не получает никакая третья сторона.",
+      sc2: "Сообщения пока без сквозного шифрования",
+      sc2b: "Они передаются по TLS и хранятся на сервере, который держите вы или мы. Сквозное шифрование личных сообщений есть в планах ниже — и эта строка изменится, когда оно выйдет.",
+      sc3: "Самоуничтожение сессии",
+      sc3b: "Задайте таймер устройства: когда он истечёт, аккаунт выйдет и очистит локальный кеш — хранилище, service worker и всё остальное.",
+      sc4: "Без номера и рекламного профиля",
+      sc4b: "Имя пользователя — вся ваша личность. Ни выгрузки контактов, ни трекеров, ни аналитических SDK.",
+      sc6: "Проверяемо и на своём сервере",
+      sc6b: "Читайте исходники, собирайте сами или поднимите весь стек на своей машине под AGPL.",
+
+      fTitle: "Сделан для комнат, а не для лент", fSub: "Шесть вещей, сделанных как следует.",
+      f1t: "Мгновенные сообщения", f1b: "Реакции, правки, ответы, голосовые, GIF и файлы — в личных и групповых чатах.",
+      f2t: "Групповые звонки и видео", f2b: "Заходите в комнату одним касанием. Без лобби, без лимита мест, без ожидания.",
+      f3t: "Трансляция экрана", f3b: "Показ всего экрана — для презентаций, парной работы и игр.",
+      f4t: "Нативные приложения", f4b: "Windows, macOS, Linux и Android — трей, счётчики, автообновления.",
+      f5t: "Bot API", f5b: "Один токен, обычный HTTP, вебхуки. Бот пишется за вечер.",
+      f6t: "Свой хостинг", f6b: "Один compose-файл: приложение, база, кеш. Ваша машина, ваши правила.",
+
+      kCmp: "СРАВНЕНИЕ", cmpTitle: "Выбирайте компромиссы осознанно",
+      cmpSub: "Большинство мессенджеров дают два пункта из трёх: приватность, групповые звонки или контроль над сервером. Dialog сделан так, чтобы дать все три.",
+      thCap: "ВОЗМОЖНОСТЬ", thMain: "МАССОВЫЙ МЕССЕНДЖЕР", thComm: "ПЛАТФОРМА ДЛЯ СООБЩЕСТВ",
+      r1: "Групповые звонки без сервера посередине", r2: "Трансляция экрана в звонке",
+      r3: "Регистрация без номера телефона", r4: "Свой собственный сервер",
+      r5: "Полностью открытый исходный код", r6: "Bot API без модерации",
+      vYes: "Да", vNo: "Нет", vLtd: "Ограниченно", vSome: "Иногда", vClient: "Только клиент", vAppr: "По одобрению",
+
+      bldTitle: "Стройте на нём", bldSub: "Токен и один HTTP-запрос — вот и всё знакомство.", bldCta: "Читать Bot API",
+      hstTitle: "Поднимите свой", hstSub: "Приложение, база и кеш — в одном compose-файле.", hstCta: "Смотреть исходники",
+
+      kRoad: "ПЛАНЫ", roadTitle: "Что готово, что дальше",
+      roadShipped: "ГОТОВО", roadNext: "В РАБОТЕ", roadLater: "ПОЗЖЕ",
+      roadS: "<li>Аудио, видео и трансляция экрана напрямую</li><li>Десктопные сборки с автообновлением</li><li>Клиент для Android</li><li>Bot API v1</li><li>Двухфакторка и самоуничтожение сессии</li>",
+      roadN: "<li>Шифрование сохранённых сообщений на диске</li><li>Сокращение метаданных</li><li>Сборка для iOS</li>",
+      roadL: "<li>Сквозное шифрование личных сообщений</li><li>Федерация между своими серверами</li><li>Независимый аудит безопасности</li>",
+
+      kFaq: "ВОПРОСЫ", fqTitle: "Разумные вопросы",
+      q1: "Есть ли сквозное шифрование?",
+      a1: "У звонков — да: аудио, видео и трансляция экрана идут прямо между участниками и до сервера не доходят. У сообщений — нет: они передаются по TLS и хранятся на сервере, который держите вы или мы. Сквозное шифрование личных сообщений есть в планах, и мы лучше скажем об этом прямо.",
+      q2: "Что сервер знает обо мне?",
+      a2: "Имя пользователя, хеш пароля, ваши сообщения и метаданные маршрутизации, нужные для доставки. Ни номера телефона, ни адресной книги, ни аналитики. А если поднимете свой сервер — он ваш.",
+      q3: "Насколько большим может быть звонок?",
+      a3: "Звонки — это mesh: каждый участник отправляет поток каждому. Небольшим компаниям комфортно; очень большие комнаты — не то, для чего он сделан.",
+      q4: "Это бесплатно?",
+      a4: "Да, и с открытым кодом под AGPL. Звонки и трансляция экрана не спрятаны за подписку. Не хотите пользоваться нашим сервером — поднимите свой: тот же код, те же клиенты.",
+
+      cTitle: "Выбери Dialog", cDl: "Скачать приложение", cBr: "Открыть в браузере",
+      fl1: "Загрузки", fl2: "Приватность", fl3: "Правила"
+    }
+  });
+</script>
 </body>
 </html>

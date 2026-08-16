@@ -8,91 +8,56 @@
   <meta name="theme-color" content="#00ff5a" />
   <link rel="icon" href="/src/lil_dialog.webp" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/site.css" />
   <style>
-    .docs { width: min(880px, 92vw); margin: 0 auto; padding: 40px 0 90px; }
-    .docs h1 { color: #fff; font-size: clamp(30px, 5vw, 46px); margin-bottom: 10px; }
-    .docs .lede { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 680px; margin-bottom: 26px; }
-    .docs .lede strong { color: var(--text); }
-    .doc-cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 36px; }
-    .doc-cta a { padding: 11px 18px; border-radius: 9px; font-size: 14px; font-weight: 600; border: 1px solid var(--line); color: var(--text); transition: all .2s; display: inline-flex; align-items: center; gap: 8px; }
-    .doc-cta a.primary { background: var(--green); color: #001b0c; border-color: var(--green); box-shadow: 0 0 22px rgba(0,255,90,.3); }
-    .doc-cta a:hover { border-color: var(--green); color: var(--green); }
-    .doc-cta a.primary:hover { color: #001b0c; box-shadow: 0 0 30px rgba(0,255,90,.5); }
-
-    .toc { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 16px 20px; margin-bottom: 40px; }
-    .toc b { color: var(--green); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; display: block; margin-bottom: 10px; }
-    .toc ol { columns: 2; column-gap: 28px; margin: 0; padding-left: 18px; }
-    .toc li { color: var(--text); font-size: 14px; line-height: 1.9; }
-    .toc a { color: var(--text); }
-    .toc a:hover { color: var(--green); }
-
-    .docs h2 { color: var(--green); font-size: 22px; margin: 46px 0 12px; scroll-margin-top: 80px; }
-    .docs h3 { color: #fff; font-size: 17px; margin: 26px 0 8px; }
-    .docs p, .docs li { color: var(--text); font-size: 15px; line-height: 1.75; }
-    .docs ul { margin: 8px 0 8px 22px; }
-    .docs li { margin-bottom: 6px; }
-    .docs a { color: var(--green); border-bottom: 1px dashed var(--green-dim); }
-    .docs strong { color: #fff; }
-    .docs .muted { color: var(--muted); }
-
-    code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,255,90,.08); color: var(--green-2); padding: 2px 6px; border-radius: 5px; }
-    pre { background: var(--bg-1); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 14px 0; }
-    pre code { background: none; color: var(--text); padding: 0; font-size: 12.5px; line-height: 1.65; white-space: pre; }
-    pre code .k { color: var(--green); }      /* method / keyword     */
-    pre code .s { color: #9fe6bd; }            /* strings              */
-    pre code .c { color: var(--muted); }       /* comments             */
-
-    .note { border-left: 2px solid var(--green-dim); padding: 10px 16px; background: var(--card); border-radius: 6px; margin: 16px 0; font-size: 14px; color: var(--text); }
-    .note strong { color: var(--green); }
-
-    .tbl-wrap { overflow-x: auto; margin: 16px 0; }
-    table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 13.5px; }
-    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-    th { color: var(--green); font-weight: 600; }
-    td { color: var(--text); }
-    td code { font-size: 12px; }
-
-    .card-preview { border: 1px solid var(--green-dim); border-radius: 12px; background: var(--bg-1); padding: 18px 20px; margin: 16px 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text); }
-
-    .back { margin-top: 40px; }
-    @media (max-width: 640px) { .toc ol { columns: 1; } }
+    .card-preview {
+      margin: 20px 0 6px; padding: 18px 20px;
+      background: var(--band); border: 1px solid var(--band-line); border-radius: var(--r);
+      font: 400 13px/1.7 var(--mono); color: var(--band-text); white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
-  <div class="bg-glow"></div>
-  <div class="bg-grid"></div>
 
   <nav class="nav">
     <div class="wrap">
-      <a class="brand-row" href="/"><img src="/src/lil_dialog.webp" alt="" /><span>DIALOG</span></a>
-      <div class="nav-links">
-        <a href="/#features">Features</a>
+      <a class="brand-row" href="/"><img src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" /></a>
+      <div class="nav-links" id="navLinks">
+        <a href="/#app">Features</a>
+        <a href="/#security">Security</a>
         <a href="/download">Download</a>
-        <a href="/bots" style="color:var(--green)">Bot API</a>
+        <a href="/bots" style="color:var(--green)">Bots</a>
         <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
-        <a class="nav-cta" href="/login">Open Dialog</a>
+      </div>
+      <div class="nav-right">
+        <a class="btn btn-accent" href="/login">Open Dialog</a>
+        <button class="nav-burger" id="burger" aria-label="Menu">☰</button>
       </div>
     </div>
   </nav>
 
-  <main class="docs">
-    <h1>Dialog Bot API</h1>
-    <p class="lede">Dialog has <strong>HTTP bot API</strong>. A bot is a Dialog
-      account you own, driven by an external program that holds a secret token. Your program calls an
-      HTTP API to send messages, and receives incoming messages by <strong>long-polling</strong>
-      (<code>getUpdates</code>) or via a signed <strong>webhook</strong>. If you've used the Telegram
-      Bot API, this will feel immediately familiar.</p>
-
-    <div class="doc-cta">
-      <a class="primary" href="/login">Create a bot →</a>
-      <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">★ View source on GitHub</a>
-      <a href="https://github.com/VanylixCODER/Dialog/blob/main/docs/bots.md" target="_blank" rel="noopener">Markdown reference</a>
+  <header class="page-head doc-head">
+    <div class="wrap">
+      <div class="kicker">DEVELOPERS</div>
+      <h1>Bot API</h1>
+      <p class="lede">A bot is a Dialog account you own, driven by an external program that holds a
+        secret token. Your program calls an <strong>HTTP API</strong> to send messages, and receives
+        incoming ones by <strong>long-polling</strong> (<code>getUpdates</code>) or via a signed
+        <strong>webhook</strong>. If you've used the Telegram Bot API, this will feel immediately
+        familiar.</p>
+      <div class="btn-row">
+        <a class="btn btn-accent" href="/login">Create a bot</a>
+        <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog/blob/main/docs/bots.md" target="_blank" rel="noopener">Markdown reference</a>
+        <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">Source on GitHub</a>
+      </div>
     </div>
+  </header>
 
+  <main class="doc">
     <div class="toc">
-      <b>On this page</b>
+      <b>ON THIS PAGE</b>
       <ol>
         <li><a href="#create">Create a bot</a></li>
         <li><a href="#auth">Authentication</a></li>
@@ -108,7 +73,7 @@
       </ol>
     </div>
 
-    <p class="muted"><strong style="color:var(--text)">Base URL:</strong> <code>https://dialogmsg.xyz</code>
+    <p class="muted"><strong>Base URL:</strong> <code>https://dialogmsg.xyz</code>
       &nbsp;·&nbsp; Everything is a bot user (DMable, addable to groups).
       &nbsp;·&nbsp; Inline keyboards &amp; <code>callback_query</code> are supported.</p>
 
@@ -179,7 +144,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       <code>editMessageText</code> and <code>deleteMessage</code> your own messages, and send a typing
       indicator with <code>sendChatAction</code>.</p>
 
-    <h2 id="buttons">5b. Inline buttons (keyboards)</h2>
+    <h2 id="buttons">6. Inline buttons (keyboards)</h2>
     <p>Attach an inline keyboard to any message with <code>reply_markup</code> (Telegram-shaped) — a
       list of rows, each a list of buttons. A button is a <strong>link</strong>
       (<code>url</code>, opens in the user's browser) or a <strong>callback</strong>
@@ -200,7 +165,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
 await call(<span class="s">"answerCallbackQuery"</span>, { callback_query_id: q.id, text: <span class="s">"You chose "</span> + q.data });
 await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } });</code></pre>
 
-    <h2 id="update">6. The update object</h2>
+    <h2 id="update">7. The update object</h2>
     <p>Each item from <code>getUpdates</code> (and each webhook POST body) looks like:</p>
     <pre><code>{
   <span class="s">"update_id"</span>: 137,
@@ -229,7 +194,7 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
   }
 }</code></pre>
 
-    <h2 id="commands">7. Commands</h2>
+    <h2 id="commands">8. Commands</h2>
     <p>Register slash-commands — they power the <strong>/ command menu</strong> that appears in the
       composer when a user chats with your bot.</p>
     <pre><code>curl -X POST .../setMyCommands -H 'Content-Type: application/json' -d '{
@@ -239,13 +204,13 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
   ]
 }'</code></pre>
 
-    <h2 id="groups">8. Behavior in groups — privacy</h2>
+    <h2 id="groups">9. Behavior in groups — privacy</h2>
     <p>Bots are added to groups through the normal member picker. By default a bot has
       <strong>group privacy ON</strong>: inside a group it only receives messages that start with a
       slash command (<code>/…</code>) or <code>@mention</code> the bot. Turn privacy <strong>off</strong>
       to receive every group message. Privacy never affects DMs.</p>
 
-    <h2 id="methods">9. Method reference</h2>
+    <h2 id="methods">10. Method reference</h2>
     <div class="tbl-wrap"><table>
       <tr><th>Method</th><th>Params</th><th>Result</th></tr>
       <tr><td><code>getMe</code></td><td>—</td><td>bot identity</td></tr>
@@ -263,7 +228,7 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
       <tr><td><code>sendChatAction</code></td><td><code>chat_id</code>, <code>action</code></td><td><code>true</code></td></tr>
     </table></div>
 
-    <h2 id="examples">10. Example — a polling echo bot (Node.js, zero deps)</h2>
+    <h2 id="examples">11. Example — a polling echo bot (Node.js, zero deps)</h2>
     <pre><code><span class="k">const</span> TOKEN = process.env.DIALOG_TOKEN;               <span class="c">// dlg_…</span>
 <span class="k">const</span> BASE  = `https://dialogmsg.xyz/bot${TOKEN}`;
 
@@ -307,20 +272,29 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
 🕐  08:44 · Europe/Rome</div>
     <p class="muted">↑ A real bot built on this API in ~90 lines — see the polling example above.</p>
 
-    <p class="back"><a href="/login">← Back to Dialog</a></p>
+    <div class="btn-row">
+      <a class="btn btn-accent" href="/login">Create a bot</a>
+      <a class="btn btn-line" href="/">Back to the site</a>
+    </div>
   </main>
 
   <footer class="footer">
     <div class="wrap">
-      <span>© <span id="yr"></span> Dialog</span>
-      <div style="display:flex; gap:18px;">
-        <a href="/bots">Bot API</a>
+      <span>© <span id="yr"></span> Dialog · AGPL-3.0</span>
+      <div class="links">
+        <a href="/">Home</a>
+        <a href="/download">Downloads</a>
         <a href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">GitHub</a>
         <a href="/privacy">Privacy</a>
         <a href="/login">Sign in</a>
       </div>
     </div>
   </footer>
-  <script>document.getElementById("yr").textContent = new Date().getFullYear();</script>
+
+  <script>
+    document.getElementById("yr").textContent = new Date().getFullYear();
+    document.getElementById("burger").onclick = () =>
+      document.getElementById("navLinks").classList.toggle("open");
+  </script>
 </body>
 </html>
