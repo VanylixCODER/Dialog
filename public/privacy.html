@@ -79,15 +79,12 @@
       advertising or tracking cookies.</p>
 
     <h2>3. Calls &amp; screen sharing</h2>
-    <p>Voice/video calls and screen sharing use <a href="https://livekit.io" target="_blank" rel="noopener">LiveKit</a>
-      as the real-time media server, and TURN relay servers to connect peers behind
-      restrictive networks. Live audio/video/screen streams pass through these servers to
-      reach other call participants; <strong>call media is not recorded or stored by us.</strong></p>
+    <p>Voice/video calls and screen sharing are <strong>peer-to-peer</strong>: audio and video flow directly between participants over WebRTC. No media server sits in the middle, and no third party receives the stream. Dialog's server only relays the small signalling messages needed to set the connection up. If two participants cannot reach each other directly (strict NAT or firewall), the connection falls back to a TURN relay, which forwards encrypted packets without being able to read them.</p>
 
     <h2>4. Third-party services</h2>
     <p>To provide certain features, limited data is shared with:</p>
     <ul>
-      <li><strong>LiveKit</strong> &amp; <strong>TURN/relay providers</strong> — to route
+      <li><strong>TURN/relay providers</strong> — used only as a fallback, to route
         call and screen-share media.</li>
       <li><strong>Giphy</strong> — when you search for GIFs, your search query is sent to
         Giphy to return results.</li>
