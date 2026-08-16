@@ -1929,6 +1929,8 @@ function openChat(c) {
   // Nothing from the previous chat may survive the switch.
   clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null;
   const csb = $("chatSearch"); if (csb) csb.classList.add("hidden");
+  const cfb = $("chatFavs"); if (cfb) cfb.classList.add("hidden");
+  loadFavIds();   // which messages in this room are starred
   dismissNotif(c.key);
   socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
@@ -2048,6 +2050,7 @@ $("chatMenuBtn").onclick = (e) => {
   const isChannel = curKind === "group" && curChannel;
   if (c) item(c.pinned ? t("unpin_chat") : t("pin_chat"), c.pinned ? "pinOff" : "pin", () => togglePin(c));
   item(t("search_in_chat"), "search", () => toggleChatSearch());
+  item(t("favs_title"), "bookmark", () => toggleChatFavs());
   item(t("jump_to_date"), "calendar", () => { $("jumpModal").classList.remove("hidden"); setTimeout(() => $("jumpDate").focus(), 30); });
   // Queue a post for later — the same posting rule as live messages (channel → owner only).
   if (curKind === "group" && (!curChannel || groupOwner)) item(t("schedule_post"), "clock", () => openSchedule());
@@ -3787,6 +3790,62 @@ $("chatSearchInput") && ($("chatSearchInput").oninput = (e) => {
   }, 220);
 });
 
+// ---------- Favourite (starred) messages ----------
+// Private per user. favIds is the set for the open room, so the context menu can
+// pick the right verb without asking the server per message.
+let favIds = new Set();
+
+async function loadFavIds() {
+  favIds = new Set();
+  if (!myRoom) return;
+  const room = myRoom;
+  const { ok, data } = await api("/api/fav-message-ids?room=" + encodeURIComponent(room), null, "GET");
+  if (ok && Array.isArray(data) && room === myRoom) favIds = new Set(data.map(Number));
+}
+function isFavMsg(id) { return favIds.has(Number(id)); }
+
+async function toggleFavMsg(id) {
+  id = Number(id);
+  const on = !favIds.has(id);
+  const { ok } = await api("/api/fav-message", { id, room: myRoom, on });
+  if (!ok) return notify(t("err_generic"));
+  if (on) favIds.add(id); else favIds.delete(id);
+  notify(t(on ? "fav_added" : "fav_removed"));
+  if (!$("chatFavs").classList.contains("hidden")) loadChatFavs();
+}
+
+function toggleChatFavs() {
+  const box = $("chatFavs"); if (!box) return;
+  const opening = box.classList.contains("hidden");
+  $("chatSearch") && $("chatSearch").classList.add("hidden");
+  box.classList.toggle("hidden", !opening);
+  if (opening) loadChatFavs();
+}
+$("chatFavsClose") && ($("chatFavsClose").onclick = () => $("chatFavs").classList.add("hidden"));
+
+async function loadChatFavs() {
+  const box = $("chatFavsResults"); if (!box) return;
+  box.innerHTML = `<div class="cs-empty">${t("loading")}</div>`;
+  const room = myRoom;
+  const { ok, data } = await api("/api/fav-messages?room=" + encodeURIComponent(room), null, "GET");
+  if (room !== myRoom) return;   // chat switched while the request was in flight
+  box.innerHTML = "";
+  if (!ok || !data.length) { box.innerHTML = `<div class="cs-empty">${t("favs_empty")}</div>`; return; }
+  for (const m of data) {
+    const row = document.createElement("div");
+    row.className = "cs-row cf-row";
+    const body = m.type === "text" ? (m.text || "") : preview(m);
+    row.innerHTML = `<button type="button" class="cf-jump">
+        <span class="cs-who">${escapeHtml(m.name || "")}</span>
+        <span class="cs-txt">${escapeHtml(body)}</span>
+        <span class="cs-date">${fmtTime(m.ts)}</span>
+      </button><button type="button" class="cf-del" title="${escapeHtml(t("fav_remove"))}">✕</button>`;
+    row.querySelector(".cf-jump").onclick = () => { $("chatFavs").classList.add("hidden"); jumpToMessage(m.id); };
+    row.querySelector(".cf-del").onclick = async () => { await toggleFavMsg(m.id); };
+    box.appendChild(row);
+  }
+}
+
 // ---- Jump to date ----
 $("jumpClose") && ($("jumpClose").onclick = () => $("jumpModal").classList.add("hidden"));
 $("jumpCancel") && ($("jumpCancel").onclick = () => $("jumpModal").classList.add("hidden"));
@@ -3915,7 +3974,9 @@ function openMsgMenu(e, wrap) {
   item(t("forward"), "forward", () => openForward([id]));
   if (canPinHere()) item(pinnedId === id ? t("unpin_message") : t("pin_message"), "pin", () => pinMessageId(pinnedId === id ? null : id));
   item(t("select"), "check", () => { enterSelectMode(); toggleSelect(wrap); });
-  // Star a sticker straight out of the conversation — yours or anyone else's.
+  // Star any message — yours or theirs. Private: the sender is never told.
+  item(t(isFavMsg(id) ? "fav_remove" : "fav_add"), "bookmark", () => toggleFavMsg(id));
+  // Stickers additionally offer the picker's own favourites, which is a different list.
   const stk = wrap.querySelector(".bubble.sticker img");
   if (stk) {
     const media = stk.getAttribute("src") || "";
@@ -4621,7 +4682,20 @@ function renderStickers() {
     img.src = s.media; img.loading = "lazy"; img.alt = s.name || "";
     img.onclick = () => sendSticker(s);
     cell.appendChild(img);
-    // Own stickers get a delete affordance; favourites get an un-star.
+    // In Mine: star it into Favourites, or delete it. In Favourites: un-star.
+    if (stickerTab === "mine") {
+      const star = document.createElement("button");
+      const faved = isFavSticker(s.media);
+      star.className = "stk-star" + (faved ? " on" : "");
+      star.title = t(faved ? "stk_fav_del" : "stk_fav_add");
+      star.textContent = faved ? "★" : "☆";
+      star.onclick = async (ev) => {
+        ev.stopPropagation();
+        await toggleFavSticker(s.media, s.name);
+        renderStickers();
+      };
+      cell.appendChild(star);
+    }
     const del = document.createElement("button");
     del.className = "stk-del";
     del.title = t(stickerTab === "mine" ? "stk_delete" : "stk_fav_del");
@@ -7214,6 +7288,7 @@ document.addEventListener("keydown", (e) => {
   if (settingsOpen) { if (isMobileView() && mobileDetailTab) showSettingsList(); else closeSettings(); return; }
   if (!$("meStatusMenu").classList.contains("hidden")) { closeStatusMenu(); return; }
   if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
+  if (!$("chatFavs").classList.contains("hidden")) { $("chatFavs").classList.add("hidden"); return; }
   if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
   if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
   if (!$("composerMore").classList.contains("hidden")) { $("composerMore").classList.add("hidden"); return; }
@@ -7323,7 +7398,7 @@ window.dialogOnBack = function () {
     return true;
   }
   // 4. Popovers / menus / pickers.
-  for (const id of ["emojiPicker", "gifPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
+  for (const id of ["emojiPicker", "gifPanel", "chatFavs", "rowMenu", "chatMenu", "botCmdMenu"]) {
     if (vis(id)) { $(id).classList.add("hidden"); return true; }
   }
   const rp = document.querySelector(".react-picker:not(.hidden)"); if (rp) { rp.classList.add("hidden"); return true; }

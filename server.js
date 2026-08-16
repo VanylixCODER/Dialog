@@ -54,6 +54,7 @@ import {
   isIpBanned, banIp, unbanIp, listBannedIps,
   createReport, listReports, getReport, resolveReport, countPendingReports,
   reportMediaSummary, reportMedia, addWarning, pendingWarnings, ackWarning, warningsFor,
+  favMessage, unfavMessage, favMessageIds, listFavMessages,
   setUserReportBan, clearUserReport, setEmailWithStamp,
   messagesFrom, firstMessageIdAtOrAfter, searchMessages, pinMessage, getPinned, replySnippet,
   listSessions, deleteSessionOf, deleteOtherSessions, touchSession,
@@ -2629,6 +2630,39 @@ app.post("/api/dm-settings", async (req, res) => {
     await setDmAutoClear(me.login, room, req.body.autoClearMs);
     res.json({ ok: true });
   } catch (e) { console.error("dm settings set", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: favourite (starred) messages ----------
+// Private to the caller — starring someone's message never notifies them.
+app.post("/api/fav-message", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = Number(req.body.id) || 0;
+    const room = String(req.body.room || "");
+    if (!id || !room) return res.status(400).json({ error: "bad_args" });
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    if (req.body.on === false) await unfavMessage(me.login, id);
+    else await favMessage(me.login, id, room);
+    res.json({ ok: true });
+  } catch (e) { console.error("fav msg", e.message); res.status(500).json({ error: "server error" }); }
+});
+// room= scopes to one chat (the panel behind the chat menu); omit it for everything.
+app.get("/api/fav-messages", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.query.room || "");
+    if (room && !(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    res.json(await listFavMessages(me.login, room || null));
+  } catch (e) { console.error("fav list", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Just the ids for the open room, so the context menu knows which verb to show.
+app.get("/api/fav-message-ids", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.query.room || "");
+    if (!room || !(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    res.json(await favMessageIds(me.login, room));
+  } catch (e) { console.error("fav ids", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: admin warnings (user side) ----------

@@ -366,6 +366,18 @@ export async function initSchema() {
     KEY idx_reports_created (created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // Favourited (starred) messages. Private per user — nobody is told you starred
+  // theirs. Distinct from `pinned`, which is one message per room and visible to
+  // everyone in it.
+  await pool.query(`CREATE TABLE IF NOT EXISTS msg_favs (
+    login VARCHAR(24) NOT NULL,
+    message_id BIGINT NOT NULL,
+    room VARCHAR(64) NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (login, message_id),
+    KEY idx_mfav_room (login, room, created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Admin warnings. Kept as rows rather than a transient socket push so a warning
   // still lands if the user is offline, and so there is an attributable record of
   // who sent what — a warning nobody can trace is not a moderation tool.
@@ -1512,4 +1524,38 @@ export async function favSticker(login, media, name) {
 export async function unfavSticker(login, media) {
   const r = await execute("DELETE FROM sticker_favs WHERE login=? AND media=?", [login, media]);
   return r.affectedRows > 0;
+}
+
+// ============================ Favourite messages ============================
+// Starred messages are private to the user who starred them: the sender is never
+// told. Room is denormalised so the per-chat list is one indexed read.
+export async function favMessage(login, id, room) {
+  await execute(
+    "INSERT INTO msg_favs (login, message_id, room, created_at) VALUES (?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE room=VALUES(room)",
+    [login, Number(id) || 0, room, Date.now()]
+  );
+}
+export async function unfavMessage(login, id) {
+  const r = await execute("DELETE FROM msg_favs WHERE login=? AND message_id=?", [login, Number(id) || 0]);
+  return r.affectedRows > 0;
+}
+// Which of the messages currently on screen are starred, so the context menu can
+// offer the right verb without a round trip per message.
+export async function favMessageIds(login, room) {
+  const r = await query("SELECT message_id FROM msg_favs WHERE login=? AND room=?", [login, room]);
+  return r.map((x) => Number(x.message_id));
+}
+// The list behind the Favourites panel. Joined against messages so a starred
+// message that was later deleted simply drops out.
+export async function listFavMessages(login, room, limit = 200) {
+  const where = room ? "f.login=? AND f.room=?" : "f.login=?";
+  const params = room ? [login, room] : [login];
+  return (await query(
+    "SELECT m.id, m.room, m.from_login AS fromLogin, m.name, m.ts, m.type, m.media_name AS mediaName, " +
+    "LEFT(COALESCE(m.text,''), 200) AS text, f.created_at AS favedAt " +
+    "FROM msg_favs f JOIN messages m ON m.id = f.message_id " +
+    "WHERE " + where + " ORDER BY f.created_at DESC LIMIT " + (Math.min(500, limit | 0 || 200)),
+    params
+  )).map((m) => ({ ...m, id: Number(m.id), ts: Number(m.ts), favedAt: Number(m.favedAt) }));
 }
