@@ -1031,6 +1031,7 @@ document.addEventListener("click", (e) => {
 function preview(m) {
   if (!m) return "";
   if (m.type === "text") return m.text;
+  if (m.type === "sticker") return "🩷 " + (m.mediaName || t("pv_sticker"));
   if (m.type === "image" || m.type === "gif") return "🖼 " + t("pv_photo");
   if (m.type === "video") return "🎬 " + t("pv_video");
   if (m.type === "audio") return "🎤 " + t("pv_voice");
@@ -3445,10 +3446,12 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     if (m.fwdFrom) inner += `<div class="fwd-tag">${window.ICON.forward || "↪"} ${t("forwarded_from", { name: escapeHtml(m.fwdName || m.fwdFrom) })}</div>`;
     if (m.replyTo) {
       const rn = escapeHtml(m.replyName || "");
-      const rt = m.replyText ? escapeHtml(m.replyText) : (m.replyType && m.replyType !== "text" ? t("pv_" + (m.replyType === "image" || m.replyType === "gif" ? "photo" : m.replyType === "video" ? "video" : m.replyType === "audio" ? "voice" : "file")) : t("reply_gone"));
+      const rt = m.replyText ? escapeHtml(m.replyText) : (m.replyType && m.replyType !== "text" ? t("pv_" + (m.replyType === "image" || m.replyType === "gif" ? "photo" : m.replyType === "video" ? "video" : m.replyType === "audio" ? "voice" : m.replyType === "sticker" ? "sticker" : "file")) : t("reply_gone"));
       inner += `<button type="button" class="quote" data-jump="${m.replyTo}"><span class="q-name">${rn}</span><span class="q-text">${rt}</span></button>`;
     }
     if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
+    // Stickers deliberately have no bubble chrome — the art is the message.
+    else if (m.type === "sticker") inner += `<div class="bubble sticker"><img src="${m.media}" alt="${escapeHtml(m.mediaName || "")}" loading="lazy" decoding="async"></div>`;
     else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "video") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}" preload="none"></audio></div>`;
@@ -3870,6 +3873,12 @@ function openMsgMenu(e, wrap) {
   item(t("forward"), "forward", () => openForward([id]));
   if (canPinHere()) item(pinnedId === id ? t("unpin_message") : t("pin_message"), "pin", () => pinMessageId(pinnedId === id ? null : id));
   item(t("select"), "check", () => { enterSelectMode(); toggleSelect(wrap); });
+  // Star a sticker straight out of the conversation — yours or anyone else's.
+  const stk = wrap.querySelector(".bubble.sticker img");
+  if (stk) {
+    const media = stk.getAttribute("src") || "";
+    item(t(isFavSticker(media) ? "stk_fav_del" : "stk_fav_add"), "bookmark", () => toggleFavSticker(media, stk.getAttribute("alt")));
+  }
   if (bubble && bubble.textContent) item(t("copy_message"), "copy", () => copyToClipboard(bubble.textContent.trim()));
   if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(sel.toString()); } });
   if (mine) { item(t("edit"), "edit", () => startEdit(wrap)); item(t("delete_msg"), "trash", () => { if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id }); }, true); }
@@ -4511,6 +4520,104 @@ async function loadGifs(q) {
 }
 document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && e.target !== $("gifBtn") && !e.target.closest("#composerMore")) gifPanel.classList.add("hidden"); });
 
+// ---------- Stickers ----------
+// A sticker is an image the user saved under a name. Sending one is an ordinary
+// message with type "sticker"; the panel below is just a launcher. Favourites are
+// keyed by media URL, so you can star one somebody else sent you.
+const stickerPanel = $("stickerPanel");
+let stickers = { mine: [], favs: [] };   // cache, refreshed when the panel opens
+let stickerTab = "favs";
+
+function isFavSticker(media) { return stickers.favs.some((s) => s.media === media); }
+
+function toggleStickers(e) {
+  if (e) e.stopPropagation();
+  picker.classList.add("hidden"); gifPanel.classList.add("hidden");
+  const show = stickerPanel.classList.contains("hidden");
+  stickerPanel.classList.toggle("hidden");
+  if (show) loadStickers();
+}
+$("stickerBtn").onclick = toggleStickers;
+
+async function loadStickers() {
+  const { ok, data } = await api("/api/stickers", null, "GET");
+  if (ok) stickers = { mine: data.mine || [], favs: data.favs || [] };
+  renderStickers();
+}
+
+function renderStickers() {
+  const grid = $("stickerGrid"), note = $("stickerNote");
+  const list = stickerTab === "mine" ? stickers.mine : stickers.favs;
+  stickerPanel.querySelectorAll(".stk-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === stickerTab));
+  grid.innerHTML = "";
+  if (!list.length) {
+    note.textContent = t(stickerTab === "mine" ? "stk_none_mine" : "stk_none_favs");
+    note.classList.remove("hidden");
+    return;
+  }
+  note.classList.add("hidden");
+  for (const s of list) {
+    const cell = document.createElement("div");
+    cell.className = "stk-cell";
+    cell.title = s.name || "";
+    const img = new Image();
+    img.src = s.media; img.loading = "lazy"; img.alt = s.name || "";
+    img.onclick = () => sendSticker(s);
+    cell.appendChild(img);
+    // Own stickers get a delete affordance; favourites get an un-star.
+    const del = document.createElement("button");
+    del.className = "stk-del";
+    del.title = t(stickerTab === "mine" ? "stk_delete" : "stk_fav_del");
+    del.textContent = "✕";
+    del.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (stickerTab === "mine") await api("/api/stickers/" + s.id, null, "DELETE");
+      else await api("/api/stickers/fav", { media: s.media, on: false });
+      loadStickers();
+    };
+    cell.appendChild(del);
+    grid.appendChild(cell);
+  }
+}
+
+function sendSticker(s) {
+  // Close either way — leaving the panel open on a no-op chat reads as a broken tap.
+  if (myRoom) socket.emit("message", { type: "sticker", media: s.media, mediaName: s.name || "sticker" });
+  stickerPanel.classList.add("hidden");
+}
+
+stickerPanel.querySelectorAll(".stk-tab").forEach((b) => {
+  b.onclick = (e) => { e.stopPropagation(); stickerTab = b.dataset.tab; renderStickers(); };
+});
+$("stkAdd").onclick = (e) => { e.stopPropagation(); $("stickerFile").click(); };
+
+// Create: reuse the image editor so the sticker is cropped square and downscaled
+// before it ever leaves the browser.
+$("stickerFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  const dataUrl = await editImage(f, { shape: "square", sizes: [128, 256, 512], size: 256, label: t("stk_create") });
+  if (!dataUrl) return;
+  const name = (await askText(t("stk_name"), f.name.replace(/\.[^.]+$/, "").slice(0, 40))) || "sticker";
+  const { ok, data } = await api("/api/stickers", { media: dataUrl, name });
+  if (!ok) return notify(data && data.error === "sticker_limit" ? t("stk_limit", { cap: data.cap }) : t("err_generic"));
+  notify(t("stk_created"));
+  stickerTab = "mine";
+  loadStickers();
+});
+
+async function toggleFavSticker(media, name) {
+  const on = !isFavSticker(media);
+  const { ok } = await api("/api/stickers/fav", { media, name, on });
+  if (!ok) return notify(t("err_generic"));
+  notify(t(on ? "stk_faved" : "stk_unfaved"));
+  if (on) stickers.favs.unshift({ media, name: name || null });
+  else stickers.favs = stickers.favs.filter((s) => s.media !== media);
+}
+
+document.addEventListener("click", (e) => { if (!stickerPanel.contains(e.target) && e.target !== $("stickerBtn") && !e.target.closest("#composerMore")) stickerPanel.classList.add("hidden"); });
+
 // Mobile composer more dropdown
 const moreBtn = $("moreBtn");
 const moreDropdown = $("composerMore");
@@ -4522,6 +4629,7 @@ if (moreBtn && moreDropdown) {
       const action = item.dataset.action;
       if (action === "emoji") $("emojiBtn").click();
       else if (action === "gif") $("gifBtn").click();
+      else if (action === "sticker") toggleStickers();
       else if (action === "attach") $("fileInput").click();
     };
   });
@@ -7054,6 +7162,7 @@ document.addEventListener("keydown", (e) => {
   if (!$("chatMenu").classList.contains("hidden")) { $("chatMenu").classList.add("hidden"); return; }
   if (!$("emojiPicker").classList.contains("hidden")) { $("emojiPicker").classList.add("hidden"); return; }
   if (!$("gifPanel").classList.contains("hidden")) { $("gifPanel").classList.add("hidden"); return; }
+  if (!$("stickerPanel").classList.contains("hidden")) { $("stickerPanel").classList.add("hidden"); return; }
   if (!$("composerMore").classList.contains("hidden")) { $("composerMore").classList.add("hidden"); return; }
   if (!$("callToast").classList.contains("hidden")) { hideToast(); return; }
   if (msgMenu && !msgMenu.classList.contains("hidden")) { msgMenu.classList.add("hidden"); return; }
@@ -7161,7 +7270,7 @@ window.dialogOnBack = function () {
     return true;
   }
   // 4. Popovers / menus / pickers.
-  for (const id of ["emojiPicker", "gifPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
+  for (const id of ["emojiPicker", "gifPanel", "stickerPanel", "rowMenu", "chatMenu", "botCmdMenu"]) {
     if (vis(id)) { $(id).classList.add("hidden"); return true; }
   }
   const rp = document.querySelector(".react-picker:not(.hidden)"); if (rp) { rp.classList.add("hidden"); return true; }

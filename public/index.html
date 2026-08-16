@@ -262,14 +262,17 @@
         <button class="icon-btn hidden" id="botCmdBtn" data-i18n-title="bot_commands">/</button>
         <button class="icon-btn desktop-only" id="emojiBtn" data-i18n-title="t_emoji">😊</button>
         <button class="icon-btn desktop-only" id="gifBtn" data-i18n-title="gif">GIF</button>
+        <button class="icon-btn desktop-only" id="stickerBtn" data-i18n-title="stickers">🩷</button>
         <button class="icon-btn desktop-only" id="attachBtn" data-i18n-title="t_attach">📎</button>
         <button class="icon-btn mobile-only" id="moreBtn" data-i18n-title="t_more">⋮</button>
         <div id="composerMore" class="composer-more hidden" role="menu">
           <button class="cm-item" data-action="emoji">😊 <span data-i18n="t_emoji">Emoji</span></button>
           <button class="cm-item" data-action="gif"><span class="cm-gif-label">GIF</span></button>
+          <button class="cm-item" data-action="sticker">🩷 <span data-i18n="stickers">Stickers</span></button>
           <button class="cm-item" data-action="attach">📎 <span data-i18n="t_attach">Attach</span></button>
         </div>
         <input id="fileInput" type="file" hidden />
+        <input id="stickerFile" type="file" accept="image/*" hidden />
         <!-- Drop-зона живёт прямо внутри #chatPane через .drop-overlay; css .chat.dragover делает
              оверлей видимым поверх сообщений. Self-contained — JS включает класс только когда
              dragenter реально принёс файлы. -->
@@ -295,6 +298,15 @@
         <input id="gifSearch" class="field" data-i18n-ph="gif_search" autocomplete="off" />
         <div id="gifGrid" class="gif-grid"></div>
         <div id="gifNote" class="gif-note hidden" data-i18n="gif_nokey">GIFs off (no GIPHY_KEY)</div>
+      </div>
+      <div id="stickerPanel" class="gif-panel sticker-panel hidden">
+        <div class="stk-tabs">
+          <button class="stk-tab active" data-tab="favs" data-i18n="stk_favs">Favourites</button>
+          <button class="stk-tab" data-tab="mine" data-i18n="stk_mine">Mine</button>
+          <button class="stk-add" id="stkAdd" data-i18n-title="stk_create">＋</button>
+        </div>
+        <div id="stickerGrid" class="stk-grid"></div>
+        <div id="stickerNote" class="gif-note hidden"></div>
       </div>
     </main>
 

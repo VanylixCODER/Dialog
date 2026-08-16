@@ -365,6 +365,30 @@ export async function initSchema() {
     KEY idx_reports_target (target),
     KEY idx_reports_created (created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Stickers a user made. `media` is a /uploads/<hash>.<ext> URL, so the bytes are
+  // content-addressed and shared with every message that sends the sticker.
+  await pool.query(`CREATE TABLE IF NOT EXISTS stickers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    owner VARCHAR(24) NOT NULL,
+    name VARCHAR(40) NOT NULL,
+    media VARCHAR(512) NOT NULL,
+    created_at BIGINT NOT NULL,
+    KEY idx_stickers_owner (owner),
+    KEY idx_stickers_media (media(191))
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+  // Favourites are keyed by the media URL, not the sticker row: you can favourite a
+  // sticker someone sent you without owning it, and it survives the creator deleting
+  // theirs. name is denormalised so a favourite still renders after that.
+  await pool.query(`CREATE TABLE IF NOT EXISTS sticker_favs (
+    login VARCHAR(24) NOT NULL,
+    media VARCHAR(512) NOT NULL,
+    name VARCHAR(40) NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (login, media(191)),
+    KEY idx_fav_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 }
 
 // ---------- Пользователи / профиль ----------
@@ -1370,4 +1394,49 @@ export async function allDmAutoClear(login) {
   const out = {};
   for (const r of rows) out[r.room] = Number(r.autoClearMs) || 0;
   return out;
+}
+
+// ============================ Stickers ============================
+// A sticker is just an image the user saved under a name. Sending one is an
+// ordinary message with type "sticker"; these tables only power the picker.
+const STICKER_CAP = 120;   // per account — keeps one user from filling the disk
+
+export async function stickerCount(login) {
+  const r = await query("SELECT COUNT(*) n FROM stickers WHERE owner=?", [login]);
+  return Number(r[0]?.n || 0);
+}
+export async function createSticker(login, name, media) {
+  if (await stickerCount(login) >= STICKER_CAP) return { error: "sticker_limit", cap: STICKER_CAP };
+  const r = await execute(
+    "INSERT INTO stickers (owner, name, media, created_at) VALUES (?,?,?,?)",
+    [login, String(name || "").slice(0, 40) || "sticker", media, Date.now()]
+  );
+  return { id: r.insertId, name, media, cap: STICKER_CAP };
+}
+export async function listStickers(login) {
+  return (await query(
+    "SELECT id, name, media, created_at AS createdAt FROM stickers WHERE owner=? ORDER BY created_at DESC",
+    [login]
+  )).map((s) => ({ ...s, id: Number(s.id), createdAt: Number(s.createdAt) }));
+}
+export async function deleteSticker(login, id) {
+  const r = await execute("DELETE FROM stickers WHERE id=? AND owner=?", [Number(id) || 0, login]);
+  return r.affectedRows > 0;
+}
+export async function listFavStickers(login) {
+  return (await query(
+    "SELECT media, name, created_at AS createdAt FROM sticker_favs WHERE login=? ORDER BY created_at DESC",
+    [login]
+  )).map((s) => ({ ...s, createdAt: Number(s.createdAt) }));
+}
+export async function favSticker(login, media, name) {
+  await execute(
+    "INSERT INTO sticker_favs (login, media, name, created_at) VALUES (?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE name=VALUES(name)",
+    [login, media, String(name || "").slice(0, 40) || null, Date.now()]
+  );
+}
+export async function unfavSticker(login, media) {
+  const r = await execute("DELETE FROM sticker_favs WHERE login=? AND media=?", [login, media]);
+  return r.affectedRows > 0;
 }

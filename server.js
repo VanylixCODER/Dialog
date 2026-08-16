@@ -65,6 +65,7 @@ import {
   getRichPresencePref, setRichPresencePref, listPresenceHidden, setPresenceHidden,
   listAwards, getAwardByCode, createAward, deleteAward, grantAward, revokeAward, userAwards, hasAward, awardStats,
   getDmSettings, setDmAutoClear, allDmAutoClear,
+  createSticker, listStickers, deleteSticker, listFavStickers, favSticker, unfavSticker,
   setSessionExpiry, getSessionExpiry, sweepExpiredSessions,
 } from "./db.js";
 import { sendVerifyEmail, sendResetEmail, sendWelcomeEmail, mailEnabled } from "./mail.js";
@@ -306,7 +307,10 @@ app.get("/uploads/:file", (req, res) => {
 // anything that isn't worth offloading (already a URL, or small enough that a file costs more
 // than the row does). Never throws — a failed write just falls back to storing the data: URL.
 const OFFLOAD_MIN_BYTES = 64 * 1024;
-function offloadMedia(media) {
+// minBytes lets a caller force a file even for small payloads. Stickers do: they are
+// referenced by URL from the picker and from every message that sends them, so they
+// have to live on disk no matter how small the PNG is.
+function offloadMedia(media, minBytes = OFFLOAD_MIN_BYTES) {
   try {
     if (typeof media !== "string" || !media.startsWith("data:")) return media;
     const comma = media.indexOf(",");
@@ -315,7 +319,7 @@ function offloadMedia(media) {
     if (!/;base64$/i.test(header)) return media;
     const mime = header.replace(/;base64$/i, "").toLowerCase().split(";")[0];
     const b64 = media.slice(comma + 1);
-    if (Math.floor(b64.length * 3 / 4) < OFFLOAD_MIN_BYTES) return media;
+    if (Math.floor(b64.length * 3 / 4) < minBytes) return media;
     const buf = Buffer.from(b64, "base64");
     if (!buf.length) return media;
     const ext = MIME_EXT[mime] || "bin";
@@ -327,8 +331,8 @@ function offloadMedia(media) {
   } catch (e) { console.error("[uploads] offload", e.message); return media; }
 }
 // Wrapper so callers get a uniform { media, size } no matter which branch ran.
-function offloadResult(media) {
-  const out = offloadMedia(media);
+function offloadResult(media, minBytes) {
+  const out = offloadMedia(media, minBytes);
   if (out && typeof out === "object") return out;
   return { media: out, size: typeof out === "string" && out.startsWith("data:") ? Math.floor((out.length - out.indexOf(",") - 1) * 3 / 4) : 0 };
 }
@@ -1847,6 +1851,7 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   io.to(room).emit("message", payload);
   const capPrev = payload.text ? " " + payload.text.slice(0, 110) : "";
   const preview = payload.type === "text" ? payload.text.slice(0, 120)
+    : payload.type === "sticker" ? "🩷 " + (payload.mediaName || "Sticker")
     : payload.type === "image" || payload.type === "gif" ? "🖼" + (capPrev || " Photo")
     : payload.type === "video" ? "🎬" + (capPrev || " Video")
     : payload.type === "audio" ? "🎤 Voice" : "📎 " + (payload.mediaName || "File");
@@ -2598,6 +2603,59 @@ app.post("/api/dm-settings", async (req, res) => {
     await setDmAutoClear(me.login, room, req.body.autoClearMs);
     res.json({ ok: true });
   } catch (e) { console.error("dm settings set", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: stickers ----------
+// Creating a sticker is an upload: the client sends a data: URL, offloadMedia writes it
+// to disk under its content hash, and the row keeps the /uploads/ URL. Sending one is a
+// normal message (type "sticker") — these routes only feed the picker.
+const STICKER_MIME = /^data:image\/(png|webp|gif|jpeg);base64,/i;
+
+app.get("/api/stickers", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const [mine, favs] = await Promise.all([listStickers(me.login), listFavStickers(me.login)]);
+    res.json({ mine, favs });
+  } catch (e) { console.error("stickers list", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+app.post("/api/stickers", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const raw = String(req.body.media || "");
+    if (!STICKER_MIME.test(raw)) return res.status(400).json({ error: "bad_image" });
+    // A sticker is a small square; anything past 2 MB is a photo the client failed to resize.
+    if (Math.floor((raw.length - raw.indexOf(",") - 1) * 3 / 4) > 2 * 1024 * 1024)
+      return res.status(413).json({ error: "too_big" });
+
+    const off = offloadResult(raw, 0);   // 0 → always write the file, however small
+    if (!off.media || off.media.startsWith("data:"))
+      return res.status(500).json({ error: "store_failed" });
+
+    const out = await createSticker(me.login, req.body.name, off.media);
+    if (out.error) return res.status(409).json(out);
+    res.json({ ok: true, sticker: out });
+  } catch (e) { console.error("sticker create", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+app.delete("/api/stickers/:id", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    // The file itself stays: it is content-addressed and other messages may reference it.
+    res.json({ ok: await deleteSticker(me.login, req.params.id) });
+  } catch (e) { console.error("sticker delete", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// Favourites are keyed by media URL so you can star a sticker someone else sent you.
+app.post("/api/stickers/fav", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const media = String(req.body.media || "");
+    if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(media)) return res.status(400).json({ error: "bad_media" });
+    if (req.body.on === false) await unfavSticker(me.login, media);
+    else await favSticker(me.login, media, req.body.name);
+    res.json({ ok: true });
+  } catch (e) { console.error("sticker fav", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: rich presence privacy ----------
