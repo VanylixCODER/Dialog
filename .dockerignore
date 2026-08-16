@@ -11,11 +11,12 @@ ssh-key-*
 *.pem
 *.key
 
-# VCS / tooling
+# VCS / tooling / local notes
 .git
 .github
 .githooks
 .claude
+CLAUDE.md
 .vscode
 
 # Dependencies are installed inside the image, not copied in
@@ -40,7 +41,6 @@ lighthouserc.json
 # Docs and compose files the runtime never reads
 README.md
 RELEASE.md
-CLAUDE.md
 docker-compose.yml
 docker-compose.prod.yml
 Dockerfile

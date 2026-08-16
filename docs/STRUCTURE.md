@@ -18,7 +18,7 @@ material used to build them. Nothing else belongs in the root.
 | Path | Responsibility |
 |---|---|
 | `public/index.html` | The whole SPA markup. Every pane, modal and overlay lives here. |
-| `public/app.js` | The client. One large file by deliberate choice — see CLAUDE.md. |
+| `public/app.js` | The client. One large file by deliberate choice. |
 | `public/css/style.css` | All app styling, including every theme. |
 | `public/js/i18n.js` | Strings, `en` + `ru`. Both must be updated together. |
 | `public/js/icons.js` | Lucide icon set exposed as `window.ICON.*`. |
@@ -57,4 +57,4 @@ material used to build them. Nothing else belongs in the root.
 
 Three files carry the version and must agree: `desktop/package.json`,
 `public/js/downloads-data.js`, `android/app/build.gradle.kts`. The full procedure is in
-CLAUDE.md.
+`RELEASE.md`.
