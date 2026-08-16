@@ -3213,8 +3213,15 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
 
 /* Themes grid — живые свотчи превью */
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+/* align-items MUST be stated: Chromium's UA stylesheet used to put
+   `align-items: flex-start` on <button>, and .theme-opt IS a button. With
+   flex-start the column children shrink-to-fit instead of stretching, and the
+   swatch — four empty spans at `flex: 1 1 0` — collapses to the width of its
+   own gaps (~11px). That is why theme previews were invisible in the desktop
+   app (older Chromium) while browsers and Android, on newer Chromium, were
+   fine. The swatch also carries width:100% so it survives either UA. */
 .theme-opt {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   padding: 14px;
   background: var(--surface-1);
   border: 1px solid var(--border-1);
@@ -3232,10 +3239,11 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
 }
 .theme-opt:active { transform: translateY(0); }
 .theme-opt .theme-swatch {
-  display: flex; gap: 3px; height: 36px; border-radius: var(--r-2);
+  display: flex; gap: 3px; width: 100%; height: 36px; border-radius: var(--r-2);
   overflow: hidden; border: 1px solid var(--border-1);
 }
-.theme-opt .theme-swatch span { flex: 1; height: 100%; }
+/* min-width keeps a colour visible even if the row is ever squeezed. */
+.theme-opt .theme-swatch span { flex: 1 1 0; min-width: 4px; height: 100%; }
 .theme-opt .theme-name { font-weight: 700; font-size: 13px; color: var(--accent-100); letter-spacing: 0.4px; }
 .theme-opt .theme-desc { color: var(--text-dim); font-size: 11px; }
 
