@@ -6,7 +6,7 @@ certs/
 # Данные пользователей (хеши паролей) — не в публичный репозиторий
 data/
 
-# Хуйня
+# Local helper scripts — not part of the shipped app
 scripts/
 
 # Логи и временное
@@ -40,3 +40,16 @@ docs/*service*.json
 *.keystore
 android/upload-keystore.jks
 docs/upload-key-credentials.txt
+
+# Build artifacts (Electron / Flatpak / packaged installers)
+dist/
+.flatpak-builder/
+*.AppImage
+*.exe
+*.dmg
+*.deb
+*.pacman
+
+# Dev-only material that should never be committed. dev/ IS tracked (design references
+# live there on purpose) — this is for scratch space inside it.
+dev/scratch/

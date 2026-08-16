@@ -1,11 +1,52 @@
-node_modules
-certs
-data
-.git
+# What the production image must NOT contain.
+# The Dockerfile does `COPY . .`, so anything missing here ends up on the server —
+# including secrets. Deny broadly; the server only needs its own JS + public/.
+
+# Secrets and local state — never in an image
 .env
-*.log
-README.md
-BUILD_PROMPT.md
-docker-compose.yml
+.env.*
+certs/
+data/
+ssh-key-*
+*.pem
+*.key
+
+# VCS / tooling
+.git
+.github
+.githooks
+.claude
+.vscode
+
+# Dependencies are installed inside the image, not copied in
+node_modules
+
+# Client shells: built and shipped as installers, not served by the app container
 android
-Dialog.apk
+desktop
+build
+dist
+*.apk
+*.AppImage
+*.exe
+*.dmg
+
+# Dev-only material — references, design handoffs, scratch work
+dev/
+docs
+scripts
+lighthouserc.json
+
+# Docs and compose files the runtime never reads
+README.md
+RELEASE.md
+CLAUDE.md
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile
+Caddyfile
+
+# Noise
+*.log
+.DS_Store
+.flatpak-builder
