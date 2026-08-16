@@ -879,6 +879,7 @@ function enterApp() {
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   applyChatListChrome();   // restore collapsed / resized sidebar
+  loadPendingWarnings();   // a warning issued while offline still has to land
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   socket.emit("identify", { token });
@@ -1575,27 +1576,68 @@ $("schAdd") && ($("schAdd").onclick = async () => {
 // nothing in the desktop and Android apps. Everything that needs a line of text goes
 // through here instead.
 let _askResolve = null;
-function askText(title, value = "", placeholder = "") {
+// opts.multiline swaps the single-line field for a textarea — used where the answer
+// is a paragraph rather than a name (admin warnings).
+function askText(title, value = "", placeholder = "", opts = {}) {
   const m = $("askModal");
   if (!m) return Promise.resolve(window.prompt ? window.prompt(title, value) : null);
   $("askTitle").textContent = title || "";
-  const inp = $("askInput");
-  inp.value = value || ""; inp.placeholder = placeholder || "";
+  const multi = !!opts.multiline;
+  const inp = $("askInput"), area = $("askArea");
+  const field = multi ? area : inp;
+  if (area) { area.classList.toggle("hidden", !multi); area.value = multi ? (value || "") : ""; area.placeholder = placeholder || ""; }
+  inp.classList.toggle("hidden", multi);
+  inp.value = multi ? "" : (value || ""); inp.placeholder = multi ? "" : (placeholder || "");
   m.classList.remove("hidden");
-  setTimeout(() => { inp.focus(); inp.select(); }, 40);
+  setTimeout(() => { field.focus(); if (!multi) field.select(); }, 40);
   return new Promise((resolve) => {
     _askResolve = (v) => { _askResolve = null; m.classList.add("hidden"); resolve(v); };
   });
 }
+function askValue() {
+  const area = $("askArea");
+  const el = (area && !area.classList.contains("hidden")) ? area : $("askInput");
+  return el.value.trim() || null;
+}
 window.askText = askText;
-$("askOk") && ($("askOk").onclick = () => { if (_askResolve) _askResolve($("askInput").value.trim() || null); });
+$("askOk") && ($("askOk").onclick = () => { if (_askResolve) _askResolve(askValue()); });
 $("askCancel") && ($("askCancel").onclick = () => { if (_askResolve) _askResolve(null); });
 $("askClose") && ($("askClose").onclick = () => { if (_askResolve) _askResolve(null); });
 $("askModal") && $("askModal").addEventListener("click", (e) => { if (e.target === $("askModal") && _askResolve) _askResolve(null); });
 $("askInput") && ($("askInput").onkeydown = (e) => {
-  if (e.key === "Enter") { e.preventDefault(); if (_askResolve) _askResolve($("askInput").value.trim() || null); }
+  if (e.key === "Enter") { e.preventDefault(); if (_askResolve) _askResolve(askValue()); }
   if (e.key === "Escape") { e.preventDefault(); if (_askResolve) _askResolve(null); }
 });
+// In the textarea, Enter is a newline — Ctrl/⌘+Enter submits.
+$("askArea") && ($("askArea").onkeydown = (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (_askResolve) _askResolve(askValue()); }
+  if (e.key === "Escape") { e.preventDefault(); if (_askResolve) _askResolve(null); }
+});
+
+// ---------- Admin warnings (user side) ----------
+// Queued rather than shown one-on-top-of-another, and acknowledged to the server so
+// it does not reappear on the next load.
+let warnQueue = [];
+function showNextWarning() {
+  const w = warnQueue[0];
+  const m = $("warnModal");
+  if (!w || !m) return;
+  $("warnText").textContent = w.text;
+  $("warnMeta").textContent = t("warn_from", { who: w.by }) + " · " + new Date(w.createdAt).toLocaleString();
+  m.classList.remove("hidden");
+}
+$("warnOk") && ($("warnOk").onclick = async () => {
+  const w = warnQueue.shift();
+  $("warnModal").classList.add("hidden");
+  if (w) await api(`/api/warnings/${w.id}/ack`, {});
+  if (warnQueue.length) setTimeout(showNextWarning, 250);
+});
+function queueWarning(w) { warnQueue.push(w); if (warnQueue.length === 1) showNextWarning(); }
+socket.on("admin-warning", (w) => queueWarning(w));
+async function loadPendingWarnings() {
+  const { ok, data } = await api("/api/warnings", null, "GET");
+  if (ok && Array.isArray(data) && data.length) { warnQueue = data; showNextWarning(); }
+}
 
 // ================== DM settings (auto-clear) ==================
 // Windows people actually think in. 0 = keep everything.
@@ -7395,8 +7437,10 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
         <div class="arep-reason">${window.ICON.flag || ""}<span>${esc(reasonLabel(r.reason))}</span><time>${esc(when)}</time></div>
         ${r.description ? `<div class="arep-desc">${esc(r.description)}</div>` : ""}
         ${r.msg_preview ? `<div class="arep-msg"><span class="rl-tag">${t("report_linked_msg")}</span>${esc(r.msg_preview)}</div>` : ""}
+        ${reportMediaHtml(r)}
         ${resolved ? "" : `<div class="arep-actions">
           <input type="number" min="1" class="field arep-days" placeholder="${t("adm_days")}" value="7">
+          <button data-act="warn">${t("adm_warn")}</button>
           <button data-act="ipban-days" class="warn">${t("adm_ipban_days")}</button>
           <button data-act="ipban-life" class="danger">${t("adm_ipban_life")}</button>
           <button data-act="false">${t("adm_mark_false")}</button>
@@ -7405,16 +7449,48 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     }).join("");
     wrap.querySelectorAll(".arep").forEach((el) => {
       el.querySelectorAll(".arep-actions button").forEach((b) => b.onclick = () => resolveReport(b.dataset.act, el));
+      const load = el.querySelector(".arep-load-media");
+      if (load) load.onclick = () => loadReportMedia(el, load);
     });
+  }
+
+  // What the reported message actually was. Attachments on disk render straight
+  // from their /uploads/ URL (public + content-addressed); legacy inline base64 is
+  // too big to ship with the list, so it gets a button that pulls it on demand.
+  function reportMediaHtml(r) {
+    if (!r.msgType || r.msgType === "text") return "";
+    const label = `<span class="rl-tag">${esc(t("adm_rep_attachment"))} · ${esc(r.msgType)}${r.msgMediaName ? " · " + esc(r.msgMediaName) : ""}</span>`;
+    if (r.msgMediaInline && !r.msgMedia)
+      return `<div class="arep-media">${label}<button type="button" class="arep-load-media">${t("adm_rep_load_media")}</button></div>`;
+    if (!r.msgMedia) return `<div class="arep-media">${label}</div>`;
+    return `<div class="arep-media">${label}${mediaEmbed(r.msgType, r.msgMedia, r.msgMediaName)}</div>`;
+  }
+  function mediaEmbed(type, src, name) {
+    if (type === "image" || type === "gif" || type === "sticker")
+      return `<img class="arep-img" src="${esc(src)}" alt="" loading="lazy">`;
+    if (type === "audio") return `<audio class="arep-audio" src="${esc(src)}" controls preload="none"></audio>`;
+    if (type === "video") return `<video class="arep-vid" src="${esc(src)}" controls preload="none"></video>`;
+    return `<a class="arep-file" href="${esc(src)}" download="${esc(name || "file")}" target="_blank" rel="noopener">${esc(name || t("pv_file"))}</a>`;
+  }
+  async function loadReportMedia(el, btn) {
+    btn.disabled = true; btn.textContent = t("adm_rep_loading");
+    const { ok, data } = await aapi(`/api/admin/reports/${el.dataset.id}/media`, null, "GET");
+    if (!ok || !data.media) { btn.textContent = (data && data.error) || "error"; return; }
+    btn.outerHTML = mediaEmbed(data.type, data.media, data.mediaName);
   }
   async function resolveReport(act, el) {
     const id = el.dataset.id, target = el.dataset.target;
     let body;
-    if (act === "ipban-days") { const days = Math.max(1, Number(el.querySelector(".arep-days").value) || 1); if (!confirm(t("adm_confirm_repban", { login: target, days })) ) return; body = { action: "ipban", days }; }
+    if (act === "warn") {
+      const text = await askText(t("adm_warn_prompt", { login: target }), "", t("adm_warn_ph"), { multiline: true });
+      if (!text || !text.trim()) return;
+      body = { action: "warn", text: text.trim() };
+    }
+    else if (act === "ipban-days") { const days = Math.max(1, Number(el.querySelector(".arep-days").value) || 1); if (!confirm(t("adm_confirm_repban", { login: target, days })) ) return; body = { action: "ipban", days }; }
     else if (act === "ipban-life") { if (!confirm(t("adm_confirm_repban_life", { login: target }))) return; body = { action: "ipban", life: true }; }
     else if (act === "false") { body = { action: "false" }; }
     const { ok, data } = await aapi(`/api/admin/reports/${id}/resolve`, body);
-    notify(ok ? t("adm_rep_done") : ((data && data.error) || "error"));
+    notify(ok ? (data && data.warned ? t("adm_rep_warned", { login: data.warned }) : t("adm_rep_done")) : ((data && data.error) || "error"));
     loadAdminReports(); refreshRepBadge(); loadAdminStats();
   }
   $("repSearch") && ($("repSearch").oninput = debounce(loadAdminReports, 300));

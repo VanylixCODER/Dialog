@@ -1100,9 +1100,23 @@
       <button id="askClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
       <div class="modal-title" id="askTitle"></div>
       <input id="askInput" class="field" maxlength="120" autocomplete="off" />
+      <textarea id="askArea" class="field hidden" rows="5" maxlength="2000"></textarea>
       <div class="modal-actions">
         <button id="askCancel" class="btn-ghost" type="button" data-i18n="cancel">Cancel</button>
         <button id="askOk" class="btn-primary" type="button" data-i18n="ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- An admin warning. Blocking and acknowledge-only: the point is that it is read. -->
+  <div id="warnModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card warn-card">
+      <div class="warn-icon">⚠️</div>
+      <div class="modal-title" data-i18n="warn_title">Warning from the moderators</div>
+      <div class="warn-text" id="warnText"></div>
+      <div class="warn-meta" id="warnMeta"></div>
+      <div class="modal-actions">
+        <button id="warnOk" class="btn-primary" type="button" data-i18n="warn_ack">I understand</button>
       </div>
     </div>
   </div>

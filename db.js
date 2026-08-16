@@ -366,6 +366,21 @@ export async function initSchema() {
     KEY idx_reports_created (created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // Admin warnings. Kept as rows rather than a transient socket push so a warning
+  // still lands if the user is offline, and so there is an attributable record of
+  // who sent what — a warning nobody can trace is not a moderation tool.
+  await pool.query(`CREATE TABLE IF NOT EXISTS warnings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    login VARCHAR(24) NOT NULL,
+    text VARCHAR(2000) NOT NULL,
+    issued_by VARCHAR(24) NOT NULL,
+    report_id INT NULL,
+    created_at BIGINT NOT NULL,
+    ack_at BIGINT NULL,
+    KEY idx_warn_login (login, ack_at),
+    KEY idx_warn_created (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Stickers a user made. `media` is a /uploads/<hash>.<ext> URL, so the bytes are
   // content-addressed and shared with every message that sends the sticker.
   await pool.query(`CREATE TABLE IF NOT EXISTS stickers (
@@ -1148,6 +1163,64 @@ export async function listReports({ filter = "pending", q = "", sort = "new", li
   return r.map((x) => ({ ...x, created_at: Number(x.created_at), resolved_at: x.resolved_at == null ? null : Number(x.resolved_at), ban_until: x.ban_until == null ? null : Number(x.ban_until) }));
 }
 export async function getReport(id) { const r = await query("SELECT * FROM reports WHERE id=?", [id]); return r[0] || null; }
+
+// The media on the reported message, for the admin queue. Text reports carry a
+// preview already; images and voice notes were invisible without this.
+// Attachments live on disk as /uploads/<hash> and that path is public and
+// content-addressed, so it can go straight into the list. Legacy rows still hold
+// base64 inline — those would be megabytes each, so they are flagged and fetched
+// one at a time through reportMedia() instead.
+export async function reportMediaSummary(ids) {
+  if (!ids.length) return new Map();
+  const rows = await query(
+    "SELECT id, type, media_name, media_size, " +
+    "CASE WHEN media LIKE '/uploads/%' THEN media ELSE NULL END AS media, " +
+    "(media IS NOT NULL AND media NOT LIKE '/uploads/%') AS inline_media " +
+    "FROM messages WHERE id IN (" + ids.map(() => "?").join(",") + ")",
+    ids
+  );
+  const out = new Map();
+  for (const r of rows) {
+    out.set(Number(r.id), {
+      msgType: r.type,
+      msgMedia: r.media || null,
+      msgMediaName: r.media_name || null,
+      msgMediaSize: r.media_size == null ? null : Number(r.media_size),
+      msgMediaInline: !!Number(r.inline_media),
+    });
+  }
+  return out;
+}
+// Full media for one message — used for the legacy inline case, on demand.
+export async function reportMedia(messageId) {
+  const r = await query("SELECT type, media, media_name FROM messages WHERE id=?", [messageId]);
+  return r[0] || null;
+}
+
+// ---------- Admin warnings ----------
+export async function addWarning({ login, text, by, reportId = null }) {
+  const r = await execute(
+    "INSERT INTO warnings (login, text, issued_by, report_id, created_at) VALUES (?,?,?,?,?)",
+    [login, String(text).slice(0, 2000), by, reportId, Date.now()]
+  );
+  return r.insertId;
+}
+export async function pendingWarnings(login) {
+  return (await query(
+    "SELECT id, text, issued_by AS by, created_at AS createdAt FROM warnings WHERE login=? AND ack_at IS NULL ORDER BY created_at ASC",
+    [login]
+  )).map((w) => ({ ...w, id: Number(w.id), createdAt: Number(w.createdAt) }));
+}
+export async function ackWarning(login, id) {
+  const r = await execute("UPDATE warnings SET ack_at=? WHERE id=? AND login=? AND ack_at IS NULL", [Date.now(), Number(id) || 0, login]);
+  return r.affectedRows > 0;
+}
+export async function warningsFor(login, limit = 50) {
+  return (await query(
+    "SELECT id, text, issued_by AS by, created_at AS createdAt, ack_at AS ackAt FROM warnings WHERE login=? ORDER BY created_at DESC LIMIT ?",
+    [login, Math.min(200, limit | 0 || 50)]
+  )).map((w) => ({ ...w, id: Number(w.id), createdAt: Number(w.createdAt), ackAt: w.ackAt == null ? null : Number(w.ackAt) }));
+}
 export async function resolveReport(id, { status, resolution, ban_until, by }) {
   await execute("UPDATE reports SET status=?, resolution=?, ban_until=?, resolved_by=?, resolved_at=? WHERE id=?",
     [status, resolution || null, ban_until || null, by || null, Date.now(), id]);

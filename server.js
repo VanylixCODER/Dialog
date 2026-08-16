@@ -53,6 +53,7 @@ import {
   adminListUsers, adminStats, setUserBanned, setUserName, setUserLastIp,
   isIpBanned, banIp, unbanIp, listBannedIps,
   createReport, listReports, getReport, resolveReport, countPendingReports,
+  reportMediaSummary, reportMedia, addWarning, pendingWarnings, ackWarning, warningsFor,
   setUserReportBan, clearUserReport, setEmailWithStamp,
   messagesFrom, firstMessageIdAtOrAfter, searchMessages, pinMessage, getPinned, replySnippet,
   listSessions, deleteSessionOf, deleteOtherSessions, touchSession,
@@ -1171,7 +1172,21 @@ app.get("/api/admin/stats", async (req, res) => {
 app.get("/api/admin/reports", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
   const list = await listReports({ filter: String(req.query.filter || "pending"), q: String(req.query.q || ""), sort: String(req.query.sort || "new") });
-  res.json(list);
+  // Attach what the reported message actually was, so a reported image or voice
+  // note can be reviewed instead of guessed at from a text preview.
+  const ids = [...new Set(list.map((r) => Number(r.message_id)).filter(Boolean))];
+  const media = await reportMediaSummary(ids);
+  res.json(list.map((r) => ({ ...r, ...(media.get(Number(r.message_id)) || {}) })));
+});
+// Legacy rows keep the attachment inline as base64; too big to ship with the whole
+// list, so the admin pulls one at a time.
+app.get("/api/admin/reports/:id/media", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const rep = await getReport(req.params.id);
+  if (!rep || !rep.message_id) return res.status(404).json({ error: "no_media" });
+  const m = await reportMedia(rep.message_id);
+  if (!m || !m.media) return res.status(404).json({ error: "no_media" });
+  res.json({ type: m.type, media: m.media, mediaName: m.media_name || null });
 });
 app.get("/api/admin/reports-count", async (req, res) => {
   if (!(await requireAdmin(req, res))) return;
@@ -1186,6 +1201,17 @@ app.post("/api/admin/reports/:id/resolve", async (req, res) => {
   if (action === "false") {
     await resolveReport(rep.id, { status: "false", resolution: "false", by: (await authUser(req)).login });
     return res.json({ ok: true });
+  }
+  // Warn: deliver a custom notice to the reported user and close the report.
+  // No ban, no "unstable" mark — the point is the message.
+  if (action === "warn") {
+    const text = String(req.body.text || "").trim().slice(0, 2000);
+    if (!text) return res.status(400).json({ error: "empty_text" });
+    const by = (await authUser(req)).login;
+    const id = await addWarning({ login: rep.target, text, by, reportId: rep.id });
+    notifyUser(rep.target, "admin-warning", { id, text, by, createdAt: Date.now() });
+    await resolveReport(rep.id, { status: "actioned", resolution: "warned", by });
+    return res.json({ ok: true, warned: rep.target });
   }
   if (action === "ipban") {
     const life = !!req.body.life;
@@ -2603,6 +2629,26 @@ app.post("/api/dm-settings", async (req, res) => {
     await setDmAutoClear(me.login, room, req.body.autoClearMs);
     res.json({ ok: true });
   } catch (e) { console.error("dm settings set", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: admin warnings (user side) ----------
+// Polled on load so a warning issued while the user was offline still lands.
+app.get("/api/warnings", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    res.json(await pendingWarnings(me.login));
+  } catch (e) { console.error("warnings get", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.post("/api/warnings/:id/ack", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    res.json({ ok: await ackWarning(me.login, req.params.id) });
+  } catch (e) { console.error("warnings ack", e.message); res.status(500).json({ error: "server error" }); }
+});
+// A user's warning history, for the admin reviewing whether this is a repeat.
+app.get("/api/admin/warnings/:login", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  res.json(await warningsFor(String(req.params.login || "").toLowerCase()));
 });
 
 // ---------- REST: stickers ----------
