@@ -219,21 +219,20 @@
   <div class="wrap">
     <div class="hero-grid">
       <div>
-        <span class="chip" data-t="hBadge">FREE · OPEN SOURCE · NO PHONE NUMBER</span>
-        <h1><span data-t="hL1">Talk freely.</span><br /><span data-t="hL2">Nobody in</span><br /><span class="lit" data-t="hL3">between.</span></h1>
-        <p class="hero-sub" data-t="hSub">Chat, peer-to-peer group calls and screen share, built for communities
+        <h1><span data-aos="wipe-up" data-t="hL1">Talk freely.</span><br /><span data-aos="wipe-up" data-aos-delay="120" data-t="hL2">Nobody in</span><br /><span class="lit" data-aos="glow-in" data-aos-delay="280" data-aos-duration="1100" data-t="hL3">between.</span></h1>
+        <p class="hero-sub" data-aos="fade-up" data-aos-delay="420" data-t="hSub">Chat, peer-to-peer group calls and screen share, built for communities
           that would rather run the thing themselves. Call media goes straight between participants — there is no
           server in the middle of it.</p>
-        <div class="hero-cta">
+        <div class="hero-cta" data-aos="fade-up" data-aos-delay="560">
           <a class="btn btn-accent" href="/download" data-t="bDl">Download Dialog</a>
           <a class="btn btn-line" href="/login" data-t="bBr">Use in browser</a>
           <span class="hero-note" data-t="bNote">no install · no phone number</span>
         </div>
       </div>
-      <img class="hero-boot" src="/src/landing/boot.webp" alt="" width="300" height="300" />
+      <img class="hero-boot" data-aos="zoom-in" data-aos-delay="260" src="/src/landing/boot.webp" alt="" width="300" height="300" />
     </div>
 
-    <div class="stats">
+    <div class="stats" data-aos="fade-up" data-aos-delay="680">
       <div><b>P2P</b><span data-t="st1">CALL MEDIA — NO SERVER IN THE PATH</span></div>
       <div><b>0</b><span data-t="st3">PHONE NUMBERS OR TRACKERS REQUIRED</span></div>
       <div><b>AGPL</b><span data-t="st4">SOURCE PUBLISHED ON GITHUB</span></div>
@@ -243,7 +242,7 @@
       <b data-t="lLive">LIVE CALLS</b><i></i><i></i><i></i><i></i><i></i>
     </div>
 
-    <figure class="win" id="win">
+    <figure class="win" id="win" data-aos="rise">
       <div class="win-grip" data-grip></div>
       <div class="win-bar" data-drag>
         <span class="win-title">DialogCalls.png</span>
@@ -263,18 +262,18 @@
   <div class="wrap">
     <div class="gal-head">
       <div>
-        <div class="kicker">02 — <span data-t="kApp">THE APP</span></div>
-        <h2 class="sec-h" data-t="tTitle">See it running</h2>
+        <div class="kicker" data-aos="fade-right">02 — <span data-t="kApp">THE APP</span></div>
+        <h2 class="sec-h" data-aos="fade-up" data-aos-delay="80" data-t="tTitle">See it running</h2>
       </div>
-      <p data-t="tSub">Real screens from the desktop build — dense sidebar, glow-lined bubbles, the call docked
+      <p data-aos="fade-up" data-aos-delay="160" data-t="tSub">Real screens from the desktop build — dense sidebar, glow-lined bubbles, the call docked
         beside the conversation instead of on top of it.</p>
     </div>
     <div class="gal">
-      <figure>
+      <figure data-aos="zoom-in">
         <div class="fr"><img src="/src/landing/shot-screenshare.webp" alt="Screen share inside a group call" /></div>
         <figcaption>01 — <span data-t="tCapBig">SCREEN SHARE IN A CALL</span></figcaption>
       </figure>
-      <figure>
+      <figure data-aos="zoom-in" data-aos-delay="140">
         <div class="fr"><img src="/src/landing/shot-group.webp" alt="Group chat with the member list open" /></div>
         <figcaption>02 — <span data-t="tCap2">GROUP CHAT + MEMBERS</span></figcaption>
       </figure>
@@ -286,19 +285,19 @@
 <section class="band" id="security">
   <div class="wrap">
     <div>
-      <div class="kicker">03 — <span data-t="kSec">SECURITY</span></div>
-      <h2 class="sec-h" data-t="sTitle">Nobody in the middle of a call, and no fiction about the rest.</h2>
+      <div class="kicker" data-aos="fade-right">03 — <span data-t="kSec">SECURITY</span></div>
+      <h2 class="sec-h" data-aos="fade-up" data-aos-delay="80" data-t="sTitle">Nobody in the middle of a call, and no fiction about the rest.</h2>
       <p data-t="sSub">Call media never touches a server. Sessions can be told to expire and wipe the device.
         What isn't encrypted yet is written down plainly rather than glossed over — the code is public, so
         verify it instead of believing us.</p>
       <a class="btn btn-accent" href="/privacy" style="margin-top:24px" data-t="sCta">Read the privacy notes</a>
     </div>
     <div class="band-rows">
-      <div><b data-t="sc1">Calls are peer-to-peer</b><span data-t="sc1b">Audio, video and screen share flow directly between participants over WebRTC. No media server sits in the middle, so no third party receives the stream.</span></div>
-      <div><b data-t="sc2">Messages are not E2E encrypted — yet</b><span data-t="sc2b">They travel over TLS and are stored on the server you or we run. End-to-end encrypted DMs are on the roadmap below, and this line changes when they ship.</span></div>
-      <div><b data-t="sc3">Self-destructing sessions</b><span data-t="sc3b">Set a device timer: when it runs out the account signs out and clears its local cache — storage, service worker and all.</span></div>
-      <div><b data-t="sc4">No phone number, no ad graph</b><span data-t="sc4b">A username is the whole identity. No contact upload, no tracking, no analytics SDKs.</span></div>
-      <div><b data-t="sc6">Auditable and self-hostable</b><span data-t="sc6b">Read the source, build it yourself, or run the whole stack on your own box under AGPL.</span></div>
+      <div data-aos="fade-left"><b data-t="sc1">Calls are peer-to-peer</b><span data-t="sc1b">Audio, video and screen share flow directly between participants over WebRTC. No media server sits in the middle, so no third party receives the stream.</span></div>
+      <div data-aos="fade-left" data-aos-delay="80"><b data-t="sc2">Messages are not E2E encrypted — yet</b><span data-t="sc2b">They travel over TLS and are stored on the server you or we run. End-to-end encrypted DMs are on the roadmap below, and this line changes when they ship.</span></div>
+      <div data-aos="fade-left" data-aos-delay="160"><b data-t="sc3">Self-destructing sessions</b><span data-t="sc3b">Set a device timer: when it runs out the account signs out and clears its local cache — storage, service worker and all.</span></div>
+      <div data-aos="fade-left" data-aos-delay="240"><b data-t="sc4">No phone number, no ad graph</b><span data-t="sc4b">A username is the whole identity. No contact upload, no tracking, no analytics SDKs.</span></div>
+      <div data-aos="fade-left" data-aos-delay="320"><b data-t="sc6">Auditable and self-hostable</b><span data-t="sc6b">Read the source, build it yourself, or run the whole stack on your own box under AGPL.</span></div>
     </div>
   </div>
 </section>
@@ -307,16 +306,16 @@
 <section class="section">
   <div class="wrap feat">
     <div>
-      <h2 data-t="fTitle">Built for rooms, not for feeds</h2>
-      <p data-t="fSub">Six things, done properly.</p>
+      <h2 data-aos="fade-right" data-t="fTitle">Built for rooms, not for feeds</h2>
+      <p data-aos="fade-right" data-aos-delay="80" data-t="fSub">Six things, done properly.</p>
     </div>
     <div class="feat-list">
-      <div><h3 data-t="f1t">Instant messaging</h3><p data-t="f1b">Reactions, edits, replies, voice notes, GIFs and files in DMs or groups.</p></div>
-      <div><h3 data-t="f2t">Group voice &amp; video</h3><p data-t="f2b">Jump into the room in one tap. No lobby, no seat count, no waiting.</p></div>
-      <div><h3 data-t="f3t">Screen share</h3><p data-t="f3b">Whole-screen sharing for presenting, pairing and playing together.</p></div>
-      <div><h3 data-t="f4t">Native apps</h3><p data-t="f4b">Windows, macOS, Linux and Android — tray, badges, auto-updates.</p></div>
-      <div><h3 data-t="f5t">Bot API</h3><p data-t="f5b">One token, plain HTTP, webhooks. Ship a bot this afternoon.</p></div>
-      <div><h3 data-t="f6t">Self-hostable</h3><p data-t="f6b">One compose file: app, database, cache. Your box, your rules.</p></div>
+      <div data-aos="fade-up"><h3 data-t="f1t">Instant messaging</h3><p data-t="f1b">Reactions, edits, replies, voice notes, GIFs and files in DMs or groups.</p></div>
+      <div data-aos="fade-up" data-aos-delay="70"><h3 data-t="f2t">Group voice &amp; video</h3><p data-t="f2b">Jump into the room in one tap. No lobby, no seat count, no waiting.</p></div>
+      <div data-aos="fade-up" data-aos-delay="140"><h3 data-t="f3t">Screen share</h3><p data-t="f3b">Whole-screen sharing for presenting, pairing and playing together.</p></div>
+      <div data-aos="fade-up" data-aos-delay="210"><h3 data-t="f4t">Native apps</h3><p data-t="f4b">Windows, macOS, Linux and Android — tray, badges, auto-updates.</p></div>
+      <div data-aos="fade-up" data-aos-delay="280"><h3 data-t="f5t">Bot API</h3><p data-t="f5b">One token, plain HTTP, webhooks. Ship a bot this afternoon.</p></div>
+      <div data-aos="fade-up" data-aos-delay="350"><h3 data-t="f6t">Self-hostable</h3><p data-t="f6b">One compose file: app, database, cache. Your box, your rules.</p></div>
     </div>
   </div>
 </section>
@@ -324,9 +323,9 @@
 <!-- ── 04 · How it compares ─────────────────────────────────────────────── -->
 <section class="section">
   <div class="wrap">
-    <div class="kicker">04 — <span data-t="kCmp">HOW IT COMPARES</span></div>
-    <h2 class="sec-h" data-t="cmpTitle">Pick your trade-offs deliberately</h2>
-    <p class="sec-p" data-t="cmpSub">Most messengers give you two of the three: privacy, group calls, or control
+    <div class="kicker" data-aos="fade-right">04 — <span data-t="kCmp">HOW IT COMPARES</span></div>
+    <h2 class="sec-h" data-aos="fade-up" data-aos-delay="80" data-t="cmpTitle">Pick your trade-offs deliberately</h2>
+    <p class="sec-p" data-aos="fade-up" data-aos-delay="160" data-t="cmpSub">Most messengers give you two of the three: privacy, group calls, or control
       over the server. Dialog is built to give all three.</p>
     <div class="cmp-wrap">
       <table class="cmp">
@@ -339,12 +338,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr><td data-t="r1">Group calls with no server in the middle</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
-          <tr><td data-t="r2">Screen share in a call</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vLtd">Limited</td><td class="them" data-t="vYes">Yes</td></tr>
-          <tr><td data-t="r3">Sign up without a phone number</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vSome">Sometimes</td></tr>
-          <tr><td data-t="r4">Run your own server</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
-          <tr><td data-t="r5">Full source published</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vClient">Client only</td><td class="them" data-t="vNo">No</td></tr>
-          <tr><td data-t="r6">Bot API without a review queue</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vYes">Yes</td><td class="them" data-t="vAppr">With approval</td></tr>
+          <tr data-aos="fade-up"><td data-t="r1">Group calls with no server in the middle</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
+          <tr data-aos="fade-up" data-aos-delay="55"><td data-t="r2">Screen share in a call</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vLtd">Limited</td><td class="them" data-t="vYes">Yes</td></tr>
+          <tr data-aos="fade-up" data-aos-delay="110"><td data-t="r3">Sign up without a phone number</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vSome">Sometimes</td></tr>
+          <tr data-aos="fade-up" data-aos-delay="165"><td data-t="r4">Run your own server</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vNo">No</td><td class="them" data-t="vNo">No</td></tr>
+          <tr data-aos="fade-up" data-aos-delay="220"><td data-t="r5">Full source published</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vClient">Client only</td><td class="them" data-t="vNo">No</td></tr>
+          <tr data-aos="fade-up" data-aos-delay="275"><td data-t="r6">Bot API without a review queue</td><td class="us" data-t="vYes">Yes</td><td class="them" data-t="vYes">Yes</td><td class="them" data-t="vAppr">With approval</td></tr>
         </tbody>
       </table>
     </div>
@@ -354,7 +353,7 @@
 <!-- ── Build on it / Host it yourself ───────────────────────────────────── -->
 <section class="section" id="host">
   <div class="wrap two">
-    <div>
+    <div data-aos="fade-up">
       <h2 data-t="bldTitle">Build on it</h2>
       <p data-t="bldSub">A token and an HTTP call is the whole onboarding.</p>
 <pre><b>POST</b> /bot&lt;token&gt;/sendMessage
@@ -363,7 +362,7 @@ Content-Type: application/json
 {"chat_id":"@grp:12","text":"deploy ok"}</pre>
       <a class="btn btn-line" href="/bots" data-t="bldCta">Read the Bot API</a>
     </div>
-    <div>
+    <div data-aos="fade-up" data-aos-delay="140">
       <h2 data-t="hstTitle">Host it yourself</h2>
       <p data-t="hstSub">App, database and cache in one compose file.</p>
 <pre><b>git clone</b> github.com/VanylixCODER/Dialog
@@ -377,18 +376,18 @@ cp .env.example .env
 <!-- ── 07 · Roadmap ─────────────────────────────────────────────────────── -->
 <section class="section">
   <div class="wrap">
-    <div class="kicker">07 — <span data-t="kRoad">ROADMAP</span></div>
-    <h2 class="sec-h" data-t="roadTitle">What's landed, what's next</h2>
+    <div class="kicker" data-aos="fade-right">07 — <span data-t="kRoad">ROADMAP</span></div>
+    <h2 class="sec-h" data-aos="fade-up" data-aos-delay="80" data-t="roadTitle">What's landed, what's next</h2>
     <div class="road">
-      <div>
+      <div data-aos="fade-up">
         <h3 data-t="roadShipped">SHIPPED</h3>
         <ul data-t-html="roadS"><li>Peer-to-peer voice, video and screen share</li><li>Desktop builds with auto-update</li><li>Android client</li><li>Bot API v1</li><li>Two-factor auth, session self-destruct</li></ul>
       </div>
-      <div>
+      <div data-aos="fade-up" data-aos-delay="130">
         <h3 data-t="roadNext">IN PROGRESS</h3>
         <ul data-t-html="roadN"><li>Encryption at rest for stored messages</li><li>Metadata reduction</li><li>iOS build</li></ul>
       </div>
-      <div>
+      <div data-aos="fade-up" data-aos-delay="260">
         <h3 data-t="roadLater">LATER</h3>
         <ul data-t-html="roadL"><li>End-to-end encrypted direct messages</li><li>Federation between self-hosted servers</li><li>Third-party security audit</li></ul>
       </div>
@@ -398,21 +397,21 @@ cp .env.example .env
 
 <!-- ── 08 · FAQ ─────────────────────────────────────────────────────────── -->
 <section class="faq-sec">
-  <div class="kicker">08 — <span data-t="kFaq">FAQ</span></div>
-  <h2 class="sec-h" data-t="fqTitle">Reasonable questions</h2>
+  <div class="kicker" data-aos="fade-right">08 — <span data-t="kFaq">FAQ</span></div>
+  <h2 class="sec-h" data-aos="fade-up" data-aos-delay="80" data-t="fqTitle">Reasonable questions</h2>
   <div class="faq">
-    <div><b data-t="q1">Is it end-to-end encrypted?</b><p data-t="a1">Call media is: audio, video and screen share go straight between participants and never reach a server. Messages are not — they travel over TLS and are stored on the instance you or we run. End-to-end encrypted DMs are on the roadmap, and we would rather say so than imply otherwise.</p></div>
-    <div><b data-t="q2">What does the server know about me?</b><p data-t="a2">A username, a hashed password, your messages, and the routing metadata needed to deliver them. No phone number, no address book, no analytics. Self-host and that server is yours.</p></div>
-    <div><b data-t="q3">How big can a call get?</b><p data-t="a3">Calls are a peer-to-peer mesh — every participant sends to every other one. Small groups are comfortable; very large rooms are not what it is built for.</p></div>
-    <div><b data-t="q4">Is it free?</b><p data-t="a4">Yes, and open source under AGPL. No paid tier gating calls or screen share. If you would rather not use the hosted instance, run your own — same code, same clients.</p></div>
+    <div data-aos="fade-up"><b data-t="q1">Is it end-to-end encrypted?</b><p data-t="a1">Call media is: audio, video and screen share go straight between participants and never reach a server. Messages are not — they travel over TLS and are stored on the instance you or we run. End-to-end encrypted DMs are on the roadmap, and we would rather say so than imply otherwise.</p></div>
+    <div data-aos="fade-up" data-aos-delay="80"><b data-t="q2">What does the server know about me?</b><p data-t="a2">A username, a hashed password, your messages, and the routing metadata needed to deliver them. No phone number, no address book, no analytics. Self-host and that server is yours.</p></div>
+    <div data-aos="fade-up" data-aos-delay="160"><b data-t="q3">How big can a call get?</b><p data-t="a3">Calls are a peer-to-peer mesh — every participant sends to every other one. Small groups are comfortable; very large rooms are not what it is built for.</p></div>
+    <div data-aos="fade-up" data-aos-delay="240"><b data-t="q4">Is it free?</b><p data-t="a4">Yes, and open source under AGPL. No paid tier gating calls or screen share. If you would rather not use the hosted instance, run your own — same code, same clients.</p></div>
   </div>
 </section>
 
 <!-- ── Closing ──────────────────────────────────────────────────────────── -->
 <section class="close">
   <div class="wrap">
-    <h2><span data-t="cTitle">Get Dialog</span><span>.</span></h2>
-    <div>
+    <h2 data-aos="fade-up"><span data-t="cTitle">Get Dialog</span><span>.</span></h2>
+    <div data-aos="fade-up" data-aos-delay="140">
       <a class="btn btn-accent" href="/download" data-t="cDl">Download the app</a>
       <a class="btn btn-line" href="/login" data-t="cBr">Open in browser</a>
     </div>
@@ -432,6 +431,7 @@ cp .env.example .env
   </div>
 </footer>
 
+<script src="/js/aos.js"></script>
 <script src="/js/site-i18n.js"></script>
 <script>
   document.getElementById("yr").textContent = new Date().getFullYear();
@@ -523,7 +523,6 @@ cp .env.example .env
     en: {
       nFeat: "Features", nSec: "Security", nBots: "Bots", nSelf: "Self-host", nOpen: "Open Dialog",
 
-      hBadge: "FREE · OPEN SOURCE · NO PHONE NUMBER",
       hL1: "Talk freely.", hL2: "Nobody in", hL3: "between.",
       hSub: "Chat, peer-to-peer group calls and screen share, built for communities that would rather run the thing themselves. Call media goes straight between participants — there is no server in the middle of it.",
       bDl: "Download Dialog", bBr: "Use in browser", bNote: "no install · no phone number",
@@ -592,7 +591,6 @@ cp .env.example .env
     ru: {
       nFeat: "Возможности", nSec: "Безопасность", nBots: "Боты", nSelf: "Свой сервер", nOpen: "Открыть Dialog",
 
-      hBadge: "БЕСПЛАТНО · ОТКРЫТЫЙ КОД · БЕЗ НОМЕРА ТЕЛЕФОНА",
       hL1: "Говорите свободно.", hL2: "Никого", hL3: "посередине.",
       hSub: "Чаты, групповые звонки напрямую и трансляция экрана — для сообществ, которые предпочитают держать всё у себя. Медиа звонка идёт прямо между участниками: сервера посередине нет.",
       bDl: "Скачать Dialog", bBr: "Открыть в браузере", bNote: "без установки · без номера телефона",

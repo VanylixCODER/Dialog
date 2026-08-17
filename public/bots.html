@@ -40,14 +40,14 @@
 
   <header class="page-head doc-head">
     <div class="wrap">
-      <div class="kicker">DEVELOPERS</div>
-      <h1>Bot API</h1>
-      <p class="lede">A bot is a Dialog account you own, driven by an external program that holds a
+      <div class="kicker" data-aos="fade-right">DEVELOPERS</div>
+      <h1 data-aos="fade-up" data-aos-delay="80">Bot API</h1>
+      <p class="lede" data-aos="fade-up" data-aos-delay="160">A bot is a Dialog account you own, driven by an external program that holds a
         secret token. Your program calls an <strong>HTTP API</strong> to send messages, and receives
         incoming ones by <strong>long-polling</strong> (<code>getUpdates</code>) or via a signed
         <strong>webhook</strong>. If you've used the Telegram Bot API, this will feel immediately
         familiar.</p>
-      <div class="btn-row">
+      <div class="btn-row" data-aos="fade-up" data-aos-delay="240">
         <a class="btn btn-accent" href="/login">Create a bot</a>
         <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog/blob/main/docs/bots.md" target="_blank" rel="noopener">Markdown reference</a>
         <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog" target="_blank" rel="noopener">Source on GitHub</a>
@@ -77,7 +77,7 @@
       &nbsp;·&nbsp; Everything is a bot user (DMable, addable to groups).
       &nbsp;·&nbsp; Inline keyboards &amp; <code>callback_query</code> are supported.</p>
 
-    <h2 id="create">1. Create a bot</h2>
+    <h2 id="create" data-aos="fade-up">1. Create a bot</h2>
     <p>Bots are self-serve — no approval needed.</p>
     <ul>
       <li>Open Dialog → <strong>Settings</strong> (gear) → <strong>Developer</strong>.</li>
@@ -92,7 +92,7 @@
     <div class="note"><strong>Limit:</strong> 3 bots per account. Bot accounts cannot log in with a
       password. Regenerating a token invalidates the previous one instantly.</div>
 
-    <h2 id="auth">2. Authentication</h2>
+    <h2 id="auth" data-aos="fade-up">2. Authentication</h2>
     <p>Pass the token one of two ways:</p>
     <pre><code><span class="c"># A) Token in the path (point any Telegram library's base URL here):</span>
 curl https://dialogmsg.xyz/bot&lt;token&gt;/getMe
@@ -104,7 +104,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       response is <code>{ "ok": true, "result": … }</code> or
       <code>{ "ok": false, "error_code": …, "description": … }</code>.</p>
 
-    <h2 id="chatid">3. <code>chat_id</code> — how chats are addressed</h2>
+    <h2 id="chatid" data-aos="fade-up">3. <code>chat_id</code> — how chats are addressed</h2>
     <div class="tbl-wrap"><table>
       <tr><th>Chat</th><th>Format</th><th>Example</th></tr>
       <tr><td>Direct message</td><td><code>@dm:&lt;a&gt;~&lt;b&gt;</code> — the two logins <strong>sorted alphabetically</strong></td><td><code>@dm:demo_bot~vnx</code></td></tr>
@@ -113,7 +113,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
     <p>Usually you just read <code>chat.id</code> off an incoming update and reply to it. A bot can
       only send to a chat it participates in, otherwise <code>sendMessage</code> returns <code>403</code>.</p>
 
-    <h2 id="receiving">4. Receiving messages</h2>
+    <h2 id="receiving" data-aos="fade-up">4. Receiving messages</h2>
     <h3>Option A — <code>getUpdates</code> (long-polling)</h3>
     <pre><code>curl "https://dialogmsg.xyz/bot&lt;token&gt;/getUpdates?offset=0&amp;timeout=30"</code></pre>
     <ul>
@@ -132,7 +132,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       <li>While a webhook is set, updates go to it and are <strong>not</strong> queued for <code>getUpdates</code>. Failed deliveries are dropped (no retry in v1).</li>
     </ul>
 
-    <h2 id="sending">5. Sending &amp; managing messages</h2>
+    <h2 id="sending" data-aos="fade-up">5. Sending &amp; managing messages</h2>
     <pre><code>curl -X POST "https://dialogmsg.xyz/bot&lt;token&gt;/sendMessage" \
   -H 'Content-Type: application/json' \
   -d '{"chat_id":"@dm:demo_bot~vnx","text":"Hello 👋"}'</code></pre>
@@ -144,7 +144,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
       <code>editMessageText</code> and <code>deleteMessage</code> your own messages, and send a typing
       indicator with <code>sendChatAction</code>.</p>
 
-    <h2 id="buttons">6. Inline buttons (keyboards)</h2>
+    <h2 id="buttons" data-aos="fade-up">6. Inline buttons (keyboards)</h2>
     <p>Attach an inline keyboard to any message with <code>reply_markup</code> (Telegram-shaped) — a
       list of rows, each a list of buttons. A button is a <strong>link</strong>
       (<code>url</code>, opens in the user's browser) or a <strong>callback</strong>
@@ -165,7 +165,7 @@ curl https://dialogmsg.xyz/api/bot/getMe -H "Authorization: Bearer &lt;token&gt;
 await call(<span class="s">"answerCallbackQuery"</span>, { callback_query_id: q.id, text: <span class="s">"You chose "</span> + q.data });
 await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } });</code></pre>
 
-    <h2 id="update">7. The update object</h2>
+    <h2 id="update" data-aos="fade-up">7. The update object</h2>
     <p>Each item from <code>getUpdates</code> (and each webhook POST body) looks like:</p>
     <pre><code>{
   <span class="s">"update_id"</span>: 137,
@@ -194,7 +194,7 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
   }
 }</code></pre>
 
-    <h2 id="commands">8. Commands</h2>
+    <h2 id="commands" data-aos="fade-up">8. Commands</h2>
     <p>Register slash-commands — they power the <strong>/ command menu</strong> that appears in the
       composer when a user chats with your bot.</p>
     <pre><code>curl -X POST .../setMyCommands -H 'Content-Type: application/json' -d '{
@@ -204,13 +204,13 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
   ]
 }'</code></pre>
 
-    <h2 id="groups">9. Behavior in groups — privacy</h2>
+    <h2 id="groups" data-aos="fade-up">9. Behavior in groups — privacy</h2>
     <p>Bots are added to groups through the normal member picker. By default a bot has
       <strong>group privacy ON</strong>: inside a group it only receives messages that start with a
       slash command (<code>/…</code>) or <code>@mention</code> the bot. Turn privacy <strong>off</strong>
       to receive every group message. Privacy never affects DMs.</p>
 
-    <h2 id="methods">10. Method reference</h2>
+    <h2 id="methods" data-aos="fade-up">10. Method reference</h2>
     <div class="tbl-wrap"><table>
       <tr><th>Method</th><th>Params</th><th>Result</th></tr>
       <tr><td><code>getMe</code></td><td>—</td><td>bot identity</td></tr>
@@ -228,7 +228,7 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
       <tr><td><code>sendChatAction</code></td><td><code>chat_id</code>, <code>action</code></td><td><code>true</code></td></tr>
     </table></div>
 
-    <h2 id="examples">11. Example — a polling echo bot (Node.js, zero deps)</h2>
+    <h2 id="examples" data-aos="fade-up">11. Example — a polling echo bot (Node.js, zero deps)</h2>
     <pre><code><span class="k">const</span> TOKEN = process.env.DIALOG_TOKEN;               <span class="c">// dlg_…</span>
 <span class="k">const</span> BASE  = `https://dialogmsg.xyz/bot${TOKEN}`;
 
@@ -291,6 +291,7 @@ await call(<span class="s">"editMessageReplyMarkup"</span>, { message_id: q.mess
     </div>
   </footer>
 
+  <script src="/js/aos.js"></script>
   <script>
     document.getElementById("yr").textContent = new Date().getFullYear();
     document.getElementById("burger").onclick = () =>

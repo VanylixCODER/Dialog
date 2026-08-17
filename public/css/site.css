@@ -51,6 +51,38 @@ img { max-width: 100%; }
 @keyframes dgFade  { from { opacity: 0 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
 
+/* ---- Scroll reveals (js/aos.js) ----------------------------------------- */
+/* Every hidden state is scoped under html.aos, which only aos.js sets. No JS,
+   or reduced motion, means nothing here applies and the page renders plainly. */
+.aos [data-aos] {
+  opacity: 0;
+  transition: opacity .7s cubic-bezier(.22, 1, .36, 1), transform .7s cubic-bezier(.22, 1, .36, 1),
+              clip-path .8s cubic-bezier(.22, 1, .36, 1), filter .7s ease;
+  will-change: opacity, transform;
+}
+/* will-change is released once the element has arrived — holding a compositor
+   layer for all ~50 of these for the life of the page is not free. */
+.aos [data-aos].aos-in { opacity: 1; transform: none; clip-path: inset(0 0 0 0); filter: none; will-change: auto; }
+
+.aos [data-aos="fade-up"]    { transform: translateY(26px); }
+.aos [data-aos="fade-down"]  { transform: translateY(-26px); }
+.aos [data-aos="fade-right"] { transform: translateX(-28px); }
+.aos [data-aos="fade-left"]  { transform: translateX(28px); }
+.aos [data-aos="fade"]       { transform: none; }
+.aos [data-aos="zoom-in"]    { transform: scale(.94); }
+/* The hero shot: rises and settles, like a window being placed down. */
+.aos [data-aos="rise"]       { transform: translateY(40px) scale(.985); }
+/* Headline lines wipe up from behind their own baseline. */
+.aos [data-aos="wipe-up"]    { clip-path: inset(105% 0 0 0); transform: translateY(14px); }
+/* Hairline rules and the band draw themselves out from the left. */
+.aos [data-aos="draw"]       { clip-path: inset(0 100% 0 0); opacity: 1; }
+/* Accent text arrives lit, then cools to its resting glow. */
+.aos [data-aos="glow-in"]    { opacity: 0; filter: brightness(2.2) saturate(1.4); }
+
+/* Reveals must never be what makes the page scroll sideways. */
+.aos [data-aos="fade-right"], .aos [data-aos="fade-left"] { will-change: opacity, transform; }
+body { overflow-x: hidden; }
+
 .wrap { width: min(1100px, calc(100% - 80px)); margin: 0 auto; }
 
 /* ---- Nav ---------------------------------------------------------------- */

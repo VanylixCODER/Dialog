@@ -50,10 +50,10 @@
   <header class="page-head dl-head">
     <div class="wrap">
       <div class="kicker">01 — <span data-t="kicker">DOWNLOADS</span></div>
-      <h1 data-t="h1">Get Dialog</h1>
-      <p class="lede" id="recoLine" data-t="reco_none">Pick your platform below — or use Dialog right in
+      <h1 data-aos="fade-up" data-aos-delay="80" data-t="h1">Get Dialog</h1>
+      <p class="lede" id="recoLine" data-aos="fade-up" data-aos-delay="160" data-t="reco_none">Pick your platform below — or use Dialog right in
         your browser, with nothing to install.</p>
-      <div class="btn-row">
+      <div class="btn-row" data-aos="fade-up" data-aos-delay="240">
         <a class="btn btn-accent" href="/login" data-t="use_web">Use in browser instead</a>
         <a class="btn btn-line" href="https://github.com/VanylixCODER/Dialog/releases" target="_blank" rel="noopener" data-t="all_rel">All releases</a>
       </div>
@@ -62,7 +62,7 @@
 
   <section class="wrap" style="padding-top:8px">
     <div class="dl-grid" id="dlGrid"></div>
-    <p class="dl-foot" data-t-html="foot_note">
+    <p class="dl-foot" data-aos="fade" data-t-html="foot_note">
       ALL BUILDS ARE VERSION <span id="ver"></span> · LINUX APPIMAGE RUNS ON ANY DISTRO
       (<code>chmod +x</code> THEN RUN)
     </p>
@@ -81,6 +81,7 @@
     </div>
   </footer>
 
+  <script src="/js/aos.js"></script>
   <script src="/js/downloads-data.js"></script>
   <script src="/js/site-i18n.js"></script>
   <script>
@@ -114,6 +115,8 @@
           }).join("");
           var card = document.createElement("div");
           card.className = "dl-card" + (recommended ? " recommended" : "");
+          card.setAttribute("data-aos", "fade-up");
+          card.setAttribute("data-aos-delay", String(order.indexOf(key) * 90));
           card.innerHTML =
             (recommended ? '<span class="reco-tag">' + dict.reco_tag + '</span>' : "") +
             '<div class="os-ic"><img src="/src/os/' + p.icon + '.png" alt="' + p.label + '" /></div>' +
@@ -122,6 +125,8 @@
             '<div class="dl-list">' + items + "</div>";
           grid.appendChild(card);
         });
+        // Cards are new DOM nodes; the observer has to be told about them.
+        if (window.DialogAOS) window.DialogAOS.scan();
 
         var reco = document.getElementById("recoLine");
         if (os === "ios") reco.innerHTML = dict.reco_ios;
