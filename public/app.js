@@ -657,17 +657,50 @@ function wireTerminalWindow() {
   });
   addEventListener("pointerup", () => { drag = null; bar.classList.remove("dragging"); });
 
-  const hide = () => { win.classList.add("hidden"); open && open.classList.remove("hidden"); };
+  // Closing and opening are sequenced, not snapped: the window scales away into
+  // the corner where the chip appears, and only then does the column glide to the
+  // middle. Reopening runs it backwards. Feels like a document, not a div.
+  const stage = document.querySelector(".auth-stage");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const hide = () => {
+    if (win.classList.contains("hidden") || win.dataset.busy) return;
+    win.dataset.busy = "1";
+    win.classList.remove("maxed");
+    const settle = () => {
+      win.classList.add("hidden");
+      win.classList.remove("closing");
+      win.style.transform = "";          // drop any drag offset while it is away
+      stage && stage.classList.add("solo");
+      open && open.classList.remove("hidden");
+      delete win.dataset.busy;
+    };
+    if (reduced) return settle();
+    win.classList.add("closing");
+    let done = false;
+    const once = () => { if (done) return; done = true; settle(); };
+    win.addEventListener("animationend", once, { once: true });
+    setTimeout(once, 600);               // never strand the window if the event is missed
+  };
+
+  const show = () => {
+    if (!win.classList.contains("hidden") || win.dataset.busy) return;
+    pos = { x: 0, y: 0 };
+    stage && stage.classList.remove("solo");
+    open && open.classList.add("hidden");
+    win.classList.remove("hidden", "closing");
+    // restart the open animation even if the node never left the DOM
+    win.style.animation = "none"; void win.offsetWidth; win.style.animation = "";
+  };
+
   $("termMin") && ($("termMin").onclick = hide);
   $("termClose") && ($("termClose").onclick = hide);
   $("termMax") && ($("termMax").onclick = () => {
     win.classList.toggle("maxed");
     if (!win.classList.contains("maxed")) win.style.transform = "translate(" + pos.x + "px," + pos.y + "px)";
+    else win.style.transform = "";
   });
-  open && (open.onclick = () => {
-    pos = { x: 0, y: 0 }; win.style.transform = "";
-    win.classList.remove("hidden"); open.classList.add("hidden");
-  });
+  open && (open.onclick = show);
 }
 
 // Show/hide password toggles — wires every .toggle-eye once (login + profile).
@@ -735,6 +768,9 @@ function playAuthSuccess() {
     log.textContent = head + "\n\nSUCCESS! Logging in 3... 2.. 1.\n~$: session established";
     if (window.DialogRain) window.DialogRain.reveal();   // only once you are through
   }, 3400);
+  // The screen recedes rather than blinking out — the handoff a desktop makes
+  // when it finishes unlocking. enterApp() runs as it finishes.
+  setTimeout(() => { const l = $("login"); if (l) l.classList.add("handoff"); }, 4000);
   setTimeout(done, 4600);
 }
 
@@ -745,6 +781,16 @@ document.querySelectorAll(".auth-tab").forEach((tab) => tab.onclick = () => {
   $("forgotForm").classList.add("hidden");
   setAuthMode(tab.dataset.mode);
 });
+// Map the account-email error codes to the current UI language. The server sends
+// codes, never prose — it has no idea which language the caller reads.
+function emailErr(data) {
+  const code = data && data.error;
+  if (code === "cooldown") return t("acc_email_cooldown", { date: new Date(data.retryAt).toLocaleDateString() });
+  if (code === "same_email") return t("acc_email_same");
+  if (code === "bad_email") return t("err_bad_email");
+  if (code === "email_taken") return t("err_email_taken");
+  return code || t("err_generic");
+}
 // Map server auth error codes to the current UI language.
 function authErr(code) {
   if (!code) return t("err_login_failed");
@@ -923,7 +969,7 @@ $("emailNagForm") && ($("emailNagForm").onsubmit = async (e) => {
   }
   const email = ($("emailNagInput").value || "").trim();     // add email
   const { ok, data } = await api("/api/account/email", { email });
-  if (!ok) { msg.textContent = (data && data.error) || t("err_generic"); return; }
+  if (!ok) { msg.textContent = emailErr(data); return; }
   profile.email = data.email; profile.emailVerified = false;
   msg.className = "form-error ok"; msg.textContent = t("email_link_sent");
   setTimeout(() => $("emailNagModal").classList.add("hidden"), 1600);
@@ -933,7 +979,11 @@ $("emailNagDontShow") && ($("emailNagDontShow").onchange = async (e) => { if (e.
 function showLogin() {
   $("loginLoading").classList.add("hidden");
   $("loginAuth").classList.remove("hidden");
-  const term = $("authTerminal"); if (term) term.classList.remove("hidden");
+  // Coming back (sign out, add account) must start from a clean stage.
+  $("login").classList.remove("handoff");
+  const stage = document.querySelector(".auth-stage"); if (stage) stage.classList.remove("solo");
+  const chip = $("termOpen"); if (chip) chip.classList.add("hidden");
+  const term = $("authTerminal"); if (term) term.classList.remove("hidden", "closing", "maxed");
   wireAuthMirror();
   updateTerminal();
   try {
@@ -7229,9 +7279,7 @@ $("accEmailSave") && ($("accEmailSave").onclick = async () => {
   const msg = $("accEmailMsg"); msg.className = "form-error";
   const { ok, data } = await api("/api/account/email", { email });
   if (!ok) {
-    if (data && data.error === "cooldown") msg.textContent = t("acc_email_cooldown", { date: new Date(data.retryAt).toLocaleDateString() });
-    else if (data && data.error === "same_email") msg.textContent = t("acc_email_same");
-    else msg.textContent = (data && data.error) || t("err_generic");
+    msg.textContent = emailErr(data);
     return;
   }
   profile.email = data.email; profile.emailVerified = false; profile.emailChangedAt = Date.now();

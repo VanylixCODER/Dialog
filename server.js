@@ -459,7 +459,7 @@ app.post("/api/account/email", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
     const email = String(req.body.email || "").trim().toLowerCase();
-    if (!auth.EMAIL_RE.test(email) || email.length > 190) return res.status(400).json({ error: "Введите корректный e-mail" });
+    if (!auth.EMAIL_RE.test(email) || email.length > 190) return res.status(400).json({ error: "bad_email" });
     const u = await getUser(me.login);
     if (email === (u.email || "")) return res.status(400).json({ error: "same_email" });
     const last = Number(u.email_changed_at) || 0;
@@ -467,7 +467,7 @@ app.post("/api/account/email", async (req, res) => {
       return res.status(429).json({ error: "cooldown", retryAt: last + EMAIL_COOLDOWN_MS });
     }
     const taken = await getUserByEmail(email);
-    if (taken && taken.login !== me.login) return res.status(400).json({ error: "E-mail уже используется" });
+    if (taken && taken.login !== me.login) return res.status(400).json({ error: "email_taken" });
     await setEmailWithStamp(me.login, email);      // resets email_verified → 0, stamps time
     await setNagDismissed(me.login, false);
     for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
@@ -582,7 +582,7 @@ app.post("/api/reset", async (req, res) => {
   try {
     const { token, password } = req.body || {};
     const row = await consumeToken(token, "reset");
-    if (!row) return res.status(400).json({ error: "Ссылка недействительна или устарела" });
+    if (!row) return res.status(400).json({ error: "reset_link_invalid" });
     await auth.setPassword(row.login, password);
     // Invalidate every existing session for safety.
     for (const tk of await import("./db.js").then((m) => m.tokensForLogin(row.login))) { await import("./db.js").then((m) => m.deleteSession(tk)); await import("./cache.js").then((c) => c.cacheDel("sess:" + tk)); }

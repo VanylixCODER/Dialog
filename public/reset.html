@@ -55,7 +55,14 @@
       fetch("/api/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: token, password: pw }) })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
-          if (!res.ok) { btn.disabled = false; msg.className = "msg err"; msg.textContent = (res.d && res.d.error) || "Reset failed."; return; }
+          if (!res.ok) {
+            btn.disabled = false; msg.className = "msg err";
+            // The server answers with codes; this standalone page carries its own
+            // tiny map rather than pulling in the whole app dictionary.
+            var CODES = { reset_link_invalid: "This link is invalid or has expired." };
+            msg.textContent = CODES[res.d && res.d.error] || (res.d && res.d.error) || "Reset failed.";
+            return;
+          }
           form.style.display = "none";
           msg.className = "msg ok";
           msg.innerHTML = "Password updated. You can sign in now.<br><a class='open' href='/login'>Open Dialog</a>";

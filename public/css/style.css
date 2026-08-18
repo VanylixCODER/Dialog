@@ -333,18 +333,49 @@ a:focus-visible {
   position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden;
   background: #0a0d0b;
 }
+/* Handing over to the app: the sign-in screen recedes instead of blinking out. */
+.login.handoff .auth-stage { animation: handoff .7s var(--os-ease) both; }
+@keyframes handoff { to { opacity: 0; transform: scale(1.04); filter: blur(8px); } }
 .login::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
   background: radial-gradient(60% 50% at 26% 44%, rgba(var(--primary-rgb), 0.07), transparent 64%);
 }
 
+/* One calm curve for the whole screen. Everything that moves uses it, so the
+   column, the window and the chip all feel like one machine. */
+:root { --os-ease: cubic-bezier(.22, 1, .36, 1); --os-slow: .62s; }
+
 .auth-stage {
   position: relative; z-index: 2;
   display: flex; align-items: flex-start; justify-content: center; gap: 70px;
   width: min(1100px, 94vw);
+  transition: gap var(--os-slow) var(--os-ease), width var(--os-slow) var(--os-ease);
 }
-.login-card { position: relative; z-index: 2; flex: 0 0 auto; width: min(376px, 92vw); padding-top: 8px; }
+/* Terminal dismissed → the form takes the stage and settles in the middle. */
+.auth-stage.solo { gap: 0; width: min(420px, 92vw); }
+.login-card {
+  position: relative; z-index: 2; flex: 0 0 auto; width: min(376px, 92vw); padding-top: 8px;
+  transition: transform var(--os-slow) var(--os-ease);
+}
 .login-auth { display: flex; flex-direction: column; }
+/* Unlock: the column lifts in, its rows a beat behind it — the moment a desktop
+   session hands you the machine. */
+.login-auth > * { animation: unlockRow .55s var(--os-ease) both; }
+.login-auth > *:nth-child(1) { animation-delay: .04s }
+.login-auth > *:nth-child(2) { animation-delay: .09s }
+.login-auth > *:nth-child(3) { animation-delay: .14s }
+.login-auth > *:nth-child(4) { animation-delay: .19s }
+.login-auth > *:nth-child(5) { animation-delay: .24s }
+.login-auth > *:nth-child(n+6) { animation-delay: .28s }
+@keyframes unlockRow { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* Switching tab re-runs the field cascade so the new form deals itself in. */
+.auth-form:not(.hidden) .field, .auth-form:not(.hidden) .field-wrap { animation: dealIn .42s var(--os-ease) both; }
+.auth-form:not(.hidden) > *:nth-child(1) { animation-delay: .02s }
+.auth-form:not(.hidden) > *:nth-child(2) { animation-delay: .07s }
+.auth-form:not(.hidden) > *:nth-child(3) { animation-delay: .12s }
+.auth-form:not(.hidden) > *:nth-child(4) { animation-delay: .17s }
+.auth-form:not(.hidden) > *:nth-child(5) { animation-delay: .22s }
+@keyframes dealIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* Loading state — still centred, since the column is not yet on screen. */
 .login-loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 60px 0; }
@@ -423,9 +454,27 @@ a:focus-visible {
   display: flex; flex-direction: column; overflow: hidden;
   background: #000; border: 1px solid #0c0f0d; border-radius: 8px;
   box-shadow: 0 18px 60px rgba(0, 0, 0, .7), 0 0 60px rgba(var(--primary-rgb), .10);
-  animation: cardIn .6s var(--ease-out);
+  /* Scales out of the bottom-right, where the chip lives — the window and the
+     chip read as the same object in two states, the way a document does when it
+     opens out of its icon. */
+  transform-origin: 100% 100%;
+  animation: winOpen var(--os-slow) var(--os-ease) both;
 }
-.auth-terminal.maxed { position: fixed; inset: 16px; max-width: none; height: auto; max-height: none; transform: none !important; }
+.auth-terminal.closing { animation: winClose .42s cubic-bezier(.55, 0, .85, .35) both; pointer-events: none; }
+@keyframes winOpen {
+  from { opacity: 0; transform: scale(.72) translate(46px, 58px); filter: blur(6px); }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes winClose {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to   { opacity: 0; transform: scale(.72) translate(46px, 58px); filter: blur(6px); }
+}
+/* The reopen chip trades places with the window rather than just appearing. */
+.term-open { transform-origin: 100% 100%; animation: chipIn .34s var(--os-ease) both; }
+@keyframes chipIn { from { opacity: 0; transform: scale(.86) translateY(8px); } to { opacity: 1; transform: none; } }
+.auth-terminal.maxed { position: fixed; inset: 16px; max-width: none; height: auto; max-height: none; transform: none !important;
+  animation: none; transition: inset var(--os-slow) var(--os-ease); }
 .term-bar {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 0 0 0 16px; background: linear-gradient(#2a2e2c, #1e2220); border-bottom: 1px solid #0c0f0d;
@@ -6030,3 +6079,12 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   text-transform: none; font-weight: 500;
 }
 #loginAuth .auth-form .btn-primary:hover { background: rgba(var(--primary-rgb), .12) !important; filter: none; transform: none; }
+
+/* Reduced motion: the stage still recentres (that is layout, and it is the point),
+   but nothing scales, blurs or cascades. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-terminal, .auth-terminal.closing, .term-open,
+  .login-auth > *, .auth-form:not(.hidden) .field, .auth-form:not(.hidden) .field-wrap,
+  .login.handoff .auth-stage { animation: none !important; }
+  .login-card, .auth-stage { transition-duration: .01ms !important; }
+}
