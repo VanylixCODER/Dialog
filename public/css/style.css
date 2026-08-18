@@ -323,97 +323,168 @@ a:focus-visible {
 .pw-change #pwSaveBtn:disabled { opacity: .5; cursor: default; }
 
 /* ============ Login ============ */
+/* ============================================================================
+   Sign in / sign up — ported from dev/design/SignInUp page.
+   Left column is the form; the terminal beside it is a second way to fill the
+   SAME fields (its inputs write straight into the form), and can be closed
+   away. Matrix rain is painted only after a successful auth.
+   ========================================================================= */
 .login {
   position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden;
+  background: #0a0d0b;
 }
 .login::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(ellipse at 50% 30%, rgba(var(--primary-rgb), 0.16), transparent 70%),
-    radial-gradient(ellipse at 50% 100%, rgba(var(--primary-rgb), 0.08), transparent 60%);
+  background: radial-gradient(60% 50% at 26% 44%, rgba(var(--primary-rgb), 0.07), transparent 64%);
 }
-.login-card {
-  position: relative; z-index: 2;
-  width: min(400px, 94vw);
-  padding: 36px 32px;
-  background: linear-gradient(180deg, rgba(0, 14, 6, 0.85), rgba(0, 7, 0, 0.92));
-  border-radius: 14px;
-  display: flex; flex-direction: column; gap: 14px;
-  isolation: isolate;
-  backdrop-filter: blur(14px) saturate(140%);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--primary-rgb), 0.16);
-  animation: cardIn 0.55s var(--ease-out);
-}
-@keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
-/* Popups glide in from the right with a soft overshoot — slow enough to actually see. */
-@keyframes popIn { from { opacity: 0; transform: translate3d(56px, 0, 0) scale(0.96); } to { opacity: 1; transform: none; } }
-/* (вращающаяся conic-рамка убрана — отвлекала и портила вид логина; тонкая подсветка через .login-card box-shadow остаётся) */
-.login-card > * { position: relative; z-index: 1; }
 
-/* Loading dots inside the login card — shown while we check the stored session */
-.login-loading {
-  display: flex; flex-direction: column; align-items: center; gap: 16px;
-  padding: 30px 0;
+.auth-stage {
+  position: relative; z-index: 2;
+  display: flex; align-items: flex-start; justify-content: center; gap: 70px;
+  width: min(1100px, 94vw);
 }
+.login-card { position: relative; z-index: 2; flex: 0 0 auto; width: min(376px, 92vw); padding-top: 8px; }
+.login-auth { display: flex; flex-direction: column; }
+
+/* Loading state — still centred, since the column is not yet on screen. */
+.login-loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 60px 0; }
 .lds-dot { display: flex; gap: 8px; }
-.lds-dot span {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--primary);
-  animation: ldsDot 1.2s ease-in-out infinite;
-}
+.lds-dot span { width: 10px; height: 10px; border-radius: 50%; background: var(--primary);
+  animation: ldsDot 1.2s ease-in-out infinite; }
 .lds-dot span:nth-child(2) { animation-delay: 0.16s; }
 .lds-dot span:nth-child(3) { animation-delay: 0.32s; }
-@keyframes ldsDot {
-  0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); }
-  40% { opacity: 1; transform: scale(1); }
-}
+@keyframes ldsDot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); } 40% { opacity: 1; transform: scale(1); } }
 .login-loading p { color: var(--text-2); font-size: 14px; margin: 0; }
-.login-auth { display: flex; flex-direction: column; gap: 14px; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { opacity: 0; transform: translate3d(56px, 0, 0) scale(0.96); } to { opacity: 1; transform: none; } }
 
-/* ── Login stage: card on the left, read-only mirror-terminal on the right ── */
-.auth-stage { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 26px; width: min(1040px, 96vw); }
-.auth-stage .login-card { flex: 0 0 auto; }
-.lang-switch { position: fixed; top: 16px; right: 20px; z-index: 6; display: flex; align-items: center; gap: 6px;
-  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-size: 13px; }
-.lang-switch button { background: none; border: none; color: var(--text-dim); cursor: pointer; font: inherit; padding: 2px 4px; letter-spacing: 1px; }
-.lang-switch button.active { color: var(--accent-400); font-weight: 700; }
+.auth-logo { height: 40px; width: auto; align-self: flex-start; object-fit: contain; display: block; }
+.auth-kicker { margin-top: 14px; font: 400 10px/1 ui-monospace, "IBM Plex Mono", Menlo, monospace;
+  letter-spacing: .2em; text-transform: uppercase; color: #5d8a70; }
+.boot-hint { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); min-height: 1em; }
+
+.lang-switch { position: fixed; top: 20px; right: 28px; z-index: 6; display: flex; align-items: center; gap: 6px;
+  font: 500 12px/1 ui-monospace, "IBM Plex Mono", Menlo, monospace; }
+.lang-switch button { background: none; border: none; color: var(--text-dim); cursor: pointer; font: inherit;
+  padding: 4px 7px; border-radius: 5px; }
+.lang-switch button.active { color: var(--accent-400); background: rgba(var(--primary-rgb), .1); }
 .lang-switch button:hover { color: var(--accent-300); }
-.lang-switch .ls-sep { color: var(--text-dim); opacity: .6; }
+.lang-switch .ls-sep { color: #2f4a3a; }
 
+/* ---- Tabs: mono labels on a hairline, 2px accent underline on the active one ---- */
+.auth-tabs { display: flex; gap: 22px; margin-top: 34px; border-bottom: 1px solid var(--border-1); background: none; padding: 0; border-radius: 0; }
+.auth-tab {
+  flex: 0 0 auto; padding: 0 0 12px; margin-bottom: -1px;
+  background: transparent; border: 0; border-bottom: 2px solid transparent;
+  color: var(--text-dim); cursor: pointer;
+  font: 400 11px/1 ui-monospace, "IBM Plex Mono", Menlo, monospace; letter-spacing: .16em; text-transform: uppercase;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.auth-tab:hover { color: var(--accent-300); }
+.auth-tab.active { color: var(--text); border-bottom-color: var(--primary); font-weight: 500; box-shadow: none; background: transparent; }
+
+/* ---- Underline-only fields ---- */
+.auth-form { display: flex; flex-direction: column; gap: 14px; margin-top: 26px; }
+.auth-form .field {
+  width: 100%; box-sizing: border-box; padding: 12px 44px 12px 0;
+  background: transparent; border: 0; border-bottom: 1px solid #26312b; border-radius: 0;
+  color: var(--text); font: 400 14.5px/1.2 Inter, sans-serif; outline: none;
+  transition: border-color var(--t-fast) var(--ease);
+}
+.auth-form .field::placeholder { color: var(--text-dim); }
+.auth-form .field:focus { border-bottom-color: var(--primary); }
+.auth-form .field-wrap { position: relative; display: block; }
+.auth-form .toggle-eye {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 44px;
+  display: grid; place-items: center; border: 0; background: transparent;
+  color: var(--text-dim); cursor: pointer;
+}
+.auth-form .toggle-eye:hover { color: var(--accent-400); }
+.auth-form .toggle-eye svg { width: 17px; height: 17px; }
+.auth-hint { font-size: 12.5px; color: var(--text-dim); margin: 0; }
+
+/* ---- CTA: outline + glow, never a fill ---- */
+.auth-form .btn-primary {
+  width: 100%; margin-top: 14px; padding: 14px 18px;
+  border: 1px solid var(--primary); border-radius: 8px; background: transparent;
+  color: var(--accent-400); font: 500 14px/1 Inter, sans-serif; cursor: pointer;
+  box-shadow: 0 0 24px rgba(var(--primary-rgb), .14);
+  transition: background var(--t-fast) var(--ease);
+}
+.auth-form .btn-primary:hover { background: rgba(var(--primary-rgb), .12); }
+.auth-link { align-self: flex-start; margin-top: 2px; background: none; border: 0; padding: 0;
+  color: var(--text-dim); font-size: 12.5px; cursor: pointer; }
+.auth-link:hover { color: var(--accent-400); }
+#loginAuth .form-error { min-height: 0; }
+
+/* ---- Terminal window ---- */
 .auth-terminal {
-  flex: 1 1 560px; max-width: 620px; height: 560px; max-height: 78vh;
-  display: flex; flex-direction: column;
-  background: #010601; border: 1px solid rgba(var(--primary-rgb), .5); border-radius: 8px; overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), .15), 0 24px 60px rgba(0, 0, 0, .6), var(--glow-sm);
+  position: relative; z-index: 3; flex: 1 1 594px; max-width: 594px; height: 520px; max-height: 76vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: #000; border: 1px solid #0c0f0d; border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .7), 0 0 60px rgba(var(--primary-rgb), .10);
   animation: cardIn .6s var(--ease-out);
 }
-.term-bar { height: 26px; flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px;
-  background: linear-gradient(180deg, #0a1e10, #061006); border-bottom: 1px solid rgba(var(--primary-rgb), .4); }
-.tb-dots { display: flex; gap: 6px; }
-.tb-dots i { width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(var(--primary-rgb), .6); display: block; }
-.tb-dots i.x { background: rgba(var(--primary-rgb), .5); }
-.term-body { position: relative; flex: 1 1 auto; overflow: auto; padding: 16px 18px;
-  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-size: 15px; line-height: 1.7;
-  color: var(--accent-300); text-shadow: 0 0 6px rgba(var(--primary-rgb), .35); }
-.term-prompt { color: var(--accent-200); margin-bottom: 14px; }
-.term-prompt #termCmd { color: var(--accent-400); font-weight: 700; }
-.term-lines .tl { white-space: pre-wrap; word-break: break-word; }
-.term-lines .tv { color: var(--accent-100); }
-.tl.tdim { opacity: .9; margin-top: 4px; }
-.tl.tok { color: var(--accent-400); font-weight: 700; }
-.tcar { display: inline-block; width: 7px; color: var(--accent-400); animation: caretBlink 1s step-end infinite; }
-@keyframes caretBlink { 50% { opacity: 0; } }
-.term-gif { position: absolute; right: 22px; top: 50%; transform: translateY(-45%); width: 200px; max-width: 44%; opacity: .92; pointer-events: none; }
+.auth-terminal.maxed { position: fixed; inset: 16px; max-width: none; height: auto; max-height: none; transform: none !important; }
+.term-bar {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 0 0 16px; background: linear-gradient(#2a2e2c, #1e2220); border-bottom: 1px solid #0c0f0d;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.term-bar.dragging { cursor: grabbing; }
+.term-title { font: 400 15px/1 Inter, sans-serif; color: var(--text); }
+.term-title #termTitleCmd { color: var(--accent-400); }
+.term-btns { display: flex; align-items: stretch; gap: 1px; padding: 5px 5px 5px 0; }
+.term-btns button {
+  width: 44px; height: 26px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid #3a423e; border-radius: 3px;
+  background: linear-gradient(#333835, #232825); color: #cdd6d1; font: 400 12px/1 Inter, sans-serif;
+}
+.term-btns button:hover { background: linear-gradient(#3d443f, #2c322e); }
+.term-btns .tb-x { width: 52px; border-color: #1c6b39; color: #eafff2; font-weight: 500;
+  background: linear-gradient(#0f7d3c, #0a5a2b); }
+.term-btns .tb-x:hover { background: linear-gradient(#14a04d, #0d7a3a); }
+.term-body {
+  position: relative; flex: 1; min-height: 0; box-sizing: border-box; overflow: auto; cursor: text;
+  padding: 24px 22px;
+  font: 400 14px/1.95 ui-monospace, "IBM Plex Mono", Menlo, Consolas, monospace; color: #8fa89a;
+}
+.term-prompt { color: #5d8a70; margin-bottom: 1.95em; }
+.term-prompt #termCmd { color: var(--primary); font-weight: 500; }
+.term-lines .tl { display: flex; align-items: baseline; }
+.term-lines .tlab { white-space: pre; flex: 0 0 auto; }
+/* The terminal's inputs ARE the form — see wireTerminalInputs(). */
+.term-lines input {
+  flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
+  color: #e9f6ee; font: inherit; caret-color: var(--primary); letter-spacing: .06em;
+}
+.term-log { margin-top: 1.95em; white-space: pre-line; color: var(--primary); }
+.term-gif { position: absolute; right: 66px; bottom: 74px; width: 112px; height: auto; opacity: .92;
+  filter: drop-shadow(0 0 30px rgba(var(--primary-rgb), .45)); pointer-events: none;
+  animation: dgDrift 9s ease-in-out infinite; }
+@keyframes dgDrift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+/* Reopen chip, shown once the terminal is closed. */
+.term-open {
+  position: fixed; right: 26px; bottom: 26px; z-index: 5;
+  display: flex; align-items: center; gap: 10px; padding: 11px 15px;
+  border: 1px solid var(--border-2); border-radius: 10px; background: var(--bg-2);
+  color: var(--accent-400); cursor: pointer; box-shadow: 0 8px 26px rgba(0, 0, 0, .55);
+  font: 400 11px/1 ui-monospace, "IBM Plex Mono", Menlo, monospace; letter-spacing: .14em;
+}
+.term-open:hover { background: rgba(var(--primary-rgb), .08); border-color: var(--accent-400); }
+.term-open .to-glyph { display: grid; place-items: center; width: 24px; height: 20px;
+  border: 1px solid var(--primary); border-radius: 4px; font-size: 11px; }
 
 @media (max-width: 900px) {
-  .auth-terminal { display: none; }   /* phones: just the card */
+  /* Phones: the form only, per the design's mobile board. */
+  .auth-terminal, .term-open { display: none !important; }
+  .auth-stage { gap: 0; width: min(420px, 92vw); }
+  .login-card { width: 100%; }
   .lang-switch { top: 12px; right: 14px; }
+  .auth-form .field { padding: 14px 48px 14px 0; font-size: 15px; }
 }
 
-.brand {
-  display: flex; align-items: center; gap: 14px; justify-content: center;
-  margin-bottom: 2px;
-}
 .brand-logo {
   position: relative;
   width: 44px; height: 44px;
@@ -443,29 +514,7 @@ a:focus-visible {
   letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 2px;
 }
 
-.auth-tabs {
-  display: flex; gap: 4px;
-  padding: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-2);
-  margin-bottom: 4px;
-}
-.auth-tab {
-  flex: 1; padding: 9px 10px;
-  background: transparent; border: none;
-  color: var(--text-dim);
-  font-weight: 700; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
-  cursor: pointer; border-radius: var(--r-1);
-  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
-}
-.auth-tab:hover { color: var(--accent-300); }
-.auth-tab.active {
-  background: linear-gradient(180deg, var(--accent-400), var(--accent-600));
-  color: var(--on-accent);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2), 0 4px 18px rgba(var(--primary-rgb), 0.18);
-}
-.auth-form { display: flex; flex-direction: column; gap: 10px; }
+/* Tabs + form styling now live in the sign-in block above. */
 
 .lang-select {
   background: var(--bg-2); color: var(--text); border: 1px solid var(--border- scolor, var(--border-1));
@@ -3564,11 +3613,7 @@ body[data-theme="flashbang"] .tile-avatar::before { display: none; }
 body[data-theme="flashbang"] .call-matrix { display: none; }
 /* Plain-light overrides — логин-карточка, фирменные модалы, баблы, кнопки и состояния в "нормальной" светлой теме — flat white/светло-серые фоны,
    тонкие серые границы, зелёные акценты и обычные тени. Без неоновых glow, gradient оверлеев и фоновых текстовых shadow. */
-body[data-theme="flashbang"] .login-card {
-  background: linear-gradient(180deg, #ffffff, #f8f9fb);
-  border: 1px solid var(--border-1);
-  box-shadow: var(--shadow-lg);
-}
+/* .login-card is a bare column since the sign-in redesign — nothing to paint. */
 body[data-theme="flashbang"] .login::before {
   background:
     radial-gradient(ellipse at 50% 30%, rgba(var(--primary-rgb), 0.08), transparent 70%),
@@ -3684,7 +3729,6 @@ body[data-theme="mono"] .info-panel { background: var(--bg-1); border-left-color
 body[data-theme="mono"] .bubble { background: var(--bg-3); color: var(--text); border-color: var(--border-1); box-shadow: var(--shadow-sm); }
 body[data-theme="mono"] .msg.me .bubble { background: #ffffff; color: #000000; border-color: #ffffff; box-shadow: var(--shadow-md); }
 body[data-theme="mono"] .msg.me .mention { color: rgba(0, 0, 0, 0.85); }
-body[data-theme="mono"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
 body[data-theme="mono"] .bubble, body[data-theme="mono"] .msg, body[data-theme="mono"] .chat-title,
 body[data-theme="mono"] .es-logo, body[data-theme="mono"] .mention, body[data-theme="mono"] .setting-tab { animation: none; text-shadow: none; }
 /* Monochrome deliberately nukes the theme palette to greyscale, which would also flatten
@@ -3755,7 +3799,6 @@ body[data-theme="mono-light"] .info-panel { background: var(--bg-1); border-left
 body[data-theme="mono-light"] .bubble { background: var(--bg-3); color: var(--text); border-color: var(--border-1); box-shadow: var(--shadow-sm); }
 body[data-theme="mono-light"] .msg.me .bubble { background: #000000; color: #ffffff; border-color: #000000; box-shadow: var(--shadow-md); }
 body[data-theme="mono-light"] .msg.me .mention { color: #ffffff; }
-body[data-theme="mono-light"] .login-card { background: var(--bg-2); border-color: var(--border-2); box-shadow: var(--shadow-lg); color: var(--text); }
 body[data-theme="mono-light"] .bubble, body[data-theme="mono-light"] .msg, body[data-theme="mono-light"] .chat-title,
 body[data-theme="mono-light"] .es-logo, body[data-theme="mono-light"] .mention, body[data-theme="mono-light"] .setting-tab { animation: none; text-shadow: none; }
 body[data-theme="mono-light"] .icon-btn.send { background: #000000; color: #ffffff; border-color: #000000; box-shadow: 0 0 0 1px rgba(0,0,0,.2) inset, 0 2px 8px rgba(0,0,0,0.18); }
@@ -3915,14 +3958,7 @@ body[data-theme="aero"] .notify-toast {
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
-body[data-theme="aero"] .login-card {
-  background: linear-gradient(180deg, rgba(248, 251, 244, 0.94), rgba(224, 234, 208, 0.90));
-  border: 1px solid #7aa64e;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 24px 64px rgba(20, 50, 10, 0.38);
-  color: var(--text);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-}
+/* aero: login column is bare, see above */
 body[data-theme="aero"] .brand h1 { color: var(--text-strong); letter-spacing: 2px; }
 body[data-theme="aero"] .brand-logo {
   background: linear-gradient(180deg, #eafbe0, #c6e79f);
@@ -3930,7 +3966,7 @@ body[data-theme="aero"] .brand-logo {
 }
 
 /* --- Fields: white inset wells with a hard XP border --- */
-body[data-theme="aero"] .field,
+body[data-theme="aero"] .field:not(.auth-form .field),
 body[data-theme="aero"] .cl-search {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #7aa64e;
@@ -5963,3 +5999,34 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 .ld-opt:hover { color: var(--accent-200); border-color: var(--accent-400); }
 .ld-opt.on { background: var(--accent-400); border-color: transparent; color: var(--on-accent); }
+
+/* ── Sign-in form: keep the underline treatment under every theme ─────────────
+   Theme blocks live later in the file and restyle .field globally (borders,
+   radii, panel backgrounds). The auth form is deliberately exempt: its fields
+   are rules, not boxes. Scoped to #loginAuth so the rest of the app is
+   untouched. */
+#loginAuth .auth-form .field {
+  background: transparent !important;
+  border-width: 0 !important; border-style: none !important;
+  border-bottom-width: 1px !important; border-bottom-style: solid !important; border-bottom-color: #26312b !important;
+  border-radius: 0 !important; box-shadow: none !important;
+}
+#loginAuth .auth-form .field:focus { border-bottom-color: var(--primary) !important; }
+/* Longhands on purpose: a `border` shorthand carrying a var() was not winning
+   the cascade here, while the individual properties do. */
+#loginAuth .auth-tab.active { background: transparent !important; color: var(--text) !important;
+  border-bottom-width: 2px !important; border-bottom-style: solid !important;
+  border-bottom-color: var(--primary) !important; box-shadow: none !important; }
+#loginAuth .auth-tabs { background: none !important; border-width: 0 !important;
+  border-bottom-width: 1px !important; border-bottom-style: solid !important;
+  border-bottom-color: var(--border-1) !important; border-radius: 0 !important; padding: 0 !important; }
+#loginAuth .auth-tab { flex: 0 0 auto !important; padding: 0 0 12px !important; border-radius: 0 !important; }
+/* The CTA is an outline in this design; the generic .btn-primary later in the
+   file makes it a filled block, so state it here where the cascade lands. */
+#loginAuth .auth-form .btn-primary {
+  background: transparent !important;
+  border-width: 1px !important; border-style: solid !important; border-color: var(--primary) !important;
+  color: var(--accent-400) !important; box-shadow: 0 0 24px rgba(var(--primary-rgb), .14) !important;
+  text-transform: none; font-weight: 500;
+}
+#loginAuth .auth-form .btn-primary:hover { background: rgba(var(--primary-rgb), .12) !important; filter: none; transform: none; }

@@ -34,8 +34,8 @@
       </div>
       <!-- Auth forms — shown only when we need the user to sign in -->
       <div id="loginAuth" class="login-auth hidden">
-        <div class="brand"><div class="brand-logo"><img src="/src/lil_dialog.webp" alt="" /></div><h1>Dialog</h1></div>
-        <p class="brand-sub" data-i18n="brand_sub">Chat · Group calls · Screen share</p>
+        <img class="auth-logo" src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" />
+        <div class="auth-kicker" data-i18n="brand_sub">Chat · Group calls · Screen share</div>
         <!-- A rotating "did you know" — the sign-in screen is dead air otherwise. -->
         <p class="boot-hint" id="bootHint"></p>
         <button type="button" class="auth-link hidden" id="addAcctBack" data-i18n="back_to_app">← Back to app</button>
@@ -72,16 +72,29 @@
         </form>
       </div>
     </div>
-    <!-- Read-only terminal: mirrors what you type on the left (hacker aesthetic). -->
-    <div class="auth-terminal hidden" id="authTerminal" aria-hidden="true">
-      <div class="term-bar"><span class="tb-dots"><i></i><i></i><i class="x"></i></span></div>
-      <div class="term-body">
-        <div class="term-prompt">[admin@linux-machine ~]$ exec <span id="termCmd">signup</span></div>
+    <!-- Terminal: a second way to fill the SAME form. Its inputs are bound to the
+         fields on the left, so typing in either updates both. Draggable, and it
+         can be closed away entirely — the form alone is always enough. -->
+    <div class="auth-terminal hidden" id="authTerminal">
+      <div class="term-bar" id="termBar">
+        <span class="term-title">exec <span id="termTitleCmd">login</span></span>
+        <span class="term-btns">
+          <button type="button" id="termMin" aria-label="Minimise">—</button>
+          <button type="button" id="termMax" aria-label="Maximise">▢</button>
+          <button type="button" id="termClose" class="tb-x" aria-label="Close">✕</button>
+        </span>
+      </div>
+      <div class="term-body" id="termBody">
+        <div class="term-prompt">[admin@linux-machine ~]$ exec <span id="termCmd">login</span></div>
         <div id="termLines" class="term-lines"></div>
-        <img class="term-gif" src="/src/3Dialog.gif" alt="" />
+        <div id="termLog" class="term-log"></div>
+        <img class="term-gif" src="/src/landing/boot.webp" alt="" />
       </div>
     </div>
     </div>
+    <button type="button" id="termOpen" class="term-open hidden" aria-label="Open terminal">
+      <span class="to-glyph">&gt;_</span> TERMINAL
+    </button>
   </div>
 
   <!-- ПРИЛОЖЕНИЕ -->

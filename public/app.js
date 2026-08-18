@@ -553,41 +553,123 @@ async function api(path, body, method = "POST") {
 }
 
 // ---------- Аутентификация ----------
-// ── Auth terminal: read-only, mirrors the form you're filling (passwords masked) ──
+// ── Auth terminal ────────────────────────────────────────────────────────────
+// The terminal is a SECOND way to fill the same form: each row owns a real input
+// bound to the matching field on the left, so typing in either updates both. The
+// form is always authoritative and works alone — the terminal can be closed, and
+// on phones it is not rendered at all.
 const AUTH_MODES = {
   login: { cmd: "login", fields: [["Username", "login"], ["Password", "password", true]] },
   register: { cmd: "signup", fields: [["Display name", "name"], ["Username", "login"], ["Email", "email"], ["Password", "password", true], ["Repeat Password", "password2", true]] },
   forgot: { cmd: "recover", fields: [["Email", "email"]] }
 };
-let authMode = "login", termBusy = false, termFocus = null;
+let authMode = "login", termBusy = false;
 function activeAuthForm() { return authMode === "register" ? $("registerForm") : authMode === "forgot" ? $("forgotForm") : $("loginForm"); }
-function updateTerminal() {
-  if (termBusy || !$("termLines")) return;
+
+// Rebuild the rows. Only called when the mode changes — re-rendering on every
+// keystroke would blow away focus and the caret position mid-word.
+function buildTerminal() {
+  const box = $("termLines"); if (!box) return;
   const m = AUTH_MODES[authMode]; if (!m) return;
-  $("termCmd").textContent = m.cmd;
-  const form = activeAuthForm();
-  let html = "";
+  const cmdEl = $("termCmd"), titleEl = $("termTitleCmd");
+  if (cmdEl) cmdEl.textContent = m.cmd;
+  if (titleEl) titleEl.textContent = m.cmd;
+  // Labels are padded to a common width so the values line up in a column.
+  const pad = Math.max(...m.fields.map(([l]) => l.length));
+  box.innerHTML = "";
   for (const [label, name, mask] of m.fields) {
-    const el = form && form.elements[name]; const val = el ? el.value : "";
-    const shown = mask ? "*".repeat(val.length) : escapeHtml(val);
-    const caret = name === termFocus ? '<span class="tcar">▍</span>' : "";
-    html += `<div class="tl">~$: ${label}: <span class="tv">${shown}</span>${caret}</div>`;
+    const row = document.createElement("div");
+    row.className = "tl";
+    const lab = document.createElement("span");
+    lab.className = "tlab";
+    lab.textContent = "~$: " + label + ": " + " ".repeat(pad - label.length + 1);
+    const inp = document.createElement("input");
+    inp.type = mask ? "password" : "text";
+    inp.autocomplete = "off"; inp.spellcheck = false;
+    inp.dataset.field = name;
+    row.appendChild(lab); row.appendChild(inp);
+    box.appendChild(row);
   }
-  $("termLines").innerHTML = html;
+  wireTerminalInputs();
+  syncTerminal();
 }
-function setAuthMode(mode) { authMode = mode; updateTerminal(); }
+
+// terminal → form. The form's own listeners then run, so validation, the mirror
+// and everything else behaves exactly as if the user typed on the left.
+function wireTerminalInputs() {
+  const form = activeAuthForm(); if (!form) return;
+  $("termLines").querySelectorAll("input").forEach((inp) => {
+    inp.oninput = () => {
+      const el = form.elements[inp.dataset.field];
+      if (el && el.value !== inp.value) { el.value = inp.value; el.dispatchEvent(new Event("input", { bubbles: true })); }
+    };
+    inp.onkeydown = (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (typeof form.requestSubmit === "function") form.requestSubmit(); else form.onsubmit(new Event("submit"));
+    };
+  });
+}
+
+// form → terminal (values only; never touches the DOM structure or focus).
+function syncTerminal() {
+  if (termBusy) return;
+  const box = $("termLines"); if (!box) return;
+  const form = activeAuthForm(); if (!form) return;
+  box.querySelectorAll("input").forEach((inp) => {
+    const el = form.elements[inp.dataset.field];
+    const v = el ? el.value : "";
+    if (document.activeElement !== inp && inp.value !== v) inp.value = v;
+  });
+}
+function updateTerminal() { syncTerminal(); }
+function setAuthMode(mode) { authMode = mode; buildTerminal(); }
+
 function wireAuthMirror() {
   if (wireAuthMirror._done) return; wireAuthMirror._done = true;
   ["loginForm", "registerForm", "forgotForm"].forEach((fid) => {
     const f = $(fid); if (!f) return;
-    f.querySelectorAll("input").forEach((inp) => {
-      inp.addEventListener("input", updateTerminal);
-      inp.addEventListener("focus", () => { termFocus = inp.name; updateTerminal(); });
-      inp.addEventListener("blur", () => { if (termFocus === inp.name) termFocus = null; updateTerminal(); });
-    });
+    f.querySelectorAll("input").forEach((inp) => inp.addEventListener("input", syncTerminal));
   });
+  buildTerminal();
+  wireTerminalWindow();
   wireEyeToggles();
 }
+
+// ── Terminal window chrome: drag, minimise/close, maximise, reopen ──
+function wireTerminalWindow() {
+  if (wireTerminalWindow._done) return; wireTerminalWindow._done = true;
+  const win = $("authTerminal"), bar = $("termBar"), open = $("termOpen");
+  if (!win || !bar) return;
+  let pos = { x: 0, y: 0 }, drag = null;
+
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button") || win.classList.contains("maxed")) return;
+    drag = { x: e.clientX, y: e.clientY, ox: pos.x, oy: pos.y };
+    bar.classList.add("dragging");
+    bar.setPointerCapture && bar.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    pos = { x: drag.ox + (e.clientX - drag.x), y: drag.oy + (e.clientY - drag.y) };
+    win.style.transform = "translate(" + pos.x + "px," + pos.y + "px)";
+  });
+  addEventListener("pointerup", () => { drag = null; bar.classList.remove("dragging"); });
+
+  const hide = () => { win.classList.add("hidden"); open && open.classList.remove("hidden"); };
+  $("termMin") && ($("termMin").onclick = hide);
+  $("termClose") && ($("termClose").onclick = hide);
+  $("termMax") && ($("termMax").onclick = () => {
+    win.classList.toggle("maxed");
+    if (!win.classList.contains("maxed")) win.style.transform = "translate(" + pos.x + "px," + pos.y + "px)";
+  });
+  open && (open.onclick = () => {
+    pos = { x: 0, y: 0 }; win.style.transform = "";
+    win.classList.remove("hidden"); open.classList.add("hidden");
+  });
+}
+
 // Show/hide password toggles — wires every .toggle-eye once (login + profile).
 function wireEyeToggles() {
   document.querySelectorAll(".toggle-eye").forEach((btn) => {
@@ -633,20 +715,27 @@ $("pwSaveBtn") && ($("pwSaveBtn").onclick = async () => {
   refreshPwCooldown();
 });
 // Cosmetic post-auth sequence in the terminal, then load the app.
+// Post-auth sequence: the log area counts down, then the rain starts and the app
+// loads. Writes to #termLog, not the field rows — those hold live inputs now.
 function playAuthSuccess() {
   termBusy = true;
-  const lines = $("termLines");
-  if (!lines) { enterApp(); return; }
-  const add = (text, cls) => { const d = document.createElement("div"); d.className = "tl " + (cls || ""); d.textContent = text; lines.appendChild(d); return d; };
-  add("");
-  add(authMode === "register" ? "Creating account..." : "Signing in...", "tdim");
+  const log = $("termLog");
+  const done = () => { termBusy = false; enterApp(); };
+  if (!log) { done(); return; }
+  const who = (activeAuthForm().elements.login || {}).value || (authMode === "register" ? "newuser" : "guest");
+  const head = authMode === "register"
+    ? "~$: creating account " + who + " …\n~$: keypair generated · stored locally"
+    : "~$: authenticating " + who + " …\n~$: key exchange … ok";
+  log.textContent = head;
+  const at = (ms, text) => setTimeout(() => { log.textContent = text; }, ms);
+  at(700,  head + "\n\nSUCCESS! Logging in 3...");
+  at(1600, head + "\n\nSUCCESS! Logging in 3... 2..");
+  at(2500, head + "\n\nSUCCESS! Logging in 3... 2.. 1.");
   setTimeout(() => {
-    add(""); add("SUCCESS!!", "tok"); add("Redirecting in..", "tok");
-    const cd = add("3....", "tok");
-    setTimeout(() => { cd.textContent = "3.... 2..."; }, 650);
-    setTimeout(() => { cd.textContent = "3.... 2... 1.."; }, 1300);
-    setTimeout(() => { termBusy = false; enterApp(); }, 2050);
-  }, 700);
+    log.textContent = head + "\n\nSUCCESS! Logging in 3... 2.. 1.\n~$: session established";
+    if (window.DialogRain) window.DialogRain.reveal();   // only once you are through
+  }, 3400);
+  setTimeout(done, 4600);
 }
 
 document.querySelectorAll(".auth-tab").forEach((tab) => tab.onclick = () => {

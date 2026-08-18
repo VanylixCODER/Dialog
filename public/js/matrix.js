@@ -74,8 +74,13 @@
   }
 
   resize();
-  // постепенный fade-in при монтировании, чтобы экран не «мигал»
-  setTimeout(() => { canvas.style.opacity = "0.42"; }, 80);
+  // Rain is the reward for getting in, not the wallpaper: it stays invisible
+  // until playAuthSuccess() calls DialogRain.reveal(). See the sign-in design.
+  let revealed = false;
+  window.DialogRain = {
+    reveal() { if (revealed) return; revealed = true; start(); canvas.style.opacity = "0.42"; },
+    stop
+  };
 
   window.addEventListener("resize", resize);
 
