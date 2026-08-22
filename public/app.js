@@ -791,6 +791,13 @@ function emailErr(data) {
   if (code === "email_taken") return t("err_email_taken");
   return code || t("err_generic");
 }
+// Register/reset codes → localized text (auth.js and the reset route return
+// codes now, not prose, so the language is chosen here).
+function regErr(code) {
+  const map = { bad_login: "err_bad_login", pass_short: "err_pass_short", bad_email: "err_bad_email",
+    login_taken: "err_login_taken", email_taken: "err_email_taken" };
+  return map[code] ? t(map[code]) : (code || t("err_register_failed"));
+}
 // Map server auth error codes to the current UI language.
 function authErr(code) {
   if (!code) return t("err_login_failed");
@@ -831,7 +838,7 @@ $("registerForm").onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
   if (f.password.value !== f.password2.value) { $("registerError").textContent = t("err_pass_mismatch"); return; }
   const { ok, data } = await api("/api/register", { name: f.name.value.trim(), login: f.login.value.trim(), email: f.email.value.trim(), password: f.password.value });
-  if (!ok) { $("registerError").textContent = data.error || t("err_register_failed"); return; }
+  if (!ok) { $("registerError").textContent = regErr(data && data.error); return; }
   onAuth(data);
 };
 // Forgot password — reveal the email form, POST /api/forgot (server always 200).

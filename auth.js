@@ -21,12 +21,12 @@ export async function register(login, name, password, email) {
   login = String(login || "").trim().toLowerCase();
   name = String(name || "").trim() || login;
   email = String(email || "").trim().toLowerCase();
-  if (!/^[a-z0-9_]{3,24}$/.test(login)) throw new Error("Логин: латиница/цифры, 3–24");
-  if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) throw new Error("bad_login");
+  if (String(password || "").length < 6) throw new Error("pass_short");
   // Email is required for new accounts (soft-verified afterwards).
-  if (!EMAIL_RE.test(email) || email.length > 190) throw new Error("Введите корректный e-mail");
-  if (await db.getUser(login)) throw new Error("Логин занят");
-  if (await db.getUserByEmail(email)) throw new Error("E-mail уже используется");
+  if (!EMAIL_RE.test(email) || email.length > 190) throw new Error("bad_email");
+  if (await db.getUser(login)) throw new Error("login_taken");
+  if (await db.getUserByEmail(email)) throw new Error("email_taken");
   const salt = randomBytes(16).toString("hex");
   const hash = await hashPw(password, salt);
   await db.createUser(login, name, salt, hash, email);
@@ -43,7 +43,7 @@ export async function verifyPassword(u, password) { return pwMatches(u, password
 
 // Set a new password (reset flow + profile change) — fresh salt+hash, stamps time.
 export async function setPassword(login, password) {
-  if (String(password || "").length < 6) throw new Error("Пароль от 6 символов");
+  if (String(password || "").length < 6) throw new Error("pass_short");
   const salt = randomBytes(16).toString("hex");
   const hash = await hashPw(password, salt);
   await db.setUserPassword(login, salt, hash, Date.now());

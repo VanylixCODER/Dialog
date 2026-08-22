@@ -29,6 +29,9 @@ import { statfs } from "fs/promises";
 import { exec } from "child_process";
 import { networkInterfaces, totalmem, freemem, loadavg, uptime as osUptime } from "os";
 import crypto from "crypto";
+import { lookup as dnsLookup } from "dns";
+import { promisify } from "util";
+const dnsLookupAll = promisify(dnsLookup);
 import webpush from "web-push";
 import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
@@ -566,6 +569,11 @@ app.post("/api/account/password", async (req, res) => {
 app.post("/api/forgot", async (req, res) => {
   try {
     const email = String(req.body.email || "").trim().toLowerCase();
+    // Rate-limit so this can't be used to email-bomb a victim (or probe by
+    // timing). Still always answers 200 so it never reveals which emails exist.
+    const ip = normIp(req.ip) || "?";
+    if (authLimited("forgot-ip:" + ip, 5, 3600000) || (email && authLimited("forgot-em:" + email, 3, 3600000)))
+      return res.json({ ok: true });
     if (auth.EMAIL_RE.test(email)) {
       const u = await getUserByEmail(email);
       if (u && u.email_verified) {
@@ -1376,6 +1384,9 @@ app.post("/api/presence", async (req, res) => {
 // ---------- REST: ICE (STUN + TURN от Metered) ----------
 let cachedIce = null, iceExp = 0;
 app.get("/api/ice", async (req, res) => {
+  // Auth-gated: these are real TURN relay credentials. Unauthenticated, anyone
+  // could pull them and use the relay's bandwidth on your dime.
+  if (!(await authUser(req))) return res.status(401).json({ error: "unauth" });
   if (cachedIce && Date.now() < iceExp) return res.json(cachedIce);
   let servers = [];
   const mk = process.env.METERED_API_KEY;
@@ -1423,13 +1434,14 @@ app.get("/api/link-preview", async (req, res) => {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
     const url = String(req.query.url || "");
     if (!/^https?:\/\//i.test(url)) return res.json({});
-    if (/\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url)) return res.json({});
     if (lpCache.has(url)) return res.json(lpCache.get(url));
     const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 5000);
     let html = "";
     try {
-      const r = await fetch(url, { signal: ctrl.signal, redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; DialogBot/1.0)" } });
+      // safeFetch resolves the host (and every redirect hop) and refuses private IPs.
+      const r = await safeFetch(url, { signal: ctrl.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; DialogBot/1.0)" } });
       clearTimeout(tm);
+      if (!r) { lpCache.set(url, {}); return res.json({}); }
       if (!(r.headers.get("content-type") || "").includes("text/html")) { lpCache.set(url, {}); return res.json({}); }
       html = Buffer.from((await r.arrayBuffer()).slice(0, 200000)).toString("utf8");
     } catch { clearTimeout(tm); return res.json({}); }
@@ -1698,12 +1710,20 @@ app.post("/webhook", (req, res) => {
   const event = req.headers["x-github-event"];
   const sig = req.headers["x-hub-signature-256"];
   if (event !== "push") return res.json({ ok: true });
+  // FAIL CLOSED. The old code only checked the HMAC "if (secret && sig)", so an
+  // attacker who simply omitted the X-Hub-Signature-256 header skipped
+  // verification entirely and could trigger a production redeploy at will
+  // (git reset --hard origin/main + docker rebuild) — remote DoS and a lever to
+  // force whatever sits on origin/main onto the box. Now a valid signature is
+  // mandatory: no configured secret, or a missing/mismatched signature, is a
+  // hard 401.
   const secret = process.env.GITHUB_WEBHOOK_SECRET;
-  if (secret && sig) {
-    const payload = JSON.stringify(req.body);
-    const hmac = crypto.createHmac("sha256", secret).update(payload, "utf-8").digest("hex");
-    if (sig !== `sha256=${hmac}`) return res.status(401).json({ error: "invalid signature" });
-  }
+  if (!secret) { console.error("webhook: GITHUB_WEBHOOK_SECRET unset — refusing deploy"); return res.status(503).json({ error: "webhook not configured" }); }
+  if (!sig) return res.status(401).json({ error: "signature required" });
+  const payload = JSON.stringify(req.body);
+  const hmac = "sha256=" + crypto.createHmac("sha256", secret).update(payload, "utf-8").digest("hex");
+  const a = Buffer.from(sig), b = Buffer.from(hmac);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: "invalid signature" });
   res.status(202).json({ ok: true, status: "deploying" });
   const repo = process.env.HOST_REPO_PATH || "/repo";
   const gitSSH = `ssh -i /root/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null`;
@@ -1945,16 +1965,66 @@ function postBotWebhook(bot, body) {
   if (!safeHttpUrl(url)) return;
   const sig = crypto.createHmac("sha256", bot.bot_webhook_secret || "").update(body).digest("hex");
   const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 8000);
-  fetch(url, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", "X-Dialog-Signature": "sha256=" + sig, "User-Agent": "DialogBot/1.0" }, body })
-    .catch((e) => { /* webhook errors never affect human delivery */ })
+  // assertPublicUrl at call time closes the set-now / rebind-later gap: a webhook
+  // saved as a public host that later resolves to an internal one is refused here.
+  safeFetch(url, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", "X-Dialog-Signature": "sha256=" + sig, "User-Agent": "DialogBot/1.0" }, body })
+    .catch(() => { /* webhook errors never affect human delivery */ })
     .finally(() => clearTimeout(tm));
 }
-// Block internal/loopback targets (SSRF guard, mirrors the link-preview check).
-function safeHttpUrl(u) {
-  if (!/^https:\/\//i.test(u)) return false;
-  if (/\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(u)) return false;
-  return true;
+// ── SSRF guard ───────────────────────────────────────────────────────────────
+// The old check was a string regex on the URL. Three ways past it: a hostname
+// that RESOLVES to a private IP (rebind), a public URL that 302-REDIRECTS to an
+// internal one (link-preview followed redirects), and encodings the regex never
+// matched (decimal/hex IPs, IPv6 ULA, ::ffff: mapped). We now resolve the host
+// and check every returned address, and follow redirects manually re-checking
+// each hop.
+function ipIsPrivate(ip) {
+  ip = String(ip || "");
+  const m4 = ip.replace(/^::ffff:/i, "").match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (m4) {
+    const [a, b] = [Number(m4[1]), Number(m4[2])];
+    return a === 0 || a === 10 || a === 127 ||
+           (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+           (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const l = ip.toLowerCase();
+  if (l === "::1" || l === "::") return true;
+  if (l.startsWith("fe80") || l.startsWith("fc") || l.startsWith("fd")) return true; // link-local + ULA
+  return false;
 }
+async function hostResolvesPublic(hostname) {
+  // A bare IP literal is checked directly; a name is resolved and every A/AAAA
+  // record must be public.
+  if (ipIsPrivate(hostname.replace(/^\[|\]$/g, ""))) return false;
+  try {
+    const addrs = await dnsLookupAll(hostname, { all: true });
+    if (!addrs.length) return false;
+    return addrs.every((a) => !ipIsPrivate(a.address));
+  } catch { return false; }
+}
+async function assertPublicUrl(raw) {
+  let u; try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  if (!(await hostResolvesPublic(u.hostname))) return null;
+  return u;
+}
+// Fetch that re-validates the target on every redirect hop.
+async function safeFetch(raw, opts = {}, maxHops = 4) {
+  let url = raw;
+  for (let i = 0; i < maxHops; i++) {
+    if (!(await assertPublicUrl(url))) return null;
+    const r = await fetch(url, { ...opts, redirect: "manual" });
+    if (r.status >= 300 && r.status < 400 && r.headers.get("location")) {
+      url = new URL(r.headers.get("location"), url).href;
+      continue;
+    }
+    return r;
+  }
+  return null;
+}
+// Synchronous set-time gate for user-supplied webhook URLs (https + shape).
+// The authoritative check is assertPublicUrl at fetch time, since DNS can change.
+function safeHttpUrl(u) { return /^https:\/\//i.test(String(u || "")); }
 
 const getPeers = (room) => { if (!rooms.has(room)) rooms.set(room, new Map()); return rooms.get(room); };
 function addUserSocket(login, id) { if (!userSockets.has(login)) userSockets.set(login, new Set()); userSockets.get(login).add(id); }
