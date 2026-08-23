@@ -1025,6 +1025,7 @@ function enterApp() {
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
   applyChatListChrome();   // restore collapsed / resized sidebar
   loadPendingWarnings();   // a warning issued while offline still has to land
+  registerE2eKey();        // publish this device's public key for Secret DMs
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
   // The socket may have connected before login (no session cookie on that
@@ -1182,6 +1183,7 @@ document.addEventListener("click", (e) => {
 function preview(m) {
   if (!m) return "";
   if (m.type === "text") return m.text;
+  if (m.type === "e2e") return "🔒 " + t("e2e_message");
   if (m.type === "sticker") return "🩷 " + (m.mediaName || t("pv_sticker"));
   if (m.type === "image" || m.type === "gif") return "🖼 " + t("pv_photo");
   if (m.type === "video") return "🎬 " + t("pv_video");
@@ -2092,6 +2094,7 @@ function openChat(c) {
   $("messages").innerHTML = "";
   showMsgSkeletons(); // placeholder until history arrives
   $("chatTitle").textContent = c.name;
+  renderSecretBadge();     // 🔒 marker if this DM is a Secret chat
   if (c.type === "group") {
     $("chatSub").textContent = t("room_sub_group");
   } else {
@@ -2183,6 +2186,64 @@ $("infoBtn").onclick = () => {
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
 
 // ---------- Меню чата (⋮) ----------
+// ── Secret DMs (E2E) ──────────────────────────────────────────────────────────
+// Per-DM opt-in. `secretRooms` = the DM keys the user has turned encryption on
+// for (remembered locally). A message is encrypted only when the room is secret
+// AND we could fetch the peer's device keys.
+let secretRooms = new Set();
+try { secretRooms = new Set(JSON.parse(localStorage.getItem("dialog_secret") || "[]")); } catch {}
+function saveSecret() { try { localStorage.setItem("dialog_secret", JSON.stringify([...secretRooms])); } catch {} }
+function isSecret(room) { return secretRooms.has(room); }
+function dmPeer(room) { return room && room.startsWith("@dm:") ? room.slice(4).split("~").find((l) => l !== profile.login) : null; }
+
+// Publish this device's public key once per session (so peers can encrypt to it).
+async function registerE2eKey() {
+  if (!window.E2E || !E2E.available()) return;
+  try { await api("/api/e2e/keys", { deviceId: E2E.deviceId(), pubkey: await E2E.spki() }); } catch {}
+}
+// Fetch a peer's device keys plus our own other devices (so our other devices,
+// and the sender, can also read the message).
+async function e2eRecipients(peer) {
+  const mine = (await api("/api/e2e/keys/" + encodeURIComponent(profile.login), null, "GET")).data;
+  const theirs = (await api("/api/e2e/keys/" + encodeURIComponent(peer), null, "GET")).data;
+  const all = [...((mine && mine.devices) || []), ...((theirs && theirs.devices) || [])];
+  return { devices: all, peerCount: ((theirs && theirs.devices) || []).length };
+}
+async function toggleSecret() {
+  if (curKind !== "dm" || !myRoom) return;
+  if (isSecret(myRoom)) { secretRooms.delete(myRoom); saveSecret(); notify(t("e2e_off")); renderSecretBadge(); return; }
+  if (!window.E2E || !E2E.available()) { notify(t("e2e_unsupported")); return; }
+  await registerE2eKey();
+  const peer = dmPeer(myRoom);
+  const { peerCount } = await e2eRecipients(peer);
+  if (!peerCount) { notify(t("e2e_peer_nokeys")); return; }  // peer hasn't opened Dialog on a device that supports it
+  secretRooms.add(myRoom); saveSecret(); notify(t("e2e_on")); renderSecretBadge();
+}
+async function decryptBubble(el) {
+  if (!el || el.dataset.done) return;
+  el.dataset.done = "1";
+  const env = el.getAttribute("data-e2e") || "";
+  const pt = (window.E2E && E2E.available()) ? await E2E.decrypt(env) : null;
+  if (pt == null) { el.innerHTML = `<span class="e2e-locked">🔒 ${escapeHtml(t("e2e_unavailable"))}</span>`; return; }
+  el.classList.add("e2e-open"); el.textContent = "";
+  el.innerHTML = formatMessage(pt);
+}
+function renderSecretBadge() {
+  const head = $("chatTitle"); if (!head) return;
+  let b = document.getElementById("secretBadge");
+  if (isSecret(myRoom)) {
+    if (!b) { b = document.createElement("span"); b.id = "secretBadge"; b.className = "secret-badge"; b.textContent = "🔒"; b.title = t("e2e_on"); head.appendChild(b); }
+  } else if (b) b.remove();
+}
+async function showFingerprint() {
+  const peer = dmPeer(myRoom); if (!peer) return;
+  const mine = (await api("/api/e2e/keys/" + encodeURIComponent(profile.login), null, "GET")).data;
+  const theirs = (await api("/api/e2e/keys/" + encodeURIComponent(peer), null, "GET")).data;
+  const spkis = [...((mine&&mine.devices)||[]), ...((theirs&&theirs.devices)||[])].map((d) => d.spki);
+  const fp = await E2E.fingerprint(spkis);
+  await askText(t("e2e_fingerprint"), fp, "", { multiline: true });
+}
+
 $("chatMenuBtn").onclick = (e) => {
   e.stopPropagation(); const menu = $("chatMenu");
   // .chat-head keeps a transform (chatChromeIn fills forwards), and a transformed ancestor
@@ -2219,6 +2280,8 @@ $("chatMenuBtn").onclick = (e) => {
     item(t("chat_wallpaper"), "image", () => openChatBgModal());
     item(isB ? t("unblock_user") : t("block_user"), "block", () => block(partner, isB ? "unblock" : "block"), !isB);
     // Close = hide the DM but keep the history (reopening restores it); Delete wipes it.
+    item(isSecret(myRoom) ? t("e2e_stop") : t("e2e_start"), "shield", () => toggleSecret());
+    if (isSecret(myRoom)) item(t("e2e_verify"), "check", () => showFingerprint());
     item(t("dm_settings"), "sliders", () => openDmSettings());
     if (c) item(t("close_dm"), "close", () => closeDm(c));
     item(t("delete_chat"), "trash", () => { if (c) deleteChat(c); }, true);
@@ -3644,7 +3707,8 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
       const rt = m.replyText ? escapeHtml(m.replyText) : (m.replyType && m.replyType !== "text" ? t("pv_" + (m.replyType === "image" || m.replyType === "gif" ? "photo" : m.replyType === "video" ? "video" : m.replyType === "audio" ? "voice" : m.replyType === "sticker" ? "sticker" : "file")) : t("reply_gone"));
       inner += `<button type="button" class="quote" data-jump="${m.replyTo}"><span class="q-name">${rn}</span><span class="q-text">${rt}</span></button>`;
     }
-    if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
+    if (m.type === "e2e") inner += `<div class="bubble e2e" data-e2e="${escapeHtml(m.text || "")}"><span class="e2e-wait">🔒 ${t("e2e_decrypting")}</span></div>`;
+    else if (m.type === "text") inner += `<div class="bubble">${formatMessage(m.text)}</div>`;
     // Stickers deliberately have no bubble chrome — the art is the message.
     else if (m.type === "sticker") inner += `<div class="bubble sticker"><img src="${m.media}" alt="${escapeHtml(m.mediaName || "")}" loading="lazy" decoding="async"></div>`;
     else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
@@ -3688,7 +3752,10 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   wrap.innerHTML = inner;
   renderReactions(wrap, m.reactions || {});
   messagesEl.appendChild(wrap);
-  if (m.type === "text" && !isB) addLinkExtras(wrap, m.text); // превью ссылки / YouTube
+  if (m.type === "e2e") decryptBubble(wrap.querySelector(".bubble.e2e"));   // decrypt locally, in place
+  // Link previews are a server-side fetch — never run them for encrypted chats
+  // (the server must not see the URL) or for encrypted bubbles.
+  if (m.type === "text" && !isB && !isSecret(m.room || myRoom)) addLinkExtras(wrap, m.text);
   // Для входящих сразу же отправляем ACK доставки (на любое сообщение, в т.ч. live broadcast).
   if (!mine && m.id && !sysType) setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0);
   if (scroll) scrollDown();
@@ -4280,11 +4347,26 @@ function sendText() {
     room: myRoom, _optimistic: true,
     replyTo: rt ? rt.id : null, replyName: rt ? rt.name : null, replyText: rt ? rt.text : null,
   };
+  const finishSend = () => { clearReply(); input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode(); closeMention(); saveDraft(""); };
+  if (isSecret(myRoom)) {
+    // Secret DM: encrypt BEFORE anything leaves the device, and FAIL CLOSED — if
+    // encryption can't complete, nothing is sent and the text stays in the box.
+    // The optimistic bubble is only shown once the envelope is built.
+    (async () => {
+      try {
+        const { devices } = await e2eRecipients(dmPeer(myRoom));
+        if (!devices.length) throw new Error("no devices");
+        const env = await E2E.encrypt(text, devices);
+        renderMessage(m, true, false);   // our own plaintext bubble (we can read it)
+        socket.emit("message", { type: "e2e", text: env, localId, replyTo: rt ? rt.id : null });
+        finishSend();
+      } catch { notify(t("e2e_send_fail")); }   // input keeps the text for a retry
+    })();
+    return;
+  }
   renderMessage(m, true, false);
   socket.emit("message", { type: "text", text, localId, replyTo: rt ? rt.id : null });
-  clearReply();
-  input.value = ""; input.style.height = "auto"; socket.emit("typing", false); updateSendMode(); closeMention();
-  saveDraft("");
+  finishSend();
 }
 // sendBtn click is wired in wireComposerSend() below (text send + voice record).
 // ---------- @mention autocomplete (Discord-style) ----------

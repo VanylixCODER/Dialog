@@ -68,13 +68,24 @@
         endpoint and keys your browser/device provides.</li>
     </ul>
 
-    <h2 data-aos="fade-up">2. What is <em>not</em> encrypted end to end</h2>
-    <p>We would rather be blunt than flattering: <strong>messages are not end-to-end
-      encrypted today.</strong> They travel over TLS and are stored on the server that
-      runs your instance, which means whoever operates that server can technically read
-      them. On the hosted instance that is us; if you self-host, it is you. End-to-end
-      encrypted direct messages are on the roadmap, and this section will change when
-      they ship — not before.</p>
+    <h2 data-aos="fade-up">2. Encryption — what is and isn't end-to-end</h2>
+    <p><strong>Secret DMs are end-to-end encrypted.</strong> Turn on a secret chat in a
+      one-to-one conversation and messages are encrypted on your device and only
+      decryptable on the participants' devices — the server stores an opaque blob it
+      cannot read. The private keys are generated on your device and never leave it, so
+      no one, including us, can decrypt those messages. Because the keys are device-only,
+      a new device or a cleared browser cannot read a secret chat's earlier messages, and
+      losing all your devices loses that history — that is the trade-off for the server
+      never holding a key.</p>
+    <p><strong>Everything else is not end-to-end encrypted.</strong> Normal chats, group
+      chats, channels and anything involving a bot travel over TLS and are stored on the
+      server, which means whoever operates it can technically read them (us on the hosted
+      instance; you if you self-host). Encryption at rest for that stored content is on
+      the roadmap.</p>
+    <p><strong>Encryption hides content, not metadata.</strong> Even for a secret DM, the
+      server still sees who is talking to whom, when, and roughly how much — the same
+      limitation every messenger has. And the crypto is our own implementation pending an
+      independent audit; the code is public, so verify it rather than take our word.</p>
 
     <h2 data-aos="fade-up">3. Local storage on your device</h2>
     <p>We store a login token and some preferences in your browser's local storage to

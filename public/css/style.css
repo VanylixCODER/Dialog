@@ -6088,3 +6088,10 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   .login.handoff .auth-stage { animation: none !important; }
   .login-card, .auth-stage { transition-duration: .01ms !important; }
 }
+
+/* ── Secret DMs (E2E) ─────────────────────────────────────────────────────────
+   The lock badge next to a secret DM's title, and the encrypted-bubble states. */
+.secret-badge { margin-left: 8px; font-size: 13px; opacity: .9; vertical-align: middle; }
+.bubble.e2e .e2e-wait { color: var(--text-dim); font-size: 13px; }
+.bubble.e2e .e2e-locked { color: var(--text-dim); font-size: 13px; font-style: italic; }
+.bubble.e2e.e2e-open { /* decrypted content renders as a normal bubble */ }

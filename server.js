@@ -58,6 +58,7 @@ import {
   createReport, listReports, getReport, resolveReport, countPendingReports,
   reportMediaSummary, reportMedia, addWarning, pendingWarnings, ackWarning, warningsFor,
   favMessage, unfavMessage, favMessageIds, listFavMessages,
+  registerE2eDevice, e2eDevices,
   setUserReportBan, clearUserReport, setEmailWithStamp,
   messagesFrom, firstMessageIdAtOrAfter, searchMessages, pinMessage, getPinned, replySnippet,
   listSessions, deleteSessionOf, deleteOtherSessions, touchSession,
@@ -1974,11 +1975,15 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of pendingCb) if (
 
 async function deliverMessage({ room, fromLogin, name, from, type, text, media, mediaName, localId, buttons, replyTo, fwdFrom, fwdName }) {
   const off = media ? offloadResult(media) : { media: null, size: 0 };
+  // Secret DMs: the body is an opaque encrypted envelope. Preserve the "e2e" type
+  // (don't let the no-media branch rewrite it to "text") and allow the larger
+  // size an envelope needs (ciphertext + a wrapped key per recipient device).
+  const isE2E = type === "e2e";
   const payload = {
     from: from || fromLogin, fromLogin, name, ts: Date.now(),
-    type: media ? (type || "file") : "text",
+    type: isE2E ? "e2e" : (media ? (type || "file") : "text"),
     // Keep the caption on media too (was previously dropped) — up to 1024 chars, Telegram-style.
-    text: String(text || "").slice(0, media ? 1024 : 4000),
+    text: isE2E ? String(text || "").slice(0, 64000) : String(text || "").slice(0, media ? 1024 : 4000),
     media: off.media, mediaSize: off.size || null, mediaName: (mediaName || "").slice(0, 255),
     buttons: buttons || null,
     replyTo: Number(replyTo) > 0 ? Number(replyTo) : null,
@@ -2000,7 +2005,8 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   if (!payload.id) return null;
   io.to(room).emit("message", payload);
   const capPrev = payload.text ? " " + payload.text.slice(0, 110) : "";
-  const preview = payload.type === "text" ? payload.text.slice(0, 120)
+  const preview = payload.type === "e2e" ? "🔒 Encrypted message"
+    : payload.type === "text" ? payload.text.slice(0, 120)
     : payload.type === "sticker" ? "🩷 " + (payload.mediaName || "Sticker")
     : payload.type === "image" || payload.type === "gif" ? "🖼" + (capPrev || " Photo")
     : payload.type === "video" ? "🎬" + (capPrev || " Video")
@@ -2836,6 +2842,31 @@ app.get("/api/fav-message-ids", async (req, res) => {
     if (!room || !(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
     res.json(await favMessageIds(me.login, room));
   } catch (e) { console.error("fav ids", e.message); res.status(500).json({ error: "server error" }); }
+});
+
+// ---------- REST: E2E device key directory (Secret DMs) ----------
+// Publish THIS device's public key, and look up a peer's device keys. Public
+// keys only — the server is a directory, not a key escrow. Restricted to human,
+// non-bot accounts (Secret DMs are 1-to-1 between people).
+app.post("/api/e2e/keys", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const deviceId = String(req.body.deviceId || "");
+    const pubkey = String(req.body.pubkey || "");
+    if (!/^[A-Za-z0-9]{8,40}$/.test(deviceId)) return res.status(400).json({ error: "bad_device" });
+    if (!/^[A-Za-z0-9+/=]{80,400}$/.test(pubkey)) return res.status(400).json({ error: "bad_key" });
+    await registerE2eDevice(me.login, deviceId, pubkey);
+    res.json({ ok: true });
+  } catch (e) { console.error("e2e reg", e.message); res.status(500).json({ error: "server error" }); }
+});
+app.get("/api/e2e/keys/:login", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const login = String(req.params.login || "").toLowerCase();
+    if (!/^[a-z0-9_]{3,24}$/.test(login)) return res.status(400).json({ error: "bad_login" });
+    if (await isBot(login)) return res.json({ devices: [] });  // bots have no E2E identity
+    res.json({ devices: await e2eDevices(login) });
+  } catch (e) { console.error("e2e keys", e.message); res.status(500).json({ error: "server error" }); }
 });
 
 // ---------- REST: admin warnings (user side) ----------

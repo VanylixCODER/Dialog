@@ -378,6 +378,16 @@ export async function initSchema() {
     KEY idx_mfav_room (login, room, created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
 
+  // E2E device key directory — one public key per (user, device) for Secret DMs.
+  await pool.query(`CREATE TABLE IF NOT EXISTS e2e_devices (
+    login VARCHAR(24) NOT NULL,
+    device_id VARCHAR(40) NOT NULL,
+    pubkey VARCHAR(400) NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (login, device_id),
+    KEY idx_e2e_login (login)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
   // Admin warnings. Kept as rows rather than a transient socket push so a warning
   // still lands if the user is offline, and so there is an attributable record of
   // who sent what — a warning nobody can trace is not a moderation tool.
@@ -1524,6 +1534,22 @@ export async function favSticker(login, media, name) {
 export async function unfavSticker(login, media) {
   const r = await execute("DELETE FROM sticker_favs WHERE login=? AND media=?", [login, media]);
   return r.affectedRows > 0;
+}
+
+// ============================ E2E device key directory ============================
+// Public keys only. Each user's devices publish their ECDH P-256 SPKI here so a
+// sender can wrap a message key to every device. The server learns nothing it
+// couldn't already see (which accounts exist); it never holds a private key.
+export async function registerE2eDevice(login, deviceId, pubkey) {
+  await execute(
+    "INSERT INTO e2e_devices (login, device_id, pubkey, created_at) VALUES (?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE pubkey=VALUES(pubkey)",
+    [login, String(deviceId).slice(0, 40), String(pubkey).slice(0, 400), Date.now()]
+  );
+}
+export async function e2eDevices(login) {
+  return (await query("SELECT device_id AS deviceId, pubkey AS spki FROM e2e_devices WHERE login=?", [login]))
+    .map((r) => ({ deviceId: r.deviceId, spki: r.spki }));
 }
 
 // ============================ Favourite messages ============================
