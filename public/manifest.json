@@ -7,7 +7,9 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000700",
-  "theme_color": "#00ff5a",  "icons": [
-    { "src": "/src/lil_dialog.webp", "sizes": "516x471", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/src/lil_dialog.webp", "sizes": "516x471", "type": "image/svg+xml", "purpose": "maskable" }
-  ]}
+  "theme_color": "#00ff5a",
+  "icons": [
+    { "src": "/src/dialogmobile.png", "sizes": "620x620", "type": "image/png", "purpose": "any" },
+    { "src": "/src/dialogmobile.png", "sizes": "620x620", "type": "image/png", "purpose": "maskable" }
+  ]
+}
