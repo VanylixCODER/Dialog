@@ -22,10 +22,17 @@ function debounce(fn, ms) {
 // and injects into a dedicated <style id="ct-live-preview">. Debounced so we don't thrash
 // on every keystroke while still feeling live.
 // ---------- Состояние ----------
-// The session secret lives in an HttpOnly cookie the page cannot read; this is
+// The session secret lives in an HttpOnly cookie the page cannot read; `token` is
 // only a client-side "signed in" flag (see the cookie migration).
 let token = null;
-try { localStorage.removeItem("dialog_token"); } catch {}  // retired: session is an HttpOnly cookie now
+// Native shells (Electron / Android WebView) load a single trusted origin under
+// the strict CSP, so a Bearer fallback there is safe — and it means the apps
+// can't be locked out if their webview ever drops the session cookie. On the WEB
+// this stays null forever: cookie only, nothing secret in storage.
+const IS_NATIVE = !!(window.Android || window.dialogDesktop) || /DialogApp|Electron/i.test(navigator.userAgent || "");
+let authToken = null;
+if (IS_NATIVE) { try { authToken = localStorage.getItem("dialog_token") || null; } catch {} }
+else { try { localStorage.removeItem("dialog_token"); } catch {} }  // web: never persist a token
 let profile = null, myName = "";
 let myRoom = "", curKind = "dm", curTitle = "", activeKey = "";
 let avaVer = Date.now();
@@ -551,7 +558,7 @@ window.addEventListener("langchange", () => {
 
 // ---------- API ----------
 async function api(path, body, method = "POST") {
-  const res = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(path, { method, headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: "Bearer " + authToken } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { ok: res.ok, data: await res.json().catch(() => ({})) };
 }
 
@@ -859,37 +866,54 @@ $("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
   sw.querySelectorAll("button").forEach((b) => b.onclick = () => { if (window.setLang) setLang(b.dataset.lang); mark(); updateTerminal(); });
   mark();
 })();
-function onAuth({ profile: p }) { token = "1"; profile = p; rememberAccount(p); stopBootHints(); playAuthSuccess(); }
+function onAuth({ token: tk, profile: p }) {
+  token = "1"; profile = p;
+  if (IS_NATIVE && tk) { authToken = tk; try { localStorage.setItem("dialog_token", tk); } catch {} }
+  rememberAccount(p, tk);
+  stopBootHints(); playAuthSuccess();
+}
 
 // ---------- Multi-account (switch account, max 2 per device) ----------
 const MAX_ACCOUNTS = 2;
 let addingAccount = false;
-function getAccounts() {
-  // Migration: older builds stored a token per account here. Strip it — tokens
-  // belong only in HttpOnly cookies now — so nothing secret lingers in storage.
-  try { return JSON.parse(localStorage.getItem("dialog_accounts") || "[]").map((x) => ({ login: x.login, name: x.name })); } catch { return []; }
-}
+// Raw store: {login,name} on web; {login,name,token} on native (the token lets a
+// shell switch accounts even if cookies are dropped). getAccounts() returns
+// names only for the menu; getAccountsRaw() is native-internal.
+function getAccountsRaw() { try { return JSON.parse(localStorage.getItem("dialog_accounts") || "[]"); } catch { return []; } }
+function getAccounts() { return getAccountsRaw().map((x) => ({ login: x.login, name: x.name })); }
 function saveAccounts(a) { localStorage.setItem("dialog_accounts", JSON.stringify(a.slice(0, MAX_ACCOUNTS))); }
-function rememberAccount(p) {
+function rememberAccount(p, tk) {
   if (!p) return;
-  // Names only — never tokens. The token for each account lives in its own
-  // HttpOnly cookie the server manages.
-  let a = getAccounts().filter((x) => x.login !== p.login);
-  a.unshift({ login: p.login, name: p.name });
+  let a = getAccountsRaw().filter((x) => x.login !== p.login);
+  // Web stores names only (nothing secret in storage). Native also keeps the
+  // token so account switching survives a dropped cookie.
+  a.unshift(IS_NATIVE && tk ? { login: p.login, name: p.name, token: tk } : { login: p.login, name: p.name });
   saveAccounts(a);
 }
 async function switchToAccount(login) {
   if (profile && login === profile.login) return;
-  // The server flips the active-account cookie; it only works if this browser is
-  // already signed into that account (its cookie exists).
+  if (IS_NATIVE) {
+    const acc = getAccountsRaw().find((x) => x.login === login);
+    if (acc && acc.token) { authToken = acc.token; try { localStorage.setItem("dialog_token", acc.token); } catch {} }
+    api("/api/session/activate", { login }).finally(() => location.reload());  // set cookie too, belt-and-braces
+    return;
+  }
+  // Web: the server flips the active-account cookie (works because this browser
+  // is already signed into that account).
   const { ok } = await api("/api/session/activate", { login });
   if (ok) location.reload(); else { notify(t("err_generic")); renderAccountMenu(); }
 }
 async function signOutAccount(login) {
   await api("/api/session/signout", { login });
-  saveAccounts(getAccounts().filter((x) => x.login !== login));
-  if (profile && login === profile.login) location.reload();
-  else renderAccountMenu();
+  saveAccounts(getAccountsRaw().filter((x) => x.login !== login));
+  if (profile && login === profile.login) {
+    if (IS_NATIVE) {
+      const next = getAccountsRaw()[0];
+      if (next && next.token) { authToken = next.token; try { localStorage.setItem("dialog_token", next.token); } catch {} }
+      else { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} }
+    }
+    location.reload();
+  } else renderAccountMenu();
 }
 function beginAddAccount() {
   if (getAccounts().length >= MAX_ACCOUNTS) { notify(t("acct_limit", { n: MAX_ACCOUNTS })); return; }
@@ -1015,7 +1039,7 @@ async function checkSession() {
     return;
   }
   const { ok, data } = await api("/api/me", null, "GET");
-  if (ok) { token = "1"; profile = data.profile; enterApp(); } else { token = null; showLogin(); }
+  if (ok) { token = "1"; profile = data.profile; enterApp(); } else { token = null; if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} } showLogin(); }
 }
 
 function enterApp() {
@@ -1034,7 +1058,7 @@ function enterApp() {
   // single path is simpler and the reconnect is cheap.
   try { socket.disconnect(); } catch {}
   socket.connect();
-  socket.emit("identify", {});   // identity comes from the session cookie on the handshake
+  socket.emit("identify", IS_NATIVE && authToken ? { token: authToken } : {});   // web: handshake cookie; native: token fallback
   applyBackgroundMode(); // native Android: keep the socket alive in the background
   requestFcmToken();     // native Android: fetch + register the FCM push token
   loadDevicePrefs();
@@ -1066,18 +1090,19 @@ function enterApp() {
 }
 socket.on("connect", () => {
   if (!token) return;
-  socket.emit("identify", {});
-  if (myRoom) socket.emit("join", { room: myRoom });
+  socket.emit("identify", IS_NATIVE && authToken ? { token: authToken } : {});
+  if (myRoom) socket.emit("join", IS_NATIVE && authToken ? { room: myRoom, token: authToken } : { room: myRoom });
   // звонок (LiveKit) переподключается сам — наш сокет лишь восстанавливает чат
 });
-socket.on("auth-error", () => { location.reload(); });
+socket.on("auth-error", () => { if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} } location.reload(); });
 // Admin kicked this device (or ban): drop just THIS account and reload.
 socket.on("force-logout", () => {
   if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} }
-  if (profile) saveAccounts(getAccounts().filter((x) => x.login !== profile.login));
+  if (profile) saveAccounts(getAccountsRaw().filter((x) => x.login !== profile.login));
+  if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} }
   location.reload();
 });
-socket.on("banned", () => { try { localStorage.setItem("dialog_banned", "1"); } catch {} location.reload(); });
+socket.on("banned", () => { try { localStorage.setItem("dialog_banned", "1"); } catch {} if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} } location.reload(); });
 
 // ---------- Хранилище чатов (ЛС на сервере + localStorage fallback) ----------
 const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
@@ -1813,7 +1838,7 @@ async function openDmSettings() {
       box.querySelectorAll(".dm-clear-opt").forEach((x) => x.classList.toggle("on", x === b));
       notify(ms ? t("dm_autoclear_set", { window: t(key) }) : t("dm_autoclear_off"));
       // Re-join so history comes back filtered by the new window.
-      socket.emit("join", { room: myRoom });
+      socket.emit("join", IS_NATIVE && authToken ? { room: myRoom, token: authToken } : { room: myRoom });
     };
     box.appendChild(b);
   }
@@ -2084,7 +2109,7 @@ function openChat(c) {
   const cfb = $("chatFavs"); if (cfb) cfb.classList.add("hidden");
   loadFavIds();   // which messages in this room are starred
   dismissNotif(c.key);
-  socket.emit("join", { room: c.key }); // звонок НЕ завершаем — он живёт отдельно
+  socket.emit("join", IS_NATIVE && authToken ? { room: c.key, token: authToken } : { room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
@@ -2932,7 +2957,7 @@ $("profileSave") && ($("profileSave").onclick = async () => {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   closeSettings(); renderChatList($("searchInput").value);
 });
-$("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); location.reload(); });
+$("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} } location.reload(); });
 
 // ---------- Контакты / друзья ----------
 $("contactsBtn").onclick = () => openSettings("contacts", true);
