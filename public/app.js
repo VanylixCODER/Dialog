@@ -22,7 +22,10 @@ function debounce(fn, ms) {
 // and injects into a dedicated <style id="ct-live-preview">. Debounced so we don't thrash
 // on every keystroke while still feeling live.
 // ---------- Состояние ----------
-let token = localStorage.getItem("dialog_token") || null;
+// The session secret lives in an HttpOnly cookie the page cannot read; this is
+// only a client-side "signed in" flag (see the cookie migration).
+let token = null;
+try { localStorage.removeItem("dialog_token"); } catch {}  // retired: session is an HttpOnly cookie now
 let profile = null, myName = "";
 let myRoom = "", curKind = "dm", curTitle = "", activeKey = "";
 let avaVer = Date.now();
@@ -548,7 +551,7 @@ window.addEventListener("langchange", () => {
 
 // ---------- API ----------
 async function api(path, body, method = "POST") {
-  const res = await fetch(path, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   return { ok: res.ok, data: await res.json().catch(() => ({})) };
 }
 
@@ -856,40 +859,37 @@ $("forgotForm") && ($("forgotForm").onsubmit = async (e) => {
   sw.querySelectorAll("button").forEach((b) => b.onclick = () => { if (window.setLang) setLang(b.dataset.lang); mark(); updateTerminal(); });
   mark();
 })();
-function onAuth({ token: tk, profile: p }) { token = tk; profile = p; localStorage.setItem("dialog_token", tk); rememberAccount(p, tk); stopBootHints(); playAuthSuccess(); }
+function onAuth({ profile: p }) { token = "1"; profile = p; rememberAccount(p); stopBootHints(); playAuthSuccess(); }
 
 // ---------- Multi-account (switch account, max 2 per device) ----------
 const MAX_ACCOUNTS = 2;
 let addingAccount = false;
-function getAccounts() { try { return JSON.parse(localStorage.getItem("dialog_accounts") || "[]"); } catch { return []; } }
+function getAccounts() {
+  // Migration: older builds stored a token per account here. Strip it — tokens
+  // belong only in HttpOnly cookies now — so nothing secret lingers in storage.
+  try { return JSON.parse(localStorage.getItem("dialog_accounts") || "[]").map((x) => ({ login: x.login, name: x.name })); } catch { return []; }
+}
 function saveAccounts(a) { localStorage.setItem("dialog_accounts", JSON.stringify(a.slice(0, MAX_ACCOUNTS))); }
-function rememberAccount(p, tk) {
-  if (!p || !tk) return;
+function rememberAccount(p) {
+  if (!p) return;
+  // Names only — never tokens. The token for each account lives in its own
+  // HttpOnly cookie the server manages.
   let a = getAccounts().filter((x) => x.login !== p.login);
-  a.unshift({ login: p.login, name: p.name, token: tk });
+  a.unshift({ login: p.login, name: p.name });
   saveAccounts(a);
 }
-function switchToAccount(login) {
-  const a = getAccounts().find((x) => x.login === login);
-  if (!a || (profile && login === profile.login)) return;
-  localStorage.setItem("dialog_token", a.token);
-  location.reload();
-}
-async function logoutToken(tk) {
-  try { await fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + tk } }); } catch {}
+async function switchToAccount(login) {
+  if (profile && login === profile.login) return;
+  // The server flips the active-account cookie; it only works if this browser is
+  // already signed into that account (its cookie exists).
+  const { ok } = await api("/api/session/activate", { login });
+  if (ok) location.reload(); else { notify(t("err_generic")); renderAccountMenu(); }
 }
 async function signOutAccount(login) {
-  const acc = getAccounts().find((x) => x.login === login);
-  if (acc) logoutToken(acc.token);
-  const rest = getAccounts().filter((x) => x.login !== login);
-  saveAccounts(rest);
-  if (profile && login === profile.login) {
-    if (rest[0]) localStorage.setItem("dialog_token", rest[0].token);
-    else localStorage.removeItem("dialog_token");
-    location.reload();
-  } else {
-    renderAccountMenu();
-  }
+  await api("/api/session/signout", { login });
+  saveAccounts(getAccounts().filter((x) => x.login !== login));
+  if (profile && login === profile.login) location.reload();
+  else renderAccountMenu();
 }
 function beginAddAccount() {
   if (getAccounts().length >= MAX_ACCOUNTS) { notify(t("acct_limit", { n: MAX_ACCOUNTS })); return; }
@@ -1014,13 +1014,12 @@ async function checkSession() {
     const back = $("addAcctBack"); if (back && getAccounts().length) back.classList.remove("hidden");
     return;
   }
-  if (!token) { showLogin(); return; }
   const { ok, data } = await api("/api/me", null, "GET");
-  if (ok) { profile = data.profile; enterApp(); } else { localStorage.removeItem("dialog_token"); showLogin(); }
+  if (ok) { token = "1"; profile = data.profile; enterApp(); } else { token = null; showLogin(); }
 }
 
 function enterApp() {
-  rememberAccount(profile, token); // keep the active account listed in the switcher
+  rememberAccount(profile); // keep the active account listed in the switcher (name only)
   myName = profile.name; myStatus = profile.status || "online"; myDesc = profile.description || ""; myActivity = profile.activity || "";
   presence.set(profile.login, myStatus === "invisible" ? "offline" : myStatus);
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
@@ -1028,7 +1027,13 @@ function enterApp() {
   loadPendingWarnings();   // a warning issued while offline still has to land
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   const adminBtn = $("adminBtn"); if (adminBtn) adminBtn.classList.toggle("hidden", !profile.admin);
-  socket.emit("identify", { token });
+  // The socket may have connected before login (no session cookie on that
+  // handshake). Reconnect so the handshake carries the cookie; the connect
+  // handler then emits identify. Returning visits already had the cookie, but a
+  // single path is simpler and the reconnect is cheap.
+  try { socket.disconnect(); } catch {}
+  socket.connect();
+  socket.emit("identify", {});   // identity comes from the session cookie on the handshake
   applyBackgroundMode(); // native Android: keep the socket alive in the background
   requestFcmToken();     // native Android: fetch + register the FCM push token
   loadDevicePrefs();
@@ -1060,19 +1065,18 @@ function enterApp() {
 }
 socket.on("connect", () => {
   if (!token) return;
-  socket.emit("identify", { token });
-  if (myRoom) socket.emit("join", { token, room: myRoom });
+  socket.emit("identify", {});
+  if (myRoom) socket.emit("join", { room: myRoom });
   // звонок (LiveKit) переподключается сам — наш сокет лишь восстанавливает чат
 });
-socket.on("auth-error", () => { localStorage.removeItem("dialog_token"); location.reload(); });
+socket.on("auth-error", () => { location.reload(); });
 // Admin kicked this device (or ban): drop just THIS account and reload.
 socket.on("force-logout", () => {
   if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} }
-  if (profile) { const rest = getAccounts().filter((x) => x.login !== profile.login); saveAccounts(rest); if (rest[0]) localStorage.setItem("dialog_token", rest[0].token); else localStorage.removeItem("dialog_token"); }
-  else localStorage.removeItem("dialog_token");
+  if (profile) saveAccounts(getAccounts().filter((x) => x.login !== profile.login));
   location.reload();
 });
-socket.on("banned", () => { try { localStorage.setItem("dialog_banned", "1"); } catch {} localStorage.removeItem("dialog_token"); location.reload(); });
+socket.on("banned", () => { try { localStorage.setItem("dialog_banned", "1"); } catch {} location.reload(); });
 
 // ---------- Хранилище чатов (ЛС на сервере + localStorage fallback) ----------
 const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
@@ -1807,7 +1811,7 @@ async function openDmSettings() {
       box.querySelectorAll(".dm-clear-opt").forEach((x) => x.classList.toggle("on", x === b));
       notify(ms ? t("dm_autoclear_set", { window: t(key) }) : t("dm_autoclear_off"));
       // Re-join so history comes back filtered by the new window.
-      socket.emit("join", { token, room: myRoom });
+      socket.emit("join", { room: myRoom });
     };
     box.appendChild(b);
   }
@@ -2078,7 +2082,7 @@ function openChat(c) {
   const cfb = $("chatFavs"); if (cfb) cfb.classList.add("hidden");
   loadFavIds();   // which messages in this room are starred
   dismissNotif(c.key);
-  socket.emit("join", { token, room: c.key }); // звонок НЕ завершаем — он живёт отдельно
+  socket.emit("join", { room: c.key }); // звонок НЕ завершаем — он живёт отдельно
   watermarkSnapshotApplied = false; // следующий watermark-снимок — это первый для новой комнаты, пересчитываем
   setTimeout(() => markDeliveredSeenUpToLast(), 300); // отметить переписку как доставленную/просмотренную
   $("emptyState").classList.add("hidden");
@@ -2865,7 +2869,7 @@ $("profileSave") && ($("profileSave").onclick = async () => {
   $("myName").textContent = myName; setMyAvatar(); renderMeStatus();
   closeSettings(); renderChatList($("searchInput").value);
 });
-$("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); localStorage.removeItem("dialog_token"); location.reload(); });
+$("logoutBtn") && ($("logoutBtn").onclick = async () => { unregisterFcm(); if (NATIVE && NATIVE.keepAlive) { try { NATIVE.keepAlive(false); } catch (e) {} } await api("/api/logout"); location.reload(); });
 
 // ---------- Контакты / друзья ----------
 $("contactsBtn").onclick = () => openSettings("contacts", true);
@@ -3579,7 +3583,7 @@ function addLinkExtras(wrap, text) {
   // preview on an older message (rendered while scrolling up) would yank the user
   // back down to the latest messages.
   if (yid) { const d = document.createElement("div"); d.className = "yt-embed"; d.innerHTML = `<iframe src="https://www.youtube.com/embed/${yid}" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`; const stick = atBottom(); wrap.appendChild(d); if (stick) scrollDown(); return; }
-  fetch("/api/link-preview?url=" + encodeURIComponent(url), { headers: { Authorization: "Bearer " + token } })
+  fetch("/api/link-preview?url=" + encodeURIComponent(url))
     .then((r) => r.json()).then((d) => {
       if (!d || (!d.title && !d.image)) return;
       const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "link-preview";
@@ -4788,7 +4792,7 @@ $("gifBtn").onclick = toggleGif;
 $("gifSearch").addEventListener("input", (e) => { clearTimeout(gifTimer); gifTimer = setTimeout(() => loadGifs(e.target.value.trim()), 400); });
 async function loadGifs(q) {
   const grid = $("gifGrid");
-  const res = await fetch("/api/gif?q=" + encodeURIComponent(q), { headers: { Authorization: "Bearer " + token } });
+  const res = await fetch("/api/gif?q=" + encodeURIComponent(q));
   const d = await res.json(); $("gifNote").classList.toggle("hidden", !d.nokey); grid.innerHTML = "";
   (d.results || []).forEach((g) => { const img = new Image(); img.src = g.preview; img.className = "gif-item"; img.loading = "lazy"; img.onclick = () => { if (myRoom) socket.emit("message", { type: "gif", media: g.url, mediaName: "gif" }); gifPanel.classList.add("hidden"); }; grid.appendChild(img); });
 }
@@ -6139,7 +6143,7 @@ async function wipeLocalTraces() {
 }
 async function selfDestruct(manual) {
   clearTimeout(seTimer);
-  try { await fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }); } catch {}
+  try { await api("/api/logout", {}); } catch {}
   await wipeLocalTraces();
   location.replace("/login");
 }
@@ -7241,7 +7245,7 @@ $("devRevokeOthers") && ($("devRevokeOthers").onclick = async () => { await api(
 // browser saves it with the filename the server picked.
 $("exportBtn") && ($("exportBtn").onclick = async () => {
   try {
-    const r = await fetch("/api/export", { headers: { Authorization: "Bearer " + token } });
+    const r = await fetch("/api/export");
     if (!r.ok) { notify(t("err_generic")); return; }
     const blob = await r.blob();
     const a = document.createElement("a");

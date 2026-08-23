@@ -211,6 +211,13 @@ const httpServer = useHttps
   : createHttp(app);
 
 const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
+// Session identity now comes from the HttpOnly cookie on the WebSocket handshake.
+// Stash the token on the handshake; identify/join fall back to it when the client
+// sends no token in the payload (the new default). Never blocks the connection.
+io.use((socket, next) => {
+  try { socket.handshake._sessTok = cookieToken({ headers: socket.handshake.headers }); } catch {}
+  next();
+});
 
 // The native apps (Electron desktop / Android WebView) must never see the
 // marketing landing or downloads pages — they should stay in the chat. They
@@ -245,6 +252,24 @@ app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
   res.setHeader("Permissions-Policy", "geolocation=(), payment=(), usb=()");
   next();
+});
+
+// ── CSRF guard ────────────────────────────────────────────────────────────────
+// Now that a session can ride an ambient cookie, a cross-site page could try to
+// POST with the victim's cookie attached. SameSite=Lax already stops the cookie
+// being sent on cross-site POST/fetch; this is defence-in-depth. It applies ONLY
+// to cookie-authenticated mutating requests, so the Bearer bot API and the
+// HMAC-signed /webhook (neither carries our cookie) are untouched.
+app.use((req, res, next) => {
+  if (!/^(POST|PUT|PATCH|DELETE)$/.test(req.method)) return next();
+  if (!req.path.startsWith("/api/")) return next();
+  const c = parseCookies(req);
+  const cookied = !!(c.dlg_active || c.dlg_sess || Object.keys(c).some((k) => k.startsWith("dlg_sess_")));
+  if (!cookied) return next();                    // Bearer / no-cookie callers exempt
+  const origin = req.headers.origin;
+  if (!origin) return next();                      // no Origin: SameSite=Lax already covers it
+  try { if (new URL(origin).host === req.headers.host) return next(); } catch {}
+  return res.status(403).json({ error: "bad_origin" });
 });
 
 // ---------- Auth rate limiting ----------
@@ -365,7 +390,48 @@ app.get(["/invite/:code", "/join/:code"], (_req, res) =>
 );
 
 const bearer = (req) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-async function authUser(req) { return auth.userByToken(bearer(req)); }
+
+// ── Session cookies ───────────────────────────────────────────────────────────
+// The session token lives in an HttpOnly cookie the page's JS cannot read, so an
+// injected script (past the CSP) still can't lift it out of localStorage — there
+// is nothing there to lift. Keyed per-login so the multi-account switcher keeps
+// working: dlg_sess_<login> holds each account's token, dlg_active names the one
+// in use. Authorization: Bearer is still accepted as a fallback (bot API; and a
+// safety net for any client still sending it).
+function parseCookies(req) {
+  const out = {}; const raw = req.headers && req.headers.cookie;
+  if (!raw) return out;
+  for (const part of raw.split(";")) {
+    const i = part.indexOf("="); if (i < 0) continue;
+    try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch {}
+  }
+  return out;
+}
+const COOKIE_MAXAGE = 400 * 24 * 3600; // 400d — the browser cap; session row TTL still governs
+const COOKIE_ATTRS = "HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=" + COOKIE_MAXAGE;
+function cookieToken(req) {
+  const c = parseCookies(req);
+  const active = /^[a-z0-9_]{3,24}$/.test(c.dlg_active || "") ? c.dlg_active : null;
+  if (active && c["dlg_sess_" + active]) return c["dlg_sess_" + active];
+  return c.dlg_sess || ""; // single-account fallback
+}
+// The token that authenticates a human session: cookie first, Bearer as fallback.
+function sessionToken(req) { return cookieToken(req) || bearer(req); }
+function appendCookie(res, str) {
+  const prev = res.getHeader("Set-Cookie");
+  res.setHeader("Set-Cookie", prev ? [].concat(prev, str) : str);
+}
+function setSession(res, login, token) {
+  appendCookie(res, "dlg_sess_" + login + "=" + token + "; " + COOKIE_ATTRS);
+  appendCookie(res, "dlg_active=" + login + "; " + COOKIE_ATTRS);
+}
+function clearSession(res, login) {
+  const gone = "=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
+  if (login) appendCookie(res, "dlg_sess_" + login + gone);
+  appendCookie(res, "dlg_active" + gone);
+  appendCookie(res, "dlg_sess" + gone);
+}
+async function authUser(req) { return auth.userByToken(sessionToken(req)); }
 
 // ---------- REST: аутентификация ----------
 app.post("/api/register", async (req, res) => {
@@ -378,6 +444,7 @@ app.post("/api/register", async (req, res) => {
     // Fire-and-forget the verification + welcome emails (never block/break signup).
     sendVerification(out.profile.login, addr, out.profile.name).catch((e) => console.error("verify mail", e.message));
     sendWelcomeEmail(addr, out.profile.name).catch((e) => console.error("welcome mail", e.message));
+    setSession(res, out.profile.login, out.token);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -389,6 +456,7 @@ app.post("/api/login", async (req, res) => {
     const out = await auth.login(login, password, code, { ua: req.headers["user-agent"], ip: normIp(req.ip) });
     setUserLastIp(out.profile.login, normIp(req.ip)).catch(() => {});
     evaluateAwards(out.profile.login).catch(() => {});
+    setSession(res, out.profile.login, out.token);
     res.json(out);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -397,10 +465,45 @@ app.get("/api/me", async (req, res) => {
   if (!me) return res.status(401).json({ error: "unauth" });
   // One write per app load keeps the device list's "last active" honest without taxing
   // every authenticated request.
-  touchSession(bearer(req)).catch(() => {});
+  touchSession(sessionToken(req)).catch(() => {});
   res.json({ profile: me });
 });
-app.post("/api/logout", async (req, res) => { await auth.logout(bearer(req)); res.json({ ok: true }); });
+app.post("/api/logout", async (req, res) => {
+  const c = parseCookies(req);
+  const active = c.dlg_active || null;
+  await auth.logout(sessionToken(req));
+  // Sign out only the active account; if another account is still logged into
+  // this browser, promote it so the switcher survives a logout.
+  if (active) appendCookie(res, "dlg_sess_" + active + "=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  const other = Object.keys(c).filter((k) => k.startsWith("dlg_sess_") && k !== "dlg_sess_" + active)
+    .map((k) => k.slice("dlg_sess_".length))[0] || null;
+  if (other) appendCookie(res, "dlg_active=" + other + "; " + COOKIE_ATTRS);
+  else clearSession(res, null);
+  res.json({ ok: true, next: other });
+});
+
+// Multi-account: flip the active account to another one this browser is already
+// signed into. Only succeeds if that account's HttpOnly session cookie exists —
+// the client never holds the token, so it cannot forge a switch to an account it
+// hasn't logged into in this browser.
+app.post("/api/session/activate", async (req, res) => {
+  const login = String(req.body.login || "").toLowerCase();
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) return res.status(400).json({ error: "bad_login" });
+  const tok = parseCookies(req)["dlg_sess_" + login];
+  if (!tok || !(await auth.userByToken(tok))) return res.status(401).json({ error: "no_session" });
+  appendCookie(res, "dlg_active=" + login + "; " + COOKIE_ATTRS);
+  res.json({ ok: true, login });
+});
+// Sign one stored account out of this browser (used by the switcher's remove).
+app.post("/api/session/signout", async (req, res) => {
+  const login = String(req.body.login || "").toLowerCase();
+  if (!/^[a-z0-9_]{3,24}$/.test(login)) return res.status(400).json({ error: "bad_login" });
+  const tok = parseCookies(req)["dlg_sess_" + login];
+  if (tok) { try { await auth.logout(tok); } catch {} }
+  appendCookie(res, "dlg_sess_" + login + "=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  if (parseCookies(req).dlg_active === login) appendCookie(res, "dlg_active=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  res.json({ ok: true });
+});
 
 // ---------- Email verification + password reset ----------
 const APP_ORIGIN = process.env.APP_URL || "https://dialogmsg.xyz";
@@ -556,7 +659,7 @@ app.post("/api/account/password", async (req, res) => {
     }
     await auth.setPassword(me.login, String(password || "")); // validates length, stamps time
     // Keep THIS session, drop all others.
-    const keep = bearer(req);
+    const keep = sessionToken(req);
     for (const tk of await import("./db.js").then((m) => m.tokensForLogin(me.login))) {
       if (tk === keep) { await import("./cache.js").then((c) => c.cacheDel("sess:" + tk)); continue; }
       await import("./db.js").then((m) => m.deleteSession(tk)); await import("./cache.js").then((c) => c.cacheDel("sess:" + tk));
@@ -2171,8 +2274,8 @@ io.on("connection", (socket) => {
 
   socket.on("latency", (cb) => { if (typeof cb === "function") cb(Date.now()); });
 
-  socket.on("identify", async ({ token }) => {
-    const p = await auth.userByToken(token); if (!p) return;
+  socket.on("identify", async ({ token } = {}) => {
+    const p = await auth.userByToken(token || socket.handshake._sessTok); if (!p) return;
     userLogin = p.login; userName = p.name;
     socket._token = token; socket._authLogin = userLogin;
     setUserLastIp(userLogin, sockIp).catch(() => {});
@@ -2196,8 +2299,8 @@ io.on("connection", (socket) => {
     currentRoom = null;
   }
 
-  socket.on("join", async ({ room, token }) => {
-    const p = await auth.userByToken(token);
+  socket.on("join", async ({ room, token } = {}) => {
+    const p = await auth.userByToken(token || socket.handshake._sessTok);
     if (!p) { socket.emit("auth-error", "Session expired"); return; }
     const newRoom = (room || "lobby").trim().slice(0, 64) || "lobby";
     // контроль доступа к приватным комнатам
@@ -2903,7 +3006,7 @@ app.post("/api/pin", async (req, res) => {
 app.get("/api/sessions", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const cur = bearer(req);
+    const cur = sessionToken(req);
     const rows = await listSessions(me.login);
     res.json({ sessions: rows.map((s) => ({
       id: s.token.slice(0, 12),          // never hand the full token back to the page
@@ -2915,7 +3018,7 @@ app.get("/api/sessions", async (req, res) => {
 app.post("/api/sessions/revoke", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    const cur = bearer(req);
+    const cur = sessionToken(req);
     if (req.body.others) {
       const rows = await listSessions(me.login);
       for (const s of rows) if (s.token !== cur) await auth.logout(s.token); // clears the Redis copy too
@@ -2938,7 +3041,7 @@ app.post("/api/sessions/revoke", async (req, res) => {
 app.get("/api/session/expiry", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-    res.json({ at: await getSessionExpiry(bearer(req)) });
+    res.json({ at: await getSessionExpiry(sessionToken(req)) });
   } catch { res.status(500).json({ error: "server error" }); }
 });
 app.post("/api/session/expiry", async (req, res) => {
@@ -2946,7 +3049,7 @@ app.post("/api/session/expiry", async (req, res) => {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
     const at = Number(req.body.at) || 0;
     if (at && at < Date.now()) return res.status(400).json({ error: "past" });
-    await setSessionExpiry(bearer(req), at || null);
+    await setSessionExpiry(sessionToken(req), at || null);
     res.json({ ok: true, at });
   } catch { res.status(500).json({ error: "server error" }); }
 });
