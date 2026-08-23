@@ -43,7 +43,7 @@
           <button class="auth-tab active" data-mode="login" data-i18n="tab_login">Sign in</button>
           <button class="auth-tab" data-mode="register" data-i18n="tab_register">Sign up</button>
         </div>
-        <form id="loginForm" class="auth-form" method="POST" onsubmit="return false">
+        <form id="loginForm" class="auth-form" method="POST" data-nodefault>
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_email" maxlength="190" autocomplete="username" />
           <span class="field-wrap"><input class="field" name="password" type="password" data-i18n-ph="ph_password" autocomplete="current-password" /><button type="button" class="toggle-eye" tabindex="-1" aria-label="Show password"></button></span>
           <!-- Second factor: revealed only when the server says the account has 2FA on. -->
@@ -54,7 +54,7 @@
           <button type="submit" class="btn-primary" data-i18n="btn_login">Sign in</button>
           <button type="button" class="auth-link" id="forgotLink" data-i18n="forgot_pw">Forgot password?</button>
         </form>
-        <form id="registerForm" class="auth-form hidden" method="POST" onsubmit="return false">
+        <form id="registerForm" class="auth-form hidden" method="POST" data-nodefault>
           <input class="field" name="name" type="text" data-i18n-ph="ph_name" maxlength="32" autocomplete="name" />
           <input class="field" name="login" type="text" data-i18n-ph="ph_login_hint" maxlength="24" autocomplete="username" />
           <input class="field" name="email" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" />
@@ -63,7 +63,7 @@
           <div class="form-error" id="registerError"></div>
           <button type="submit" class="btn-primary" data-i18n="btn_register">Create account</button>
         </form>
-        <form id="forgotForm" class="auth-form hidden" method="POST" onsubmit="return false">
+        <form id="forgotForm" class="auth-form hidden" method="POST" data-nodefault>
           <p class="auth-hint" data-i18n="forgot_hint">Enter your email — we'll send a reset link.</p>
           <input class="field" name="email" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" />
           <div class="form-error" id="forgotMsg"></div>
@@ -912,7 +912,7 @@
     <div class="modal-card" style="width:360px">
       <div class="modal-title" id="emailNagTitle" data-i18n="email_nag_title">Secure your account</div>
       <p class="fb-confirm-body" id="emailNagBody" data-i18n="email_nag_body">Link an email so you can recover your account if you lose your password. Without one, a lost password means a lost account.</p>
-      <form id="emailNagForm" onsubmit="return false" style="margin-top:6px">
+      <form id="emailNagForm" data-nodefault style="margin-top:6px">
         <input class="field" id="emailNagInput" type="email" data-i18n-ph="ph_email" maxlength="190" autocomplete="email" style="width:100%" />
         <div class="form-error" id="emailNagMsg"></div>
         <div class="modal-actions" style="flex-direction:column;gap:6px;margin-top:10px">
@@ -1324,7 +1324,6 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script src="/js/i18n.js"></script>
   <script src="/js/icons.js"></script>
   <script src="/js/matrix.js"></script>

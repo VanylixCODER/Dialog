@@ -3075,8 +3075,41 @@ setInterval(async () => {
   } catch (e) { console.error("schedule sweep", e.message); }
 }, 30000);
 
+// Content-Security-Policy for the messenger SPA. The whole point is script-src
+// without 'unsafe-inline': if any XSS ever slips past formatMessage(), it still
+// can't run injected inline script or an on*= handler, and connect-src 'self'
+// stops it shipping the session token anywhere. That is the real mitigation for
+// a chat app whose token lives in localStorage.
+//   • 'wasm-unsafe-eval' + esm.sh — the optional in-call noise-suppression and
+//     background-blur modules are wasm loaded from esm.sh. Narrowly scoped: it
+//     permits wasm compilation, not arbitrary eval. (Self-hosting these later
+//     would let esm.sh drop out entirely — the one third-party in script-src.)
+//   • style-src 'unsafe-inline' — the UI uses inline style= throughout; styles
+//     cannot exfiltrate a token, so this is the standard, safe concession.
+//   • img/media https: — avatars, GIFs and link-preview thumbnails are remote.
+// Marketing pages (their own inline scripts) keep the looser global header.
+const APP_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  // youtube + ytimg: the "Watch Together" activity boots the YT IFrame API,
+  // which injects its widget script from s.ytimg.com. Google-owned origins.
+  "script-src 'self' 'wasm-unsafe-eval' https://esm.sh https://www.youtube.com https://s.ytimg.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' data: blob: https:",
+  "connect-src 'self' https://esm.sh",
+  "frame-src https://www.youtube.com https://youtube.com",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+].join("; ");
+
 // SPA fallback — serve index.html for all non-API paths (needed for /en/@user, /ru/group/1, etc.)
 app.get(/^\/(?!api\/|src\/|js\/|css\/|socket\.io\/)/, (req, res) => {
+  res.setHeader("Content-Security-Policy", APP_CSP);
   res.sendFile(join(__dirname, "public", "index.html"));
 });
 

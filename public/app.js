@@ -906,7 +906,7 @@ function renderAccountMenu() {
   for (const a of accs) {
     const isActive = profile && a.login === profile.login;
     const row = document.createElement("div"); row.className = "acct-row" + (isActive ? " active" : "");
-    row.innerHTML = `<div class="avatar acct-av" data-login="${escapeHtml(a.login)}"><img src="${avaUrl(a.login)}" onerror="this.remove()">${initials(a.name || a.login)}</div>`
+    row.innerHTML = `<div class="avatar acct-av" data-login="${escapeHtml(a.login)}"><img src="${avaUrl(a.login)}" data-fallback="remove">${initials(a.name || a.login)}</div>`
       + `<div class="acct-meta"><span class="acct-name">${escapeHtml(a.name || a.login)}</span><span class="acct-login">@${escapeHtml(a.login)}</span></div>`
       + `<div class="acct-side">${isActive ? `<span class="acct-cur">${t("acct_current")}</span>` : ""}<button class="acct-out" title="${t("btn_logout")}">${window.ICON.logout || "✕"}</button></div>`;
     row.querySelector(".acct-out").onclick = (e) => { e.stopPropagation(); signOutAccount(a.login); };
@@ -1296,8 +1296,8 @@ function renderChatList(filter = "") {
     li._chatKey = c.key; // метка для быстрого in-place обновления точек (см. updateDots)
     const dot = c.type === "dm" ? `<span class="st-dot ci-status st-${statusClass(presence.get(c.login))}"></span>` : "";
     const avaInner = c.type === "group"
-      ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`
-      : `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}`;
+      ? `<img src="/api/group-avatar/${c.id}?v=${avaVer}" data-fallback="group">`
+      : `<img src="${avaUrl(c.login)}" data-fallback="remove">${initials(c.name)}`;
     li.innerHTML = `<div class="ava-wrap"><div class="avatar ${c.type === "group" ? "grp" : ""}" ${c.type === "dm" ? `data-login="${c.login}"` : ""}>${avaInner}</div>${dot}</div>
       <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(c.name)}</span><span class="ci-pin" data-key="${c.key}"><svg viewBox="0 0 16 16" width="12" height="12"><path d="${c.pinned ? 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z' : 'M9.5 1.5v5l2 2v1h-3.5v6h-1v-6H3.5v-1l2-2v-5h.5V1h4v.5h.5z'}" fill="${c.pinned ? '#fff' : 'none'}" stroke="#888" stroke-width="1.2"/></svg></span><span class="ci-time">${c.ts ? fmtTime(c.ts) : ""}</span></div>
       <div class="ci-bot"><span class="ci-last">${escapeHtml(c.last || "")}</span>${c.unread ? `<span class="badge${c.mentioned ? " mention-badge" : ""}">${c.mentioned ? "@" : ""}${c.unread}</span>` : (c.type === "group" ? `<span class="ci-del" title="${t("delete_chat")}">✕</span>` : "")}</div></div>`;
@@ -1379,7 +1379,7 @@ document.addEventListener("click", (e) => {
 // (global search) so you can find whoever you want and open a DM with them.
 function suggestRow(login, name, sub) {
   const li = document.createElement("li"); li.className = "chat-item chat-suggest";
-  li.innerHTML = `<div class="ava-wrap"><div class="avatar" data-login="${login}"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name || login)}</div><span class="st-dot ci-status st-${statusClass(presence.get(login))}"></span></div>
+  li.innerHTML = `<div class="ava-wrap"><div class="avatar" data-login="${login}"><img src="${avaUrl(login)}" data-fallback="remove">${initials(name || login)}</div><span class="st-dot ci-status st-${statusClass(presence.get(login))}"></span></div>
     <div class="ci-body"><div class="ci-top"><span class="ci-name">${escapeHtml(name || login)}</span></div>
     <div class="ci-bot"><span class="ci-last">${escapeHtml(sub)}</span></div></div>`;
   li.onclick = () => { $("searchInput").value = ""; openDM(login); };
@@ -1647,8 +1647,8 @@ function renderDirectory() {
     row.type = "button"; row.className = "dir-row";
     const sub = dirTab === "channels" ? (r.about || t("dir_members", { n: r.members || 0 })) : (r.description || "@" + r.login);
     const ava = dirTab === "channels"
-      ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/group-avatar/${r.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'"></div>`
-      : `<div class="avatar" style="width:36px;height:36px;font-size:14px"><img src="${avaUrl(r.login)}" onerror="this.remove()">${initials(r.name)}</div>`;
+      ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/group-avatar/${r.id}?v=${avaVer}" data-fallback="group"></div>`
+      : `<div class="avatar" style="width:36px;height:36px;font-size:14px"><img src="${avaUrl(r.login)}" data-fallback="remove">${initials(r.name)}</div>`;
     row.innerHTML = ava + `<div class="dir-body"><div class="dir-name">${escapeHtml(r.name)}</div><div class="dir-sub">${escapeHtml(sub)}</div></div>`;
     row.onclick = () => {
       $("directoryModal").classList.add("hidden");
@@ -2000,7 +2000,7 @@ function nextGroupInvite() {
   if (!giCurrent) { modal.classList.add("hidden"); return; }
   $("giName").textContent = giCurrent.groupName || t("group");
   $("giFrom").textContent = t("group_invite_from", { name: giCurrent.fromName || giCurrent.fromLogin });
-  $("giAva").innerHTML = `<img src="/api/group-avatar/${giCurrent.groupId}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
+  $("giAva").innerHTML = `<img src="/api/group-avatar/${giCurrent.groupId}?v=${avaVer}" data-fallback="group">`;
   modal.classList.remove("hidden");
   // Visible countdown so the popup closing itself doesn't look like a bug.
   let left = Math.round(GROUP_INVITE_TIMEOUT / 1000);
@@ -2054,7 +2054,7 @@ async function refreshGroupInvites() {
   $("gsInviteCard") && $("gsInviteCard").classList.toggle("hidden", false);
   for (const r of rows) {
     const row = document.createElement("div"); row.className = "contact-row";
-    row.innerHTML = `<div class="avatar grp" style="width:32px;height:32px"><img src="/api/group-avatar/${r.groupId}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'"></div>` +
+    row.innerHTML = `<div class="avatar grp" style="width:32px;height:32px"><img src="/api/group-avatar/${r.groupId}?v=${avaVer}" data-fallback="group"></div>` +
       `<span class="c-name">${escapeHtml(r.groupName || "")}</span><span class="c-mutual">${escapeHtml(t("group_invite_from", { name: r.fromLogin }))}</span>`;
     const ok2 = document.createElement("button"); ok2.className = "c-icon-btn"; ok2.title = t("accept_request"); ok2.innerHTML = window.ICON.check || "✓";
     ok2.onclick = () => answerGroupInvite(r.id, "accept");
@@ -2099,10 +2099,10 @@ function openChat(c) {
   $("chatAva").className = "avatar ch-ava" + (c.type === "group" ? " grp" : "");
   $("chatAva").setAttribute("data-login", c.type === "dm" ? c.login : "");
   if (c.type === "group") {
-    $("chatAva").innerHTML = `<img src="/api/group-avatar/${c.id}?v=${avaVer}" onerror="this.onerror=null;this.src='/src/group.svg'">`;
+    $("chatAva").innerHTML = `<img src="/api/group-avatar/${c.id}?v=${avaVer}" data-fallback="group">`;
   } else {
     const st = presence.get(c.login);
-    $("chatAva").innerHTML = `<img src="${avaUrl(c.login)}" onerror="this.remove()">${initials(c.name)}<span class="st-dot ch-status st-${statusClass(st)}"></span>`;
+    $("chatAva").innerHTML = `<img src="${avaUrl(c.login)}" data-fallback="remove">${initials(c.name)}<span class="st-dot ch-status st-${statusClass(st)}"></span>`;
   }
   // Title для чат-аватара: DM → open_profile (мини-профиль собеседника), группа → settings overlay
   // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
@@ -2334,7 +2334,7 @@ async function populateGroupSettingsPane() {
   data.members.forEach((m) => {
     const row = document.createElement("div"); row.className = "contact-row";
     const ownerTag = m.login === data.owner ? `<span class="owner-tag">(${t("owner")})</span>` : "";
-    row.innerHTML = `<div class="avatar" data-login="${m.login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(m.login)}" onerror="this.remove()">${initials(m.name)}</div><span class="c-name">${escapeHtml(m.name)}</span>${ownerTag}`;
+    row.innerHTML = `<div class="avatar" data-login="${m.login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(m.login)}" data-fallback="remove">${initials(m.name)}</div><span class="c-name">${escapeHtml(m.name)}</span>${ownerTag}`;
     if (gsOwner && m.login !== data.owner) { const b = document.createElement("button"); b.className = "danger"; b.textContent = t("remove"); b.onclick = () => removeGroupMember(m.login); row.appendChild(b); }
     box.appendChild(row);
   });
@@ -2454,7 +2454,7 @@ function renderInviteList(invites) {
     const label = creator === profile.login ? t("you_suffix") : creator;
     const usesTxt = inv.max_uses != null ? `${inv.uses}/${inv.max_uses}` : `${inv.uses}·∞`;
     const expTxt = inv.expires != null ? invExpiryLabel(inv.expires) : t("invite_never_short");
-    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(creator)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(creator)}" onerror="this.remove()">${initials(creator)}</div>`
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(creator)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(creator)}" data-fallback="remove">${initials(creator)}</div>`
       + `<span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">#${inv.id}</span>`
       + `<span class="invite-tags"><span class="inv-tag" title="${t("invite_uses")}">${window.ICON.users || ""} ${usesTxt}</span><span class="inv-tag" title="${t("invite_expiry")}">${window.ICON.clock || ""} ${escapeHtml(expTxt)}</span></span></span>`;
     const canRevoke = gsOwner || creator === profile.login;
@@ -2478,7 +2478,7 @@ function renderPendingList(items) {
     const row = document.createElement("div"); row.className = "contact-row";
     const byName = p.invited_by === profile.login ? t("you_suffix") : p.invited_by;
     const label = p.name || p.login;
-    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(p.login)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(p.login)}" onerror="this.remove()">${initials(label)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">${escapeHtml(t("pending_by", { name: byName }))}</span></span>`;
+    row.innerHTML = `<div class="avatar" data-login="${escapeHtml(p.login)}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(p.login)}" data-fallback="remove">${initials(label)}</div><span class="c-name">${escapeHtml(label)}<span class="owner-tag" style="margin-left:6px">${escapeHtml(t("pending_by", { name: byName }))}</span></span>`;
     const a = document.createElement("button"); a.textContent = "✓"; a.style.color = "var(--accent-300)";
     a.title = t("pending_approve");
     a.onclick = () => resolvePending(p.id, "approve");
@@ -2654,7 +2654,7 @@ function initials(n) {
   const s = String(n == null ? "" : n).trim();
   return (s.charAt(0) || "?").toUpperCase();
 }
-function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" onerror="this.remove()">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
+function setMyAvatar() { const a = $("myAvatar"); a.setAttribute("data-login", profile.login); a.innerHTML = `<img src="${avaUrl(profile.login)}" data-fallback="remove">${initials(myName)}<span class="st-dot ci-status st-${statusClass(myStatus === "invisible" ? "offline" : myStatus)}"></span>`; }
 
 // ---------- Создание новой группы с друзьями ----------
 // (#newchat пейн в #settingsOverlay удалён → новая группа создаётся через #createGroupModal.
@@ -2702,7 +2702,7 @@ function renderCgPicker() {
     const row = document.createElement("div");
     row.className = "cg-row" + (cgPicked.has(l) ? " on" : "");
     row.dataset.login = l;
-    row.innerHTML = `<div class="avatar cg-ava-mini" data-login="${escapeHtml(l)}"><img src="${avaUrl(l)}" onerror="this.remove()">${initials(l)}</div>` +
+    row.innerHTML = `<div class="avatar cg-ava-mini" data-login="${escapeHtml(l)}"><img src="${avaUrl(l)}" data-fallback="remove">${initials(l)}</div>` +
       `<span class="cg-row-name">${escapeHtml(l)}</span>` +
       `<span class="cg-tick" aria-hidden="true">${cgPicked.has(l) ? "✓" : ""}</span>`;
     row.onclick = () => {
@@ -2889,7 +2889,7 @@ function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
   const st = presence.get(login) || "offline";
   row.innerHTML =
-    `<div class="ava-wrap c-ava-wrap"><div class="avatar" data-login="${login}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(login)}</div>` +
+    `<div class="ava-wrap c-ava-wrap"><div class="avatar" data-login="${login}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(login)}" data-fallback="remove">${initials(login)}</div>` +
     `<span class="st-dot c-status st-${statusClass(st)}"></span></div>` +
     `<span class="c-name">${escapeHtml(login)}</span>`;
   row.onclick = (e) => { if (e.target.closest("button")) return; openDM(login); };
@@ -3005,7 +3005,7 @@ async function openMiniProfile(login) {
   $("mpModal").classList.remove("hidden");
   $("mpAva").setAttribute("data-login", login);
   loadAwards(login, $("mpAwards"));
-  $("mpAva").innerHTML = `<img src="${avaUrl(login)}" onerror="this.remove()"><span class="ava-fallback">${initials(data.name)}</span>`;
+  $("mpAva").innerHTML = `<img src="${avaUrl(login)}" data-fallback="remove"><span class="ava-fallback">${initials(data.name)}</span>`;
   if (data.isBot) botLoginCache.add(login); else botLoginCache.delete(login);
   $("mpName").innerHTML = escapeHtml(data.name) + (data.isBot ? ' <span class="bot-badge">BOT</span>' : ""); $("mpLogin").textContent = data.login;
   const banner = $("mpBanner"), bannerImg = $("mpBannerImg");
@@ -3239,7 +3239,7 @@ function renderMembers() {
     const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
     const crown = login === groupOwnerLogin ? `<span class="m-crown">👑</span>` : "";
     const botTag = botLogins.has(login) ? ` <span class="bot-badge">BOT</span>` : "";
-    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" onerror="this.remove()">${initials(name)}</div><span class="m-name">${crown}${escapeHtml(name)}${botTag}</span>${callIcon}`;
+    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" data-fallback="remove">${initials(name)}</div><span class="m-name">${crown}${escapeHtml(name)}${botTag}</span>${callIcon}`;
     // Inline remove для овнера: раньше единственный путь «удалить участника» был Settings → Groups,
     // что далеко от списка, который сейчас у пользователя перед глазами. groupOwner уже учитывает
     // ds.owner === profile.login (см. loadGroupMembers) → self-сравнение login !== profile.login
@@ -3583,7 +3583,7 @@ function addLinkExtras(wrap, text) {
     .then((r) => r.json()).then((d) => {
       if (!d || (!d.title && !d.image)) return;
       const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "link-preview";
-      a.innerHTML = (d.image ? `<img class="lp-img" src="${escapeHtml(d.image)}" onerror="this.remove()">` : "") +
+      a.innerHTML = (d.image ? `<img class="lp-img" src="${escapeHtml(d.image)}" data-fallback="remove">` : "") +
         `<div class="lp-body"><div class="lp-site">${escapeHtml(d.site || "")}</div><div class="lp-title">${escapeHtml(d.title || "")}</div><div class="lp-desc">${escapeHtml(d.description || "")}</div></div>`;
       const stick = atBottom(); wrap.appendChild(a); if (stick) scrollDown();
     }).catch(() => {});
@@ -4320,7 +4320,7 @@ function renderMentionMenu() {
   const el = mentionElm();
   el.innerHTML = mentionState.items.map((it, i) =>
     `<button type="button" class="mm-item${i === mentionState.sel ? " sel" : ""}" data-i="${i}">` +
-    (it.all ? `<span class="mm-ava mm-all">@</span>` : `<span class="avatar mm-ava"><img src="${avaUrl(it.login)}" onerror="this.remove()">${initials(it.name || it.login)}</span>`) +
+    (it.all ? `<span class="mm-ava mm-all">@</span>` : `<span class="avatar mm-ava"><img src="${avaUrl(it.login)}" data-fallback="remove">${initials(it.name || it.login)}</span>`) +
     `<span class="mm-name">${escapeHtml(it.name || it.login)}</span>` +
     (it.all ? `<span class="mm-login">${escapeHtml(t("mention_all_hint"))}</span>` : `<span class="mm-login">@${escapeHtml(it.login)}</span>`) +
     `</button>`).join("");
@@ -4926,7 +4926,7 @@ function ensureTile(identity, name, isMe) {
     tile = document.createElement("div"); tile.id = "tile-" + id; tile.className = "tile show-avatar" + (isMe ? " me" : "");
     tile.dataset.identity = identity;
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
-      `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" onerror="this.style.display='none'"><span>${initials(name)}</span></div>` +
+      `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" data-fallback="hide"><span>${initials(name)}</span></div>` +
       `<div class="tile-name">${escapeHtml(name)}</div>` +
       `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>` +
       (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
@@ -6708,7 +6708,7 @@ function showToast(from, name, ctx) {
   if (isDnd()) return;
   pendingCall = ctx || null; $("toastName").textContent = name;
   let callerLogin = ""; if (ctx?.room?.startsWith("@dm:")) callerLogin = ctx.room.slice(4).split("~").find((l) => l !== profile.login) || "";
-  $("toastAvatar").innerHTML = callerLogin ? `<img src="${avaUrl(callerLogin)}" onerror="this.remove()"><span>${initials(name)}</span>` : `<span>${initials(name)}</span>`;
+  $("toastAvatar").innerHTML = callerLogin ? `<img src="${avaUrl(callerLogin)}" data-fallback="remove"><span>${initials(name)}</span>` : `<span>${initials(name)}</span>`;
   $("toastSub").textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
   $("callToast").classList.remove("hidden");
   // On the Android app, hand off to the native full-screen call screen (ringtone/vibrate
@@ -6820,6 +6820,24 @@ function dayLabel(dayStr) {
   if (sameDay(d, yest)) return t("yesterday");
   return d.toLocaleDateString(window.getLang() === "ru" ? "ru-RU" : "en-GB", { day: "numeric", month: "long", year: now.getFullYear() === d.getFullYear() ? undefined : "numeric" });
 }
+// ── CSP-safe delegated handlers ───────────────────────────────────────────────
+// A strict Content-Security-Policy (script-src 'self', no unsafe-inline) blocks
+// inline on* attributes even on JS-built nodes. These two listeners replace the
+// inline onerror= (avatar fallbacks) and onsubmit="return false" that used to be
+// sprinkled through the markup, so the policy can stay tight.
+document.addEventListener("error", (e) => {
+  const el = e.target;
+  if (!el || el.tagName !== "IMG") return;
+  const fb = el.dataset && el.dataset.fallback;
+  if (!fb) return;
+  if (fb === "group") { el.onerror = null; el.dataset.fallback = ""; el.src = "/src/group.svg"; }
+  else if (fb === "hide") { el.style.display = "none"; }
+  else { el.remove(); }   // "remove" — let the initials behind the avatar show
+}, true);   // capture: image error events don't bubble
+document.addEventListener("submit", (e) => {
+  if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-nodefault")) e.preventDefault();
+}, true);
+
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
 function notify(text, room) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.dataset.room = room || ""; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
@@ -6996,7 +7014,7 @@ function openMiniApp(app) {
   if (!app || !app.url) return;
   const ov = $("miniAppOverlay"), fr = $("miniAppFrame");
   $("miniAppTitle").textContent = app.name || app.login;
-  $("miniAppAva").innerHTML = `<img src="${avaUrl(app.login)}" onerror="this.remove()">${initials(app.name || app.login)}`;
+  $("miniAppAva").innerHTML = `<img src="${avaUrl(app.login)}" data-fallback="remove">${initials(app.name || app.login)}`;
   ov.dataset.botLogin = app.login;
   fr.onload = postMiniAppInit; // push user + theme once the app frame is ready
   fr.src = app.url;
@@ -7061,7 +7079,7 @@ async function refreshDevPane() {
 function botCardHTML(b) {
   return `<div class="bot-card" data-login="${escapeHtml(b.login)}">
     <div class="bot-head">
-      <div class="avatar bot-ava"><img src="${avaUrl(b.login)}" onerror="this.remove()"><span class="ava-fallback">${initials(b.name)}</span></div>
+      <div class="avatar bot-ava"><img src="${avaUrl(b.login)}" data-fallback="remove"><span class="ava-fallback">${initials(b.name)}</span></div>
       <div class="bot-meta"><b>${escapeHtml(b.name)}</b> <span class="bot-badge">BOT</span><div class="profile-login">${escapeHtml(b.login)}</div></div>
       <button class="btn-ghost btn-xs bot-regen" data-i18n="bot_regen">Regenerate token</button>
     </div>
@@ -7796,7 +7814,7 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       const btn = (act, icon, label, cls) => `<button data-act="${act}"${cls ? ` class="${cls}"` : ""}>${IC[icon] || ""}<span>${label}</span></button>`;
       return `<div class="auser${u.banned ? " is-banned" : ""}" data-login="${esc(u.login)}">
         <div class="auser-top">
-          <div class="avatar auser-av" data-login="${esc(u.login)}"><img src="${avaUrl(u.login)}" onerror="this.remove()">${initials(u.name || u.login)}</div>
+          <div class="avatar auser-av" data-login="${esc(u.login)}"><img src="${avaUrl(u.login)}" data-fallback="remove">${initials(u.name || u.login)}</div>
           <div class="auser-id"><span class="auser-name">${esc(u.name)}</span><span class="auser-login">@${esc(u.login)}</span></div>
           <div class="auser-badges">${badges}</div>
         </div>

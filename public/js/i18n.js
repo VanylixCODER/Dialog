@@ -812,15 +812,13 @@ const I18N = {
 function detectLang() {
   const saved = localStorage.getItem("dialog_lang");
   if (saved) return saved;
-  const ru = ["RU", "AM", "BY", "KZ", "KG", "MD", "UA", "GE", "AZ", "UZ", "TJ", "TM"];
+  // Was a SYNCHRONOUS XHR to ip-api.com — it blocked first paint and, worse,
+  // silently sent every visitor's IP to a third party just to guess RU vs EN.
+  // The browser already tells us its locale; use that. No network, no leak, and
+  // it lets the app run under connect-src 'self'.
   try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "https://ip-api.com/json/?fields=countryCode", false);
-    xhr.send();
-    if (xhr.status === 200) {
-      const data = JSON.parse(xhr.responseText);
-      if (ru.includes(data.countryCode)) return "ru";
-    }
+    const langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""]);
+    if (langs.some((l) => /^ru\b/i.test(l))) return "ru";
   } catch {}
   return "en";
 }
