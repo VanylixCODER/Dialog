@@ -5148,7 +5148,7 @@ function removeTile(id) {
   const t = $("tile-" + id); if (!t) return;
   const wasFocused = t.classList.contains("focused");
   t.remove();
-  if (wasFocused) { dissolveStrip(); vGrid.classList.remove("has-focus"); }
+  if (wasFocused) { vzUnbind(); dissolveStrip(); vGrid.classList.remove("has-focus"); }
   scheduleFsLayout();
 }
 function setTileAvatar(id, show) { const t = $("tile-" + id); if (t) t.classList.toggle("show-avatar", show); }
@@ -5210,11 +5210,121 @@ function focusTile(tile) {
   const fs = vGrid.classList.contains("fs");
   if (tile) {
     tile.classList.add("focused"); vGrid.classList.add("has-focus");
+    vzBind(tile);
     if (fs) { buildStrip(); showGridHint(); }
   } else {
+    vzUnbind();
     vGrid.classList.remove("has-focus");
     if (fs) scheduleFsLayout();
   }
+}
+
+// ── Pinch / wheel zoom on the spotlighted stream ────────────────────────────
+// The #1 phone gripe was that you could spotlight a webcam but not zoom into it.
+// While a tile is focused we bind a small zoom controller to its <video>: a
+// two-finger pinch (touch) or the mouse wheel (desktop) zooms 1×–5× anchored on
+// the focal point, one finger / a mouse drag pans once zoomed, and double-tap or
+// the ⟲ chip snaps back to 1×. All state is per-focus and cleared on unbind, so
+// leaving the spotlight always returns a clean, untransformed video.
+const vZoom = { tile: null, video: null, chip: null, scale: 1, x: 0, y: 0, pts: new Map(), pinch: null, drag: null, moved: 0 };
+function vzActive() { return Date.now() - vZoom.moved < 350; }   // a recent pan/pinch, so ignore the click
+function vzClamp() {
+  const el = vZoom.tile; if (!el) return;
+  const mx = Math.max(0, (vZoom.scale - 1) * el.clientWidth / 2);
+  const my = Math.max(0, (vZoom.scale - 1) * el.clientHeight / 2);
+  vZoom.x = Math.max(-mx, Math.min(mx, vZoom.x));
+  vZoom.y = Math.max(-my, Math.min(my, vZoom.y));
+}
+function vzApply() {
+  const v = vZoom.video; if (!v) return;
+  vzClamp();
+  const mir = vZoom.tile.classList.contains("me") ? " scaleX(-1)" : "";
+  const zoomed = vZoom.scale > 1.01;
+  v.style.transform = (zoomed || vZoom.x || vZoom.y)
+    ? `translate(${vZoom.x.toFixed(1)}px, ${vZoom.y.toFixed(1)}px) scale(${vZoom.scale.toFixed(3)})${mir}`
+    : "";   // clean base transform (CSS reapplies the self-view mirror)
+  vZoom.tile.classList.toggle("zoomed", zoomed);
+  if (vZoom.chip) { vZoom.chip.firstChild.textContent = zoomed ? vZoom.scale.toFixed(1).replace(/\.0$/, "") + "×" : ""; vZoom.chip.classList.toggle("show", zoomed); }
+}
+// Zoom toward a focal point (client coords) so a pinch feels anchored under the fingers.
+function vzSet(scale, cx, cy) {
+  const prev = vZoom.scale, next = Math.max(1, Math.min(5, scale));
+  if (Math.abs(next - prev) < 0.001) return;
+  if (cx != null && vZoom.tile) {
+    const r = vZoom.tile.getBoundingClientRect();
+    const ox = cx - r.left - r.width / 2 - vZoom.x;
+    const oy = cy - r.top - r.height / 2 - vZoom.y;
+    vZoom.x -= ox * (next / prev - 1);
+    vZoom.y -= oy * (next / prev - 1);
+  }
+  vZoom.scale = next;
+  if (next === 1) { vZoom.x = 0; vZoom.y = 0; }
+  vzApply();
+}
+function vzReset() { vZoom.scale = 1; vZoom.x = 0; vZoom.y = 0; vzApply(); }
+function vzDown(e) {
+  vZoom.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { vZoom.video.setPointerCapture(e.pointerId); } catch {}
+  if (vZoom.pts.size === 2) {
+    const [a, b] = [...vZoom.pts.values()];
+    vZoom.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: vZoom.scale, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    vZoom.drag = null;
+  } else if (vZoom.scale > 1.01) {
+    vZoom.drag = { x: e.clientX - vZoom.x, y: e.clientY - vZoom.y };
+  }
+}
+function vzMove(e) {
+  if (!vZoom.pts.has(e.pointerId)) return;
+  vZoom.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (vZoom.pinch && vZoom.pts.size === 2) {
+    const [a, b] = [...vZoom.pts.values()];
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    vZoom.x += cx - vZoom.pinch.cx; vZoom.y += cy - vZoom.pinch.cy;   // two-finger pan
+    vZoom.pinch.cx = cx; vZoom.pinch.cy = cy;
+    vZoom.moved = Date.now();
+    vzSet(vZoom.pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / vZoom.pinch.d, cx, cy);
+  } else if (vZoom.drag) {
+    vZoom.x = e.clientX - vZoom.drag.x; vZoom.y = e.clientY - vZoom.drag.y;
+    vZoom.moved = Date.now(); vzApply();
+  }
+}
+function vzUp(e) {
+  vZoom.pts.delete(e.pointerId);
+  if (vZoom.pts.size < 2) vZoom.pinch = null;
+  if (!vZoom.pts.size) vZoom.drag = null;
+}
+function vzWheel(e) { e.preventDefault(); vZoom.moved = Date.now(); vzSet(vZoom.scale * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX, e.clientY); }
+function vzBind(tile) {
+  vzUnbind();
+  const v = tile && tile.querySelector("video");
+  if (!v) return;
+  vZoom.tile = tile; vZoom.video = v;
+  v.addEventListener("pointerdown", vzDown);
+  v.addEventListener("pointermove", vzMove);
+  v.addEventListener("pointerup", vzUp);
+  v.addEventListener("pointercancel", vzUp);
+  v.addEventListener("wheel", vzWheel, { passive: false });
+  const chip = document.createElement("button");
+  chip.className = "vz-chip"; chip.type = "button"; chip.title = t("reset_zoom") || "Reset zoom";
+  chip.appendChild(document.createTextNode(""));   // zoom-level label; the ⟲ glyph is a CSS ::after
+  chip.onclick = (ev) => { ev.stopPropagation(); vzReset(); };
+  tile.appendChild(chip);
+  vZoom.chip = chip;
+}
+function vzUnbind() {
+  const v = vZoom.video;
+  if (v) {
+    v.removeEventListener("pointerdown", vzDown);
+    v.removeEventListener("pointermove", vzMove);
+    v.removeEventListener("pointerup", vzUp);
+    v.removeEventListener("pointercancel", vzUp);
+    v.removeEventListener("wheel", vzWheel);
+    v.style.transform = "";   // CSS reapplies the .me mirror (or nothing) for the base state
+  }
+  if (vZoom.chip) vZoom.chip.remove();
+  if (vZoom.tile) vZoom.tile.classList.remove("zoomed");
+  vZoom.tile = null; vZoom.video = null; vZoom.chip = null;
+  vZoom.scale = 1; vZoom.x = 0; vZoom.y = 0; vZoom.pinch = null; vZoom.drag = null; vZoom.pts.clear();
 }
 
 // Balanced, rectangular fullscreen grid (Discord-style): compute the column
@@ -5246,7 +5356,9 @@ function showGridHint() {
   const st = callStageEl(); if (!st) return;
   let h = st.querySelector(".fs-hint");
   if (!h) { h = document.createElement("div"); h.className = "fs-hint"; st.appendChild(h); }
-  h.textContent = t("fs_dblclick_hint") || "Double-click the stream to return to the grid";
+  h.textContent = matchMedia("(pointer: coarse)").matches
+    ? (t("fs_zoom_hint") || "Pinch to zoom · drag to pan · double-tap to exit")
+    : (t("fs_dblclick_hint") || "Double-click the stream to return to the grid");
   h.classList.add("show");
   clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove("show"), 3200);
 }
@@ -6515,10 +6627,13 @@ function toggleFsBar() {
 let tileClickTimer = 0;
 vGrid.addEventListener("click", (e) => {
   if (e.target.closest(".tile-ctrl")) return; // per-user mute/volume
+  if (e.target.closest(".vz-chip")) return;   // the zoom/reset chip handles itself
   const tile = e.target.closest(".tile"); if (!tile) return;
   e.stopPropagation();
+  if (vzActive()) return;                      // this "click" was the tail of a pan/pinch
   clearTimeout(tileClickTimer);
   tileClickTimer = setTimeout(() => {
+    if (vzActive()) return;
     if (isCallFullscreen()) {
       if (tile.classList.contains("focused")) toggleFsBar();
       else focusTile(tile);
@@ -6530,8 +6645,10 @@ vGrid.addEventListener("click", (e) => {
 vGrid.addEventListener("dblclick", (e) => {
   const tile = e.target.closest(".tile"); if (!tile) return;
   e.stopPropagation(); clearTimeout(tileClickTimer);
-  if (tile.classList.contains("focused")) focusTile(null); // back to the grid
-  else watchStream(tile); // zoom (enters fullscreen from the dock if needed)
+  if (tile.classList.contains("focused")) {
+    if (vZoom.scale > 1.01) vzReset();   // first double-tap zooms back out…
+    else focusTile(null);                 // …then returns to the grid
+  } else watchStream(tile); // zoom (enters fullscreen from the dock if needed)
 });
 // Right-click on tile → volume popup
 vGrid.addEventListener("contextmenu", (e) => {
@@ -6545,6 +6662,7 @@ vGrid.addEventListener("contextmenu", (e) => {
 // Long-press on tile (mobile) → volume popup
 let tileHoldTimer = 0;
 vGrid.addEventListener("touchstart", (e) => {
+  if (e.touches && e.touches.length > 1) { clearTimeout(tileHoldTimer); return; } // a pinch, not a long-press
   const tile = e.target.closest(".tile");
   if (!tile) return;
   const identity = tile.dataset.identity;
@@ -6594,6 +6712,7 @@ function applyFsState(on) {
   } else {
     // Leaving fullscreen: dissolve the strip, drop the spotlight, restore dock.
     fsRestore($("screenModal")); // move the screen dialog back to the body
+    vzUnbind();
     dissolveStrip();
     vGrid.classList.remove("fs", "has-focus", "faces-hidden");
     vGrid.querySelectorAll(".tile.focused").forEach((tl) => tl.classList.remove("focused"));
