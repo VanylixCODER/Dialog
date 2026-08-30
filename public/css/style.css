@@ -1077,7 +1077,7 @@ a:focus-visible {
 .back-btn {
   background: transparent; border: none;
   color: var(--accent-300); font-size: 26px; cursor: pointer; line-height: 1;
-  width: 36px; height: 36px;
+  width: 44px; height: 44px;                 /* Apple minimum tap target */
   display: grid; place-items: center;
   border-radius: var(--r-2);
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
@@ -3192,7 +3192,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   .back-btn.mobile-only { display: grid; }
   .win-btn.mobile-only { display: inline-flex; }
   .icon-btn { width: 46px; height: 46px; }
-  .hicon-btn { width: 42px; height: 42px; }
+  .hicon-btn { width: 44px; height: 44px; }   /* Apple minimum tap target */
   .hicon-btn svg { width: 20px; height: 20px; }
   .chat-title { font-size: 14px; }
   /* Звонок на телефоне — всегда на полный экран. background: var(--bg-1)
@@ -5328,11 +5328,14 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
   /* No accidental horizontal scroll anywhere. */
   html, body { max-width: 100%; overflow-x: hidden; }
 
-  /* --- Chat header: shrink chrome so the name keeps readable room --- */
+  /* --- Chat header: fewer, bigger actions (Apple 44pt tap targets). Search is
+     already in the ⋮ menu and info opens by tapping the avatar/name, so both drop
+     off the row on phones — leaving mute · call · ⋮ at a comfortable size. --- */
   .chat-head { padding-left: 6px; padding-right: 6px; gap: 4px; }
-  .chat-head .avatar.ch-ava { width: 38px; height: 38px; border-radius: 11px; font-size: 15px; }
-  .chat-head .hicon-btn { width: 32px; height: 32px; }
-  .chat-head .hicon-btn svg { width: 17px; height: 17px; }
+  .chat-head .avatar.ch-ava { width: 40px; height: 40px; border-radius: 12px; font-size: 15px; }
+  .chat-head #chatSearchBtn, .chat-head #infoBtn { display: none; }
+  .chat-head .hicon-btn { width: 44px; height: 44px; }
+  .chat-head .hicon-btn svg { width: 19px; height: 19px; }
   .chat-title { font-size: 14px; }
   .chat-sub, .typing { font-size: 10px; }
 
@@ -5341,10 +5344,10 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
   .msg { max-width: 88%; }
   .msg .bubble { padding: 8px 11px; }
 
-  /* --- Composer: input stays dominant --- */
+  /* --- Composer: input stays dominant, buttons stay tappable --- */
   .composer { gap: 5px; }
-  .composer .icon-btn { width: 36px; height: 36px; }
-  .composer .icon-btn svg { width: 18px; height: 18px; }
+  .composer .icon-btn { width: 42px; height: 42px; }
+  .composer .icon-btn svg { width: 19px; height: 19px; }
 
   /* --- Chat list rows --- */
   .chat-item { padding: 8px 8px 8px 10px; gap: 9px; }
@@ -5365,14 +5368,14 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 }
 
 @media (max-width: 360px) {
-  .chat-head .avatar.ch-ava { width: 34px; height: 34px; font-size: 14px; }
-  .chat-head .hicon-btn { width: 29px; height: 29px; }
-  .chat-head .hicon-btn svg { width: 16px; height: 16px; }
+  .chat-head .avatar.ch-ava { width: 38px; height: 38px; font-size: 14px; }
+  .chat-head .hicon-btn { width: 42px; height: 42px; }   /* still near the 44pt target on a tiny screen */
+  .chat-head .hicon-btn svg { width: 18px; height: 18px; }
   .chat-title { font-size: 13.5px; }
   .msg { max-width: 92%; }
-  #callStage .call-btn, #callStage .call-btn.end { width: 40px; height: 40px; }
+  #callStage .call-btn, #callStage .call-btn.end { width: 42px; height: 42px; }
   #callStage .call-btn svg { width: 18px; height: 18px; }
-  .composer .icon-btn { width: 34px; height: 34px; }
+  .composer .icon-btn { width: 40px; height: 40px; }
   .cs-count { display: none; } /* counts stop fitting next to the tab labels */
 }
 
@@ -5751,7 +5754,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 
 @container cl (max-width: 380px) {
   .cl-head { gap: 3px; padding-left: 9px; padding-right: 9px; }
-  .cl-head .hicon-btn { width: 33px; height: 33px; }
+  .cl-head .hicon-btn { width: 38px; height: 38px; }
   .cl-head .hicon-btn svg { width: 18px; height: 18px; }
   .cl-head .avatar.me-trigger { width: 36px; height: 36px; font-size: 14px; }
   .cl-head .me-name { font-size: 13px; }
@@ -5760,7 +5763,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 }
 @container cl (max-width: 320px) {
   .cl-head { gap: 2px; padding-left: 7px; padding-right: 7px; }
-  .cl-head .hicon-btn { width: 30px; height: 30px; }
+  .cl-head .hicon-btn { width: 36px; height: 36px; }
   .cl-head .hicon-btn svg { width: 17px; height: 17px; }
   .cl-head .avatar.me-trigger { width: 32px; height: 32px; font-size: 13px; }
   .cl-head .me-name { font-size: 12.5px; }
