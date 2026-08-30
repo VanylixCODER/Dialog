@@ -525,7 +525,7 @@ a:focus-visible {
 .term-open .to-glyph { display: grid; place-items: center; width: 24px; height: 20px;
   border: 1px solid var(--primary); border-radius: 4px; font-size: 11px; }
 
-@media (max-width: 900px) {
+@media (max-width: 900px), (max-height: 500px) and (pointer: coarse) {
   /* Phones: the form only, per the design's mobile board. */
   .auth-terminal, .term-open { display: none !important; }
   .auth-stage { gap: 0; width: min(420px, 92vw); }
@@ -2381,7 +2381,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 
 /* Phone spotlight = WhatsApp/Discord full-screen: the tapped stream fills the whole screen
    (cover), everyone else (incl. your self-view) becomes a small floating corner PiP. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .video-grid.pip-grid.has-focus { display: block; position: relative; padding: 0; overflow: hidden; }
   .video-grid.pip-grid.has-focus .tile.focused {
     position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; z-index: 1;
@@ -3175,7 +3175,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 }
 .call-actions [data-tip]:hover::after { transform: translate(-50%, 0) scale(1); }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .app { grid-template-columns: 1fr; }
   .chatlist { display: flex; }
   .app.in-chat .chatlist { display: none; }
@@ -3440,7 +3440,7 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
 
 /* --- Desktop (≥721px): the section nav is a LEFT sidebar instead of a top tab row.
    Scoped to #settingsOverlay so Theme Studio / Admin keep their horizontal tab bars. --- */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (pointer: fine) {
   #settingsOverlay .settings-card {
     grid-template-columns: 208px minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
@@ -3471,7 +3471,7 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
 
 /* --- Phone (≤720px): bottom-sheet card, and the tab bar becomes a drill-in
    section list (tap a row → its pane + a back arrow in the head). --- */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .settings-overlay { padding: 0; align-items: end; }
   .settings-card {
     /* Flex column (not grid) so whichever of the list / pane is shown simply fills the
@@ -4621,7 +4621,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 /* ============ Mobile call screen (sketch redesign) ============ */
 .call-mhead { display: none; }
 #callStage.fs-call .call-mhead, #callStage.manual-fs .call-mhead { display: none; }
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
   .call-mhead {
     display: flex; align-items: center; gap: 12px; position: relative; z-index: 4;
     padding: calc(12px + env(safe-area-inset-top)) 14px 8px;
@@ -4670,7 +4670,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
    The other person fills the screen; your camera is a small rounded thumbnail
    that floats and snaps to a corner (drag handled in app.js). The header and the
    control pill float over the video and hide on tap (.wa-hide). */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
   #callStage.wa-call { border: 0; }
   #callStage.wa-call::after { display: none; }   /* accent hairline off — full bleed */
   #callStage.wa-call .video-grid {
@@ -4985,7 +4985,7 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
    .mobile-only icon buttons on desktop (the composer "+" #moreBtn). Re-assert the
    visibility helper so it wins, and keep #moreBtn shown on mobile. */
 .mobile-only { display: none; }
-@media (max-width: 720px) { #moreBtn.mobile-only { display: grid; } }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) { #moreBtn.mobile-only { display: grid; } }
 
 /* ---------- Developer / My Bots (Telegram-style bot integration) ---------- */
 /* Small inline button sizes (the settings panes lay buttons out at full width by
@@ -5137,7 +5137,7 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 
 /* Mobile: opening a chat slides it in over the list; settings is a bottom sheet, so it
    rises from the bottom edge instead of gliding in from the right. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .app.in-chat .chat { animation: chatInR 0.24s var(--ease-out) both; }
   .settings-overlay > .settings-card { animation: sheetIn 0.26s var(--ease-out) backwards; }
 }
@@ -5175,7 +5175,7 @@ button, .icon-btn, .hicon-btn, .call-btn, .chat-item, .member, .settings-tab,
 .modal.hidden .modal-card { opacity: 0; transform: translate3d(28px, 0, 0) scale(0.98); } /* leaves the way popIn brought it in */
 .settings-overlay.hidden > .settings-card { opacity: 0; transform: translate3d(40px, 0, 0) scale(0.98); }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   /* Phones: the settings sheet drops back down, and the info panel is a full-screen
      overlay here (on desktop it's a grid column — deferring its display would hold the
      column open for the whole fade), so it only fades out on phones. */
@@ -5434,7 +5434,7 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 .app.cl-collapsed .ci-body { opacity: 0; transform: translateY(12px); max-width: 0; margin: 0; overflow: hidden; }
 
 /* ---- Collapsed rail: avatars only, but the top header stays full-width (floats over the chat) ---- */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (pointer: fine) {
   .app.cl-collapsed .chatlist { overflow: visible; z-index: 30; }  /* let the full header spill right, above the chat's isolate context */
   /* A call is docked in the chat column: the wide header would cover it. Tuck the sidebar
      back under the chat and shrink the header to just the avatar rail so nothing overlaps. */
@@ -5469,10 +5469,10 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 }
 
 /* Minimize + resize are desktop controls — the phone list is full-screen, nothing to minimize/resize. */
-@media (max-width: 720px) { .cl-foot, .cl-resizer { display: none; } }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) { .cl-foot, .cl-resizer { display: none; } }
 
 /* ---- Mobile: no inline pin button — pin lives in the long-press menu ---- */
-@media (max-width: 720px) { .ci-pin { display: none !important; } }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) { .ci-pin { display: none !important; } }
 
 /* ---- Drag to reorder ---- */
 .chat-item { position: relative; touch-action: pan-y; }
@@ -5518,7 +5518,7 @@ body.motion-off #chatPane.anim-open .composer,
 body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 
 /* On phones the chat is a full-screen overlay — slide the whole pane in from / out to the right. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   @keyframes mobChatIn  { from { transform: translate3d(100%, 0, 0); } to { transform: translateX(0); } }
   @keyframes mobChatOut { from { transform: translateX(0); }    to { transform: translateX(100%); } }
   .app.in-chat .chat { animation: mobChatIn 0.34s var(--ease-out); }
@@ -5718,7 +5718,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   word-break: break-all; cursor: pointer;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .reply-bar, .select-bar { margin: 0 10px; }
   .pinned-bar, .chat-search { padding-left: 12px; padding-right: 12px; }
   .select-bar { flex-direction: column; align-items: stretch; gap: 6px; }
@@ -5866,7 +5866,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .gf-score { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; font-size: 12px; color: var(--text-dim); }
 .gf-score .gf-p.on { color: var(--accent-300); font-weight: 700; }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
   .act-panel { bottom: 84px; width: calc(100% - 12px); max-height: 62%; }
   .act-body { padding: 10px; }
 }
@@ -6115,7 +6115,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 .pv-input { flex: 1; height: 18px; border-radius: 9px; background: var(--surface-1); border: 1px solid var(--border-1); }
 .pv-send { width: 18px; height: 18px; border-radius: 6px; background: var(--accent-400); flex: none; }
 
-@media (max-width: 900px) {
+@media (max-width: 900px), (max-height: 500px) and (pointer: coarse) {
   .ts-split { grid-template-columns: minmax(0, 1fr); }
   .ts-preview-col { position: static; order: -1; }   /* preview first on a phone */
   .ts-pv .pv-frame { height: 240px; }

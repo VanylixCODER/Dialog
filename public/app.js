@@ -2185,7 +2185,7 @@ function exitChatToList() {
   if (!app || !app.classList.contains("in-chat")) return;
   const reveal = () => { app.classList.remove("in-chat"); activeKey = ""; renderChatList($("searchInput").value); };
   const chat = $("chatPane");
-  if (chat && window.matchMedia("(max-width: 720px)").matches) {
+  if (chat && isMobile()) {
     // Reveal + render the contact list FIRST so it sits under the chat as it slides off to
     // the right — otherwise the list stays display:none behind the pane and you see black
     // until the animation ends. .mob-leaving keeps the chat as a fixed overlay meanwhile.
@@ -5026,7 +5026,11 @@ const call = { active: false, room: null, roomKey: null, roomTitle: "", kind: ""
 const audioEls = new Map(); // identity -> <audio> (голос участника / микрофон)
 const screenAudioEls = new Map(); // identity -> <audio> (звук демонстрации экрана, отдельно от микрофона)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
-const isMobile = () => matchMedia("(max-width:720px)").matches;
+// "Phone" = a narrow viewport OR a short-and-touch one, so a phone rotated to
+// landscape (wide but short, coarse pointer) keeps the mobile layout instead of
+// snapping to the desktop split. Kept in sync with the CSS breakpoints.
+const PHONE_MQ = "(max-width: 720px), (max-height: 500px) and (pointer: coarse)";
+const isMobile = () => matchMedia(PHONE_MQ).matches;
 const vGrid = $("videoGrid"); // кешируем — выживает при переносе в окно поп-аута
 
 function lkTile(identity) { return "p-" + identity.replace(/[^a-zA-Z0-9_]/g, ""); }
@@ -6732,7 +6736,13 @@ function waDragEnd(e) {
 }
 vGrid.addEventListener("pointerup", waDragEnd);
 vGrid.addEventListener("pointercancel", waDragEnd);
-window.addEventListener("resize", syncWa);
+// Rotating a phone stays "mobile" (portrait and landscape both match PHONE_MQ),
+// so no matchMedia change fires — re-sync the call layout on resize/rotate so
+// pip-grid / wa-call recompute for the new orientation instead of going stale.
+let _callRelayoutRaf = 0;
+function relayoutCall() { cancelAnimationFrame(_callRelayoutRaf); _callRelayoutRaf = requestAnimationFrame(() => { if (call.active) syncCallUI(); else syncWa(); }); }
+window.addEventListener("resize", relayoutCall);
+window.addEventListener("orientationchange", () => setTimeout(relayoutCall, 250));
 
 let tileClickTimer = 0;
 vGrid.addEventListener("click", (e) => {
@@ -7206,7 +7216,7 @@ function dismissNotif(room) {
 let settingsOpen = false;
 const SETTINGS_TABS = ["profile", "account", "prefs", "notif", "contacts", "themes", "groups", "devices", "dev"];
 // ---- Mobile settings: a section LIST that drills into a detail pane with a back button ----
-function isMobileView() { return window.matchMedia("(max-width: 720px)").matches; }
+function isMobileView() { return window.matchMedia(PHONE_MQ).matches; }
 function settingsCard() { return $("settingsOverlay") && $("settingsOverlay").querySelector(".settings-card"); }
 function settingsTabLabel(tab) { const l = $("settingsTabs") && $("settingsTabs").querySelector(`.settings-tab[data-tab="${tab}"] .stab-label`); return l ? l.textContent : t("settings"); }
 let mobileDetailTab = null;   // which section the mobile detail view is showing (null = the list)
