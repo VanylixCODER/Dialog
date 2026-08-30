@@ -4679,6 +4679,9 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   }
   #callStage.wa-call .video-grid .tile:not(.me) {
     position: absolute; inset: 0; width: 100%; height: 100%;
+    /* reset the .pip-grid flex clamps (min-width:200/max-width:33%) that syncCallUI
+       leaves on the grid — without these the remote is pinned to ~half the screen. */
+    flex: none; min-width: 0; max-width: none; min-height: 0;
     margin: 0; border: 0; border-radius: 0; box-shadow: none; aspect-ratio: auto; max-height: none;
   }
   #callStage.wa-call .video-grid .tile:not(.me) > video { object-fit: cover; }
@@ -4690,6 +4693,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   #callStage.wa-call .video-grid .tile.me {
     position: absolute; z-index: 6;
     width: 30vw; max-width: 132px; height: auto; aspect-ratio: 3 / 4; max-height: 30vh;
+    flex: none; min-width: 0; min-height: 0;   /* ignore the .pip-grid min-width:200 clamp */
     margin: 0; border-radius: 16px; overflow: hidden;
     border: 1.5px solid rgba(255,255,255,0.35); box-shadow: 0 10px 28px rgba(0,0,0,0.55);
     background: var(--bg-3); touch-action: none; cursor: grab;
