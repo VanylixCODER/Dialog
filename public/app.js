@@ -5563,8 +5563,20 @@ function openCallReactPicker(e) {
 }
 $("reactBtn") && ($("reactBtn").onclick = (e) => { e.stopPropagation(); openCallReactPicker(e); });
 // Mobile call bar: ⋮ collapses the secondary controls into a dropdown.
-$("callMoreBtn") && ($("callMoreBtn").onclick = (e) => { e.stopPropagation(); const m = $("callMore"); if (m) m.classList.toggle("open"); });
-document.addEventListener("click", (e) => { const m = $("callMore"); if (m && m.classList.contains("open") && !m.contains(e.target) && e.target !== $("callMoreBtn")) m.classList.remove("open"); });
+// The ⋮ menu is authored inside the control pill (so it sits inline on desktop),
+// but the pill's backdrop-filter CLIPS the mobile dropdown that overflows above it.
+// Hoist it to <body> while open so it's viewport-fixed and unclipped, then put it
+// back on close so the desktop inline layout is unchanged.
+const callMoreHome = $("callMore") ? $("callMore").parentElement : null;
+function setCallMore(open) {
+  const m = $("callMore"); if (!m) return;
+  // Hoist onto #callStage (not the filtered pill) so it's unclipped and viewport-
+  // fixed, while still inheriting the call's button styling. Restore on close.
+  if (open) { ($("callStage") || document.body).appendChild(m); m.classList.add("open"); }
+  else { m.classList.remove("open"); if (callMoreHome && m.parentElement !== callMoreHome) callMoreHome.appendChild(m); }
+}
+$("callMoreBtn") && ($("callMoreBtn").onclick = (e) => { e.stopPropagation(); setCallMore(!$("callMore").classList.contains("open")); });
+document.addEventListener("click", (e) => { const m = $("callMore"); if (m && m.classList.contains("open") && !m.contains(e.target) && e.target !== $("callMoreBtn")) setCallMore(false); });
 document.addEventListener("click", (e) => { if (reactPop && !reactPop.classList.contains("hidden") && Date.now() - (reactPop._openedAt || 0) > 200 && !reactPop.contains(e.target) && e.target !== $("reactBtn")) reactPop.classList.add("hidden"); });
 
 // Кнопка звонка: в звонке здесь → положить; идёт звонок здесь → войти; иначе начать/войти
@@ -6750,6 +6762,7 @@ vGrid.addEventListener("click", (e) => {
   if (e.target.closest(".vz-chip")) return;   // the zoom/reset chip handles itself
   const tile = e.target.closest(".tile"); if (!tile) return;
   e.stopPropagation();
+  if ($("callMore") && $("callMore").classList.contains("open")) setCallMore(false); // a tap elsewhere dismisses the ⋮ menu (stopPropagation would hide it from the doc handler)
   if (vzActive()) return;                      // this "click" was the tail of a pan/pinch
   // WhatsApp mode: the self PiP is drag-only; tapping the big remote toggles the chrome.
   const st = $("callStage");
