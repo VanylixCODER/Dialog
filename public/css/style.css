@@ -4666,6 +4666,61 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   #callStage #minBtn, #callStage .call-fs, #callStage .call-drop { display: none; } /* header + pill cover these */
 }
 
+/* ── WhatsApp 1-to-1 phone layout — JS toggles #callStage.wa-call ──────────────
+   The other person fills the screen; your camera is a small rounded thumbnail
+   that floats and snaps to a corner (drag handled in app.js). The header and the
+   control pill float over the video and hide on tap (.wa-hide). */
+@media (max-width: 768px) {
+  #callStage.wa-call { border: 0; }
+  #callStage.wa-call::after { display: none; }   /* accent hairline off — full bleed */
+  #callStage.wa-call .video-grid {
+    position: absolute; inset: 0; z-index: 1;
+    display: block; padding: 0; gap: 0; overflow: hidden;
+  }
+  #callStage.wa-call .video-grid .tile:not(.me) {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    margin: 0; border: 0; border-radius: 0; box-shadow: none; aspect-ratio: auto; max-height: none;
+  }
+  #callStage.wa-call .video-grid .tile:not(.me) > video { object-fit: cover; }
+  #callStage.wa-call .tile:not(.me) .tile-name,
+  #callStage.wa-call .tile-expand { display: none; }
+  #callStage.wa-call .tile:not(.me) .tile-avatar { width: 108px; height: 108px; font-size: 42px; }
+
+  /* Floating self-view thumbnail. */
+  #callStage.wa-call .video-grid .tile.me {
+    position: absolute; z-index: 6;
+    width: 30vw; max-width: 132px; height: auto; aspect-ratio: 3 / 4; max-height: 30vh;
+    margin: 0; border-radius: 16px; overflow: hidden;
+    border: 1.5px solid rgba(255,255,255,0.35); box-shadow: 0 10px 28px rgba(0,0,0,0.55);
+    background: var(--bg-3); touch-action: none; cursor: grab;
+    transition: left .18s var(--ease-out), top .18s var(--ease-out), right .18s var(--ease-out), bottom .18s var(--ease-out);
+  }
+  #callStage.wa-call .video-grid .tile.me.dragging { transition: none; cursor: grabbing; }
+  #callStage.wa-call .video-grid .tile.me > video { object-fit: cover; }
+  #callStage.wa-call .tile.me .tile-name,
+  #callStage.wa-call .tile.me .tile-ctrl { display: none; }
+  #callStage.wa-call .tile.me .tile-avatar { width: 48px; height: 48px; font-size: 20px; }
+  /* Corner anchors — JS sets the class on drop. Top corners clear the header
+     (name + flip button), bottom corners clear the control pill; env() dodges
+     the notch + home indicator. */
+  .tile.me.wa-tl { left: 14px; right: auto; top: calc(74px + env(safe-area-inset-top)); bottom: auto; }
+  .tile.me.wa-tr { right: 14px; left: auto; top: calc(74px + env(safe-area-inset-top)); bottom: auto; }
+  .tile.me.wa-bl { left: 14px; right: auto; bottom: calc(108px + env(safe-area-inset-bottom)); top: auto; }
+  .tile.me.wa-br { right: 14px; left: auto; bottom: calc(108px + env(safe-area-inset-bottom)); top: auto; }
+  /* Ping meter would sit under the top-right thumbnail — hide it in this mode. */
+  #callStage.wa-call #pingMeter { display: none; }
+
+  /* Chrome floats over the video and hides on tap. */
+  #callStage.wa-call .call-mhead {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 7;
+    background: linear-gradient(180deg, rgba(0,0,0,0.5), transparent);
+  }
+  #callStage.wa-call .call-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; }
+  #callStage.wa-call .call-mhead, #callStage.wa-call .call-bar { transition: opacity .25s var(--ease), transform .25s var(--ease); }
+  #callStage.wa-call.wa-hide .call-mhead { opacity: 0; pointer-events: none; transform: translateY(-8px); }
+  #callStage.wa-call.wa-hide .call-bar { opacity: 0; pointer-events: none; transform: translateY(8px); }
+}
+
 /* BETA tag on a theme card (e.g. AeroDialog) */
 .theme-opt { position: relative; }
 .theme-name { position: static; }

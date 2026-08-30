@@ -5022,7 +5022,7 @@ if (moreBtn && moreDropdown) {
 }
 
 // ====================== ЗВОНКИ (LiveKit SFU — надёжно через медиа-сервер) ======================
-const call = { active: false, room: null, roomKey: null, roomTitle: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null, peers: null, localStream: null, videoTrack: null };
+const call = { active: false, room: null, roomKey: null, roomTitle: "", kind: "", minimized: false, micOn: true, camOn: false, sharing: false, ns: true, deaf: false, micWasOn: true, audioInId: null, audioOutId: null, camId: null, peers: null, localStream: null, videoTrack: null };
 const audioEls = new Map(); // identity -> <audio> (голос участника / микрофон)
 const screenAudioEls = new Map(); // identity -> <audio> (звук демонстрации экрана, отдельно от микрофона)
 const activeCalls = new Map(); // roomKey -> {count, logins} — где сейчас идёт звонок
@@ -5362,7 +5362,7 @@ function showGridHint() {
   h.classList.add("show");
   clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove("show"), 3200);
 }
-function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; }
+function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; if (typeof syncWa === "function") syncWa(); }
 function updateCallStatus() {
   const el = $("callStatus"); if (!el) return;
   if (!call.active) { el.textContent = ""; el.className = "call-status"; return; }
@@ -5617,6 +5617,7 @@ function syncCallUI() {
   if (vGrid.parentElement === stage) vGrid.classList.toggle("pip-grid", isMobile() && showStage);
   vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
+  syncWa();
 }
 function updateVoiceBar() {
   if (!call.active) return;
@@ -5850,7 +5851,7 @@ async function joinCall() {
   catch (e) { alert(t("err_media") + (e.message || "")); return; }
   await p2pGetIce();   // warm the ICE (STUN+TURN) cache so peer creation is synchronous
   call.localStream = stream; call.peers = new Map();
-  call.active = true; call.room = null; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false;
+  call.active = true; call.room = null; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; call.kind = curKind;
   startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
   applySpeaker(); // restore the saved loudspeaker/earpiece route (native mobile only)
@@ -5872,6 +5873,7 @@ async function joinCall() {
 }
 function endCall() {
   hideToast(); stopRingtone();
+  exitPipIfAny(); // close the OS picture-in-picture window if one is open
   if (isCallFullscreen()) exitCallFullscreen(); // tear down native/overlay fullscreen
   const wasActive = call.active;
   if (call.active) socket.emit("call-leave");
@@ -6624,6 +6626,114 @@ function toggleFsBar() {
 // shares and dynamically-added tiles):
 //   • grid tile  → single click zooms/spotlights it
 //   • focused    → single click toggles the control bar, double-click → grid
+// ════════════════════════════════════════════════════════════════════════════
+// WhatsApp-style phone call + native Picture-in-Picture
+// ════════════════════════════════════════════════════════════════════════════
+// On a phone, a 1-to-1 call opens like WhatsApp: the other person fills the
+// screen and your own camera rides in a small rounded thumbnail you can drag to
+// any corner. Group calls keep the grid. Independently, a real OS picture-in-
+// picture pops the active video out of the page so the call keeps playing while
+// you use another app (a proper "phone call" that survives leaving Dialog).
+
+// ── Native OS Picture-in-Picture ────────────────────────────────────────────
+const PIP_OK = (() => {
+  try { const v = document.createElement("video"); return document.pictureInPictureEnabled === true || typeof v.webkitSetPresentationMode === "function"; }
+  catch { return false; }
+})();
+// The video most worth popping out: the spotlighted stream, else the remote
+// (DM peer / a screen share), else your self-view — whichever actually has media.
+function pipVideo() {
+  const vid = (el) => el && el.querySelector("video");
+  const live = (v) => v && v.srcObject;
+  let v = vid(vGrid.querySelector(".tile.focused"));
+  if (!live(v)) v = vid(vGrid.querySelector(".tile.screen")) || v;
+  if (!live(v)) v = vid(vGrid.querySelector(".tile:not(.me):not(.screen)")) || v;
+  if (!live(v)) v = vid($("tile-me")) || v;
+  return live(v) ? v : null;
+}
+async function requestPip(v) {
+  if (!v) return false;
+  try {
+    if (v.requestPictureInPicture) { await v.requestPictureInPicture(); return true; }
+    if (v.webkitSetPresentationMode) { v.webkitSetPresentationMode("picture-in-picture"); return true; }
+  } catch (e) {}
+  return false;
+}
+async function togglePip() {
+  if (document.pictureInPictureElement) { try { await document.exitPictureInPicture(); } catch {} return; }
+  await requestPip(pipVideo());
+}
+function exitPipIfAny() { try { if (document.pictureInPictureElement) document.exitPictureInPicture(); } catch {} }
+(function initPip() {
+  const btn = $("pipBtn"); if (!btn || !PIP_OK) return;
+  btn.onclick = (e) => { e.stopPropagation(); togglePip(); };
+  document.addEventListener("enterpictureinpicture", () => btn.classList.add("active"));
+  document.addEventListener("leavepictureinpicture", () => btn.classList.remove("active"));
+  // Best-effort auto-PiP: when you leave the app mid-call, pop the video out so
+  // the call stays visible. Browsers may block this without activation — hence
+  // the button as the reliable path; failures are silently ignored.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && call.active && !document.pictureInPictureElement) {
+      const v = pipVideo(); if (v && v.requestPictureInPicture) v.requestPictureInPicture().catch(() => {});
+    }
+  });
+})();
+
+// ── WhatsApp 1-to-1 layout + draggable self-view thumbnail ──────────────────
+function waEligible() {
+  const st = $("callStage");
+  return isMobile() && call.active && call.kind === "dm"
+    && !st.classList.contains("hidden") && !st.classList.contains("fs-call")
+    && vGrid.querySelectorAll(".tile.screen").length === 0
+    && vGrid.querySelectorAll(".tile:not(.screen)").length === 2;   // you + one peer
+}
+let waCorner = (() => { try { return localStorage.getItem("dialog_wa_corner") || "tr"; } catch { return "tr"; } })();
+function applyWaCorner() {
+  const me = $("tile-me"); if (!me) return;
+  me.classList.remove("wa-tl", "wa-tr", "wa-bl", "wa-br");
+  me.classList.add("wa-" + waCorner);
+  me.style.left = me.style.top = me.style.right = me.style.bottom = "";   // let the corner class position it
+}
+function syncWa() {
+  const st = $("callStage"), on = waEligible();
+  st.classList.toggle("wa-call", on);
+  if (on) applyWaCorner(); else st.classList.remove("wa-hide");
+  if ($("pipBtn")) $("pipBtn").classList.toggle("hidden", !(call.active && PIP_OK));
+}
+// Drag the self-view PiP and snap it to the nearest corner (remembered).
+let waDrag = null;
+vGrid.addEventListener("pointerdown", (e) => {
+  const st = $("callStage"); if (!st.classList.contains("wa-call")) return;
+  const me = e.target.closest(".tile.me"); if (!me) return;
+  e.preventDefault();
+  const r = me.getBoundingClientRect();
+  waDrag = { id: e.pointerId, me, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
+  try { me.setPointerCapture(e.pointerId); } catch {}
+  me.classList.add("dragging");
+});
+vGrid.addEventListener("pointermove", (e) => {
+  if (!waDrag || e.pointerId !== waDrag.id) return;
+  const sr = $("callStage").getBoundingClientRect();
+  let x = e.clientX - waDrag.dx - sr.left, y = e.clientY - waDrag.dy - sr.top;
+  x = Math.max(6, Math.min(sr.width - waDrag.w - 6, x));
+  y = Math.max(6, Math.min(sr.height - waDrag.h - 6, y));
+  Object.assign(waDrag.me.style, { left: x + "px", top: y + "px", right: "auto", bottom: "auto" });
+});
+function waDragEnd(e) {
+  if (!waDrag || e.pointerId !== waDrag.id) return;
+  const me = waDrag.me, sr = $("callStage").getBoundingClientRect();
+  me.classList.remove("dragging");
+  const cx = (parseFloat(me.style.left) || 0) + waDrag.w / 2;
+  const cy = (parseFloat(me.style.top) || 0) + waDrag.h / 2;
+  waCorner = (cy < sr.height / 2 ? "t" : "b") + (cx < sr.width / 2 ? "l" : "r");
+  try { localStorage.setItem("dialog_wa_corner", waCorner); } catch {}
+  applyWaCorner();
+  waDrag = null;
+}
+vGrid.addEventListener("pointerup", waDragEnd);
+vGrid.addEventListener("pointercancel", waDragEnd);
+window.addEventListener("resize", syncWa);
+
 let tileClickTimer = 0;
 vGrid.addEventListener("click", (e) => {
   if (e.target.closest(".tile-ctrl")) return; // per-user mute/volume
@@ -6631,6 +6741,15 @@ vGrid.addEventListener("click", (e) => {
   const tile = e.target.closest(".tile"); if (!tile) return;
   e.stopPropagation();
   if (vzActive()) return;                      // this "click" was the tail of a pan/pinch
+  // WhatsApp mode: the self PiP is drag-only; tapping the big remote toggles the chrome.
+  const st = $("callStage");
+  if (st.classList.contains("wa-call")) {
+    // The self PiP is drag-only (its click target is itself); tapping the big
+    // remote toggles the chrome. A drag ends with the click on the self tile, so
+    // the me-check already stops a drag from toggling — no timing guard needed.
+    if (!tile.classList.contains("me")) st.classList.toggle("wa-hide");
+    return;
+  }
   clearTimeout(tileClickTimer);
   tileClickTimer = setTimeout(() => {
     if (vzActive()) return;
@@ -7703,10 +7822,10 @@ document.addEventListener("click", (e) => {
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
-  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", discoverBtn: "compass", chatSearchBtn: "search", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close" };
+  const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", discoverBtn: "compass", chatSearchBtn: "search", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close", pipBtn: "pip" };
   // Settings-tab icons (mobile list + desktop tabs): fill each .stab-ico from its data-ico.
   document.querySelectorAll(".stab-ico[data-ico]").forEach((el) => { const ic = window.ICON[el.dataset.ico]; if (ic) el.innerHTML = ic; });
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "emoji_stickers", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "emoji_stickers", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup", pipBtn: "t_pip" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
   // ALSO pop its own tooltip (that's the "two overlapping" doubling). EXCEPT inside
