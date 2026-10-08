@@ -134,9 +134,10 @@ function applyWallpaper() {
     // URL-escape кавычек (теоретически dataURL содержит base64 без них, но безопаснее).
     cp.style.setProperty("--chat-wallpaper-url", "url(\"" + url.replace(/"/g, "%22") + "\")");
     cp.classList.add("has-wallpaper");
+    cp.classList.toggle("wp-default", url === "/src/DefaultBG.png");   // light themes tone the stock pattern down
   } else {
     cp.style.removeProperty("--chat-wallpaper-url");
-    cp.classList.remove("has-wallpaper");
+    cp.classList.remove("has-wallpaper", "wp-default");
   }
   refreshBgStatusTexts();
 }
@@ -7129,11 +7130,15 @@ window.addEventListener("load", () => { const p = new URLSearchParams(location.s
 
 // ---------- Соединение ----------
 let connEl;
-socket.on("disconnect", () => { if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
-// On reconnect, drop the banner out of the DOM entirely (not just off-screen) so it
-// can't bleed its glow over the top edge or intercept clicks while "hidden".
+// "io client disconnect" is our own deliberate bounce in enterApp() — not an outage.
+socket.on("disconnect", (reason) => { if (reason === "io client disconnect") return; if (!connEl) { connEl = document.createElement("div"); connEl.className = "conn-status"; connEl.setAttribute("role", "status"); connEl.textContent = t("conn_offline"); document.body.appendChild(connEl); } connEl.classList.add("show"); });
+// On (re)connect, drop the banner out of the DOM entirely (not just off-screen) so it
+// can't bleed its glow over the top edge or intercept clicks while "hidden". Listening
+// on "connect" too: a manual socket.connect() never fires the manager's "reconnect".
+function hideConnBanner() { if (connEl) { connEl.classList.remove("show"); const el = connEl; connEl = null; setTimeout(() => el.remove(), 400); } }
+socket.on("connect", hideConnBanner);
 socket.io.on("reconnect", () => {
-  if (connEl) { connEl.classList.remove("show"); const el = connEl; connEl = null; setTimeout(() => el.remove(), 400); }
+  hideConnBanner();
   if (token) refreshPresence();
 });
 
