@@ -279,10 +279,6 @@
       </div>
       <div class="composer hidden" id="composer">
         <button class="icon-btn hidden" id="botCmdBtn" data-i18n-title="bot_commands">/</button>
-        <button class="icon-btn desktop-only" id="emojiBtn" data-i18n-title="emoji_stickers">😊</button>
-        <button class="icon-btn desktop-only" id="gifBtn" data-i18n-title="gif">GIF</button>
-        <button class="icon-btn desktop-only" id="attachBtn" data-i18n-title="t_attach">📎</button>
-        <button class="icon-btn mobile-only" id="moreBtn" data-i18n-title="t_more">⋮</button>
         <div id="composerMore" class="composer-more hidden" role="menu">
           <button class="cm-item" data-action="emoji">😊 <span data-i18n="emoji_stickers">Emoji / Stickers</span></button>
           <button class="cm-item" data-action="gif"><span class="cm-gif-label">GIF</span></button>
@@ -293,16 +289,26 @@
         <!-- Drop-зона живёт прямо внутри #chatPane через .drop-overlay; css .chat.dragover делает
              оверлей видимым поверх сообщений. Self-contained — JS включает класс только когда
              dragenter реально принёс файлы. -->
-        <div class="input-wrap"><textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea></div>
-        <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
-        <div id="recBar" class="rec-bar hidden">
-          <span class="rec-dot"></span>
-          <span id="recTime" class="rec-time">0:00</span>
-          <span class="rec-hint" data-i18n="rec_hint">Slide up to lock · left to cancel</span>
-          <div class="rec-actions">
-            <button id="recCancel" class="rec-cancel" type="button" data-i18n="rec_cancel">Cancel</button>
-            <button id="recSend" class="rec-send" type="button" data-i18n-title="t_send" title="Send"></button>
+        <!-- WhatsApp/Telegram-style: the tools live inside one rounded field, the mic/send is its
+             own round button. While recording, #recBar covers the field (not the button). -->
+        <div class="input-wrap">
+          <button class="icon-btn desktop-only" id="emojiBtn" data-i18n-title="emoji_stickers">😊</button>
+          <textarea id="msgInput" rows="1" data-i18n-ph="ph_message"></textarea>
+          <button class="icon-btn desktop-only" id="gifBtn" data-i18n-title="gif">GIF</button>
+          <button class="icon-btn desktop-only" id="attachBtn" data-i18n-title="t_attach">📎</button>
+          <button class="icon-btn mobile-only" id="moreBtn" data-i18n-title="t_more">⋮</button>
+          <div id="recBar" class="rec-bar hidden">
+            <button id="recCancel" class="rec-trash" type="button" data-i18n-title="rec_cancel" title="Cancel"></button>
+            <span class="rec-dot"></span>
+            <span id="recTime" class="rec-time">0:00</span>
+            <canvas id="recWave" class="rec-wave" aria-hidden="true"></canvas>
+            <span class="rec-slide" id="recSlide"><span class="rec-chev">‹</span> <span data-i18n="rec_slide">Slide to cancel</span></span>
           </div>
+        </div>
+        <div class="send-wrap">
+          <span class="rec-halo" id="recHalo" aria-hidden="true"></span>
+          <div class="rec-lock" id="recLock" aria-hidden="true"><span class="rl-ico" id="recLockIco"></span><span class="rl-chev">⌃</span></div>
+          <button class="icon-btn send" id="sendBtn" data-i18n-title="t_send">➤</button>
         </div>
         <div id="uploadProgress" class="upload-progress hidden">
           <div class="up-bar"><div class="up-fill" id="upFill"></div></div>

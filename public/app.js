@@ -4877,13 +4877,18 @@ socket.on("file-rejected", ({ reason, maxMb } = {}) => {
   if (reason === "save_failed") notify(t("file_rejected_size", { mb: MAX_FILE_SIZE_MB }));
   else notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
 });
-// ---------- Voice messages (WhatsApp-style: mic lives on the send button) ----------
-// Empty input ⇒ the send button is a mic. Mobile: hold to record, slide up to lock
-// hands-free (tap ▶ to send), slide left to cancel. Desktop: click to start, click to
-// stop+send; Esc cancels. Live timer, 60s cap.
-let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0;
-let recState = "idle"; // idle | recording
-let recCancelled = false;
+// ---------- Voice messages (WhatsApp / Telegram logic) ----------
+// Empty input ⇒ the round button is a mic.
+//   • Hold it: records; release sends. Slide LEFT to cancel, slide UP to lock (hands-free).
+//   • Quick tap (or keyboard): starts a locked, hands-free recording; the button becomes Send.
+//   • While recording, a circle behind the button breathes with your voice (grows when you talk,
+//     settles back to a set size in silence) and a waveform scrolls in the bar.
+//   • Locked: 🗑 cancels, the button sends. Esc cancels. Clips under 0.5 s are dropped (a mis-tap).
+let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0, recStartedAt = 0;
+let recState = "idle";            // idle | starting | recording
+let recCancelled = false, recLocked = false, recAfterStart = null;   // what to do once the mic opens
+let recViz = null;                 // { src, an, buf, raf, level, wave[], lastPush }
+const REC_CANCEL_DX = -100, REC_LOCK_DY = -80, REC_TAP_MS = 300, REC_MIN_MS = 500, REC_MAX_S = 60;
 function isMicMode() { return $("sendBtn").classList.contains("mic-mode"); }
 function updateSendMode() {
   if (recState !== "idle") return;
@@ -4894,37 +4899,137 @@ function updateSendMode() {
 }
 const fmtRec = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 function updateRecOverlay() { const tm = $("recTime"); if (tm) tm.textContent = fmtRec(recSec); }
-// Tap to start, tap to stop (same on desktop and mobile). On stop the clip goes to the
-// send-preview tray so you hear it before sending. Esc cancels.
+function recUI(on) {
+  const c = $("composer"), bar = $("recBar");
+  c.classList.toggle("rec", on); c.classList.toggle("rec-locked", on && recLocked);
+  if (bar) bar.classList.toggle("hidden", !on);
+  if (!on) { c.style.removeProperty("--slide-x"); c.style.removeProperty("--lock-y"); c.style.removeProperty("--lvl"); }
+}
 async function startRec() {
   if (!myRoom || recState !== "idle") return;
-  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { alert(t("err_mic_voice")); recState = "idle"; return; }
-  recChunks = []; recSec = 0; recCancelled = false;
+  recState = "starting"; recCancelled = false; recAfterStart = null; recChunks = []; recSec = 0;
+  ensureAudioCtx();
+  recUI(true);   // show the circle/bar at once — the mic permission prompt can take a moment
+  try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { recState = "idle"; recLocked = false; recUI(false); updateSendMode(); alert(t("err_mic_voice")); return; }
+  if (recAfterStart === "cancel") { recStream.getTracks().forEach((tr) => tr.stop()); recState = "idle"; recLocked = false; recUI(false); updateSendMode(); return; }
   mediaRecorder = new MediaRecorder(recStream);
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
-    clearInterval(recTimer); try { recStream.getTracks().forEach((t) => t.stop()); } catch {}
-    const cancelled = recCancelled; recState = "idle"; const bar = $("recBar"); if (bar) bar.classList.add("hidden"); updateSendMode();
-    if (cancelled) return;
-    const blob = new Blob(recChunks, { type: "audio/webm" });
+    clearInterval(recTimer); stopRecViz();
+    try { recStream.getTracks().forEach((tr) => tr.stop()); } catch {}
+    const cancelled = recCancelled, ms = Date.now() - recStartedAt;
+    recState = "idle"; recLocked = false; recUI(false); updateSendMode();
+    if (cancelled || ms < REC_MIN_MS) return;
+    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || "audio/webm" });
     if (blob.size < 600 || blob.size > 20 * 1024 * 1024) return;
-    addPending({ kind: "voice", blob, type: "audio", url: URL.createObjectURL(blob), name: "voice" });
+    sendVoice(blob);
   };
-  mediaRecorder.start(); recState = "recording";
-  const bar = $("recBar"); if (bar) { bar.classList.remove("hidden"); bar.classList.add("recording"); } updateRecOverlay();
-  recTimer = setInterval(() => { recSec++; updateRecOverlay(); if (recSec >= 60) stopRec(true); }, 1000);
+  mediaRecorder.start(); recState = "recording"; recStartedAt = Date.now();
+  const sb = $("sendBtn"); if (sb) sb.innerHTML = window.ICON.send;
+  startRecViz(); updateRecOverlay();
+  recTimer = setInterval(() => { recSec++; updateRecOverlay(); if (recSec >= REC_MAX_S) stopRec(true); }, 1000);
+  if (recAfterStart === "send") stopRec(true);
+  else if (recAfterStart === "lock") lockRec();
 }
-function stopRec(send) { if (recState === "idle" || !mediaRecorder) return; recCancelled = !send; try { mediaRecorder.stop(); } catch {} }
+function lockRec() {
+  if (recState === "starting") { recAfterStart = "lock"; }
+  recLocked = true; $("composer").classList.add("rec-locked");
+  $("composer").style.removeProperty("--slide-x"); $("composer").style.removeProperty("--lock-y");
+}
+function stopRec(send) {
+  if (recState === "starting") { recAfterStart = send ? "send" : "cancel"; recCancelled = !send; return; }
+  if (recState !== "recording" || !mediaRecorder) return;
+  recCancelled = !send; try { mediaRecorder.stop(); } catch {}
+}
 function cancelRec() { stopRec(false); }
+// Straight out, like WhatsApp/Telegram — no preview step for voice.
+function sendVoice(blob) {
+  if (!myRoom) return;
+  const r = new FileReader();
+  r.onload = () => socket.emit("message", { type: "audio", media: r.result, mediaName: "voice" });
+  r.readAsDataURL(blob);
+}
+// Mic level → the breathing circle (CSS var --lvl, 0..1) and the scrolling waveform.
+function startRecViz() {
+  stopRecViz();
+  const ctx = ensureAudioCtx(); if (!ctx || !recStream) return;
+  let src, an;
+  try { src = ctx.createMediaStreamSource(recStream); an = ctx.createAnalyser(); an.fftSize = 1024; src.connect(an); } catch { return; }
+  const cv = $("recWave");
+  const color = getComputedStyle(document.documentElement).getPropertyValue("--accent-400").trim() || "#00ff5a";
+  recViz = { src, an, buf: new Float32Array(an.fftSize), raf: 0, level: 0, wave: [], lastPush: 0, color };
+  const tick = (now) => {
+    if (!recViz) return;
+    recViz.raf = requestAnimationFrame(tick);
+    an.getFloatTimeDomainData(recViz.buf);
+    let sum = 0; for (const v of recViz.buf) sum += v * v;
+    const db = 20 * Math.log10(Math.sqrt(sum / recViz.buf.length) + 1e-8);
+    const target = Math.min(1, Math.max(0, (db + 52) / 38));          // ≈ −52 dB (silence) … −14 dB (loud)
+    // jumps up with the voice, eases back down — that's what makes it feel alive
+    recViz.level += (target - recViz.level) * (target > recViz.level ? 0.45 : 0.12);
+    $("composer").style.setProperty("--lvl", recViz.level.toFixed(3));
+    if (now - recViz.lastPush > 70 && cv) {
+      recViz.lastPush = now;
+      recViz.wave.push(recViz.level);
+      const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h); g.fillStyle = recViz.color;
+      const step = 4, n = Math.floor(w / step); if (recViz.wave.length > n) recViz.wave.splice(0, recViz.wave.length - n);
+      recViz.wave.forEach((lv, i) => {   // newest on the right, older bars scroll left
+        const x = w - (recViz.wave.length - i) * step, bh = Math.max(2, lv * (h - 2));
+        g.globalAlpha = 0.35 + 0.65 * (i / recViz.wave.length);
+        if (g.roundRect) { g.beginPath(); g.roundRect(x, (h - bh) / 2, 2, bh, 1); g.fill(); } else g.fillRect(x, (h - bh) / 2, 2, bh);
+      });
+      g.globalAlpha = 1;
+    }
+  };
+  recViz.raf = requestAnimationFrame(tick);
+}
+function stopRecViz() {
+  if (!recViz) return;
+  cancelAnimationFrame(recViz.raf);
+  try { recViz.src.disconnect(); recViz.an.disconnect(); } catch {}
+  const cv = $("recWave"); if (cv) cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
+  recViz = null;
+}
 (function wireComposerSend() {
   const b = $("sendBtn"); if (!b) return;
-  const rs = $("recSend"); if (rs) rs.innerHTML = window.ICON.check || window.ICON.send;
-  b.addEventListener("click", () => {
-    if (!isMicMode()) { sendText(); return; }
-    if (recState === "idle") startRec(); else stopRec(true);
+  const rc = $("recCancel"); if (rc) rc.innerHTML = window.ICON.trash || window.ICON.close;
+  const li = $("recLockIco"); if (li) li.innerHTML = window.ICON.lock || "🔒";
+  let press = null, lastPointerAt = 0;
+  b.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || recState !== "idle" || !isMicMode()) return;
+    e.preventDefault();
+    try { b.setPointerCapture(e.pointerId); } catch {}
+    press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+    recLocked = false; startRec();
   });
-  $("recCancel") && ($("recCancel").onclick = cancelRec);
-  $("recSend") && ($("recSend").onclick = () => stopRec(true));
+  b.addEventListener("pointermove", (e) => {
+    if (!press || e.pointerId !== press.id || recLocked) return;
+    const dx = Math.min(0, e.clientX - press.x), dy = Math.min(0, e.clientY - press.y);
+    if (dx < REC_CANCEL_DX) { press = null; lastPointerAt = Date.now(); cancelRec(); return; }
+    if (dy < REC_LOCK_DY) { lockRec(); return; }
+    const c = $("composer"); c.style.setProperty("--slide-x", dx + "px"); c.style.setProperty("--lock-y", dy + "px");
+  });
+  const release = (e) => {
+    if (!press || e.pointerId !== press.id) return;
+    const held = performance.now() - press.t; press = null; lastPointerAt = Date.now();
+    if (recLocked) return;                       // locked → keep recording; the button now sends
+    if (e.type === "pointercancel") { cancelRec(); return; }
+    if (held < REC_TAP_MS) lockRec();            // a tap = hands-free recording
+    else stopRec(true);                          // hold-and-release = send
+  };
+  b.addEventListener("pointerup", release);
+  b.addEventListener("pointercancel", release);
+  b.addEventListener("click", () => {
+    if (Date.now() - lastPointerAt < 450) return;   // this click is the tail of a press we handled
+    if (recState !== "idle") { stopRec(true); return; }
+    if (!isMicMode()) { sendText(); return; }
+    recLocked = true; startRec();                    // keyboard / assistive "click" → hands-free
+  });
+  b.addEventListener("contextmenu", (e) => { if (recState !== "idle" || isMicMode()) e.preventDefault(); });   // long-press menu on phones
+  if (rc) rc.onclick = cancelRec;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && recState !== "idle") cancelRec(); });
 })();
 

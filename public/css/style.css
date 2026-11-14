@@ -6472,3 +6472,101 @@ body:not([data-theme="aero"]) .app *, body:not([data-theme="aero"]) .settings-ov
 /* A pill only reads as a pill on one row: a wrapped ⋮ menu becomes an oval. Radius = half a row
    (follows the Corners setting via --rk). */
 #callStage > .call-more.open { border-radius: calc((var(--cbtn, 42px) / 2 + 8px) * var(--rk)); }
+
+/* ═════════════ Composer v2 — WhatsApp/Telegram shape + voice recording ═════════════
+   One rounded field holds emoji · text · GIF · attach; the mic/send is its own round button.
+   Recording (JS: .composer.rec / .rec-locked, --lvl 0..1 from the mic, --slide-x / --lock-y from
+   the finger): the button grows, a circle behind it breathes with your voice and settles to a
+   set size in silence, the bar shows a pulsing dot, timer, scrolling waveform and slide hint. */
+#composer { align-items: flex-end; gap: 8px; padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+#composer .input-wrap {
+  position: relative; display: flex; align-items: flex-end; gap: 2px;
+  min-height: 46px; padding: 3px 4px;
+  background: var(--bg-3); border: 1px solid var(--border-1);
+  border-radius: calc(23px * var(--rk));
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+#composer .input-wrap:focus-within { border-color: var(--border-3); }
+#composer #msgInput {
+  flex: 1; min-width: 0; align-self: center;
+  background: transparent; border: 0; box-shadow: none; border-radius: 0;
+  padding: 9px 6px; min-height: 0; line-height: 1.4;
+}
+#composer #msgInput:focus, #composer #msgInput:focus-visible { box-shadow: none; outline: none; }
+#composer .input-wrap .icon-btn {
+  width: 38px; height: 38px; border: 0; background: transparent; box-shadow: none;
+  color: var(--text-dim); border-radius: calc(50% * var(--rc)); flex: 0 0 auto;
+}
+@media (hover: hover) { #composer .input-wrap .icon-btn:hover { color: var(--accent-300); background: transparent; } }
+#composer .input-wrap #gifBtn { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+
+/* The round mic / send button and what grows behind it. */
+#composer .send-wrap { position: relative; flex: 0 0 auto; width: 46px; height: 46px; }
+#composer #sendBtn {
+  position: relative; z-index: 2; width: 46px; height: 46px;
+  border: 0; border-radius: calc(50% * var(--rc));
+  background: var(--accent-400); color: var(--on-accent); box-shadow: none;
+  touch-action: none; -webkit-user-select: none; user-select: none;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background var(--t-fast) var(--ease);
+}
+#composer #sendBtn svg { width: 21px; height: 21px; }
+@media (hover: hover) { #composer #sendBtn:hover { background: var(--accent-300); } }
+#composer #sendBtn:active { transform: scale(0.92); }
+.rec-halo {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  border-radius: calc(50% * var(--rc)); background: var(--accent-400);
+  opacity: 0; transform: scale(1);
+  transition: opacity 0.18s var(--ease), transform 0.09s linear;
+}
+#composer.rec { z-index: 8; }                         /* the circle paints over the message list */
+#composer.rec #sendBtn { transform: scale(1.22); }   /* the button itself grows when you start */
+#composer.rec .rec-halo { opacity: 0.22; transform: scale(calc(1.4 + var(--lvl, 0) * 0.85)); }
+#composer.rec #sendBtn::after, #composer.rec #sendBtn::before { display: none; }   /* no "Send" tooltip while recording */
+#composer.rec-locked #sendBtn { transform: scale(1.12); }
+#composer.rec-locked .rec-halo { transform: scale(calc(1.3 + var(--lvl, 0) * 0.8)); }
+
+/* Lock badge above the button while holding; it follows the finger up. */
+.rec-lock {
+  position: absolute; left: 50%; bottom: calc(100% + 26px); z-index: 3;
+  width: 36px; padding: 8px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: calc(18px * var(--rk));
+  color: var(--text-dim); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+  opacity: 0; pointer-events: none;
+  transform: translate(-50%, calc(10px + var(--lock-y, 0px) * 0.5));
+  transition: opacity 0.18s var(--ease);
+}
+.rec-lock .rl-ico svg { width: 16px; height: 16px; display: block; }
+.rec-lock .rl-chev { font-size: 12px; line-height: 1; animation: rlUp 1.2s ease-in-out infinite; }
+@keyframes rlUp { 50% { transform: translateY(-3px); opacity: 0.5; } }
+#composer.rec:not(.rec-locked) .rec-lock { opacity: 1; }
+
+/* The recording bar covers the field only. */
+#composer .rec-bar {
+  position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px 0 8px; background: var(--bg-3); border-radius: inherit; overflow: hidden;
+}
+#composer .rec-bar.hidden { display: none; }
+#composer .rec-dot { width: 10px; height: 10px; border-radius: calc(50% * var(--rc)); background: var(--danger); animation: recBlink 1s ease-in-out infinite; box-shadow: none; flex: none; }
+@keyframes recBlink { 50% { opacity: 0.25; } }
+#composer .rec-time { font: 600 14px/1 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text-strong); min-width: 38px; }
+#composer .rec-wave { flex: 1; min-width: 40px; height: 28px; }
+#composer .rec-slide {
+  flex: none; color: var(--text-dim); font-size: 13px; white-space: nowrap; position: relative; z-index: 1;
+  /* a soft backing so the hint slides OVER the waveform instead of tangling with it */
+  padding-left: 22px; background: linear-gradient(90deg, transparent, var(--bg-3) 18px);
+  transform: translateX(var(--slide-x, 0px)); opacity: calc(1 + var(--slide-x, 0px) / 120px);
+}
+#composer .rec-slide .rec-chev { display: inline-block; animation: recNudge 1.2s ease-in-out infinite; }
+@keyframes recNudge { 50% { transform: translateX(-4px); } }
+#composer .rec-trash {
+  display: none; width: 34px; height: 34px; border: 0; border-radius: calc(50% * var(--rc));
+  background: transparent; color: var(--danger); cursor: pointer; place-items: center; flex: none;
+}
+#composer .rec-trash svg { width: 18px; height: 18px; }
+@media (hover: hover) { #composer .rec-trash:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); } }
+#composer.rec-locked .rec-trash { display: grid; }
+#composer.rec-locked .rec-slide { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rec-halo, #composer #sendBtn { transition: none; }
+  #composer .rec-slide .rec-chev, .rec-lock .rl-chev, #composer .rec-dot { animation: none; }
+}
