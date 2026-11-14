@@ -225,9 +225,9 @@
             <button class="call-btn" id="toggleCam" data-i18n-title="t_cam"></button>
             <button class="call-btn flip-cam hidden" id="flipCam" data-i18n-title="flip_cam"></button>
             <button class="call-btn desktop-only" id="shareScreen" data-i18n-title="t_screen"></button>
-            <button class="call-btn" id="activityBtn" data-i18n-title="act_launch" title="Activities">🎮</button>
             <button class="call-btn mobile-only" id="callMoreBtn" data-i18n-title="t_more" title="More">⋮</button>
             <div id="callMore" class="call-more">
+              <button class="call-btn" id="activityBtn" data-i18n-title="act_launch" title="Activities">🎮</button>
               <button class="call-btn" id="reactBtn" data-i18n-title="react" title="React"></button>
               <button class="call-btn call-speaker hidden" id="toggleSpeaker" data-i18n-title="t_speaker"></button>
               <button class="call-btn" id="toggleDeafen" data-i18n-title="t_deafen"></button>
@@ -639,6 +639,12 @@
               <div class="ap-label"><b data-i18n="ld_title">Loading screen</b><small data-i18n="ld_hint">The terminal boot screen on launch. Cinematic is the designed pace; faster skips the theatre.</small></div>
             </div>
             <div class="ld-opts" id="ldOpts"></div>
+            <div class="ap-row">
+              <div class="ap-label"><b data-i18n="ap_corners">Corners</b><small data-i18n="ap_corners_d">How rounded the whole app is — from sharp squares to soft and round.</small></div>
+              <span class="ap-corners-val" id="apCornersVal"></span>
+            </div>
+            <div class="ld-opts" id="apCornerOpts"></div>
+            <input type="range" class="ap-corners-range" id="apCorners" min="0" max="2" step="0.05" value="1" aria-label="Corners" />
             <div class="ap-row ap-toggle-row">
               <div class="ap-label"><b data-i18n="ap_callviz">Call voice visualizer</b><small data-i18n="ap_callviz_d">Live audio bars on each participant's tile while they talk.</small></div>
               <label class="switch"><input type="checkbox" id="apCallViz" /><span class="switch-track"></span></label>
@@ -793,8 +799,8 @@
       <div class="ci-name" id="toastName">—</div>
       <div class="ci-sub" id="toastSub" data-i18n="toast_started">incoming call</div>
       <div class="ci-actions">
-        <div class="ci-act"><button class="ci-btn decline" id="toastClose" data-i18n-title="t_hangup"></button><span class="ci-act-label" data-i18n="ci_decline">Decline</span></div>
-        <div class="ci-act"><button class="ci-btn accept" id="toastJoin" data-i18n-title="toast_join"></button><span class="ci-act-label" data-i18n="ci_accept">Accept</span></div>
+        <div class="ci-act"><button class="ci-btn decline" id="toastClose"></button><span class="ci-act-label" data-i18n="ci_decline">Decline</span></div>
+        <div class="ci-act"><button class="ci-btn accept" id="toastJoin"></button><span class="ci-act-label" data-i18n="ci_accept">Accept</span></div>
       </div>
     </div>
   </div>

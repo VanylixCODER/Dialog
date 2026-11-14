@@ -769,6 +769,16 @@ export async function createGroup(name, owner, memberLogins, channel = false, ho
   return id;
 }
 export async function regenGroupHook(id, secret) { await execute("UPDATE chat_groups SET hook_secret=? WHERE id=?", [secret, id]); }
+// Latest message of each room, for the chat-list previews. MAX(id) per room comes straight off
+// idx_messages_room (room, id); only a short slice of the text is read.
+export async function lastMessagesFor(rooms) {
+  if (!rooms.length) return [];
+  return await query(
+    `SELECT m.room, m.type, LEFT(m.text, 120) AS text, m.media_name AS mediaName, m.ts FROM messages m
+     JOIN (SELECT room, MAX(id) AS id FROM messages WHERE room IN (${rooms.map(() => "?").join(",")}) GROUP BY room) x ON x.id = m.id`,
+    rooms
+  );
+}
 export async function getUserGroups(login) {
   return await query(
     `SELECT g.id, g.name, g.owner FROM chat_groups g
@@ -1229,7 +1239,7 @@ export async function addWarning({ login, text, by, reportId = null }) {
 }
 export async function pendingWarnings(login) {
   return (await query(
-    "SELECT id, text, issued_by AS by, created_at AS createdAt FROM warnings WHERE login=? AND ack_at IS NULL ORDER BY created_at ASC",
+    "SELECT id, text, issued_by AS `by`, created_at AS createdAt FROM warnings WHERE login=? AND ack_at IS NULL ORDER BY created_at ASC",
     [login]
   )).map((w) => ({ ...w, id: Number(w.id), createdAt: Number(w.createdAt) }));
 }
@@ -1239,7 +1249,7 @@ export async function ackWarning(login, id) {
 }
 export async function warningsFor(login, limit = 50) {
   return (await query(
-    "SELECT id, text, issued_by AS by, created_at AS createdAt, ack_at AS ackAt FROM warnings WHERE login=? ORDER BY created_at DESC LIMIT ?",
+    "SELECT id, text, issued_by AS `by`, created_at AS createdAt, ack_at AS ackAt FROM warnings WHERE login=? ORDER BY created_at DESC LIMIT ?",
     [login, Math.min(200, limit | 0 || 50)]
   )).map((w) => ({ ...w, id: Number(w.id), createdAt: Number(w.createdAt), ackAt: w.ackAt == null ? null : Number(w.ackAt) }));
 }

@@ -25,7 +25,7 @@ import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
-import { statfs } from "fs/promises";
+import { statfs, readdir } from "fs/promises";
 import { exec } from "child_process";
 import { networkInterfaces, totalmem, freemem, loadavg, uptime as osUptime } from "os";
 import crypto from "crypto";
@@ -37,7 +37,7 @@ import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, editMessageMarkup, getMessageMeta, toggleReaction,
-  createGroup, getUserGroups, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
+  createGroup, getUserGroups, lastMessagesFor, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
   isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser, searchUsers,
@@ -211,7 +211,9 @@ const httpServer = useHttps
   ? createHttps({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, app)
   : createHttp(app);
 
-const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024 });
+// Ping every 15s, give up after 15s more: a vanished client (closed laptop, dead network) is
+// noticed in ~30s instead of socket.io's default ~45s — that's how long a call partner waits.
+const io = new Server(httpServer, { maxHttpBufferSize: B64_BUFFER_MB * 1024 * 1024, pingInterval: 15000, pingTimeout: 15000 });
 // Session identity now comes from the HttpOnly cookie on the WebSocket handshake.
 // Stash the token on the handshake; identify/join fall back to it when the client
 // sends no token in the payload (the new default). Never blocks the connection.
@@ -234,6 +236,17 @@ app.use((req, res, next) => {
     return res.redirect(302, "/login");
   }
   next();
+});
+
+// Drop-in sound pack: the client asks which sound slots have a file in public/src/sounds/
+// and uses those, keeping its built-in tones for the rest (see the README in that folder).
+// Read per request, so a newly dropped file is picked up without a restart.
+const SOUND_DIR = join(__dirname, "public", "src", "sounds");
+app.get("/src/sounds/manifest.json", async (req, res) => {
+  let files = [];
+  try { files = (await readdir(SOUND_DIR)).filter((f) => /^[a-z0-9_-]+\.(mp3|ogg|wav|m4a|webm)$/i.test(f)).sort(); } catch {}
+  res.set("Cache-Control", "no-cache");
+  res.json({ files });
 });
 
 // index:false so "/" is not auto-served as the SPA — the marketing landing
@@ -801,6 +814,19 @@ app.get("/api/users/search", async (req, res) => {
 // ВАЖНО: эти маршруты идут ПЕРВЫМИ — Express сопоставляет по порядку объявления. Если поставить их после , GET /api/groups уйдёт в POST с :id='', а POST /api/groups/:id/leave может перепутаться.
 // Клиент (app.js) вызывает вот эти три маршрута, но раньше сервер возвращал 404 — отсюда жалобы «группы сломались».
 
+// Chat-list previews: the last message of each of your chats, in one query. Only rooms you're
+// in are answered (DMs you're part of, groups you're a member of). E2E text never leaves.
+app.post("/api/chat-previews", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const asked = Array.isArray(req.body && req.body.rooms) ? req.body.rooms.filter((r) => typeof r === "string").slice(0, 200) : [];
+    const myGroups = new Set((await getUserGroups(me.login)).map((g) => "@grp:" + g.id));
+    const rooms = asked.filter((r) => (r.startsWith("@dm:") && r.slice(4).split("~").includes(me.login)) || myGroups.has(r));
+    const out = {};
+    for (const m of await lastMessagesFor(rooms)) out[m.room] = { type: m.type, text: m.type === "e2e" ? "" : m.text || "", mediaName: m.mediaName, ts: Number(m.ts) };
+    res.json(out);
+  } catch (e) { console.error("chat previews", e.message); res.status(500).json({ error: "server error" }); }
+});
 app.get("/api/groups", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
@@ -1873,18 +1899,42 @@ function callStatePayload(room) {
   const meta = callMeta.get(room);
   return { room, count: logins.length, logins, locked: !!(meta && meta.locked), muteOnEntry: !!(meta && meta.muteOnEntry) };
 }
-function broadcastCallState(room) { io.to(room).emit("call-state", callStatePayload(room)); }
+// To everyone viewing the chat AND every socket in the call: a participant who has wandered
+// into another chat while the call runs isn't in the chat's socket.io room any more, and used
+// to miss the "they left" update entirely.
+function broadcastCallState(room) {
+  const c = callRooms.get(room);
+  io.to([room, ...(c ? c.keys() : [])]).emit("call-state", callStatePayload(room));
+}
+// How long someone may sit alone in a call that WAS answered before it ends for them.
+// 1-on-1: the other side hung up → at once; their connection dropped → a short grace, so a
+// network blip (they rejoin on reconnect) doesn't end the call. Group: a while, people return.
+const ALONE_GRACE_DROP_MS = 15000, ALONE_GRACE_GROUP_MS = 120000;
+function scheduleAloneEnd(room, delay) {
+  const meta = callMeta.get(room); if (!meta) return;
+  clearTimeout(meta.aloneTimer);
+  meta.aloneTimer = setTimeout(() => {
+    const c = callRooms.get(room);
+    if (!c || new Set([...c.values()].map((v) => v.login)).size >= 2) return;   // someone came back
+    for (const sid of [...c.keys()]) { io.to(sid).emit("call-auto-end", { room, reason: "alone" }); removeFromCall(room, sid); }
+  }, delay);
+}
 // Remove one socket from a call room, running the same end-of-call bookkeeping
 // (system message + meta cleanup) as a normal leave when the room empties.
-function removeFromCall(room, sid) {
+// `dropped` = the socket vanished (disconnect) rather than hanging up.
+function removeFromCall(room, sid, dropped = false) {
   const c = callRooms.get(room);
   if (!c || !c.has(sid)) return;
   c.delete(sid);
+  const meta0 = callMeta.get(room);
+  if (c.size && meta0 && meta0.answered && new Set([...c.values()].map((v) => v.login)).size < 2) {
+    scheduleAloneEnd(room, room.startsWith("@grp:") ? ALONE_GRACE_GROUP_MS : dropped ? ALONE_GRACE_DROP_MS : 0);
+  }
   if (!c.size) {
     callRooms.delete(room);
     const meta = callMeta.get(room);
     if (meta) {
-      clearTimeout(meta.ringTimer);
+      clearTimeout(meta.ringTimer); clearTimeout(meta.aloneTimer);
       const dur = Date.now() - meta.startTs;
       if (meta.answered && dur > 2000) saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_ended", fmtDuration(dur));
       else {
@@ -1910,6 +1960,14 @@ async function saveSystemMessage(room, fromLogin, name, type, text) {
   } catch (e) { console.error("saveSystemMessage", e.message); return; }
   if (!payload.id) return;
   io.to(room).emit("message", payload);
+  // "Call started / ended / missed" should show up as the chat-list preview for participants who
+  // aren't looking at this chat — silently (no unread, no sound).
+  let recips = [];
+  try {
+    if (room.startsWith("@dm:")) recips = room.slice(4).split("~");
+    else if (room.startsWith("@grp:")) recips = await getGroupMembers(room.slice(5));
+  } catch {}
+  for (const login of recips) notifyUser(login, "chat-preview", { room, ts, last: { type, text: payload.text } });
 }
 
 // Save + broadcast + notify a message into a room, then fan out to any bot participants.
@@ -2019,7 +2077,10 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
   for (const login of recips) {
     if (login === fromLogin) continue;
     const mentioned = mentions.has(login);
-    notifyUser(login, "dm-ping", { room, fromLogin, fromName: name, mention: mentioned });
+    // `last` lets the chat list show the new preview without opening the chat (the full
+    // "message" event only goes to people viewing the room). Never the ciphertext of an E2E msg.
+    notifyUser(login, "dm-ping", { room, fromLogin, fromName: name, mention: mentioned, ts: payload.ts,
+      last: { type: payload.type, text: payload.type === "e2e" ? "" : String(payload.text || "").slice(0, 120), mediaName: payload.mediaName || null } });
     // A mention pushes even if the recipient is elsewhere; normal msgs push only when not in the room.
     if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: (mentioned ? "@ " : "") + preview, room, icon: `${APP_ORIGIN}/api/avatar/${fromLogin}` });
   }
@@ -2280,9 +2341,10 @@ io.on("connection", (socket) => {
 
   socket.on("latency", (cb) => { if (typeof cb === "function") cb(Date.now()); });
 
-  socket.on("identify", async ({ token } = {}) => {
+  socket.on("identify", async ({ token } = {}, ack) => {
     const p = await auth.userByToken(token || socket.handshake._sessTok); if (!p) return;
     userLogin = p.login; userName = p.name;
+    if (typeof ack === "function") ack(true);   // client waits for this before rejoining a call
     socket._token = token; socket._authLogin = userLogin;
     setUserLastIp(userLogin, sockIp).catch(() => {});
     addUserSocket(userLogin, socket.id);
@@ -2553,14 +2615,26 @@ io.on("connection", (socket) => {
   // Which room this socket's call is in. Tracked separately from currentRoom now that you can
   // walk into another chat while the call keeps running.
   let callRoom = null;
-  function callLeave() {
-    const room = callRoom || currentRoom;
+  function callLeave(dropped = false) {
+    const room = callRoom;
     if (!room) return;
     callRoom = null;
-    removeFromCall(room, socket.id);
+    removeFromCall(room, socket.id, dropped);
   }
-  socket.on("call-join", async ({ title } = {}) => {
-    if (!currentRoom || !userLogin) return;
+  async function mayUseRoom(room) {
+    if (room.startsWith("@dm:")) return room.slice(4).split("~").includes(userLogin);
+    if (room.startsWith("@grp:")) { const gid = room.slice(5); return /^\d+$/.test(gid) && !!(await isGroupMember(gid, userLogin)); }
+    return false;
+  }
+  // `room` + `rejoin`: the client's socket reconnected mid-call (the disconnect took it out of
+  // the call) and it's coming back in — possibly while viewing a different chat. A rejoin never
+  // starts or rings a call: if the call ended meanwhile, the client is told so instead.
+  socket.on("call-join", async ({ title, room: wanted, rejoin } = {}) => {
+    if (!userLogin) return;
+    const target = typeof wanted === "string" && wanted ? wanted : currentRoom;
+    if (!target || (target !== currentRoom && !(await mayUseRoom(target)))) return;
+    if (rejoin && !callMeta.has(target)) { socket.emit("call-auto-end", { room: target, reason: "ended" }); return; }
+    { const currentRoom = target; // the call's room from here on (shadows the viewed chat)
     callRoom = currentRoom;
     // Channels are broadcast rooms — no calls in them. The UI hides the button; this is the
     // rule a hand-rolled client can't skip.
@@ -2597,6 +2671,7 @@ io.on("connection", (socket) => {
     }
     const wasEmpty = c.size === 0;
     c.set(socket.id, { name: userName, login: userLogin });
+    { const mA = callMeta.get(currentRoom); if (mA && new Set([...c.values()].map((v) => v.login)).size >= 2) { clearTimeout(mA.aloneTimer); mA.aloneTimer = null; } }
     broadcastCallState(currentRoom);
     // Mute-on-entry: a non-owner joining an ongoing group call starts muted if the owner set it.
     if (!wasEmpty && currentRoom.startsWith("@grp:")) {
@@ -2641,7 +2716,9 @@ io.on("connection", (socket) => {
       }, 60000)
     });
     saveSystemMessage(room, userLogin, userName, "call_started", "");
-    const payload = { from: socket.id, name: userName, room, title: title || room };
+    // For a 1-to-1 call the title is the CALLER's name: the client-sent title is the caller's
+    // own header — the callee's name — which then showed up (and renamed the chat) on the callee.
+    const payload = { from: socket.id, name: userName, room, title: room.startsWith("@dm:") ? userName : (title || room) };
     let recips = [];
     try {
       if (room.startsWith("@grp:")) recips = await getGroupMembers(room.slice(5));
@@ -2653,6 +2730,7 @@ io.on("connection", (socket) => {
       notifyUser(login, "call-ring", payload);
       sendPush(login, { kind: "call", title: "📞 " + userName, body: payload.title, room, icon: `${APP_ORIGIN}/api/avatar/${userLogin}` });
     }
+    }
   });
   socket.on("call-leave", () => callLeave());
 
@@ -2660,8 +2738,8 @@ io.on("connection", (socket) => {
   // Relays a payload to a specific peer *login* that is in the same call room. No media ever
   // touches the server — it only forwards the tiny signalling messages between the two browsers.
   socket.on("rtc-signal", ({ to, data } = {}) => {
-    if (!currentRoom || !userLogin || !to || !data) return;
-    const members = callRooms.get(currentRoom); if (!members) return;
+    if (!callRoom || !userLogin || !to || !data) return;   // the CALL's room, not the chat on screen
+    const members = callRooms.get(callRoom); if (!members) return;
     // Sender must actually be in this call room (prevents relaying from outside a call).
     if (![...members.values()].some((v) => v.login === userLogin)) return;
     for (const [sid, info] of members) if (info.login === to && sid !== socket.id) io.to(sid).emit("rtc-signal", { from: userLogin, fromName: userName, data });
@@ -2669,6 +2747,7 @@ io.on("connection", (socket) => {
 
   // Owner-only call moderation (group calls). Cooperative: the target's client obeys the signal.
   socket.on("call-mod", async ({ action, target } = {}) => {
+    const currentRoom = callRoom;   // moderation applies to the call you're in
     if (!currentRoom || !userLogin || !currentRoom.startsWith("@grp:")) return;
     if (!(await isGroupOwner(currentRoom.slice(5), userLogin))) return; // only the group owner
     const members = callRooms.get(currentRoom); if (!members) return;
@@ -2688,7 +2767,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    callLeave();     // the socket is gone for good — this one IS a call exit
+    callLeave(true); // the socket is gone — a call exit, but maybe just a network blip (grace)
     doLeave();
     if (userLogin) {
       removeUserSocket(userLogin, socket.id);
@@ -3099,6 +3178,11 @@ app.get("/api/2fa", async (req, res) => {
 app.post("/api/2fa/setup", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    // Setup writes a new secret and clears totp_enabled — on an account that already has 2FA
+    // that was a password-free way to switch it off. Disabling (which asks for the password)
+    // has to come first.
+    const cur = await getTotp(me.login);
+    if (cur && cur.enabled) return res.status(409).json({ error: "already_enabled" });
     const secret = auth.newTotpSecret();
     await setTotpSecret(me.login, secret);
     res.json({ secret, uri: auth.totpUri(me.login, secret) });

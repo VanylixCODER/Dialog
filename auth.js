@@ -68,9 +68,12 @@ export async function login(identifier, password, code, meta) {
   if (rbu && rbu > Date.now()) throw new Error("report_banned:" + rbu);
   // Second factor last: the password is already known-good, so "totp_required" can't be used
   // to probe which accounts exist.
-  if (u.totp_enabled && u.totp_secret) {
+  // Read the TOTP state on its own: getUser() deliberately doesn't select the secret (that row
+  // feeds profile responses), so checking u.totp_enabled here silently skipped 2FA for everyone.
+  const t = await db.getTotp(u.login);
+  if (t && t.enabled && t.secret) {
     if (!code) throw new Error("totp_required");
-    if (!totpVerify(u.totp_secret, code)) throw new Error("totp_invalid");
+    if (!totpVerifyOnce(u.login, t.secret, code)) throw new Error("totp_invalid");
   }
   return issueToken(u.login, meta);
 }
@@ -152,16 +155,28 @@ function totpAt(secret, counter) {
   return String(bin % 1e6).padStart(6, "0");
 }
 // ±1 step of drift, compared in constant time so a wrong code leaks nothing by timing.
-export function totpVerify(secret, code, window = 1) {
+// Returns the matching time step (truthy) or false.
+function totpMatch(secret, code, window = 1) {
   const c = String(code || "").replace(/\D/g, "");
   if (c.length !== 6 || !secret) return false;
   const step = Math.floor(Date.now() / 30000);
   for (let i = -window; i <= window; i++) {
     const expect = Buffer.from(totpAt(secret, step + i));
     const given = Buffer.from(c);
-    if (expect.length === given.length && timingSafeEqual(expect, given)) return true;
+    if (expect.length === given.length && timingSafeEqual(expect, given)) return step + i;
   }
   return false;
+}
+export function totpVerify(secret, code, window = 1) { return !!totpMatch(secret, code, window); }
+// Login use: a code works ONCE. Without this, a code read over someone's shoulder (or phished)
+// stays valid for its whole ~90s window. Steps only move forward, so one number per account is
+// enough; it lives in memory, which is fine — after a restart the window has long passed.
+const totpLastStep = new Map();
+export function totpVerifyOnce(login, secret, code) {
+  const step = totpMatch(secret, code);
+  if (!step || step <= (totpLastStep.get(login) || 0)) return false;
+  totpLastStep.set(login, step);
+  return true;
 }
 export function totpUri(login, secret, issuer = "Dialog") {
   return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(login)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;

@@ -63,20 +63,63 @@ function beep(freq, dur, vol = 0.05) {
   g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur); o.stop(ctx.currentTime + dur);
 }
 function beepSeq(notes) { let dt = 0; notes.forEach(([f, d, v]) => { setTimeout(() => beep(f, d, v ?? 0.05), dt); dt += d * 900; }); }
+
+// Every UI sound is a named slot. A file in public/src/sounds/ named after the slot
+// (mic_off.mp3, ringtone.ogg, …) replaces the built-in tone; slots without a file keep the
+// synth. The server lists the folder (/src/sounds/manifest.json). One-shots are decoded once
+// into AudioBuffers so they start on the next audio frame instead of after a fetch.
+const SOUND_DIR = "/src/sounds/";
+const soundUrls = new Map();   // slot -> url
+const soundBufs = new Map();   // slot -> decoded AudioBuffer
+const LOOPED_SLOTS = new Set(["ringtone", "ringback"]);   // played through <audio loop>, not decoded
+const soundManifest = fetch(SOUND_DIR + "manifest.json", { cache: "no-cache" })
+  .then((r) => r.json())
+  .then(({ files }) => { for (const f of files || []) { const slot = f.replace(/\.[^.]+$/, "").toLowerCase(); if (!soundUrls.has(slot)) soundUrls.set(slot, SOUND_DIR + f); } })
+  .catch(() => {});
+let soundsDecoding = null;
+function preloadSounds() {
+  if (soundsDecoding) return soundsDecoding;
+  soundsDecoding = soundManifest.then(() => {
+    const ctx = ensureAudioCtx(); if (!ctx) return;
+    return Promise.all([...soundUrls].filter(([slot]) => !LOOPED_SLOTS.has(slot)).map(async ([slot, url]) => {
+      try { soundBufs.set(slot, await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer())); } catch {}
+    }));
+  });
+  return soundsDecoding;
+}
+const _soundLast = new Map();
+function playSound(slot, fallback, vol = 0.8) {
+  const now = performance.now();
+  if (now - (_soundLast.get(slot) || 0) < 120) return;   // a burst (3 peers joining at once) → one chime
+  _soundLast.set(slot, now);
+  const buf = soundBufs.get(slot), ctx = buf && ensureAudioCtx();
+  if (!ctx) { if (fallback) fallback(); return; }
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = buf; g.gain.value = vol; src.connect(g); g.connect(ctx.destination); src.start();
+}
 const sfx = {
-  msg: () => beep(660, 0.12),
-  call: () => beep(880, 0.18),
-  start: () => beepSeq([[440, 0.1], [660, 0.1], [880, 0.13]]),   // вход в звонок
-  end: () => beepSeq([[523, 0.12], [330, 0.18]]),                // выход из звонка
-  join: () => beepSeq([[523, 0.09], [784, 0.12]]),               // участник зашёл
-  leave: () => beepSeq([[784, 0.09], [415, 0.13]]),              // участник вышел
-  mute: () => beep(300, 0.07),
-  unmute: () => beep(560, 0.07),
+  msg: () => playSound("message", () => beep(660, 0.12)),
+  mention: () => playSound("mention", () => beep(880, 0.18)),
+  start: () => playSound("call_start", () => beepSeq([[440, 0.1], [660, 0.1], [880, 0.13]])),
+  end: () => playSound("call_end", () => beepSeq([[523, 0.12], [330, 0.18]])),
+  join: () => playSound("user_join", () => beepSeq([[523, 0.09], [784, 0.12]])),
+  leave: () => playSound("user_leave", () => beepSeq([[784, 0.09], [415, 0.13]])),
+  mute: () => playSound("mic_off", () => beep(300, 0.07)),
+  unmute: () => playSound("mic_on", () => beep(560, 0.07)),
+  deafen: () => playSound("deafen_on", () => beepSeq([[440, 0.07], [262, 0.1]])),
+  undeafen: () => playSound("deafen_off", () => beepSeq([[262, 0.07], [440, 0.1]])),
+  camOn: () => playSound("camera_on", null),      // silent unless a file is provided
+  camOff: () => playSound("camera_off", null),
+  screenOn: () => playSound("screen_start", () => beepSeq([[587, 0.07], [880, 0.1]])),
+  screenOff: () => playSound("screen_stop", () => beepSeq([[880, 0.07], [587, 0.1]])),
 };
+
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const motionOff = () => reduceMotion.matches || document.body.classList.contains("motion-off");
 
 // Per-theme msg SFX hook (currently uniform for all built-in themes).
 function msgSfxForTheme() { return sfx.msg; }
-document.addEventListener("pointerdown", ensureAudioCtx, { once: true });
+document.addEventListener("pointerdown", () => { ensureAudioCtx(); preloadSounds(); }, { once: true });
 
 // ---- Wallpaper (global + per-chat background images) ----
 // BSAV: хранилище — localStorage. Один глобальный dataURL + map chatKey→dataURL
@@ -188,13 +231,11 @@ $("bgFileGlobal") && $("bgFileGlobal").addEventListener("change", (e) => {
   const f = e.target.files[0]; if (!f) return;
   const err = $("bgGlobalError"); if (err) err.textContent = "";
   if (f.size > BG_MAX_BYTES) { if (err) err.textContent = t("bg_too_big"); e.target.value = ""; return; }
-  const r = new FileReader();
-  r.onload = () => {
-    if (!setGlobalBg(r.result)) { if (err) err.textContent = t("bg_quota"); return; }
+  e.target.value = "";
+  compressImage(f, 2560, 0.8).then(readAsDataUrl).then((url) => {
+    if (!setGlobalBg(url)) { if (err) err.textContent = t("bg_quota"); return; }
     renderBgPreviews(); applyWallpaper();
-  };
-  r.onerror = () => { if (err) err.textContent = "Read error"; };
-  r.readAsDataURL(f); e.target.value = "";
+  }, () => { if (err) err.textContent = "Read error"; });
 });
 $("bgRemoveGlobal") && ($("bgRemoveGlobal").onclick = () => { setGlobalBg(null); renderBgPreviews(); applyWallpaper(); });
 
@@ -220,13 +261,11 @@ $("bgFileChat") && $("bgFileChat").addEventListener("change", (e) => {
   const err = $("cbgError"); if (err) err.textContent = "";
   if (f.size > BG_MAX_BYTES) { if (err) err.textContent = t("bg_too_big"); e.target.value = ""; return; }
   const key = $("chatBgModal").dataset.chatkey; if (!key) return;
-  const r = new FileReader();
-  r.onload = () => {
-    if (!setChatBg(key, r.result)) { if (err) err.textContent = t("bg_quota"); return; }
+  e.target.value = "";
+  compressImage(f, 2560, 0.8).then(readAsDataUrl).then((url) => {
+    if (!setChatBg(key, url)) { if (err) err.textContent = t("bg_quota"); return; }
     renderBgPreviews(); applyWallpaper(); refreshBgStatusTexts();
-  };
-  r.onerror = () => { if (err) err.textContent = "Read error"; };
-  r.readAsDataURL(f); e.target.value = "";
+  }, () => { if (err) err.textContent = "Read error"; });
 });
 // «Remove» — снимает override для текущего чата. Если глобальный фон задан, chat
 // автоматически перейдёт на него (resolveBgForChat). Если глобального нет — уйдёт
@@ -296,17 +335,35 @@ function applyTheme(key, animate = false) {
   // for users with old localStorage); unknown keys → matrix. Custom themes no longer exist.
   if (["contrast", "high_contrast", "dracula", "midnight"].includes(key)) key = "matrix";
   else if (!THEMES.find((x) => x.key === key)) key = "matrix";
-  // Smooth cross-fade: a transient .theming class transitions colours on everything so the
-  // old palette mixes into the new one instead of snapping. Skipped on initial load.
-  if (animate) { document.body.classList.add("theming"); clearTimeout(window._themingT); window._themingT = setTimeout(() => document.body.classList.remove("theming"), 480); }
-  document.body.dataset.theme = key;
-  try { localStorage.setItem("dialog_theme", key); } catch {}
-  const grid = $("themeGrid");
-  if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+  const swap = () => {
+    document.body.dataset.theme = key;
+    try { localStorage.setItem("dialog_theme", key); } catch {}
+    const grid = $("themeGrid");
+    if (grid) grid.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === key));
+    applyThemeDerived(key);
+    // Themes can change the default chat wallpaper (e.g. aero → aerobg.png), so repaint
+    // the open chat's background immediately instead of waiting for the next chat open.
+    try { applyWallpaper(); } catch {}
+  };
+  // Cross-fade via the View Transitions API: the browser snapshots the old and new page and
+  // fades the two pictures on the GPU — ONE style recalc. The old way transitioned 7 colour
+  // properties on every element for 450ms (a full-page recalc + repaint each frame, two more
+  // to add/remove the class): seconds of frozen UI on a phone with a long chat open.
+  // No API (older WebViews) or reduced motion → instant switch.
+  if (animate && document.startViewTransition && !motionOff()) document.startViewTransition(swap);
+  else swap();
+}
+// --on-accent / badge colours are derived from the theme's computed palette. Reading that back
+// forces a full-page style recalc right after the switch, so the result is remembered per
+// built-in theme (it never changes) and applied together with the theme in the same frame.
+const THEME_DERIVED_KEY = "dialog_theme_derived_v1";
+const themeDerived = (() => { try { return JSON.parse(localStorage.getItem(THEME_DERIVED_KEY) || "{}") || {}; } catch { return {}; } })();
+function applyThemeDerived(key) {
+  const root = document.documentElement.style, d = themeDerived[key];
+  if (d) { root.setProperty("--on-accent", d.on); root.setProperty("--badge-bg", d.bb); root.setProperty("--badge-fg", d.bf); return; }
   refreshOnAccent();
-  // Themes can change the default chat wallpaper (e.g. aero → aerobg.png), so repaint
-  // the open chat's background immediately instead of waiting for the next chat open.
-  try { applyWallpaper(); } catch {}
+  themeDerived[key] = { on: root.getPropertyValue("--on-accent"), bb: root.getPropertyValue("--badge-bg"), bf: root.getPropertyValue("--badge-fg") };
+  try { localStorage.setItem(THEME_DERIVED_KEY, JSON.stringify(themeDerived)); } catch {}
 }
 
 // ---------- User themes (Theme Studio + Workshop) ----------
@@ -498,9 +555,29 @@ function renderThemes() {
 
 // ---------- Appearance (Settings → Appearances) ----------
 // Glow was removed (kept at 0). Borders now live in the Theme Studio, not here.
+// Corners: one scale (--rk) multiplies every radius in the stylesheet; circles/pills follow via
+// --rc (see :root). 0 = everything square, 1 = as designed, 2 = extra round. Per device.
+const CORNER_PRESETS = [[0, "ap_corners_square"], [1, "ap_corners_default"], [1.8, "ap_corners_round"]];
+function cornerScale() { const v = parseFloat(localStorage.getItem("dialog_ap_corners")); return Number.isFinite(v) ? Math.min(2, Math.max(0, v)) : 1; }
+function applyCorners(v) { document.documentElement.style.setProperty("--rk", String(v)); }
+function renderCornerControls() {
+  const v = cornerScale(), box = $("apCornerOpts"), range = $("apCorners"), val = $("apCornersVal");
+  if (range) range.value = v;
+  if (val) val.textContent = Math.round(v * 100) + "%";
+  if (box && !box.children.length) for (const [pv, key] of CORNER_PRESETS) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "ld-opt"; b.dataset.v = pv;
+    b.textContent = t(key); b.onclick = () => setCorners(pv); box.appendChild(b);
+  }
+  if (box) box.querySelectorAll(".ld-opt").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.v - v) < 0.001));
+}
+function setCorners(v) {
+  try { localStorage.setItem("dialog_ap_corners", String(v)); } catch {}
+  applyCorners(v); renderCornerControls();
+}
 function applyAppearance() {
   document.documentElement.style.setProperty("--glow-strength", "0");
   document.body.classList.remove("custom-border");
+  applyCorners(cornerScale());
 }
 function initAppearanceControls() {
   renderBootSpeed();
@@ -509,6 +586,8 @@ function initAppearanceControls() {
     subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".ap-subpane").forEach((p) => p.classList.toggle("active", p.dataset.apsubpane === b.dataset.apsub));
   });
+  renderCornerControls();
+  const cr = $("apCorners"); if (cr) cr.oninput = () => setCorners(+cr.value);
   const cv = $("apCallViz");
   if (cv) { cv.checked = callVizOn(); cv.onchange = () => localStorage.setItem("dialog_ap_callviz", cv.checked ? "on" : "off"); }
   renderFavThemes();
@@ -1091,9 +1170,12 @@ function enterApp() {
 }
 socket.on("connect", () => {
   if (!token) return;
-  socket.emit("identify", IS_NATIVE && authToken ? { token: authToken } : {});
+  // The P2P media keeps flowing through a socket blip, but the disconnect took us out of the
+  // call server-side — so once we're identified again, step back into it (never re-rings).
+  socket.emit("identify", IS_NATIVE && authToken ? { token: authToken } : {}, () => {
+    if (call.active && call.roomKey) socket.emit("call-join", { title: call.roomTitle, room: call.roomKey, rejoin: true });
+  });
   if (myRoom) socket.emit("join", IS_NATIVE && authToken ? { room: myRoom, token: authToken } : { room: myRoom });
-  // звонок (LiveKit) переподключается сам — наш сокет лишь восстанавливает чат
 });
 socket.on("auth-error", () => { if (IS_NATIVE) { authToken = null; try { localStorage.removeItem("dialog_token"); } catch {} } location.reload(); });
 // Admin kicked this device (or ban): drop just THIS account and reload.
@@ -1149,10 +1231,27 @@ async function syncDMsFromServer() {
   _dmsSynced = true;
   applyPins();
   renderChatList($("searchInput").value);
+  loadPreviews();
 }
 async function persistDMs() {
   const dms = [...chats.values()].filter((c) => c.type === "dm").map(repairDM).slice(0, 50);
   await api("/api/dms", { dms });
+}
+// Fill every row's preview (last message + its time) on load — the list used to stay blank
+// until a new message arrived or you opened the chat. Debounced: DMs and groups load separately.
+let _previewT = 0;
+function loadPreviews() {
+  clearTimeout(_previewT);
+  _previewT = setTimeout(async () => {
+    const rooms = [...chats.keys()]; if (!rooms.length) return;
+    const { ok, data } = await api("/api/chat-previews", { rooms });
+    if (!ok || !data) return;
+    for (const [room, m] of Object.entries(data)) {
+      const c = chats.get(room); if (!c || (clearedChats.get(room) || 0) >= m.ts) continue;
+      if (!c.ts || m.ts >= c.ts || !c.last) { c.last = preview(m); c.ts = Math.max(c.ts || 0, m.ts); }
+    }
+    scheduleChatList();
+  }, 60);
 }
 async function loadGroups() {
   const { ok, data } = await api("/api/groups", null, "GET");
@@ -1160,6 +1259,7 @@ async function loadGroups() {
   data.groups.forEach((g) => { const key = "@grp:" + g.id; if (!chats.has(key)) chats.set(key, { key, type: "group", id: g.id, name: g.name, last: "", ts: 0, unread: 0, pinned: false }); });
   applyPins();
   renderChatList($("searchInput").value);
+  loadPreviews();
 }
 // Mute is stored as { room: untilTs } where 0 = forever. The legacy shape was a plain array of
 // room keys, so anything already muted keeps working and gets migrated on the next change.
@@ -1303,7 +1403,15 @@ function repairDM(c) {
   if (!c.name || c.login === profile.login || c.name === myName) c.name = c.login;
   return c;
 }
+// Hot paths (every incoming message / ping) schedule instead of rebuilding on the spot: a busy
+// group used to tear down and recreate the whole list — every row, every avatar <img> — once per
+// message. Now a burst collapses into one rebuild on the next frame.
+let _chatListRaf = 0;
+function scheduleChatList() {
+  if (!_chatListRaf) _chatListRaf = requestAnimationFrame(() => { _chatListRaf = 0; renderChatList($("searchInput").value); });
+}
 function renderChatList(filter = "") {
+  if (_chatListRaf) { cancelAnimationFrame(_chatListRaf); _chatListRaf = 0; }
   const ul = $("chatList"); ul.innerHTML = ""; filter = filter.toLowerCase();
   for (const c of chats.values()) if (c.type === "dm") repairDM(c);
   const oi = (k) => { const i = chatOrder.indexOf(k); return i === -1 ? 1e9 : i; };
@@ -2826,15 +2934,13 @@ $("cgAvaBtn")?.addEventListener?.("click", () => $("cgAvaFile")?.click());
 $("cgAvaFile")?.addEventListener?.("change", (e) => {
   const f = e.target.files[0]; if (!f) return;
   if (f.size > 5 * 1024 * 1024) { $("cgError").textContent = t("err_avatar_too_big"); return; }
-  const r = new FileReader();
-  r.onload = () => {
-    cgAvatar = r.result;
-    const img = $("cgAvaImg"); img.src = r.result; img.style.display = "block";
+  e.target.value = "";
+  compressImage(f, 512, 0.85).then(readAsDataUrl).then((url) => {
+    cgAvatar = url;
+    const img = $("cgAvaImg"); img.src = url; img.style.display = "block";
     $("cgAvaInit").style.display = "none";
     $("cgAvaClear").classList.remove("hidden");
-  };
-  r.readAsDataURL(f);
-  e.target.value = "";
+  });
 });
 $("cgAvaClear")?.addEventListener?.("click", () => {
   cgAvatar = null;
@@ -3206,6 +3312,7 @@ socket.on("presence", ({ login, status, activity }) => {
     if (sub) sub.textContent = activity ? activityLine(activity) : (status ? t("status_" + status) : t("room_sub_dm"));
   }
   presence.set(login, status); updateDots();
+  if (chatTypeFilter === "online") scheduleChatList();   // the Online tab gains/loses this row
   if (curKind === "dm" && myRoom && login === myRoom.slice(4).split("~").find((l) => l !== profile.login)) {
     $("chatSub").textContent = t("status_" + status);
     const dot = $("chatAva")?.querySelector(".ch-status");
@@ -3259,7 +3366,7 @@ socket.on("profile-updated", ({ login, name, avatarChanged, bannerChanged }) => 
     if (!$("infoPanel").classList.contains("hidden")) renderMembers();
   }
   if (avatarChanged || bannerChanged) avaVer = Date.now();
-  if (changed) { persistDMs(); renderChatList($("searchInput").value); }
+  if (changed) { persistDMs(); scheduleChatList(); }
 });
 
 // ---------- Участники (инфо-панель) ----------
@@ -3435,9 +3542,32 @@ function stickBottomDuringMedia() {
   messagesEl.querySelectorAll(".msg img").forEach((img) => {
     if (!img.complete) img.addEventListener("load", pin, { once: true });
   });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(pin);   // web fonts reflow the bubbles
   setTimeout(releaseStick, 4000); // safety: never fight the user forever
 }
+// Photos arriving after the history is drawn used to push the list down in a visible jump.
+// Hold the list invisible (still laid out, so the pin keeps working) until the last few images
+// have their size, or 300ms at most, then show it already sitting on the newest message.
+function settleThenReveal() {
+  const imgs = [...messagesEl.querySelectorAll(".msg img")].slice(-6).filter((i) => !i.complete);
+  if (!imgs.length) return;
+  messagesEl.classList.add("settling");
+  const done = () => { if (!messagesEl.classList.contains("settling")) return; scrollDown(); messagesEl.classList.remove("settling"); };
+  Promise.all(imgs.map((i) => new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))).then(done);
+  setTimeout(done, 300);
+}
 function releaseStick() { _stickBottom = false; if (_stickMO) { _stickMO.disconnect(); _stickMO = null; } }
+// Only the user's own hand ends the pin. It used to be ANY scroll event that wasn't at the
+// bottom — but our own scrollDown() fires one a frame later, by which time the freshly
+// rendered list had grown, so the pin let go of itself, the "near the top" prefetch pulled in
+// the older chunk, and the chat opened stuck ~a screen above the newest message.
+["wheel", "touchstart", "pointerdown"].forEach((ev) => messagesEl.addEventListener(ev, (e) => {
+  if (!_stickBottom) return;
+  if (ev === "wheel" && e.deltaY > 0) return;   // scrolling DOWN at the bottom isn't leaving it
+  if (ev === "pointerdown" && e.target !== messagesEl) return;   // only a grab of the scrollbar itself
+  releaseStick();
+}, { passive: true }));
+messagesEl.addEventListener("keydown", (e) => { if (_stickBottom && ["PageUp", "ArrowUp", "Home"].includes(e.key)) releaseStick(); });
 // Newest message id currently in the DOM — so "jump to newest" knows whether we
 // already have the latest chunk or must re-fetch it from the server.
 let _newestId = null;
@@ -3459,6 +3589,7 @@ socket.on("history", (list) => {
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   placeUnreadDivider(list.length);
   flushPendingForward();   // a forward waiting on this room's join
+  settleThenReveal();
   stickBottomDuringMedia();
   updateJumpBtn();
   setTimeout(markDeliveredSeenUpToLast, 50);
@@ -3474,7 +3605,8 @@ function placeUnreadDivider(loaded) {
   const div = document.createElement("div");
   div.className = "unread-sep"; div.textContent = t("unread_from_here");
   messagesEl.insertBefore(div, target);
-  target.scrollIntoView({ block: "center" });
+  // The divider marks where the unread starts; the chat itself still opens on the newest
+  // message (stickBottomDuringMedia), as people expect.
 }
 // A jump landed: replace the list with the returned window and flash the anchor. Paging older
 // still works from here — _moreOldest points at the top of the new window.
@@ -3549,12 +3681,14 @@ function updateJumpBtn() { const b = $("jumpNewer"); if (b) b.classList.toggle("
 
 // "Jump to newest": the newest chunk is always in the DOM (pruning only drops
 // older/top chunks), so we unload the older chunks and scroll to the bottom.
-function jumpToNewest() { pruneOldChunks(); scrollDown(); updateJumpBtn(); }
+function jumpToNewest() { pruneOldChunks(); scrollDown(true); updateJumpBtn(); }
 
 messagesEl.addEventListener("scroll", () => {
-  updateJumpBtn();
-  if (_stickBottom && !atBottom()) releaseStick(); // user scrolled away → stop auto-pinning
-  if (atBottom()) pruneOldChunks();
+  // One geometry read per scroll event (atBottom() was evaluated three times per event).
+  const bottom = atBottom();
+  const jb = $("jumpNewer"); if (jb) jb.classList.toggle("show", !bottom);
+  if (_stickBottom) { if (!bottom) scrollDown(); return; }   // still pinned: content grew → follow it
+  if (bottom) pruneOldChunks();
   // Prefetch the next older chunk WELL BEFORE the top (no debounce) so it's
   // already in place by the time the user scrolls up to it — seamless, no
   // visible loading. The _moreLoading guard prevents duplicate requests.
@@ -3585,8 +3719,8 @@ socket.on("message", (m) => {
       renderMessage(m, true, ping);
     }
   }
-  const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); renderChatList($("searchInput").value); }
-  if (!mine && !isDnd()) { if (ping) sfx.call(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
+  const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); scheduleChatList(); }
+  if (!mine && !isDnd()) { if (ping) sfx.mention(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
   // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
   // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
@@ -3604,7 +3738,7 @@ socket.on("rate-limited", ({ reason, localId } = {}) => {
 });
 // Снимок курсоров для всей комнаты (приходит на join и при каждом обновлении).
 socket.on("watermark", ({ updates }) => { applyWatermarkUpdates(updates); });
-socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
+socket.on("dm-ping", ({ room, fromLogin, fromName, mention, ts, last }) => {
   // Room-type aware: a DM ping resolves to (or creates) the DM chat; a GROUP ping updates the
   // existing group chat — NEVER a DM keyed by the sender (that spawned phantom "named-after-them"
   // contacts on every group message).
@@ -3612,13 +3746,13 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
   const c = isDm
     ? upsertChat({ key: room, type: "dm", login: fromLogin, name: fromName, last: "", ts: Date.now(), unread: 0 })
     : chats.get(room);
-  if (c) c.ts = Date.now();
+  if (c) { c.ts = ts || Date.now(); if (last) c.last = preview(last); }
   if (myRoom !== room) {
     if (c) { c.unread = (c.unread || 0) + 1; if (mention) c.mentioned = true; }
     // Mentions ping through a mute (like Discord); ordinary messages respect it. DnD silences all.
     const kind = mention ? "mention" : isDm ? "dm" : "group";
     if (!isDnd() && (mention || !isMuted(room)) && ntAllows(kind)) {
-      ntSound(() => (mention ? sfx.call() : msgSfxForTheme()()));
+      ntSound(() => (mention ? sfx.mention() : msgSfxForTheme()()));
       ntVibrate(mention ? 60 : 25);
       const line = mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName });
       ntToast(line, room);
@@ -3626,7 +3760,13 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention }) => {
     }
   }
   if (isDm) persistDMs();
-  renderChatList($("searchInput").value);
+  scheduleChatList();
+});
+// Silent preview refresh for a chat you're not viewing (call started/ended, …).
+socket.on("chat-preview", ({ room, ts, last } = {}) => {
+  const c = chats.get(room); if (!c || !last || room === myRoom) return;
+  c.last = preview(last); if (ts) c.ts = ts;
+  scheduleChatList();
 });
 socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_by_recipient" ? t("blocked_by_user") : r === "blocked_sender" ? t("blocked_msg_send") : t("dm_need_friend")); if (r) loadRelations(); });
 socket.on("channel-readonly", () => notify(t("channel_readonly")));
@@ -4554,6 +4694,26 @@ $("upCancel")?.addEventListener?.("click", () => {
   if (uploadingCount <= 0) hideProgress();
 });
 
+// Re-encode a still image as WebP, longest side capped at maxDim. Phone photos are 3–10× smaller
+// this way (and lose their EXIF — GPS location included). GIF/SVG pass through untouched (they'd
+// lose animation / vectors), as does anything WebP wouldn't actually shrink.
+const COMPRESSIBLE = /^image\/(jpeg|png|webp|bmp|avif|heic|heif)$/i;
+async function compressImage(file, maxDim = 2560, quality = 0.82) {
+  if (!file || !COMPRESSIBLE.test(file.type || "")) return file;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const k = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(bmp, 0, 0, w, h); bmp.close && bmp.close();
+    const blob = await new Promise((res) => cv.toBlob(res, "image/webp", quality));
+    if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return file;
+    const name = (file.name || "image").replace(/\.[^.]+$/, "") + ".webp";
+    return new File([blob], name, { type: "image/webp", lastModified: file.lastModified });
+  } catch { return file; }   // undecodable here (e.g. HEIC on desktop Chrome) → send as-is
+}
+const readAsDataUrl = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+
 function sendFile(file, caption) {
   if (!file || !file.size || !myRoom) return null;
   const blocked = spamBlock("", true); // файлы — только анти-флуд, без проверки дублей
@@ -4567,7 +4727,10 @@ function sendFile(file, caption) {
   const cap = (type === "image" || type === "gif" || type === "video") ? String(caption || "").trim().slice(0, 1024) : "";
   const localId = ++localIdCounter;
   uploadingCount++;
-
+  (type === "image" ? compressImage(file) : Promise.resolve(file)).then((f) => readFileForSend(f, type, cap, localId));
+  return null;
+}
+function readFileForSend(file, type, cap, localId) {
   const reader = new FileReader();
   reader.onprogress = (e) => {
     if (e.lengthComputable) showProgress(file, (e.loaded / e.total) * 100);
@@ -4589,7 +4752,6 @@ function sendFile(file, caption) {
     notify("File read error");
   };
   reader.readAsDataURL(file);
-  return null;
 }
 // ---------- Clipboard paste preview ----------
 let _clipFile = null;
@@ -5152,6 +5314,16 @@ function removeParticipant(identity) {
 function removeTile(id) {
   const t = $("tile-" + id); if (!t) return;
   const wasFocused = t.classList.contains("focused");
+  // Someone leaving fades and shrinks out instead of blinking away. The id comes off first, so
+  // a quick re-join builds a fresh tile rather than finding this one mid-exit. Spotlight and
+  // fullscreen relayout around the tile synchronously, so those still remove it on the spot.
+  if (!wasFocused && t.animate && !motionOff() && !$("callStage").classList.contains("fs-call")) {
+    t.removeAttribute("id"); t.classList.add("tile-leaving");
+    const gone = () => t.remove();
+    t.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.92)" }],
+      { duration: 170, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" }).finished.then(gone, gone);
+    return;
+  }
   t.remove();
   if (wasFocused) { vzUnbind(); dissolveStrip(); vGrid.classList.remove("has-focus"); }
   scheduleFsLayout();
@@ -5220,8 +5392,8 @@ function focusTile(tile) {
   } else {
     vzUnbind();
     vGrid.classList.remove("has-focus");
-    if (fs) scheduleFsLayout();
   }
+  scheduleFsLayout();   // spotlight on → the gallery steps aside; off → it re-forms
 }
 
 // ── Pinch / wheel zoom on the spotlighted stream ────────────────────────────
@@ -5335,26 +5507,51 @@ function vzUnbind() {
 // Balanced, rectangular fullscreen grid (Discord-style): compute the column
 // count + tile width that maximises tile size for 16:9 rectangles that fit the
 // stage, so tiles are never stretched into tall portrait columns.
+// One gallery layout for the docked stage AND fullscreen (phones use their own layouts).
+// Every tile is the same 16:9 box whether it shows video or an avatar, sized to the largest
+// grid that fits the space — so a camera turning on or off never changes anyone's tile, and
+// tiles are never cropped by the stage or hidden under the controls. Recomputed whenever the
+// stage resizes (ResizeObserver) or someone joins/leaves.
 let fsLayoutRaf = 0;
 function scheduleFsLayout() { cancelAnimationFrame(fsLayoutRaf); fsLayoutRaf = requestAnimationFrame(layoutFsTiles); }
 function layoutFsTiles() {
-  if (!vGrid.classList.contains("fs") || vGrid.classList.contains("has-focus")) return;
-  const tiles = vGrid.querySelectorAll(":scope > .tile");
+  const st = $("callStage");
+  const off = !call.active || st.classList.contains("hidden") || st.classList.contains("wa-call")
+    || vGrid.classList.contains("pip-grid") || vGrid.classList.contains("has-focus");
+  vGrid.classList.toggle("gal", !off);
+  syncBarFit();
+  if (off) return;
+  const tiles = vGrid.querySelectorAll(":scope > .tile:not(.tile-leaving)");
   const n = tiles.length; if (!n) return;
-  const W = vGrid.clientWidth, H = vGrid.clientHeight; if (!W || !H) return;
-  const gap = 12, ratio = 16 / 9;
-  let best = { w: 0, cols: 1 };
+  const cs = getComputedStyle(vGrid);
+  const W = vGrid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const H = vGrid.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  if (W <= 0 || H <= 0) return;
+  const gap = parseFloat(cs.columnGap) || 10, ratio = 16 / 9;
+  let best = { w: 0, h: 0, cols: 1 };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
-    const cw = (W - gap * (cols - 1)) / cols;
-    const ch = (H - gap * (rows - 1)) / rows;
+    const cw = (W - gap * (cols - 1)) / cols, ch = (H - gap * (rows - 1)) / rows;
     let w = cw, h = w / ratio;
     if (h > ch) { h = ch; w = h * ratio; }
-    if (w > best.w) best = { w, cols };
+    if (w > best.w + 0.5) best = { w, h, cols };
   }
+  // A lone tile doesn't need to fill a huge monitor edge to edge.
+  const cap = n === 1 ? Math.min(best.w, 960) : best.w;
   vGrid.style.setProperty("--fs-cols", best.cols);
-  vGrid.style.setProperty("--fs-tw", Math.floor(best.w) + "px");
+  vGrid.style.setProperty("--g-tw", Math.floor(cap) + "px");
+  vGrid.style.setProperty("--g-th", Math.floor(cap / ratio) + "px");
+  vGrid.style.setProperty("--fs-tw", Math.floor(cap) + "px");
 }
+// A narrow dock can't fit every control in one row: secondary buttons fold into the ⋮ menu
+// (same one phones use) instead of wrapping into a second row.
+function syncBarFit() {
+  const st = $("callStage"), bar = st && st.querySelector(".call-bar"); if (!bar) return;
+  const narrow = !isMobile() && st.clientWidth > 0 && st.clientWidth < 560;
+  st.classList.toggle("cs-narrow", narrow);
+  st.style.setProperty("--bar-h", bar.offsetHeight + "px");
+}
+if (window.ResizeObserver) new ResizeObserver(() => scheduleFsLayout()).observe(vGrid);
 
 // Small, auto-fading hint telling the user how to leave the spotlight.
 function showGridHint() {
@@ -5367,7 +5564,7 @@ function showGridHint() {
   h.classList.add("show");
   clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove("show"), 3200);
 }
-function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen)").length; if (typeof syncWa === "function") syncWa(); }
+function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen):not(.tile-leaving)").length; if (typeof syncWa === "function") syncWa(); }
 function updateCallStatus() {
   const el = $("callStatus"); if (!el) return;
   if (!call.active) { el.textContent = ""; el.className = "call-status"; return; }
@@ -5430,7 +5627,7 @@ function addTileCava(tileId, mst) {
   const tile = $("tile-" + tileId); if (!tile) { try { src.disconnect(); } catch {} return; }
   let canvas = tile.querySelector(".tile-cava");
   if (!canvas) { canvas = document.createElement("canvas"); canvas.className = "tile-cava"; canvas.setAttribute("aria-hidden", "true"); tile.appendChild(canvas); }
-  cavaNodes.set(tileId, { analyser, data: new Uint8Array(analyser.frequencyBinCount), canvas, src });
+  cavaNodes.set(tileId, { analyser, data: new Uint8Array(analyser.frequencyBinCount), canvas, src, quietAt: -1e9, live: false });
   startCavaLoop();
 }
 function removeTileCava(tileId) {
@@ -5442,30 +5639,47 @@ function removeTileCava(tileId) {
 function clearAllCava() { [...cavaNodes.keys()].forEach(removeTileCava); cancelAnimationFrame(cavaLoopRaf); cavaLoopRaf = 0; }
 function startCavaLoop() {
   if (cavaLoopRaf) return;
-  const tick = () => {
+  let last = 0, sampled = -1e9, accent = "#00ff5a";
+  const tick = (now) => {
     if (!call.active || !cavaNodes.size) { cavaLoopRaf = 0; return; }
     cavaLoopRaf = requestAnimationFrame(tick);
-    if (document.hidden) return;
+    if (document.hidden || now - last < 32) return;   // ~30fps is plenty for level bars
+    last = now;
+    // Style and layout are sampled about once a second, not every frame: getComputedStyle and
+    // clientWidth each force a recalc, and interleaved with the class writes below they turned
+    // every frame into a layout thrash for the whole call.
+    if (now - sampled > 1000) {
+      sampled = now;
+      accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-400").trim() || "#00ff5a";
+      cavaNodes.forEach((n) => { if (n.canvas) { n.w = n.canvas.clientWidth; n.h = n.canvas.clientHeight; } });
+    }
     const show = callVizOn();
-    const accent = (getComputedStyle(document.documentElement).getPropertyValue("--accent-400").trim() || "#00ff5a");
     cavaNodes.forEach((n) => {
       const c = n.canvas; if (!c) return;
-      if (!show) { if (c.style.display !== "none") c.style.display = "none"; return; }
-      if (c.style.display === "none") c.style.display = "";
-      if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; }
       n.analyser.getByteFrequencyData(n.data);
-      const cx = c.getContext("2d"), w = c.width, h = c.height, N = n.data.length; if (!cx) return;
-      cx.clearRect(0, 0, w, h); const bw = w / N; let sum = 0;
-      cx.fillStyle = accent;
-      for (let i = 0; i < N; i++) { const v = n.data[i] / 255; sum += v; const bh = Math.max(2, v * h * 0.9); cx.fillRect(i * bw + bw * 0.18, h - bh, bw * 0.64, bh); }
-      const tile = c.parentElement;
-      if (tile) {
-        const live = sum / N > 0.05;
-        tile.classList.toggle("cava-live", live);
-        // The green ring came from LiveKit's ActiveSpeakersChanged, which died with the P2P
-        // switch — and your own tile never had an analyser at all, so you could never see
-        // yourself talking. One measurement now drives both, for every tile.
-        tile.classList.toggle("speaking", live);
+      const N = n.data.length; let sum = 0;
+      for (let i = 0; i < N; i++) sum += n.data[i];
+      if (!show) { if (c.style.display !== "none") c.style.display = "none"; }
+      else {
+        if (c.style.display === "none") { c.style.display = ""; sampled = -1e9; }
+        if (n.w && (c.width !== n.w || c.height !== n.h)) { c.width = n.w; c.height = n.h; }
+        const cx = c.getContext("2d"), w = c.width, h = c.height, bw = w / N;
+        if (cx) {
+          cx.clearRect(0, 0, w, h); cx.fillStyle = accent;
+          for (let i = 0; i < N; i++) { const bh = Math.max(2, (n.data[i] / 255) * h * 0.9); cx.fillRect(i * bw + bw * 0.18, h - bh, bw * 0.64, bh); }
+        }
+      }
+      // Speaking ring (drives both .cava-live and .speaking, for every tile incl. your own).
+      // A 300ms hold bridges the gaps between syllables, so the ring stays on through a
+      // sentence instead of strobing — every flip restarted its pulse animation and repainted
+      // the tile's glow.
+      const loud = sum / N / 255 > 0.05;
+      if (loud) n.quietAt = 0; else if (!n.quietAt) n.quietAt = now;
+      const live = loud || now - n.quietAt < 300;
+      if (live !== n.live) {
+        n.live = live;
+        const tile = c.parentElement;
+        if (tile) { tile.classList.toggle("cava-live", live); tile.classList.toggle("speaking", live); }
       }
     });
   };
@@ -5569,12 +5783,16 @@ $("reactBtn") && ($("reactBtn").onclick = (e) => { e.stopPropagation(); openCall
 // Hoist it to <body> while open so it's viewport-fixed and unclipped, then put it
 // back on close so the desktop inline layout is unchanged.
 const callMoreHome = $("callMore") ? $("callMore").parentElement : null;
+// Marks the menu's home slot: putting it back with appendChild dropped it AFTER the hang-up
+// button, so React/Deafen drifted to the end of the row after the first open.
+const callMoreAnchor = document.createComment("callMore");
+if (callMoreHome) callMoreHome.insertBefore(callMoreAnchor, $("callMore"));
 function setCallMore(open) {
   const m = $("callMore"); if (!m) return;
   // Hoist onto #callStage (not the filtered pill) so it's unclipped and viewport-
   // fixed, while still inheriting the call's button styling. Restore on close.
   if (open) { ($("callStage") || document.body).appendChild(m); m.classList.add("open"); }
-  else { m.classList.remove("open"); if (callMoreHome && m.parentElement !== callMoreHome) callMoreHome.appendChild(m); }
+  else { m.classList.remove("open"); if (callMoreHome && m.parentElement !== callMoreHome) callMoreHome.insertBefore(m, callMoreAnchor.nextSibling); }
 }
 $("callMoreBtn") && ($("callMoreBtn").onclick = (e) => { e.stopPropagation(); setCallMore(!$("callMore").classList.contains("open")); });
 document.addEventListener("click", (e) => { const m = $("callMore"); if (m && m.classList.contains("open") && !m.contains(e.target) && e.target !== $("callMoreBtn")) setCallMore(false); });
@@ -5716,6 +5934,8 @@ function p2pEnsurePeer(login, name) {
   m = { pc, makingOffer: false, ignoreOffer: false, polite: profile.login > login, name: name || p2pNameFor(login), candQueue: [], restartT: 0 };
   call.peers.set(login, m);
   ensureTile(login, m.name, false);
+  stopRingback();
+  if (Date.now() - (call.joinedAt || 0) > 1500) sfx.join();
   if (call.localStream) for (const track of call.localStream.getTracks()) { try { pc.addTrack(track, call.localStream); } catch {} }
   // Already sharing when they joined → publish the screen to them as well.
   if (call.screenStream) { p2pAttachScreen(m); socket.emit("rtc-signal", { to: login, data: { screen: call.screenStream.id } }); }
@@ -5813,6 +6033,7 @@ function p2pOnTrack(login, m, e) {
 }
 async function p2pOnSignal({ from, fromName, data }) {
   if (!call.active || !from || !data) return;
+  if (call.iceWait) { await call.iceWait; if (!call.active) return; }   // build peers with TURN available
   const m = p2pEnsurePeer(from, fromName); if (!m) return;
   if (data.mic !== undefined) { setMicIndicator(lkTile(from), !data.mic); return; }  // remote mute indicator
   if (data.screen) { p2pOnScreenSignal(from, data.screen); return; }
@@ -5842,6 +6063,7 @@ function p2pClosePeer(login) {
   clearTimeout(m.restartT);
   try { m.pc.close(); } catch {}
   call.peers.delete(login); removeParticipant(login); updateCallStatus();
+  if (call.active) sfx.leave();
 }
 function p2pLeaveAll() {
   if (call.peers) { for (const m of call.peers.values()) { clearTimeout(m.restartT); try { m.pc.close(); } catch {} } call.peers.clear(); }
@@ -5852,27 +6074,43 @@ function p2pLeaveAll() {
 // Establish/tear down peer connections to match who's in the call room (from call-state).
 function p2pReconcile(logins) {
   if (!call.active || !call.peers) return;
+  if (call.iceWait) { call.iceWait.then(() => p2pReconcile(logins)); return; }
   const want = new Set((logins || []).filter((l) => l !== profile.login));
   for (const l of want) p2pEnsurePeer(l, p2pNameFor(l));
   for (const l of [...call.peers.keys()]) if (!want.has(l)) p2pClosePeer(l);
 }
 
 async function joinCall() {
+  if (call.active || call.joining) return;
   ensureAudioCtx();
+  // Pin the room now: the mic prompt can take a while, and the user may open another chat
+  // meanwhile — the call must still go to the chat it was started from.
+  const room = myRoom, title = curTitle, kind = curKind;
+  if (!room) return;
+  call.joining = true;
   let stream;
   // Echo cancellation stays (it stops you hearing yourself); the browser's own noise
   // suppression is off so the single user-facing switch is the only thing shaping the mic.
   const micCon = { echoCancellation: true, noiseSuppression: false, autoGainControl: true };
   if (call.audioInId) micCon.deviceId = { ideal: call.audioInId };
+  // TURN credentials load in the background. The ring no longer waits for them (that fetch
+  // goes out to Metered and could hold the ring back by a second); instead, building a peer
+  // connection waits for them (call.iceWait — see p2pReconcile / p2pOnSignal), which in
+  // practice is long done by the time a human has tapped Accept.
+  call.iceWait = p2pGetIce().catch(() => {}).then(() => { call.iceWait = null; });
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: micCon, video: false }); }
-  catch (e) { alert(t("err_media") + (e.message || "")); return; }
-  await p2pGetIce();   // warm the ICE (STUN+TURN) cache so peer creation is synchronous
+  catch (e) { call.joining = false; alert(t("err_media") + (e.message || "")); return; }
+  call.joining = false;
   call.localStream = stream; call.peers = new Map();
-  call.active = true; call.room = null; call.roomKey = myRoom; call.roomTitle = curTitle; call.minimized = false; call.kind = curKind;
+  call.active = true; call.room = null; call.roomKey = room; call.roomTitle = title; call.minimized = false; call.kind = kind;
+  // Ring first — everything below is local UI. The room is named explicitly: the server's
+  // idea of "the chat you're in" can lag a quick chat switch, and a call-join against the
+  // wrong (or no) room was silently dropped — nobody rang.
+  socket.emit("call-join", { title, room });
   startCallMatrix(); startPing();
   $("startCallBtn").classList.add("in-call"); hideToast(); syncCallUI(); updateCallStatus(); sfx.start(); startCallTimer();
   applySpeaker(); // restore the saved loudspeaker/earpiece route (native mobile only)
-  if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(curKind === "group" ? t("t_call") : t("call_dm"), curTitle || ""); } catch (e) {} }
+  if (NATIVE && NATIVE.callStarted) { try { NATIVE.callStarted(kind === "group" ? t("t_call") : t("call_dm"), title || ""); } catch (e) {} }
   ensureTile(profile.login, myName + " " + t("you_suffix"), true); setTileAvatar("me", true);
   // Your own mic feeds the same visualiser as everyone else's.
   try { const mt = stream.getAudioTracks()[0]; if (mt) addTileCava("me", mt); } catch {}
@@ -5882,14 +6120,16 @@ async function joinCall() {
   $("flipCam") && $("flipCam").classList.add("hidden"); // camera starts off
   populateDevices(); startKeepAlive(); updateCallStatus(); updateCallButton();
   $("toggleDeafen").classList.remove("off"); $("toggleDeafen").innerHTML = window.ICON.headphones;
-  dismissNotif(myRoom);
+  dismissNotif(room);
   if (pttOn) setMic(false);   // push-to-talk: start muted, hold Space to talk
   syncCallOwnerUI();
   if (rnnOn) applyRnnoise(true);   // opt-in strong noise cancel
-  socket.emit("call-join", { title: curTitle }); // ring others + объявить звонок в комнате
+  call.joinedAt = Date.now(); scheduleRingback();
+  // A call-state may have landed while the stage was being built — connect to whoever's there.
+  const known = activeCalls.get(room); if (known) p2pReconcile(known.logins);
 }
 function endCall() {
-  hideToast(); stopRingtone();
+  hideToast(); stopRingtone(); stopRingback();
   exitPipIfAny(); // close the OS picture-in-picture window if one is open
   if (isCallFullscreen()) exitCallFullscreen(); // tear down native/overlay fullscreen
   const wasActive = call.active;
@@ -5932,7 +6172,7 @@ function endCall() {
 let _callTimer = null, _callStart = 0;
 function startCallTimer() {
   _callStart = Date.now();
-  const title = $("cmhTitle"); if (title) title.textContent = curKind === "group" ? t("t_call") : t("call_dm");
+  const title = $("cmhTitle"); if (title) title.textContent = call.roomTitle || curTitle || (curKind === "group" ? t("t_call") : t("call_dm"));
   const tick = () => {
     const s = Math.floor((Date.now() - _callStart) / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
@@ -5950,13 +6190,18 @@ socket.on("call-ring", (p) => {
   if (call.active) return;
   ensureAudioCtx();
   if (!isMuted(p.room) && !isDnd()) {
-    if (!NATIVE) sfx.call(); // native app rings via the OS (ringer/DND-aware)
     notify(t("call_in", { title: p.title }), p.room);
   }
   const kind = p.room.startsWith("@grp:") ? "group" : "dm";
   showToast(p.from, p.name, { room: p.room, title: p.title, kind });
 });
-socket.on("call-auto-end", () => { if (call.active) endCall(); });
+// Server ended the call for us: nobody answered, everyone else left, or it ended while we were
+// reconnecting. Only if it's the call we're in.
+socket.on("call-auto-end", ({ room, reason } = {}) => {
+  if (!call.active || (room && room !== call.roomKey)) return;
+  endCall();
+  if (reason === "alone" || reason === "ended") notify(t("call_ended_alone"));
+});
 // Owner moderation, target side (cooperative).
 socket.on("call-forced", ({ action, by } = {}) => {
   if (action === "mute" && call.active && call.micOn) { setMic(false); notify(t("mod_muted_by", { name: by || "" })); }
@@ -5984,14 +6229,22 @@ function showDeviceTakeover() {
 }
 
 // Контролы
-async function setMic(on) {
+// A quick press-and-settle on a control whose state just flipped, so the change registers even
+// when the icon swap is subtle. Web Animations: no class juggling, no forced reflow.
+function bumpBtn(el) {
+  if (!el || !el.animate || motionOff()) return;
+  el.animate([{ transform: "scale(0.86)" }, { transform: "scale(1.07)", offset: 0.55 }, { transform: "scale(1)" }],
+    { duration: 280, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+}
+async function setMic(on, quiet) {
   call.micOn = on;
   if (call.localStream) call.localStream.getAudioTracks().forEach((tk) => { tk.enabled = on; });   // P2P
   if (call._rnn && call._rnn.processed) call._rnn.processed.enabled = on;   // keep the RNNoise-processed track in sync
   else if (call.room) { try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {} } // legacy
   p2pBroadcast({ mic: on });   // tell peers so their mic indicator on my tile updates
   $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
-  setMicIndicator("me", !on); (on ? sfx.unmute : sfx.mute)();
+  setMicIndicator("me", !on); bumpBtn($("toggleMic"));
+  if (!quiet) (on ? sfx.unmute : sfx.mute)();
 }
 $("toggleMic").onclick = () => { if (!call.active) return; setMic(!call.micOn); };
 // Заглушить наушники (deafen) — глушим входящий звук; по-дискордовски выключаем и свой микрофон
@@ -6002,16 +6255,17 @@ $("toggleDeafen").onclick = () => {
   screenAudioEls.forEach((a) => (a.muted = call.deaf));
   $("toggleDeafen").classList.toggle("off", call.deaf);
   $("toggleDeafen").innerHTML = window.ICON[call.deaf ? "headphonesOff" : "headphones"];
-  if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false); }
-  else if (call.micWasOn) setMic(true);
+  if (call.deaf) { call.micWasOn = call.micOn; if (call.micOn) setMic(false, true); }
+  else if (call.micWasOn) setMic(true, true);
+  bumpBtn($("toggleDeafen")); (call.deaf ? sfx.deafen : sfx.undeafen)();
 };
 // Лимит одновременных видеопотоков в групповом звонке (камеры + демонстрации экрана).
 // В DM участников максимум двое, поэтому ограничение касается только групп.
 const STREAM_LIMIT = 3;
 const isGroupCall = () => (call.roomKey || "").startsWith("@grp:");
 function videoStreamCount() {
-  return vGrid.querySelectorAll(".tile.screen").length
-       + vGrid.querySelectorAll(".tile:not(.screen):not(.show-avatar)").length;
+  return vGrid.querySelectorAll(".tile.screen:not(.tile-leaving)").length
+       + vGrid.querySelectorAll(".tile:not(.screen):not(.show-avatar):not(.tile-leaving)").length;
 }
 // true → можно включать свой поток; false → достигнут лимит (показываем уведомление)
 function canStartStream() {
@@ -6051,6 +6305,7 @@ $("toggleCam").onclick = async () => {
   }
   $("toggleCam").classList.toggle("off", !call.camOn);
   $("toggleCam").innerHTML = window.ICON[call.camOn ? "camera" : "cameraOff"];
+  bumpBtn($("toggleCam")); (call.camOn ? sfx.camOn : sfx.camOff)();
   updateFlipCamBtn();
 };
 // Flip between the phone's front/back cameras (cycles video inputs). The button
@@ -6107,7 +6362,7 @@ function fsReparent(el) {
 function fsRestore(el) { if (el && el._homeParent && el.parentElement !== el._homeParent) { el._homeParent.appendChild(el); } }
 function openScreenModal() { const m = $("screenModal"); if (!m) return; $("ssError").textContent = ""; fsReparent(m); m.classList.remove("hidden"); }
 function closeScreenModal() { const m = $("screenModal"); if (m) { m.classList.add("hidden"); fsRestore(m); const cb = $("ssIncludeAudio"); if (cb) cb.checked = false; } }
-function setShareActive(on) { call.sharing = on; $("shareScreen").classList.toggle("active", on); }
+function setShareActive(on) { if (call.sharing !== on) bumpBtn($("shareScreen")); call.sharing = on; $("shareScreen").classList.toggle("active", on); }
 // ---------- Screen share over P2P ----------
 // The screen travels as its own MediaStream (separate from the mic/camera stream), and a tiny
 // `{screen: <streamId>}` signal tells peers which arriving stream is a screen rather than a
@@ -6139,7 +6394,7 @@ async function startScreenShare() {
   for (const m of call.peers.values()) p2pAttachScreen(m);
   p2pBroadcast({ screen: stream.id });
   addScreenTile("me", myName + " " + t("you_suffix"), vTrack);
-  setShareActive(true);
+  setShareActive(true); sfx.screenOn();
   vTrack.addEventListener("ended", () => stopScreenShare());   // browser's own "Stop sharing"
   closeScreenModal();
 }
@@ -6150,6 +6405,7 @@ function p2pAttachScreen(m) {
   try { if (!m.scrASender && screenAudioTrack) m.scrASender = m.pc.addTrack(screenAudioTrack, call.screenStream); } catch {}
 }
 async function stopScreenShare() {
+  const wasSharing = !!call.screenStream;
   if (call.peers) {
     for (const m of call.peers.values()) {
       if (m.scrSender) { try { m.pc.removeTrack(m.scrSender); } catch {} m.scrSender = null; }
@@ -6160,6 +6416,7 @@ async function stopScreenShare() {
   if (call.screenStream) for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} }
   call.screenStream = null; screenTrack = null; screenAudioTrack = null;
   removeTile("screen-me");
+  if (call.active && wasSharing) sfx.screenOff();
   setShareActive(false);
 }
 // A peer told us which of their streams is a screen — promote any video we already have from
@@ -6701,8 +6958,8 @@ function waEligible() {
   const st = $("callStage");
   return isMobile() && call.active && call.kind === "dm"
     && !st.classList.contains("hidden") && !st.classList.contains("fs-call")
-    && vGrid.querySelectorAll(".tile.screen").length === 0
-    && vGrid.querySelectorAll(".tile:not(.screen)").length === 2;   // you + one peer
+    && vGrid.querySelectorAll(".tile.screen:not(.tile-leaving)").length === 0
+    && vGrid.querySelectorAll(".tile:not(.screen):not(.tile-leaving)").length === 2;   // you + one peer
 }
 let waCorner = (() => { try { return localStorage.getItem("dialog_wa_corner") || "tr"; } catch { return "tr"; } })();
 function applyWaCorner() {
@@ -6836,8 +7093,9 @@ function fsBackgroundTap(e) {
 function applyFsState(on) {
   const st = callStageEl(); if (!st) return;
   const btn = $("expandBtn"), facesBtn = $("toggleFaces");
-  if (btn) btn.classList.toggle("active", on);
+  if (btn) { btn.classList.toggle("active", on); btn.innerHTML = window.ICON[on ? "shrink" : "expand"]; }
   st.classList.toggle("fs-call", on);
+  scheduleFsLayout();
   st.classList.toggle("manual-fs", on && manualFs);
   if (on) {
     vGrid.classList.remove("pip-grid");
@@ -6882,6 +7140,9 @@ function applyFsState(on) {
     facesBtn.onclick = () => { const hidden = vGrid.classList.toggle("faces-hidden"); facesBtn.classList.toggle("active", hidden); };
   }
   const onFsChange = () => { if (!manualFs) applyFsState(isCallFullscreen()); };
+  // Esc leaves fullscreen even when it's our in-page overlay (iOS / blocked Fullscreen API),
+  // which the browser's own Esc handling doesn't know about.
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && manualFs && call.active) exitCallFullscreen(); });
   document.addEventListener("fullscreenchange", onFsChange);
   document.addEventListener("webkitfullscreenchange", onFsChange);
 })();
@@ -6900,11 +7161,18 @@ let callMatrixRaf = 0;
 function startCallMatrix() {
   const c = $("callMatrix"); if (!c) return; const ctx = c.getContext("2d");
   const chars = "アイウエオカキ0123456789ABCDEF<>/{}".split(""); let cols = 0, drops = [];
-  const frame = () => {
+  // Every theme but Matrix hides this canvas (display:none), and Matrix shows it at 5% opacity —
+  // yet it used to repaint full-size at 60fps for the whole call. Now: 24fps, and no drawing at
+  // all while it has no box. Size is re-read once a second (a theme switch mid-call still works).
+  let last = 0, sampled = -1e9, cw = 0, ch = 0;
+  const frame = (now = performance.now()) => {
     // Вкладка скрыта — пауза canvas: снижаем нагрузку на CPU в фоне; возобновляется через visibilitychange.
     if (document.hidden) { callMatrixRaf = 0; return; }
     callMatrixRaf = requestAnimationFrame(frame);
-    if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; cols = Math.floor(c.width / 16); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
+    if (now - sampled > 1000) { sampled = now; cw = c.clientWidth; ch = c.clientHeight; }
+    if (!cw || now - last < 41) return;
+    last = now;
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; cols = Math.floor(c.width / 16); drops = new Array(cols).fill(0).map(() => Math.random() * -50); }
     ctx.fillStyle = "rgba(0,7,0,0.09)"; ctx.fillRect(0, 0, c.width, c.height); ctx.font = "14px monospace";
     for (let i = 0; i < cols; i++) { ctx.fillStyle = Math.random() > 0.98 ? "#b6ffd2" : "#00ff5a"; ctx.fillText(chars[(Math.random() * chars.length) | 0], i * 16, drops[i] * 16); if (drops[i] * 16 > c.height && Math.random() > 0.975) drops[i] = 0; drops[i]++; }
   };
@@ -6973,9 +7241,9 @@ function startRingtone() {
   ensureAudioCtx();
   ensureRingAnalyser();
   startCava();
-  // Always the real ringtone file (public/ringtone.mp3) — no synth fallback.
+  // A ringtone dropped into public/src/sounds/ wins; otherwise the bundled public/ringtone.mp3.
   if (!ringAudioEl) {
-    ringAudioEl = new Audio("/ringtone.mp3");
+    ringAudioEl = new Audio(soundUrls.get("ringtone") || "/ringtone.mp3");
     ringAudioEl.loop = true;
     ringAudioEl.preload = "none";
     ringAudioEl.addEventListener("error", () => { console.warn("ringtone.mp3 failed to load"); }, { once: true });
@@ -6998,6 +7266,31 @@ function startRingtoneSynth() {
   playRingChord();
   ring.toneLoop = setInterval(playRingChord, 4500);
 }
+// Outgoing "calling…" tone: plays while you sit alone in a DM call waiting for them to pick
+// up, and stops the moment their peer connection appears (or the call ends).
+let ringbackEl = null, ringbackLoop = 0, ringbackT = 0;
+function scheduleRingback() {
+  clearTimeout(ringbackT);
+  // call-state lands within a few hundred ms; if they were already in the call, no tone at all.
+  ringbackT = setTimeout(() => { if (call.active && call.kind === "dm" && call.peers && !call.peers.size) startRingback(); }, 600);
+}
+function startRingback() {
+  stopRingback();
+  const url = soundUrls.get("ringback");
+  if (url) {
+    if (!ringbackEl) { ringbackEl = new Audio(url); ringbackEl.loop = true; }
+    applySinkId(ringbackEl); ringbackEl.currentTime = 0; ringbackEl.play().catch(() => {});
+  } else {
+    const tone = () => { beep(440, 0.9, 0.03); beep(480, 0.9, 0.03); };
+    tone(); ringbackLoop = setInterval(tone, 3000);
+  }
+  ringbackT = setTimeout(stopRingback, 60000);   // nobody answered — don't drone on forever
+}
+function stopRingback() {
+  clearTimeout(ringbackT); ringbackT = 0;
+  clearInterval(ringbackLoop); ringbackLoop = 0;
+  if (ringbackEl) { try { ringbackEl.pause(); } catch {} }
+}
 function stopRingtone() {
   clearInterval(ring.toneLoop); ring.toneLoop = null;
   if (ringAudioEl) { try { ringAudioEl.pause(); ringAudioEl.currentTime = 0; } catch {} }
@@ -7012,9 +7305,14 @@ function startCava() {
   // Pull the theme accent so the visualizer matches whatever theme is active.
   const cs = getComputedStyle(document.body);
   const rgb = (cs.getPropertyValue("--primary-rgb").trim() || "0,255,90");
-  const frame = () => {
+  // Size is read at most once a second, and the canvas is only resized when it actually
+  // changed: assigning width/height reallocates the backing store, and doing it (plus the
+  // layout read right after last frame's style write) every frame was the ring screen's jank.
+  let sampled = -1e9, tw = 0, th = 0;
+  const frame = (now = performance.now()) => {
     ring.raf = requestAnimationFrame(frame); const dpr = devicePixelRatio || 1;
-    canvas.width = toast.clientWidth * dpr; canvas.height = toast.clientHeight * dpr;
+    if (now - sampled > 1000) { sampled = now; tw = Math.round(toast.clientWidth * dpr); th = Math.round(toast.clientHeight * dpr); }
+    if (canvas.width !== tw || canvas.height !== th) { canvas.width = tw; canvas.height = th; }
     const w = canvas.width, h = canvas.height, mid = h / 2; cx.clearRect(0, 0, w, h);
     if (ring.analyser) ring.analyser.getByteFrequencyData(ring.data);
     const bw = w / N; let sum = 0;
@@ -7082,7 +7380,7 @@ function showToast(from, name, ctx) {
   pendingCall = ctx || null; $("toastName").textContent = name;
   let callerLogin = ""; if (ctx?.room?.startsWith("@dm:")) callerLogin = ctx.room.slice(4).split("~").find((l) => l !== profile.login) || "";
   $("toastAvatar").innerHTML = callerLogin ? `<img src="${avaUrl(callerLogin)}" data-fallback="remove"><span>${initials(name)}</span>` : `<span>${initials(name)}</span>`;
-  $("toastSub").textContent = ctx ? t("call_in", { title: ctx.title }) : t("toast_started");
+  $("toastSub").textContent = ctx && ctx.kind === "group" ? t("ci_incoming_group", { title: ctx.title || "" }) : t("ci_incoming");
   $("callToast").classList.remove("hidden");
   // On the Android app, hand off to the native full-screen call screen (ringtone/vibrate
   // there respects the phone's ringer/DND mode). Otherwise play the in-app ringtone.
@@ -7092,7 +7390,8 @@ function showToast(from, name, ctx) {
 function hideToast() { clearTimeout(toastTimer); pendingCall = null; $("callToast").classList.add("hidden"); stopRingtone(); nativeCancelIncomingCall(); }
 $("toastJoin").onclick = () => {
   const pc = pendingCall;
-  if (pc && pc.room !== myRoom) { hideToast(); openRoomByKey(pc.room, pc.title); setTimeout(joinCall, 600); } else joinCall();
+  if (pc && pc.room !== myRoom) openRoomByKey(pc.room);   // sets myRoom synchronously
+  hideToast(); joinCall();
 };
 $("toastClose").onclick = hideToast;
 
@@ -7124,7 +7423,12 @@ function openRoomByKey(room, title) {
   if (!room || !profile) return;
   const kind = room.startsWith("@grp:") ? "group" : "dm";
   const partner = kind === "dm" ? room.slice(4).split("~").find((l) => l !== profile.login) : undefined;
-  openChat({ key: room, type: kind, login: partner, id: kind === "group" ? room.slice(5) : undefined, name: title || (kind === "dm" ? partner : chats.get(room)?.name || "Group"), last: "", ts: Date.now(), unread: 0 });
+  // An existing chat keeps its name. A passed-in title is only a fallback for a chat we don't
+  // have yet — it used to overwrite the name, and a ring's title is the CALLER's header, i.e.
+  // your own name, so accepting a call renamed your friend's chat to you.
+  const known = chats.get(room)?.name;
+  const useTitle = title && !(kind === "dm" && (title === myName || title === profile.login)) ? title : "";
+  openChat({ key: room, type: kind, login: partner, id: kind === "group" ? room.slice(5) : undefined, name: known || useTitle || (kind === "dm" ? partner : "Group"), last: "", ts: Date.now(), unread: 0 });
 }
 window.addEventListener("load", () => { const p = new URLSearchParams(location.search); const r = p.get("room"); if (r) setTimeout(() => { if (profile) { openRoomByKey(r); if (p.get("autojoin")) setTimeout(() => { if (!call.active) joinCall(); }, 1200); } }, 800); });
 
@@ -7151,7 +7455,7 @@ function updatePing(ms) {
   const region = serverRegion ? serverRegion.toUpperCase() : "";
   pingEl.textContent = "";
   const dot = document.createElement("span");
-  dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;background:currentColor;flex-shrink:0";
+  dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:calc(50% * var(--rc));margin-right:4px;background:currentColor;flex-shrink:0";
   pingEl.appendChild(dot);
   if (region) { const r = document.createElement("span"); r.textContent = region + " "; pingEl.appendChild(r); }
   const v = document.createElement("span"); v.textContent = ms; pingEl.appendChild(v);
@@ -7180,7 +7484,9 @@ function startPing() {
 }
 
 // ---------- Утилиты ----------
-function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+// Instant by default: .messages has scroll-behavior:smooth, so a plain scrollTop assignment
+// animated every open from the top of the loaded history down to the newest message.
+function scrollDown(smooth = false) { messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: smooth ? "smooth" : "instant" }); }
 // Phone: when the keyboard opens (input focus / viewport shrinks), keep the latest messages in view.
 $("msgInput") && $("msgInput").addEventListener("focus", () => { setTimeout(scrollDown, 100); setTimeout(scrollDown, 350); });
 if (window.visualViewport) window.visualViewport.addEventListener("resize", () => { if (document.activeElement === $("msgInput")) scrollDown(); });
@@ -7351,6 +7657,13 @@ function updateBotCmds(c) {
   api("/api/profile/" + c.login, null, "GET").then(({ ok, data }) => {
     if (!ok || myRoom !== key) return;
     curPartner = { login: c.login, isBot: !!data.isBot, dmOpen: !!data.dmOpen };
+    // Self-heal the chat's name from the server: older builds could rename a DM to YOUR name
+    // when you accepted a call from another chat (see openRoomByKey).
+    if (data.name && c.name !== data.name) {
+      c.name = data.name; curTitle = data.name; $("chatTitle").textContent = data.name; renderSecretBadge();
+      if (call.active && call.roomKey === key) call.roomTitle = data.name;
+      persistDMs(); scheduleChatList();
+    }
     if (data.isBot) {
       curBotCommands = data.commands || [];
       if (btn) btn.classList.toggle("hidden", !curBotCommands.length);
@@ -7847,13 +8160,30 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- Иконки ----------
+// Close buttons: one plain ✕ everywhere. The markup and older code write a text "✕", which
+// the UI font doesn't have — each platform drew its own fallback glyph at its own size. Swap
+// it for the Lucide icon and tag the button .x-btn (styling in style.css), including ✕s that
+// are created later (menus, previews, rows), via one cheap observer.
+function xify(root) {
+  const scan = (el) => {
+    if (el.nodeType !== 1 || el.classList.contains("x-btn")) return;
+    if ((el.tagName === "BUTTON" || el.getAttribute("role") === "button") && el.childElementCount === 0 && el.textContent.trim() === "✕") {
+      el.innerHTML = window.ICON.close; el.classList.add("x-btn");
+      if (!el.getAttribute("aria-label")) el.setAttribute("aria-label", el.getAttribute("title") || t("close"));
+    }
+  };
+  scan(root); if (root.querySelectorAll) root.querySelectorAll("button, [role=button]").forEach(scan);
+}
+xify(document.body);
+new MutationObserver((recs) => { for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1) xify(n); })
+  .observe(document.body, { childList: true, subtree: true });
 function setIcons() {
   // ВАЖНО: newChatBtn теперь это кнопка-шестерёнка «Settings» (⚙ в HTML) — иконку «edit»
   // мы не перетираем. profileBtn и contactsBtn — открывают settings overlay, для них оставляем наконечник-тултип.
   const map = { emojiBtn: "emoji", attachBtn: "attach", voiceBtn: "mic", sendBtn: "send", muteBtn: "bell", startCallBtn: "phone", infoBtn: "info", backBtnMobile: "back", settingsBack: "back", contactsBtn: "users", accountBtn: "userSwitch", adminBtn: "shield", discoverBtn: "compass", chatSearchBtn: "search", toggleMic: "mic", toggleCam: "camera", toggleDeafen: "headphones", shareScreen: "monitor", reactBtn: "smile", flipCam: "flipCamera", cmhFlip: "flipCamera", moreBtn: "plus", hangUp: "phoneOff", infoClose: "close", mpCancel: "close", pipBtn: "pip" };
   // Settings-tab icons (mobile list + desktop tabs): fill each .stab-ico from its data-ico.
   document.querySelectorAll(".stab-ico[data-ico]").forEach((el) => { const ic = window.ICON[el.dataset.ico]; if (ic) el.innerHTML = ic; });
-  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "emoji_stickers", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup", pipBtn: "t_pip" };
+  const tips = { muteBtn: "mute_room", startCallBtn: "t_call", infoBtn: "info", emojiBtn: "emoji_stickers", attachBtn: "t_attach", voiceBtn: "t_voice", sendBtn: "t_send", toggleMic: "t_mic", toggleCam: "t_cam", toggleDeafen: "t_deafen", shareScreen: "t_screen", flipCam: "flip_cam", hangUp: "t_hangup", contactsBtn: "contacts", accountBtn: "switch_account", adminBtn: "admin_panel", minBtn: "minimize", vbMic: "t_mic", vbDeafen: "t_deafen", vbHang: "t_hangup", pipBtn: "t_pip", callMoreBtn: "t_more", expandBtn: "t_window", activityBtn: "act_launch", toggleFaces: "fs_faces" };
   for (const [id, name] of Object.entries(map)) { const el = $(id); if (el && window.ICON[name]) el.innerHTML = window.ICON[name]; }
   // These get the CSS [data-tip] pill; drop the native `title` so the browser doesn't
   // ALSO pop its own tooltip (that's the "two overlapping" doubling). EXCEPT inside
@@ -7867,8 +8197,8 @@ function setIcons() {
   // Кнопки входящего звонка получают подпись снизу (инлайн .ci-label — без data-tip,
   // чтобы [data-tip]::after не дублировал ту же подпись при наведении).
   const toastJoin = $("toastJoin"), toastClose = $("toastClose");
-  if (toastJoin) { toastJoin.innerHTML = window.ICON.phone + '<span class="ci-label">' + t("toast_join") + '</span>'; }
-  if (toastClose) { toastClose.innerHTML = window.ICON.phoneOff + '<span class="ci-label">' + t("t_hangup") + '</span>'; }
+  if (toastJoin) { toastJoin.innerHTML = window.ICON.phone; toastJoin.setAttribute("aria-label", t("ci_accept")); }
+  if (toastClose) { toastClose.innerHTML = window.ICON.phone; toastClose.setAttribute("aria-label", t("ci_decline")); }   // rotated into a hang-up handset by CSS
 }
 $("searchInput").addEventListener("input", (e) => { fetchGlobalUsers(e.target.value); renderChatList(e.target.value); });
 $("chatFilters").addEventListener("click", (e) => {
