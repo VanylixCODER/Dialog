@@ -5543,14 +5543,52 @@ function layoutFsTiles() {
   vGrid.style.setProperty("--g-th", Math.floor(cap / ratio) + "px");
   vGrid.style.setProperty("--fs-tw", Math.floor(cap) + "px");
 }
-// A narrow dock can't fit every control in one row: secondary buttons fold into the ⋮ menu
-// (same one phones use) instead of wrapping into a second row.
+// The control row must always fit on one line, whatever the window size. Measured, not guessed:
+// first everything inline; if that overflows, the secondary group goes behind ⋮; if it STILL
+// overflows (a narrow dock, a small phone), buttons fold into ⋮ one by one, least needed first.
+// Mic, ⋮ and hang-up never fold. Each folded button keeps a comment marker for its way home.
+const FOLD_ORDER = ["pipBtn", "shareScreen", "expandBtn", "toggleFaces", "toggleCam"];
+const foldHome = new Map();   // id -> comment node marking its slot in the bar
+function unfoldAll() {
+  for (const [id, mark] of foldHome) { const b = $(id); if (b && mark.parentNode) mark.parentNode.insertBefore(b, mark); if (b) b.classList.remove("folded"); }
+}
 function syncBarFit() {
-  const st = $("callStage"), bar = st && st.querySelector(".call-bar"); if (!bar) return;
-  const narrow = !isMobile() && st.clientWidth > 0 && st.clientWidth < 560;
-  st.classList.toggle("cs-narrow", narrow);
+  const st = $("callStage"), bar = st && st.querySelector(".call-bar"), row = bar && bar.querySelector(".call-actions");
+  if (!row || st.classList.contains("hidden")) return;
+  if ($("callMore") && $("callMore").classList.contains("open")) setCallMore(false);
+  // Sum of what the buttons need vs the room there is. (Not scrollWidth: every button's hover
+  // tooltip is an absolutely-positioned pill that pokes out sideways and counts as overflow.)
+  const px = (el, k) => parseFloat(getComputedStyle(el)[k]) || 0;
+  const fits = () => {
+    const items = [];
+    for (const c of row.children) {
+      if (getComputedStyle(c).display === "contents") items.push(...c.children); else items.push(c);
+    }
+    const shown = items.filter((e) => getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 0);
+    const need = shown.reduce((a, e) => a + e.getBoundingClientRect().width, 0) + px(row, "columnGap") * Math.max(0, shown.length - 1) + px(row, "paddingLeft") + px(row, "paddingRight");
+    let room = bar.clientWidth - px(bar, "paddingLeft") - px(bar, "paddingRight");
+    if (st.classList.contains("fs-call")) {   // floating bar shrink-wraps: its room is the screen
+      const meta = bar.querySelector(".call-meta");
+      room = st.clientWidth * 0.96 - px(bar, "paddingLeft") - px(bar, "paddingRight") - (meta ? meta.getBoundingClientRect().width + px(bar, "columnGap") : 0);
+    }
+    return need <= room + 1;
+  };
+  unfoldAll();
+  st.classList.remove("cs-narrow", "cs-folding");
+  if (!isMobile() && fits()) { st.style.setProperty("--bar-h", bar.offsetHeight + "px"); return; }
+  if (!isMobile()) st.classList.add("cs-narrow");
+  const more = $("callMore");
+  for (const id of FOLD_ORDER) {
+    if (fits()) break;
+    const b = $(id); if (!b || !b.offsetParent || !more) continue;   // hidden ones take no room anyway
+    if (!foldHome.has(id)) foldHome.set(id, document.createComment(id));
+    b.parentNode.insertBefore(foldHome.get(id), b);
+    more.insertBefore(b, more.firstChild); b.classList.add("folded");
+    st.classList.add("cs-folding");
+  }
   st.style.setProperty("--bar-h", bar.offsetHeight + "px");
 }
+if (window.ResizeObserver) new ResizeObserver(() => syncBarFit()).observe($("callStage"));
 if (window.ResizeObserver) new ResizeObserver(() => scheduleFsLayout()).observe(vGrid);
 
 // Small, auto-fading hint telling the user how to leave the spotlight.
@@ -7517,6 +7555,16 @@ document.addEventListener("error", (e) => {
   else if (fb === "hide") { el.style.display = "none"; }
   else { el.remove(); }   // "remove" — let the initials behind the avatar show
 }, true);   // capture: image error events don't bubble
+// The initial behind an avatar is only for when there's no photo. Photos with transparent parts
+// (logos, cut-outs) let it show through, so once a real image loads its holder gets .img-ok and the
+// letter goes. The server answers "no avatar" with a 1×1 transparent PNG — that's not a photo.
+document.addEventListener("load", (e) => {
+  const el = e.target;
+  if (!el || el.tagName !== "IMG" || !el.dataset || el.dataset.fallback === undefined || !el.parentElement) return;
+  if (el.naturalWidth <= 1 && el.naturalHeight <= 1) { el.parentElement.classList.remove("img-ok"); el.dispatchEvent(new Event("error")); return; }
+  el.parentElement.classList.add("img-ok");
+}, true);
+document.addEventListener("error", (e) => { const el = e.target; if (el && el.tagName === "IMG" && el.parentElement) el.parentElement.classList.remove("img-ok"); }, true);
 document.addEventListener("submit", (e) => {
   if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-nodefault")) e.preventDefault();
 }, true);

@@ -6458,3 +6458,17 @@ body:not([data-theme="aero"]) .app *, body:not([data-theme="aero"]) .settings-ov
 /* Opening a chat whose newest messages are photos: see settleThenReveal() in app.js. */
 #messages.settling { visibility: hidden; }
 
+
+/* Avatars: a loaded photo hides the fallback initial (bare text or a class-less <span>).
+   Status dots and badges inside the avatar have classes and stay visible. */
+.img-ok { color: transparent !important; text-shadow: none !important; }
+.img-ok > span:not([class]) { visibility: hidden; }
+
+/* Call controls: always one row; syncBarFit() folds buttons into ⋮ until it fits. */
+#callStage .call-bar { min-width: 0; max-width: 100%; }
+#callStage .call-actions { flex-wrap: nowrap; max-width: 100%; min-width: 0; }
+#callStage.cs-folding #callMoreBtn { display: grid; }
+#callStage > .call-more.open { flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+/* A pill only reads as a pill on one row: a wrapped ⋮ menu becomes an oval. Radius = half a row
+   (follows the Corners setting via --rk). */
+#callStage > .call-more.open { border-radius: calc((var(--cbtn, 42px) / 2 + 8px) * var(--rk)); }
