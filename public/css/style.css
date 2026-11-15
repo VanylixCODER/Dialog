@@ -6254,7 +6254,10 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   background: transparent; border: none; box-shadow: none; color: var(--text-dim);
 }
 .x-btn { transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
-.x-btn:hover, .x-btn:focus-visible { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; border-color: transparent !important; }
+/* Red on a real hover only: on touch screens :hover sticks to whatever was tapped, which left
+   the ✕ glowing red. Keyboard focus still shows it. */
+@media (hover: hover) { .x-btn:hover { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; border-color: transparent !important; } }
+.x-btn:focus-visible { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; border-color: transparent !important; }
 .x-btn:active { transform: scale(0.92); opacity: 1; }
 .x-btn.danger { color: var(--danger); }
 .sp-x.x-btn > svg, .pe-banner-x.x-btn > svg, .cg-clear.x-btn > svg { width: 13px; height: 13px; stroke-width: 2.5; }
@@ -6569,4 +6572,13 @@ body:not([data-theme="aero"]) .app *, body:not([data-theme="aero"]) .settings-ov
 @media (prefers-reduced-motion: reduce) {
   .rec-halo, #composer #sendBtn { transition: none; }
   #composer .rec-slide .rec-chev, .rec-lock .rl-chev, #composer .rec-dot { animation: none; }
+}
+
+/* The ✕ lines up with the title it belongs to. It sat at a fixed top: 10px — 9 px below the
+   Settings title on phones (and poking out of the header), ~10 px above every modal title. */
+.settings-head { position: relative; }   /* the ✕ is placed against the header, not the whole card */
+.settings-head > .hub-close { top: calc(50% - 16px); right: 12px; }
+.modal-card > .hub-close { top: 21px; right: 14px; }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
+  .settings-head > .hub-close { top: calc(50% - 19px); right: 10px; }   /* 38 px tap target here */
 }

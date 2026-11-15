@@ -2733,6 +2733,17 @@ io.on("connection", (socket) => {
     }
   });
   socket.on("call-leave", () => callLeave());
+  // The callee pressed Decline. Their other devices stop ringing; in a 1-to-1 call the caller is
+  // told (they stay in the call and can keep waiting — so the no-answer auto-end is called off).
+  // In a group, one person declining is nobody else's business.
+  socket.on("call-decline", async ({ room } = {}) => {
+    if (!userLogin || typeof room !== "string" || !(await mayUseRoom(room))) return;
+    notifyUser(userLogin, "call-cancelled", { room });
+    const meta = callMeta.get(room), c = callRooms.get(room);
+    if (!meta || meta.answered || !c || !room.startsWith("@dm:")) return;
+    clearTimeout(meta.ringTimer); meta.ringTimer = null; meta.declined = true;
+    for (const [sid, info] of c) if (info.login !== userLogin) io.to(sid).emit("call-declined", { room, login: userLogin, name: userName });
+  });
 
   // ---- Custom P2P WebRTC signalling relay (SDP offer/answer + ICE) ----
   // Relays a payload to a specific peer *login* that is in the same call room. No media ever

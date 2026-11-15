@@ -5720,8 +5720,8 @@ function updateCallStatus() {
     else if (states.some((x) => x === "failed" || x === "disconnected")) s = "reconnecting";
     else s = "connecting";
   } else if (call.room) { s = call.room.state; }        // legacy LiveKit
-  else { s = "waiting"; }                                // alone in the call, waiting for someone to join
-  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected", waiting: "call_waiting", unreachable: "call_unreachable" };
+  else { s = call.declinedBy !== undefined ? "declined" : "waiting"; }   // alone, waiting (or they said no for now)
+  const map = { connecting: "call_connecting", connected: "call_connected", reconnecting: "call_disconnected", disconnected: "call_disconnected", waiting: "call_waiting", unreachable: "call_unreachable", declined: "call_declined_status" };
   el.textContent = t(map[s] || "call_waiting");
   el.className = "call-status " + (s === "connected" ? "ok" : s === "reconnecting" || s === "disconnected" ? "bad" : "");
 }
@@ -6246,6 +6246,7 @@ async function joinCall() {
   call.joining = false;
   call.localStream = stream; call.peers = new Map();
   call.active = true; call.room = null; call.roomKey = room; call.roomTitle = title; call.minimized = false; call.kind = kind;
+  delete call.declinedBy;
   // Ring first — everything below is local UI. The room is named explicitly: the server's
   // idea of "the chat you're in" can lag a quick chat switch, and a call-join against the
   // wrong (or no) room was silently dropped — nobody rang.
@@ -6300,6 +6301,7 @@ function endCall() {
   $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
+  delete call.declinedBy;
   if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
   krispNode = null; stopCallMatrix();
@@ -7510,8 +7512,8 @@ function unregisterFcm() {
 // Native calls these back from the IncomingCallActivity buttons.
 window.__dialogCall = {
   answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },
-  decline() { hideToast(); },
-  declineDnd() { hideToast(); try { setMyStatus("dnd"); } catch (e) {} },
+  decline(room) { declineCall(room); },
+  declineDnd(room) { declineCall(room); try { setMyStatus("dnd"); } catch (e) {} },
   // Ongoing-call notification actions (Mute / End).
   mute() { const b = $("toggleMic"); if (b) b.click(); },
   end() { const b = $("hangUp"); if (b) b.click(); },
@@ -7536,7 +7538,22 @@ $("toastJoin").onclick = () => {
   if (pc && pc.room !== myRoom) openRoomByKey(pc.room);   // sets myRoom synchronously
   hideToast(); joinCall();
 };
-$("toastClose").onclick = hideToast;
+// Decline tells the caller (and silences your other devices) — closing the card used to be
+// purely local, so the caller just kept ringing into the void for the full minute.
+function declineCall(room) {
+  const r = room || (pendingCall && pendingCall.room);
+  if (r) socket.emit("call-decline", { room: r });
+  hideToast();
+}
+$("toastClose").onclick = () => declineCall();
+// The person you called declined. You stay in the call (they can still join from the chat's
+// "Join call" banner); the calling tone stops and the status says so.
+socket.on("call-declined", ({ room, name } = {}) => {
+  if (!call.active || room !== call.roomKey) return;
+  call.declinedBy = name || "";
+  stopRingback(); updateCallStatus();
+  notify(t("call_declined", { name: name || "" }));
+});
 
 // ---------- Push ----------
 let swReg = null;
