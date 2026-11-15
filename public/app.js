@@ -3879,7 +3879,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     else if (m.type === "sticker") inner += `<div class="bubble sticker"><img src="${m.media}" alt="${escapeHtml(m.mediaName || "")}" loading="lazy" decoding="async"></div>`;
     else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "video") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
-    else if (m.type === "audio") inner += `<div class="bubble audio">🎤 <audio controls src="${m.media}" preload="none"></audio></div>`;
+    else if (m.type === "audio") inner += voiceBubbleHTML(m.media);
     else if (m.type === "file") {
       const safeName = escapeHtml(m.mediaName || t("file_untitled"));
       const sizeBytes = m.mediaSize || mediaBytesFromDataUrl(m.media);
@@ -4877,6 +4877,108 @@ socket.on("file-rejected", ({ reason, maxMb } = {}) => {
   if (reason === "save_failed") notify(t("file_rejected_size", { mb: MAX_FILE_SIZE_MB }));
   else notify(t("file_rejected_size", { mb: maxMb || MAX_FILE_SIZE_MB }));
 });
+// ---------- Voice message player (Telegram / Discord style) ----------
+// A round play button, the clip's real waveform (filled as it plays, tap/drag to seek), the
+// length (or position while playing) and a 1× / 1.5× / 2× speed chip. The waveform + duration
+// come from decoding the clip once it scrolls into view — MediaRecorder webm has no duration
+// header, so the browser's own player couldn't even show the length. One clip plays at a time.
+const vpData = new Map();   // src -> Promise<{ peaks: number[], dur }>
+let vpAudio = null, vpCur = null, vpRaf = 0;
+let vpRate = parseFloat(localStorage.getItem("dialog_vp_rate")) || 1;
+function voiceBubbleHTML(src) {
+  return `<div class="bubble voice" data-src="${escapeHtml(src || "")}"><button class="vp-play" type="button" aria-label="${t("vp_play")}">${window.ICON.play || "▶"}</button>` +
+    `<div class="vp-body"><canvas class="vp-wave"></canvas><div class="vp-meta"><span class="vp-time">0:00</span><button class="vp-speed" type="button">${vpRate}×</button></div></div></div>`;
+}
+const vpFmt = (s) => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function vpLoad(src) {
+  if (!vpData.has(src)) vpData.set(src, (async () => {
+    // Short clips are stored inline as data: URLs, which the CSP doesn't let fetch() load —
+    // decode the base64 ourselves; uploaded files (/uploads/…) are fetched normally.
+    let buf;
+    if (src.startsWith("data:")) { const b64 = src.slice(src.indexOf(",") + 1), bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); buf = u8.buffer; }
+    else buf = await (await fetch(src)).arrayBuffer();
+    const ab = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(buf);   // no user gesture needed
+    const ch = ab.getChannelData(0), N = 64, step = Math.floor(ch.length / N) || 1, peaks = [];
+    for (let i = 0; i < N; i++) { let m = 0; for (let j = i * step; j < (i + 1) * step && j < ch.length; j += 16) m = Math.max(m, Math.abs(ch[j])); peaks.push(m); }
+    const top = Math.max(...peaks) || 1;
+    return { peaks: peaks.map((p) => Math.max(0.08, p / top)), dur: ab.duration };
+  })().catch(() => ({ peaks: Array.from({ length: 64 }, (_, i) => 0.25 + 0.2 * Math.abs(Math.sin(i * 1.7))), dur: 0 })));
+  return vpData.get(src);
+}
+function vpDraw(el, progress = 0) {
+  const cv = el.querySelector(".vp-wave"), d = el._vp; if (!cv || !d) return;
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(el), played = cs.getPropertyValue("--vp-played").trim() || "#00ff5a", rest = cs.getPropertyValue("--vp-rest").trim() || "rgba(128,128,128,.45)";
+  const bw = 3, gap = 2, n = Math.max(8, Math.floor((w + gap) / (bw + gap)));
+  for (let i = 0; i < n; i++) {
+    const p = d.peaks[Math.floor(i / n * d.peaks.length)], bh = Math.max(3, p * h);
+    g.fillStyle = (i + 0.5) / n <= progress ? played : rest;
+    if (g.roundRect) { g.beginPath(); g.roundRect(i * (bw + gap), (h - bh) / 2, bw, bh, 1.5); g.fill(); } else g.fillRect(i * (bw + gap), (h - bh) / 2, bw, bh);
+  }
+}
+const vpObserver = "IntersectionObserver" in window ? new IntersectionObserver((ents) => {
+  for (const e of ents) if (e.isIntersecting) { vpObserver.unobserve(e.target); vpPrepare(e.target); }
+}, { rootMargin: "200px" }) : null;
+async function vpPrepare(el) {
+  if (el._vp) return el._vp;
+  el._vp = await vpLoad(el.dataset.src);
+  el.querySelector(".vp-time").textContent = vpFmt(el._vp.dur);
+  vpDraw(el, el === vpCur && vpAudio ? vpAudio.currentTime / (el._vp.dur || 1) : 0);
+  return el._vp;
+}
+function vpWatch(root) { root.querySelectorAll(".bubble.voice:not([data-vpw])").forEach((el) => { el.dataset.vpw = "1"; if (vpObserver) vpObserver.observe(el); else vpPrepare(el); }); }
+new MutationObserver(() => vpWatch(messagesEl)).observe(messagesEl, { childList: true, subtree: true });
+function vpStop() {
+  cancelAnimationFrame(vpRaf);
+  if (vpAudio) vpAudio.pause();
+  if (vpCur) { vpCur.classList.remove("playing"); vpCur.querySelector(".vp-play").innerHTML = window.ICON.play || "▶"; vpDraw(vpCur, 0); if (vpCur._vp) vpCur.querySelector(".vp-time").textContent = vpFmt(vpCur._vp.dur); }
+  vpCur = null;
+}
+async function vpPlay(el, at) {
+  const d = await vpPrepare(el);
+  if (vpCur !== el) { vpStop(); vpAudio = vpAudio || new Audio(); vpAudio.src = el.dataset.src; vpCur = el; }
+  const dur = d.dur || vpAudio.duration || 0;
+  if (at != null && dur) vpAudio.currentTime = at * dur;
+  vpAudio.playbackRate = vpRate;
+  vpAudio.onended = vpStop;
+  try { await vpAudio.play(); } catch { return; }
+  el.classList.add("playing"); el.querySelector(".vp-play").innerHTML = window.ICON.pause || "❚❚";
+  const tick = () => {
+    if (vpCur !== el || vpAudio.paused) return;
+    const total = d.dur || vpAudio.duration || 1;
+    vpDraw(el, vpAudio.currentTime / total); el.querySelector(".vp-time").textContent = vpFmt(vpAudio.currentTime);
+    vpRaf = requestAnimationFrame(tick);
+  };
+  cancelAnimationFrame(vpRaf); vpRaf = requestAnimationFrame(tick);
+}
+function vpPause(el) {
+  if (vpCur !== el || !vpAudio) return;
+  vpAudio.pause(); cancelAnimationFrame(vpRaf);
+  el.classList.remove("playing"); el.querySelector(".vp-play").innerHTML = window.ICON.play || "▶";
+}
+messagesEl.addEventListener("click", (e) => {
+  const el = e.target.closest(".bubble.voice"); if (!el) return;
+  if (e.target.closest(".vp-play")) { (vpCur === el && vpAudio && !vpAudio.paused) ? vpPause(el) : vpPlay(el); }
+  else if (e.target.closest(".vp-speed")) {
+    vpRate = vpRate === 1 ? 1.5 : vpRate === 1.5 ? 2 : 1;
+    try { localStorage.setItem("dialog_vp_rate", String(vpRate)); } catch {}
+    messagesEl.querySelectorAll(".vp-speed").forEach((b) => b.textContent = vpRate + "×");
+    if (vpAudio) vpAudio.playbackRate = vpRate;
+  }
+});
+messagesEl.addEventListener("pointerdown", (e) => {
+  const cv = e.target.closest(".vp-wave"); if (!cv) return;
+  const el = cv.closest(".bubble.voice");
+  const seek = (ev) => { const r = cv.getBoundingClientRect(); vpPlay(el, Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width))); };
+  seek(e);
+  const move = (ev) => { if (vpCur === el && el._vp && vpAudio) { const r = cv.getBoundingClientRect(); const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)); vpAudio.currentTime = f * (el._vp.dur || vpAudio.duration || 0); vpDraw(el, f); } };
+  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+});
+window.addEventListener("resize", () => messagesEl.querySelectorAll(".bubble.voice").forEach((el) => vpDraw(el, el === vpCur && vpAudio && el._vp ? vpAudio.currentTime / (el._vp.dur || 1) : 0)));
+
 // ---------- Voice messages (WhatsApp / Telegram logic) ----------
 // Empty input ⇒ the round button is a mic.
 //   • Hold it: records; release sends. Slide LEFT to cancel, slide UP to lock (hands-free).
