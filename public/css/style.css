@@ -6653,3 +6653,34 @@ body[data-page="chat"]:not([data-theme="aero"]) { background-image: none; }
 
 /* Settings header: no tinted band and no line under it — the title just sits on the card. */
 body:not([data-theme="aero"]) .settings-head { background: transparent; border-bottom: 0; }
+
+/* ═════════════ Flashbang, reimagined ═════════════
+   Daylight / camera-flash: paper white on a warm off-white base, ink-black type, and ONE hot
+   accent — signal orange — kept for actions only (send, active tab, switches, links, focus).
+   Your own messages are solid ink with white text, theirs light grey; flat, no borders, no
+   wallpaper. The blinding easter-egg flash + its confirm dialog are unchanged (app.js). */
+body[data-theme="flashbang"] {
+  --primary-rgb: 255, 77, 0;
+  --accent-100: #0a0a0a; --accent-200: #1a1a1a; --accent-300: #3a3a3a;
+  --accent-400: #ff4d00; --accent-500: #e04300; --accent-600: #b83700;
+  --accent-glow: rgba(255, 77, 0, 0.22); --accent-soft: rgba(255, 77, 0, 0.12); --accent-faint: rgba(255, 77, 0, 0.06);
+  --bg-0: #f2f2f0; --bg-1: #ffffff; --bg-2: #fafaf9; --bg-3: #f1f1ef; --bg-4: #e8e8e5;
+  --surface-1: rgba(10, 10, 10, 0.03); --surface-2: rgba(10, 10, 10, 0.05); --surface-3: rgba(10, 10, 10, 0.08);
+  --border-1: rgba(10, 10, 10, 0.09); --border-2: rgba(10, 10, 10, 0.16); --border-3: rgba(10, 10, 10, 0.3);
+  --text: #2a2a2a; --text-strong: #0a0a0a; --text-dim: #6b6b6b;
+  --danger: #dc2626; --cyan-300: #0a0a0a;
+  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06); --shadow-md: 0 6px 18px rgba(10, 10, 10, 0.08); --shadow-lg: 0 20px 50px rgba(10, 10, 10, 0.14);
+}
+body[data-theme="flashbang"] .messages { background: var(--bg-1); }
+body[data-theme="flashbang"] .bubble { background: var(--bg-3); border-color: transparent; color: var(--text-strong); box-shadow: none; }
+body[data-theme="flashbang"] .msg.me .bubble { background: #0a0a0a; border-color: transparent; color: #ffffff; box-shadow: none; }
+body[data-theme="flashbang"] .msg.me .bubble a { color: #ffb08a; }
+body[data-theme="flashbang"] .msg.me .bubble .time, body[data-theme="flashbang"] .msg.me .bubble .meta { color: rgba(255, 255, 255, 0.6); }
+body[data-theme="flashbang"] .msg.me .bubble.voice { --vp-played: #ffffff; --vp-rest: rgba(255, 255, 255, 0.35); }
+body[data-theme="flashbang"] .msg.me .bubble.voice .vp-time, body[data-theme="flashbang"] .msg.me .bubble.voice .vp-speed { color: rgba(255, 255, 255, 0.7); }
+body[data-theme="flashbang"] .msg.me .bubble.voice .vp-play { background: #ffffff; color: #0a0a0a; }
+body[data-theme="flashbang"] .icon-btn.send { box-shadow: none; }
+body[data-theme="flashbang"] .chat-item.active { background: var(--bg-3); }
+body[data-theme="flashbang"] .chat-item.active .ci-name { color: var(--text-strong); }
+body[data-theme="flashbang"] .system-msg { background: transparent; border-color: var(--border-1); color: var(--text-dim); }
+body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { border-color: var(--border-1); }

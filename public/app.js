@@ -172,7 +172,7 @@ function resolveBgForChat(chatKey) {
   if (glob && glob.startsWith("data:")) return glob;
   const theme = document.body.dataset.theme;
   if (theme === "aero") return "/src/aerobg.png";
-  if (theme && theme !== "matrix") return "/src/DefaultBG.png";
+  if (theme && theme !== "matrix" && theme !== "flashbang") return "/src/DefaultBG.png";   // Flashbang: plain paper
   return null;
 }
 // Применяем wallpaper на уровне .chat (= #chatPane): при активном чате достаём URL
@@ -303,7 +303,7 @@ window.addEventListener("langchange", refreshBgStatusTexts);
 const THEMES = [
   { key: "matrix",    name: "theme_matrix",    desc: "theme_desc_matrix",    swatch: ["#00ff5a", "#88ffaa", "#b6ffd2", "#000000"] },
   { key: "mono",      name: "theme_mono",      desc: "theme_desc_mono",      swatch: ["#ffffff", "#cccccc", "#888888", "#000000"] },
-  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#16a34a", "#16a34a", "#111827", "#ffffff"] },
+  { key: "flashbang", name: "theme_flashbang", desc: "theme_desc_flashbang", swatch: ["#ff4d00", "#0a0a0a", "#f1f1ef", "#ffffff"] },
   { key: "aero",      name: "theme_aero",      desc: "theme_desc_aero",      swatch: ["#6cbb3c", "#a6e56f", "#2f6015", "#7fb4e6"], beta: true },
 ];
 // Contrast colour for anything painted on the accent (buttons, active tabs, badges): white
