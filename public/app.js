@@ -97,22 +97,32 @@ function playSound(slot, fallback, vol = 0.8) {
   const src = ctx.createBufferSource(), g = ctx.createGain();
   src.buffer = buf; g.gain.value = vol; src.connect(g); g.connect(ctx.destination); src.start();
 }
+// Per-type volume from Settings → Notifications → Sounds (NT is defined further down; these
+// only run later, on events).
+const SND_DEFAULT = { volMsg: 0.25, volMention: 0.35, volRing: 0.5, volRingback: 0.25, volCall: 0.4 };
+function sndVol(k) { try { const v = NT[k]; return typeof v === "number" ? v : SND_DEFAULT[k]; } catch { return SND_DEFAULT[k]; } }
+const inCall = (slot, fb) => () => playSound(slot, fb, sndVol("volCall"));
 const sfx = {
-  msg: () => playSound("message", () => beep(660, 0.12)),
-  mention: () => playSound("mention", () => beep(880, 0.18)),
-  start: () => playSound("call_start", () => beepSeq([[440, 0.1], [660, 0.1], [880, 0.13]])),
-  end: () => playSound("call_end", () => beepSeq([[523, 0.12], [330, 0.18]])),
-  join: () => playSound("user_join", () => beepSeq([[523, 0.09], [784, 0.12]])),
-  leave: () => playSound("user_leave", () => beepSeq([[784, 0.09], [415, 0.13]])),
-  mute: () => playSound("mic_off", () => beep(300, 0.07)),
-  unmute: () => playSound("mic_on", () => beep(560, 0.07)),
-  deafen: () => playSound("deafen_on", () => beepSeq([[440, 0.07], [262, 0.1]])),
-  undeafen: () => playSound("deafen_off", () => beepSeq([[262, 0.07], [440, 0.1]])),
-  camOn: () => playSound("camera_on", null),      // silent unless a file is provided
-  camOff: () => playSound("camera_off", null),
-  screenOn: () => playSound("screen_start", () => beepSeq([[587, 0.07], [880, 0.1]])),
-  screenOff: () => playSound("screen_stop", () => beepSeq([[880, 0.07], [587, 0.1]])),
+  msg: () => playSound("message", () => beep(660, 0.12), sndVol("volMsg")),
+  mention: () => playSound("mention", () => beep(880, 0.18), sndVol("volMention")),
+  start: inCall("call_start", () => beepSeq([[440, 0.1], [660, 0.1], [880, 0.13]])),
+  end: inCall("call_end", () => beepSeq([[523, 0.12], [330, 0.18]])),
+  join: inCall("user_join", () => beepSeq([[523, 0.09], [784, 0.12]])),
+  leave: inCall("user_leave", () => beepSeq([[784, 0.09], [415, 0.13]])),
+  mute: inCall("mic_off", () => beep(300, 0.07)),
+  unmute: inCall("mic_on", () => beep(560, 0.07)),
+  deafen: inCall("deafen_on", () => beepSeq([[440, 0.07], [262, 0.1]])),
+  undeafen: inCall("deafen_off", () => beepSeq([[262, 0.07], [440, 0.1]])),
+  camOn: inCall("camera_on", null),      // silent unless a file is provided
+  camOff: inCall("camera_off", null),
+  screenOn: inCall("screen_start", () => beepSeq([[587, 0.07], [880, 0.1]])),
+  screenOff: inCall("screen_stop", () => beepSeq([[880, 0.07], [587, 0.1]])),
 };
+// Message sound gate: the open-chat toggle and "quiet during a call" (mentions always ping).
+function msgSoundAllowed(openChat) {
+  try { if (openChat && NT.sndOpenChat === false) return false; if (NT.sndQuietInCall && call.active) return false; } catch {}
+  return true;
+}
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const motionOff = () => reduceMotion.matches || document.body.classList.contains("motion-off");
@@ -3726,7 +3736,7 @@ socket.on("message", (m) => {
     }
   }
   const c = chats.get(myRoom); if (c) { c.last = preview(m); c.ts = m.ts; if (c.type === "dm") persistDMs(); scheduleChatList(); }
-  if (!mine && !isDnd()) { if (ping) sfx.mention(); else if (!isMuted(myRoom)) msgSfxForTheme()(); }
+  if (!mine && !isDnd()) { if (ping) sfx.mention(); else if (!isMuted(myRoom) && msgSoundAllowed(true)) msgSfxForTheme()(); }
   // «delivery» путём отправляется в renderMessage (там же и для истории, и для live), дублировать не нужно.
   // «seen» ставим ТОЛЬКО на явных действиях пользователя: открыл чат / сделал его видимым.
 });
@@ -3758,7 +3768,7 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention, ts, last }) => {
     // Mentions ping through a mute (like Discord); ordinary messages respect it. DnD silences all.
     const kind = mention ? "mention" : isDm ? "dm" : "group";
     if (!isDnd() && (mention || !isMuted(room)) && ntAllows(kind)) {
-      ntSound(() => (mention ? sfx.mention() : msgSfxForTheme()()));
+      ntSound(() => (mention ? sfx.mention() : msgSoundAllowed(false) && msgSfxForTheme()()));
       ntVibrate(mention ? 60 : 25);
       const line = mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName });
       ntToast(line, room);
@@ -6908,6 +6918,9 @@ const NT_DEFAULTS = {
   dm: true, group: true, mention: true, call: true, friend: true, invite: true,
   sound: true, toast: true, desktop: true, preview: true, vibrate: true,
   quiet: false, quietFrom: "23:00", quietTo: "08:00",
+  // per-type sound volume (0..1) and sound behaviour — Settings → Notifications → Sounds
+  volMsg: 0.25, volMention: 0.35, volRing: 0.5, volRingback: 0.25, volCall: 0.4,
+  sndOpenChat: true, sndQuietInCall: false,
 };
 let NT = { ...NT_DEFAULTS };
 try { NT = { ...NT_DEFAULTS, ...JSON.parse(localStorage.getItem(NT_KEY) || "{}") }; } catch {}
@@ -6934,6 +6947,21 @@ function ntDesktop(title, body, room) {
     n.onclick = () => { window.focus(); n.close(); };
   } catch {}
 }
+// Play one sound at a given volume (Settings preview). Loops get a 3 s taste.
+let _sndPrev = null;
+function sndPreview(slot, vol) {
+  ensureAudioCtx(); preloadSounds();
+  if (_sndPrev) { try { _sndPrev.pause(); } catch {} _sndPrev = null; }
+  if (slot === "ringtone" || slot === "ringback") {
+    const url = soundUrls.get(slot) || (slot === "ringtone" ? "/ringtone.mp3" : null);
+    if (!url) { beep(440, 0.6, 0.03 * vol * 4); return; }
+    const a = new Audio(url); a.volume = vol; a.play().catch(() => {}); _sndPrev = a;
+    setTimeout(() => { if (_sndPrev === a) { a.pause(); _sndPrev = null; } }, 3000);
+    return;
+  }
+  _soundLast.delete(slot);
+  soundsDecoding && soundsDecoding.then(() => playSound(slot, () => beep(660, 0.12), vol));
+}
 function ntRender() {
   document.querySelectorAll("[data-nt]").forEach((el) => {
     el.checked = NT[el.dataset.nt] !== false;
@@ -6947,6 +6975,16 @@ function ntRender() {
   });
   const f = $("ntQuietFrom"), tt = $("ntQuietTo");
   if (f) { f.value = NT.quietFrom; f.onchange = () => { NT.quietFrom = f.value; ntSave(); }; }
+  // Per-type volumes: slider + live % + ▶ preview at that volume.
+  document.querySelectorAll(".snd-row").forEach((row) => {
+    const k = row.dataset.snd, r = row.querySelector("input"), val = row.querySelector(".snd-val"), btn = row.querySelector(".snd-play");
+    const show = () => { val.textContent = Math.round(sndVol(k) * 100) + "%"; };
+    r.value = sndVol(k); show();
+    r.oninput = () => { NT[k] = +r.value; show(); };
+    r.onchange = () => ntSave();
+    btn.innerHTML = window.ICON.play || "▶";
+    btn.onclick = () => sndPreview(row.dataset.prev, sndVol(k));
+  });
   if (tt) { tt.value = NT.quietTo; tt.onchange = () => { NT.quietTo = tt.value; ntSave(); }; }
 }
 $("ntTest") && ($("ntTest").onclick = () => {
@@ -7504,9 +7542,11 @@ function startRingtone() {
   ring.audio = { mp3: true };
   // Route the mp3 through the analyser so CAVA reacts to it (once per element).
   if (ring.analyser && !ringSrcNode && audioCtx) {
-    try { ringSrcNode = audioCtx.createMediaElementSource(ringAudioEl); ringSrcNode.connect(ring.analyser); }
+    try { ringSrcNode = audioCtx.createMediaElementSource(ringAudioEl); ring.gain = audioCtx.createGain(); ringSrcNode.connect(ring.gain); ring.gain.connect(ring.analyser); }
     catch { ringSrcNode = null; }
   }
+  if (ringSrcNode && ring.gain) { ring.gain.gain.value = sndVol("volRing"); ringAudioEl.volume = 1; }
+  else ringAudioEl.volume = sndVol("volRing");
   ringAudioEl.currentTime = 0;
   const p = ringAudioEl.play();
   if (p && typeof p.catch === "function") p.catch((e) => console.warn("ringtone play blocked:", e && e.name));
@@ -7532,7 +7572,7 @@ function startRingback() {
   const url = soundUrls.get("ringback");
   if (url) {
     if (!ringbackEl) { ringbackEl = new Audio(url); ringbackEl.loop = true; }
-    applySinkId(ringbackEl); ringbackEl.currentTime = 0; ringbackEl.play().catch(() => {});
+    applySinkId(ringbackEl); ringbackEl.volume = sndVol("volRingback"); ringbackEl.currentTime = 0; ringbackEl.play().catch(() => {});
   } else {
     const tone = () => { beep(440, 0.9, 0.03); beep(480, 0.9, 0.03); };
     tone(); ringbackLoop = setInterval(tone, 3000);

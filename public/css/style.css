@@ -6623,3 +6623,12 @@ body:is(.ava-circle, .ava-rounded, .ava-square) :is(.avatar, .tile-avatar, .pe-a
 body.ava-circle { --ava-r: 50%; }
 body.ava-rounded { --ava-r: 28%; }
 body.ava-square { --ava-r: 0px; }
+
+/* Settings → Notifications → Sounds: one row per sound type. */
+.snd-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(120px, 2fr) 44px 34px; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-1); }
+.snd-label { font-weight: 600; font-size: 14px; color: var(--text-strong); }
+.snd-row input[type="range"] { width: 100%; accent-color: var(--accent-400); }
+.snd-val { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text-dim); text-align: right; }
+.snd-play { width: 32px; height: 32px; border: 1px solid var(--border-2); background: transparent; color: var(--accent-300); border-radius: calc(50% * var(--rc)); cursor: pointer; display: grid; place-items: center; }
+.snd-play svg { width: 13px; height: 13px; fill: currentColor; stroke: none; margin-left: 2px; }
+@media (hover: hover) { .snd-play:hover { border-color: var(--accent-400); } }
