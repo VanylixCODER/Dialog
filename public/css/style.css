@@ -6187,8 +6187,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 
 /* Loading-screen pace picker (Appearance) */
 .ld-opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
-.ap-corners-val { font: 600 12px/1 var(--font-ui); color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.ap-corners-range { width: 100%; margin: -4px 0 16px; accent-color: var(--accent-400); }
+
 .ld-opt {
   padding: 7px 13px; border-radius: var(--r-pill); cursor: pointer;
   background: var(--surface-1); border: 1px solid var(--border-1);
@@ -6606,3 +6605,21 @@ body:not([data-theme="aero"]) .app *, body:not([data-theme="aero"]) .settings-ov
   font: 700 10.5px/1 var(--font-ui); padding: 3px 6px; border: 0; cursor: pointer;
   border-radius: var(--r-pill); background: color-mix(in srgb, var(--text-dim) 18%, transparent); color: var(--text-dim);
 }
+
+/* Roundness is part of the theme: everything keeps the designed corners, AeroDialog is square
+   (--rc too: no pills or circles either — except avatars when the user picks a shape). */
+/* The radius tokens are re-derived on <body> because that's where themes set --rk: declared only
+   on :root they were computed once with the root's --rk = 1 and inherited as fixed lengths. */
+body {
+  --rc: min(1, calc(var(--rk) * 3));
+  --r-1: calc(4px * var(--rk)); --r-2: calc(6px * var(--rk)); --r-3: calc(10px * var(--rk)); --r-4: calc(14px * var(--rk));
+  --r-pill: calc(999px * var(--rc));
+}
+body[data-theme="aero"] { --rk: 0; --rc: 0; }
+
+/* Avatar shape preference (Settings → Preferences → Display). "Theme default" adds no class. */
+body:is(.ava-circle, .ava-rounded, .ava-square) :is(.avatar, .tile-avatar, .pe-ava, .profile-ava, .mm-ava, .ci-ava) { border-radius: var(--ava-r) !important; }
+body:is(.ava-circle, .ava-rounded, .ava-square) :is(.avatar, .tile-avatar, .pe-ava, .profile-ava, .mm-ava, .ci-ava) img { border-radius: inherit !important; }
+body.ava-circle { --ava-r: 50%; }
+body.ava-rounded { --ava-r: 28%; }
+body.ava-square { --ava-r: 0px; }

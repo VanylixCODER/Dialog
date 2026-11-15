@@ -509,6 +509,12 @@
         <!-- Preferences -->
         <section class="settings-pane" data-pane="prefs" role="tabpanel">
           <h3 data-i18n="tab_prefs">Preferences</h3>
+          <div class="uppercase-tag" data-i18n="pref_display">Display</div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="pref_ui_scale">Interface size</b><small data-i18n="pref_ui_scale_d">Makes everything bigger or smaller on this device</small></div></div>
+          <div class="ld-opts" id="prefScaleOpts"></div>
+          <div class="pref-row"><div class="pref-label"><b data-i18n="pref_ava_shape">Avatar shape</b><small data-i18n="pref_ava_shape_d">How profile pictures are framed everywhere</small></div></div>
+          <div class="ld-opts" id="prefAvaOpts"></div>
+          <div class="uppercase-tag" data-i18n="pref_privacy">Privacy</div>
           <div class="pref-row">
             <div class="pref-label"><b data-i18n="pref_friend_req">Friend requests</b><small data-i18n="pref_friend_req_d">Who can send you friend requests</small></div>
             <select id="prefFriendReq" class="field pref-select">
@@ -645,12 +651,6 @@
               <div class="ap-label"><b data-i18n="ld_title">Loading screen</b><small data-i18n="ld_hint">The terminal boot screen on launch. Cinematic is the designed pace; faster skips the theatre.</small></div>
             </div>
             <div class="ld-opts" id="ldOpts"></div>
-            <div class="ap-row">
-              <div class="ap-label"><b data-i18n="ap_corners">Corners</b><small data-i18n="ap_corners_d">How rounded the whole app is — from sharp squares to soft and round.</small></div>
-              <span class="ap-corners-val" id="apCornersVal"></span>
-            </div>
-            <div class="ld-opts" id="apCornerOpts"></div>
-            <input type="range" class="ap-corners-range" id="apCorners" min="0" max="2" step="0.05" value="1" aria-label="Corners" />
             <div class="ap-row ap-toggle-row">
               <div class="ap-label"><b data-i18n="ap_callviz">Call voice visualizer</b><small data-i18n="ap_callviz_d">Live audio bars on each participant's tile while they talk.</small></div>
               <label class="switch"><input type="checkbox" id="apCallViz" /><span class="switch-track"></span></label>

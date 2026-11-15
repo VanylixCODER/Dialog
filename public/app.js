@@ -555,29 +555,36 @@ function renderThemes() {
 
 // ---------- Appearance (Settings → Appearances) ----------
 // Glow was removed (kept at 0). Borders now live in the Theme Studio, not here.
-// Corners: one scale (--rk) multiplies every radius in the stylesheet; circles/pills follow via
-// --rc (see :root). 0 = everything square, 1 = as designed, 2 = extra round. Per device.
-const CORNER_PRESETS = [[0, "ap_corners_square"], [1, "ap_corners_default"], [1.8, "ap_corners_round"]];
-function cornerScale() { const v = parseFloat(localStorage.getItem("dialog_ap_corners")); return Number.isFinite(v) ? Math.min(2, Math.max(0, v)) : 1; }
-function applyCorners(v) { document.documentElement.style.setProperty("--rk", String(v)); }
-function renderCornerControls() {
-  const v = cornerScale(), box = $("apCornerOpts"), range = $("apCorners"), val = $("apCornersVal");
-  if (range) range.value = v;
-  if (val) val.textContent = Math.round(v * 100) + "%";
-  if (box && !box.children.length) for (const [pv, key] of CORNER_PRESETS) {
-    const b = document.createElement("button"); b.type = "button"; b.className = "ld-opt"; b.dataset.v = pv;
-    b.textContent = t(key); b.onclick = () => setCorners(pv); box.appendChild(b);
-  }
-  if (box) box.querySelectorAll(".ld-opt").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.v - v) < 0.001));
+// Display preferences (per device): interface size (CSS zoom on the root) and avatar shape.
+// Corner roundness is no longer a setting — each theme sets it (AeroDialog is square).
+const UI_SCALES = [[0.9, "pref_scale_s"], [1, "pref_scale_m"], [1.1, "pref_scale_l"], [1.25, "pref_scale_xl"]];
+const AVA_SHAPES = [["theme", "pref_ava_theme"], ["circle", "pref_ava_circle"], ["rounded", "pref_ava_rounded"], ["square", "pref_ava_square"]];
+const uiScale = () => { const v = parseFloat(localStorage.getItem("dialog_ui_scale")); return UI_SCALES.some((x) => x[0] === v) ? v : 1; };
+const avaShape = () => { const v = localStorage.getItem("dialog_ava_shape"); return AVA_SHAPES.some((x) => x[0] === v) ? v : "theme"; };
+function applyDisplayPrefs() {
+  const z = uiScale(); document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  document.body.classList.remove("ava-circle", "ava-rounded", "ava-square");
+  if (avaShape() !== "theme") document.body.classList.add("ava-" + avaShape());
+  if (typeof scheduleFsLayout === "function") scheduleFsLayout();
 }
-function setCorners(v) {
-  try { localStorage.setItem("dialog_ap_corners", String(v)); } catch {}
-  applyCorners(v); renderCornerControls();
+function renderChips(boxId, items, cur, onPick) {
+  const box = $(boxId); if (!box) return;
+  box.innerHTML = "";
+  for (const [v, key] of items) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "ld-opt" + (v === cur ? " on" : ""); b.textContent = t(key);
+    b.onclick = () => { onPick(v); renderDisplayPrefs(); };
+    box.appendChild(b);
+  }
+}
+function renderDisplayPrefs() {
+  renderChips("prefScaleOpts", UI_SCALES, uiScale(), (v) => { try { localStorage.setItem("dialog_ui_scale", String(v)); } catch {} applyDisplayPrefs(); });
+  renderChips("prefAvaOpts", AVA_SHAPES, avaShape(), (v) => { try { localStorage.setItem("dialog_ava_shape", v); } catch {} applyDisplayPrefs(); });
 }
 function applyAppearance() {
   document.documentElement.style.setProperty("--glow-strength", "0");
   document.body.classList.remove("custom-border");
-  applyCorners(cornerScale());
+  try { localStorage.removeItem("dialog_ap_corners"); } catch {}   // retired per-device setting
+  applyDisplayPrefs();
 }
 function initAppearanceControls() {
   renderBootSpeed();
@@ -586,8 +593,7 @@ function initAppearanceControls() {
     subtabs.querySelectorAll(".settings-subtab").forEach((x) => x.classList.toggle("active", x === b));
     document.querySelectorAll(".ap-subpane").forEach((p) => p.classList.toggle("active", p.dataset.apsubpane === b.dataset.apsub));
   });
-  renderCornerControls();
-  const cr = $("apCorners"); if (cr) cr.oninput = () => setCorners(+cr.value);
+  renderDisplayPrefs();
   const cv = $("apCallViz");
   if (cv) { cv.checked = callVizOn(); cv.onchange = () => localStorage.setItem("dialog_ap_callviz", cv.checked ? "on" : "off"); }
   renderFavThemes();
