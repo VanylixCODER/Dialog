@@ -1191,88 +1191,111 @@
   <!-- Theme Studio (tweakable theme editor + workshop) -->
   <div id="themeStudio" class="settings-overlay hidden" role="dialog" aria-modal="true">
     <div class="settings-card ts-card" role="document">
-      <div class="settings-head">
+      <!-- Top bar: title · Editor / My themes / Workshop · close -->
+      <div class="settings-head ts-top">
         <h2 data-i18n="ts_title">Theme Studio</h2>
+        <nav class="ts-seg" id="tsTabs" role="tablist">
+          <button class="settings-tab active" data-tstab="editor" role="tab" data-i18n="ts_editor">Editor</button>
+          <button class="settings-tab" data-tstab="mine" role="tab" data-i18n="ts_mine">My themes</button>
+          <button class="settings-tab" data-tstab="workshop" role="tab" data-i18n="ts_workshop">Workshop</button>
+        </nav>
         <button id="tsClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
       </div>
-      <nav class="settings-tabs" id="tsTabs" role="tablist">
-        <button class="settings-tab active" data-tstab="editor" role="tab" data-i18n="ts_editor">Editor</button>
-        <button class="settings-tab" data-tstab="mine" role="tab" data-i18n="ts_mine">My themes</button>
-        <button class="settings-tab" data-tstab="workshop" role="tab" data-i18n="ts_workshop">Workshop</button>
-      </nav>
       <div class="ts-body">
         <section class="ts-pane active" data-tspane="editor">
-          <!-- Two columns: the knobs on the left, a live mock of the real app on the right.
-               Editing colours you can't see applied is guesswork. -->
-          <div class="ts-split">
-          <div class="ts-controls">
-          <label class="ts-row"><span data-i18n="ts_name">Theme name</span><input id="tsName" class="field" maxlength="48" /></label>
-          <div class="ts-sub" data-i18n="ts_colors">Colors</div>
-          <div class="ts-colors">
-            <label class="ts-color"><input type="color" id="tsPrimary" /><span data-i18n="ts_primary">Primary</span></label>
-            <label class="ts-color"><input type="color" id="tsSecondary" /><span data-i18n="ts_secondary">Secondary</span></label>
-            <label class="ts-color"><input type="color" id="tsBg" /><span data-i18n="ts_bg">Background</span></label>
-            <label class="ts-color"><input type="color" id="tsBorder" /><span data-i18n="ts_border">Border</span></label>
-            <label class="ts-color"><input type="color" id="tsOnline" /><span data-i18n="ts_online">Online</span></label>
-            <label class="ts-color"><input type="color" id="tsDnd" /><span data-i18n="ts_dnd">Do not disturb</span></label>
-            <label class="ts-color"><input type="color" id="tsOffline" /><span data-i18n="ts_offline">Offline</span></label>
-          </div>
-          <div class="ts-sub" data-i18n="ts_glass">Glass</div>
-          <label class="ts-row ts-slider"><span><span data-i18n="ts_transparency">Transparency</span> <em id="tsAlphaV"></em></span><input type="range" id="tsAlpha" min="25" max="100" step="1" /></label>
-          <div class="ts-row"><span data-i18n="ts_blur">Blur (30%)</span><label class="switch"><input type="checkbox" id="tsBlur" /><span class="switch-track"></span></label></div>
-          <div class="ts-sub" data-i18n="ts_typography">Typography</div>
-          <label class="ts-row"><span data-i18n="ts_font">Google Font</span>
-            <select id="tsFont" class="field">
-              <option value="" data-i18n="ts_font_default">Default (system)</option>
-              <option value="Inter">Inter</option><option value="Roboto">Roboto</option><option value="Poppins">Poppins</option>
-              <option value="Montserrat">Montserrat</option><option value="Nunito">Nunito</option><option value="JetBrains Mono">JetBrains Mono</option>
-              <option value="Space Grotesk">Space Grotesk</option><option value="Orbitron">Orbitron</option><option value="Fira Code">Fira Code</option>
-              <option value="__custom">— Custom… —</option>
-            </select>
-          </label>
-          <input id="tsFontCustom" class="field hidden" data-i18n-ph="ts_font_custom" maxlength="40" />
-          <div class="ts-sub" data-i18n="ts_bg_section">Default background</div>
-          <label class="ts-row"><span data-i18n="ts_bgimg">Image URL</span><input id="tsBgUrl" class="field" placeholder="https://… or leave empty" /></label>
-          <input id="tsBgFile" type="file" accept="image/*" hidden />
-          <button id="tsBgUpload" type="button" class="btn-ghost" data-i18n="ts_upload">Upload image</button>
-          <div class="form-error" id="tsMsg"></div>
-          <div class="ts-actions">
-            <button id="tsSave" class="btn-primary" data-i18n="ts_save">Save &amp; apply</button>
-            <button id="tsPublish" type="button" class="btn-ghost" data-i18n="ts_publish">Publish</button>
-            <button id="tsReset" type="button" class="btn-ghost" data-i18n="ts_reset">Reset</button>
-          </div>
-                  </div>
-          <div class="ts-preview-col">
-            <div class="ts-pv-tabs">
-              <button class="ts-pv-tab active" data-pv="pc" data-i18n="ts_pv_pc">Desktop</button>
-              <button class="ts-pv-tab" data-pv="phone" data-i18n="ts_pv_phone">Phone</button>
+          <div class="ts-editor">
+            <!-- The stage: a live mock of the app, painted by the same CSS variables the app uses. -->
+            <div class="ts-stage">
+              <div class="ts-stage-top">
+                <input id="tsName" class="ts-name" maxlength="48" aria-label="Theme name" data-i18n-ph="ts_name" />
+                <div class="ts-pv-tabs ts-seg">
+                  <button class="ts-pv-tab active" data-pv="pc" data-i18n="ts_pv_pc">Desktop</button>
+                  <button class="ts-pv-tab" data-pv="phone" data-i18n="ts_pv_phone">Phone</button>
+                </div>
+              </div>
+              <div class="ts-pv pc" id="tsPv">
+                <div class="pv-frame">
+                  <aside class="pv-side">
+                    <div class="pv-me"><span class="pv-ava"></span><span class="pv-bars"><b></b><i></i></span></div>
+                    <div class="pv-search"></div>
+                    <div class="pv-chat on"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span><span class="pv-dot on"></span></div>
+                    <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span><span class="pv-dot dnd"></span></div>
+                    <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span><span class="pv-dot off"></span></div>
+                  </aside>
+                  <main class="pv-main">
+                    <div class="pv-head"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span><span class="pv-icons"><i></i><i></i></span></div>
+                    <div class="pv-msgs">
+                      <div class="pv-bubble in" data-i18n="ts_pv_in">Looks good?</div>
+                      <div class="pv-bubble out" data-i18n="ts_pv_out">That's the one.</div>
+                      <div class="pv-bubble in short"></div>
+                      <div class="pv-bubble out short"></div>
+                      <div class="pv-bubble in"><span class="pv-link">dialogmsg.xyz</span></div>
+                    </div>
+                    <div class="pv-composer"><span class="pv-input"></span><span class="pv-send"></span></div>
+                  </main>
+                </div>
+              </div>
             </div>
-            <!-- The mock is styled entirely by the same CSS variables the app uses, so it
-                 reflects every token change without a second styling path. -->
-            <div class="ts-pv pc" id="tsPv">
-              <div class="pv-frame">
-                <aside class="pv-side">
-                  <div class="pv-me"><span class="pv-ava"></span><span class="pv-bars"><b></b><i></i></span></div>
-                  <div class="pv-search"></div>
-                  <div class="pv-chat on"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
-                  <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
-                  <div class="pv-chat"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
-                </aside>
-                <main class="pv-main">
-                  <div class="pv-head"><span class="pv-ava sm"></span><span class="pv-lines"><b></b><i></i></span></div>
-                  <div class="pv-msgs">
-                    <div class="pv-bubble in" data-i18n="ts_pv_in">Looks good?</div>
-                    <div class="pv-bubble out" data-i18n="ts_pv_out">That's the one.</div>
-                    <div class="pv-bubble in short"></div>
-                    <div class="pv-bubble out short"></div>
+            <!-- The inspector -->
+            <div class="ts-inspector">
+              <div class="ts-scroll">
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_start_from">Start from</div>
+                  <div class="ts-presets" id="tsPresets"></div>
+                </div>
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_colors">Colors</div>
+                  <div class="ts-colors">
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsPrimary" /></span><span class="ts-cl" data-i18n="ts_primary">Primary</span><input class="ts-hex" data-for="tsPrimary" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsSecondary" /></span><span class="ts-cl" data-i18n="ts_secondary">Secondary</span><input class="ts-hex" data-for="tsSecondary" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsBg" /></span><span class="ts-cl" data-i18n="ts_bg">Background</span><input class="ts-hex" data-for="tsBg" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsBorder" /></span><span class="ts-cl" data-i18n="ts_border">Border</span><input class="ts-hex" data-for="tsBorder" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsOnline" /></span><span class="ts-cl" data-i18n="ts_online">Online</span><input class="ts-hex" data-for="tsOnline" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsDnd" /></span><span class="ts-cl" data-i18n="ts_dnd">Do not disturb</span><input class="ts-hex" data-for="tsDnd" maxlength="7" spellcheck="false" /></label>
+                    <label class="ts-color"><span class="ts-sw"><input type="color" id="tsOffline" /></span><span class="ts-cl" data-i18n="ts_offline">Offline</span><input class="ts-hex" data-for="tsOffline" maxlength="7" spellcheck="false" /></label>
                   </div>
-                  <div class="pv-composer"><span class="pv-input"></span><span class="pv-send"></span></div>
-                </main>
+                </div>
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_shape">Shape</div>
+                  <label class="ts-row ts-slider"><span><span data-i18n="ts_roundness">Roundness</span> <em id="tsRadiusV"></em></span><input type="range" id="tsRadius" min="0" max="2" step="0.05" /></label>
+                  <div class="ld-opts" id="tsRadiusOpts"></div>
+                </div>
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_glass">Surface</div>
+                  <label class="ts-row ts-slider"><span><span data-i18n="ts_transparency">Transparency</span> <em id="tsAlphaV"></em></span><input type="range" id="tsAlpha" min="25" max="100" step="1" /></label>
+                  <div class="ts-row ts-inline"><span data-i18n="ts_blur">Blur</span><label class="switch"><input type="checkbox" id="tsBlur" /><span class="switch-track"></span></label></div>
+                </div>
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_typography">Type</div>
+                  <select id="tsFont" class="field">
+                    <option value="" data-i18n="ts_font_default">Default (system)</option>
+                    <option value="Inter">Inter</option><option value="Roboto">Roboto</option><option value="Poppins">Poppins</option>
+                    <option value="Montserrat">Montserrat</option><option value="Nunito">Nunito</option><option value="JetBrains Mono">JetBrains Mono</option>
+                    <option value="Space Grotesk">Space Grotesk</option><option value="Orbitron">Orbitron</option><option value="Fira Code">Fira Code</option>
+                    <option value="__custom">— Custom… —</option>
+                  </select>
+                  <input id="tsFontCustom" class="field hidden" data-i18n-ph="ts_font_custom" maxlength="40" />
+                </div>
+                <div class="ts-group">
+                  <div class="ts-sub" data-i18n="ts_bg_section">Chat background</div>
+                  <div class="ts-bgrow">
+                    <input id="tsBgUrl" class="field" placeholder="https://… or leave empty" />
+                    <input id="tsBgFile" type="file" accept="image/*" hidden />
+                    <button id="tsBgUpload" type="button" class="btn-ghost" data-i18n="ts_upload">Upload</button>
+                  </div>
+                </div>
+              </div>
+              <div class="ts-foot">
+                <div class="form-error" id="tsMsg"></div>
+                <div class="ts-actions">
+                  <button id="tsReset" type="button" class="btn-ghost" data-i18n="ts_reset">Reset</button>
+                  <button id="tsPublish" type="button" class="btn-ghost" data-i18n="ts_publish">Publish</button>
+                  <button id="tsSave" class="btn-primary" data-i18n="ts_save">Save &amp; apply</button>
+                </div>
               </div>
             </div>
           </div>
-          </div>
-</section>
+        </section>
         <section class="ts-pane" data-tspane="mine">
           <p class="ts-hint" id="tsMineHint"></p>
           <div id="tsMine" class="ts-list"></div>

@@ -383,7 +383,7 @@ function applyThemeDerived(key) {
 const DEFAULT_TOKENS = {
   name: "My Theme", primary: "#00ff5a", secondary: "#3df58a", bg: "#000604",
   online: "#3fb950", dnd: "#ff5252", offline: "#6e7681",
-  alpha: 0.92, blur: 0, font: "", bgImage: "", border: "",
+  alpha: 0.92, blur: 0, font: "", bgImage: "", border: "", radius: 1,
 };
 function hexToRgb(hex) {
   hex = String(hex || "").trim().replace("#", "");
@@ -418,7 +418,11 @@ function themeCss(tk) {
   const textStrong = light ? "#0f1218" : shade(t.primary, 74);
   const textDim = light ? "#6b7280" : shade(t.primary, -18);
   const s = 'body[data-theme="user"]';
+  // Roundness (0 = square, 1 = as designed, 2 = extra round). Workshop themes are other people's
+  // data, so it's clamped to a number here before it touches CSS.
+  const rk = Math.max(0, Math.min(2, Number(t.radius ?? 1) || 0));
   let css = `${s}{
+    --rk:${rk};--rc:min(1, calc(${rk} * 3));
     --primary-rgb:${p};
     --accent-100:${a100};--accent-200:${a200};--accent-300:${a300};
     --accent-400:${t.primary};--accent-500:${shade(t.primary, -26)};--accent-600:${shade(t.primary, -46)};
@@ -8986,7 +8990,46 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     name: $("tsName"), primary: $("tsPrimary"), secondary: $("tsSecondary"), bg: $("tsBg"), border: $("tsBorder"),
     online: $("tsOnline"), dnd: $("tsDnd"), offline: $("tsOffline"),
     alpha: $("tsAlpha"), blur: $("tsBlur"), font: $("tsFont"), fontCustom: $("tsFontCustom"), bgUrl: $("tsBgUrl"),
+    radius: $("tsRadius"),
   };
+  // Hex fields mirror the colour pickers both ways (typing a hex is faster than fishing for it).
+  const hexes = [...ov.querySelectorAll(".ts-hex")];
+  const syncHexes = () => hexes.forEach((h) => { const c = $(h.dataset.for); if (c && document.activeElement !== h) h.value = c.value; });
+  hexes.forEach((h) => {
+    const commit = () => { let v = h.value.trim(); if (!v.startsWith("#")) v = "#" + v; if (/^#[0-9a-f]{6}$/i.test(v)) { $(h.dataset.for).value = v.toLowerCase(); livePreview(); } else h.value = $(h.dataset.for).value; };
+    h.addEventListener("change", commit);
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); h.blur(); } });
+  });
+  // Roundness shortcuts under the slider.
+  const RADIUS_PRESETS = [[0, "ts_r_square"], [1, "ts_r_default"], [1.8, "ts_r_round"]];
+  function renderRadiusOpts() {
+    const box = $("tsRadiusOpts"); if (!box) return;
+    const v = Number(C.radius.value);
+    if (!box.children.length) for (const [rv, key] of RADIUS_PRESETS) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "ld-opt"; b.dataset.v = rv; b.textContent = t(key);
+      b.onclick = () => { C.radius.value = rv; livePreview(); };
+      box.appendChild(b);
+    }
+    box.querySelectorAll(".ld-opt").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.v - v) < 0.001));
+    $("tsRadiusV").textContent = v === 0 ? t("ts_r_square") : Math.round(v * 100) + "%";
+  }
+  // "Start from": a few complete looks to begin with (status colours keep the defaults).
+  const TS_PRESETS = [
+    ["Matrix",   { primary: "#00ff5a", secondary: "#3df58a", bg: "#000604", border: "#00ff5a", radius: 1, font: "" }],
+    ["Ocean",    { primary: "#38bdf8", secondary: "#818cf8", bg: "#0b1220", border: "#38bdf8", radius: 1.4, font: "Inter" }],
+    ["Sunset",   { primary: "#fb7185", secondary: "#f59e0b", bg: "#1a0f14", border: "#fb7185", radius: 1.2, font: "Poppins" }],
+    ["Paper",    { primary: "#2563eb", secondary: "#0ea5e9", bg: "#f7f7f5", border: "#2563eb", radius: 0.8, font: "Inter" }],
+    ["Terminal", { primary: "#e5e5e5", secondary: "#a3a3a3", bg: "#0a0a0a", border: "#e5e5e5", radius: 0, font: "JetBrains Mono" }],
+  ];
+  function renderPresets() {
+    const box = $("tsPresets"); if (!box || box.children.length) return;
+    for (const [name, tk] of TS_PRESETS) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "ts-preset";
+      b.innerHTML = `<span class="tp-sw" style="background:${tk.bg}"><i style="background:${tk.primary}"></i><i style="background:${tk.secondary}"></i></span><span>${escapeHtml(name)}</span>`;
+      b.onclick = () => { const keepName = C.name.value; writeControls({ ...DEFAULT_TOKENS, ...tk, name: keepName }); livePreview(); };
+      box.appendChild(b);
+    }
+  }
   function writeControls(tk) {
     C.name.value = tk.name || "My Theme";
     C.primary.value = tk.primary; C.secondary.value = tk.secondary; C.bg.value = tk.bg;
@@ -8997,7 +9040,9 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
     if (tk.font && !presets.includes(tk.font)) { C.font.value = "__custom"; C.fontCustom.classList.remove("hidden"); C.fontCustom.value = tk.font; }
     else { C.font.value = tk.font || ""; C.fontCustom.classList.add("hidden"); C.fontCustom.value = ""; }
     C.bgUrl.value = tk.bgImage || "";
+    C.radius.value = Math.max(0, Math.min(2, Number(tk.radius ?? 1)));
     $("tsAlphaV").textContent = C.alpha.value + "%";
+    syncHexes(); renderRadiusOpts(); renderPresets();
   }
   function readControls() {
     const font = C.font.value === "__custom" ? (C.fontCustom.value || "").trim() : C.font.value;
@@ -9005,11 +9050,13 @@ if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.
       name: (C.name.value || "My Theme").trim(), primary: C.primary.value, secondary: C.secondary.value, bg: C.bg.value,
       border: C.border.value, online: C.online.value, dnd: C.dnd.value, offline: C.offline.value,
       alpha: Number(C.alpha.value) / 100, blur: C.blur.checked ? 9 : 0, font, bgImage: (C.bgUrl.value || "").trim(),
+      radius: Number(C.radius.value),
     };
   }
   function livePreview() {
     cur = readControls();
     $("tsAlphaV").textContent = C.alpha.value + "%";
+    syncHexes(); renderRadiusOpts();
     applyUserTheme(cur, { preview: true });
   }
   Object.values(C).forEach((el) => { if (el) { el.addEventListener("input", livePreview); el.addEventListener("change", livePreview); } });

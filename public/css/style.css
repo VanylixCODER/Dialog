@@ -6684,3 +6684,99 @@ body[data-theme="flashbang"] .chat-item.active { background: var(--bg-3); }
 body[data-theme="flashbang"] .chat-item.active .ci-name { color: var(--text-strong); }
 body[data-theme="flashbang"] .system-msg { background: transparent; border-color: var(--border-1); color: var(--text-dim); }
 body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { border-color: var(--border-1); }
+
+/* ═════════════ Theme Studio, reimagined ═════════════
+   Top bar: title · segmented Editor/My themes/Workshop · ✕. Editor: a big live stage on the
+   left (name + Desktop/Phone switch above a mock of the app, painted by the live tokens), an
+   inspector on the right (Start from · Colors · Shape · Surface · Type · Background) with a
+   pinned action bar. Stacks on phones. */
+#themeStudio .ts-card { width: min(96vw, 1080px); height: min(90vh, 780px); display: flex; flex-direction: column; }
+#themeStudio .ts-top { display: flex; align-items: center; gap: 14px; padding: 12px 56px 12px 20px; }
+#themeStudio .ts-top h2 { flex: 0 0 auto; }
+.ts-seg { display: inline-flex; gap: 2px; padding: 3px; margin: 0 auto; background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--r-pill); }
+.ts-seg > button, #themeStudio .ts-seg .settings-tab {
+  border: 0; background: transparent; color: var(--text-dim); font: 600 13px/1 var(--font-ui);
+  padding: 8px 14px; border-radius: var(--r-pill); cursor: pointer; width: auto; box-shadow: none; text-transform: none; letter-spacing: 0;
+}
+.ts-seg > button.active, #themeStudio .ts-seg .settings-tab.active { background: var(--bg-1); color: var(--text-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+#themeStudio .ts-body { flex: 1; min-height: 0; padding: 0; overflow: hidden; background: var(--bg-1); }
+#themeStudio .ts-pane[data-tspane="mine"], #themeStudio .ts-pane[data-tspane="workshop"] { padding: 18px 22px; overflow-y: auto; height: 100%; }
+#themeStudio .ts-pane[data-tspane="editor"].active { display: block; height: 100%; }
+.ts-editor { display: grid; grid-template-columns: minmax(0, 1fr) 360px; height: 100%; }
+
+/* Stage */
+.ts-stage { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; min-width: 0; background: var(--bg-0); border-right: 1px solid var(--border-1); }
+.ts-stage-top { display: flex; align-items: center; gap: 12px; }
+.ts-name {
+  flex: 1; min-width: 0; font: 700 20px/1.2 var(--font-ui); color: var(--text-strong);
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-2); padding: 6px 8px; margin-left: -8px; outline: none;
+}
+.ts-name:hover { border-color: var(--border-1); }
+.ts-name:focus { border-color: var(--accent-400); background: var(--bg-1); }
+.ts-stage-top .ts-pv-tabs { margin: 0; }
+.ts-stage-top .ts-pv-tab { border: 0; }
+.ts-stage-top .ts-pv-tab.active { background: var(--bg-1); color: var(--text-strong); }
+#themeStudio .ts-pv { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; }
+#themeStudio .ts-pv .pv-frame {
+  width: 100%; max-width: 760px; height: min(100%, 560px); border: 1px solid var(--border-2); border-radius: var(--r-4);
+  overflow: hidden; background: var(--bg-1); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+#themeStudio .ts-pv.pc .pv-frame { grid-template-columns: 170px 1fr; }
+#themeStudio .ts-pv.phone { max-width: none; padding: 0; border-radius: 0; }
+#themeStudio .ts-pv.phone .pv-frame { width: 250px; height: min(100%, 480px); border-radius: calc(28px * var(--rk)); border-width: 6px; border-color: var(--bg-4); }
+.pv-chat { position: relative; }
+.pv-dot { position: absolute; left: 14px; bottom: 3px; width: 6px; height: 6px; border-radius: calc(50% * var(--rc)); border: 1px solid var(--bg-2); }
+.pv-dot.on { background: var(--st-online, #3fb950); }
+.pv-dot.dnd { background: var(--danger); }
+.pv-dot.off { background: var(--text-dim); }
+.pv-head { position: relative; }
+.pv-icons { margin-left: auto; display: flex; gap: 6px; }
+.pv-icons i { width: 10px; height: 10px; border-radius: calc(3px * var(--rk)); background: var(--surface-3); display: block; }
+.pv-link { color: rgba(var(--secondary-rgb, var(--primary-rgb)), 1); text-decoration: underline; }
+#themeStudio .pv-bubble { font-size: 12px; }
+
+/* Inspector */
+.ts-inspector { display: flex; flex-direction: column; min-height: 0; background: var(--bg-1); }
+.ts-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+.ts-group { display: flex; flex-direction: column; gap: 10px; }
+#themeStudio .ts-sub { margin: 0; font-size: 11px; letter-spacing: 0.06em; }
+.ts-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.ts-preset {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; cursor: pointer;
+  border: 1px solid var(--border-1); background: var(--bg-2); color: var(--text); border-radius: var(--r-pill); font: 600 12.5px/1 var(--font-ui);
+}
+@media (hover: hover) { .ts-preset:hover { border-color: var(--border-3); } }
+.tp-sw { width: 22px; height: 22px; border-radius: calc(50% * var(--rc)); display: inline-flex; align-items: center; justify-content: center; gap: 2px; border: 1px solid var(--border-2); }
+.tp-sw i { width: 5px; height: 12px; border-radius: 2px; display: block; }
+#themeStudio .ts-colors { display: flex; flex-direction: column; gap: 2px; }
+#themeStudio .ts-color { flex-direction: row; align-items: center; gap: 10px; padding: 6px 4px; border-radius: var(--r-2); color: var(--text); font-size: 13.5px; cursor: default; }
+#themeStudio .ts-color:hover { background: var(--surface-1); }
+#themeStudio .ts-sw { position: relative; width: 28px; height: 28px; flex: none; border-radius: calc(50% * var(--rc)); overflow: hidden; border: 1px solid var(--border-2); }
+#themeStudio .ts-sw input[type="color"] { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); border: 0; padding: 0; cursor: pointer; background: none; }
+.ts-cl { flex: 1; }
+.ts-hex {
+  width: 86px; font: 500 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase;
+  color: var(--text); background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--r-2); padding: 7px 8px;
+}
+.ts-hex:focus { outline: none; border-color: var(--accent-400); }
+#themeStudio .ts-row > span { font-size: 13.5px; }
+.ts-inline { flex-direction: row !important; align-items: center; justify-content: space-between; }
+.ts-bgrow { display: flex; gap: 8px; }
+.ts-bgrow .field { flex: 1; min-width: 0; }
+.ts-bgrow .btn-ghost { width: auto; padding: 0 14px; flex: none; }
+.ts-foot { border-top: 1px solid var(--border-1); padding: 12px 18px; display: flex; flex-direction: column; gap: 8px; background: var(--bg-1); }
+.ts-foot .form-error:empty { display: none; }
+#themeStudio .ts-actions { margin: 0; display: flex; gap: 8px; }
+#themeStudio .ts-actions #tsSave { margin-left: auto; }
+#themeStudio .ts-actions .btn-ghost, #themeStudio .ts-actions .btn-primary { width: auto; padding: 10px 16px; }
+
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
+  #themeStudio .ts-card { width: 100vw; height: 100dvh; }
+  #themeStudio .ts-top { padding: 10px 52px 10px 14px; gap: 8px; }
+  #themeStudio .ts-top h2 { display: none; }
+  #themeStudio .ts-seg { margin: 0; }
+  .ts-editor { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .ts-stage { border-right: 0; border-bottom: 1px solid var(--border-1); padding: 12px 14px; gap: 10px; }
+  #themeStudio .ts-pv .pv-frame { height: 200px; }
+  #themeStudio .ts-pv.phone .pv-frame { height: 220px; width: 170px; }
+}
