@@ -6632,3 +6632,24 @@ body.ava-square { --ava-r: 0px; }
 .snd-play { width: 32px; height: 32px; border: 1px solid var(--border-2); background: transparent; color: var(--accent-300); border-radius: calc(50% * var(--rc)); cursor: pointer; display: grid; place-items: center; }
 .snd-play svg { width: 13px; height: 13px; fill: currentColor; stroke: none; margin-left: 2px; }
 @media (hover: hover) { .snd-play:hover { border-color: var(--accent-400); } }
+
+/* ═════════════ Minimal pass ═════════════
+   Flat surfaces instead of tinted top-to-bottom gradients, and no decorative glow hairlines
+   (header/composer/call-stage/list "neon" lines, the chat scan-grid, the background vignette).
+   Separations that carry meaning stay as plain 1px borders. AeroDialog keeps its gloss — that's
+   the point of that theme. */
+body:not([data-theme="aero"]) :is(.chatlist, .chat-head, .composer, .info-panel, .settings-card, .modal-card, .call-stage, .notify-toast, .return-pill, .call-join-banner, .pinned-bar, .cl-foot, .act-head, .lb-bar, .pv-head, .drop-overlay-card) {
+  background-image: none;
+}
+body:not([data-theme="aero"]) :is(.chatlist, .info-panel, .settings-card, .modal-card) { background-color: var(--bg-1); }
+body:not([data-theme="aero"]) :is(.chat-head, .composer) { background-color: var(--bg-1); }
+body:not([data-theme="aero"]) .cl-head { background: transparent; }
+body:not([data-theme="aero"]) .chat-item.active { background: var(--surface-3); }
+body:not([data-theme="aero"]) :is(.avatar, .tile-avatar, .tile) { background-image: none; background-color: var(--bg-3); }
+body:not([data-theme="aero"]) :is(.chatlist::before, .chat::before, .chat-head::after, .composer::before, .call-stage::after,
+  .voice-bar::before, .contacts-sec-title::after, .btn-primary::after) { display: none; }
+body:not([data-theme="aero"]) :is(.day-sep::before, .day-sep::after) { background: var(--border-1); }
+body[data-page="chat"]:not([data-theme="aero"]) { background-image: none; }
+
+/* Settings header: no tinted band and no line under it — the title just sits on the card. */
+body:not([data-theme="aero"]) .settings-head { background: transparent; border-bottom: 0; }
