@@ -3871,6 +3871,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   wrap.dataset.id = m.id != null ? m.id : "";
   if (m.fromLogin) wrap.dataset.from = m.fromLogin;
   if (m.name) wrap.dataset.fromname = m.name;
+  if (m.ts) wrap.dataset.ts = String(m.ts);
   if (m.localId != null) wrap.dataset.localid = String(m.localId);
   if (m._optimistic) wrap.dataset.acked = ""; // ещё не подтверждено сервером
   else if (m.id != null) wrap.dataset.acked = "1";
@@ -3878,6 +3879,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   let inner = "";
   const sysType = ["call_started", "call_ended", "call_missed", "join", "leave"].includes(m.type);
   if (sysType) {
+    wrap.classList.add("sys");
     const name = escapeHtml(m.name);
     if (m.type === "call_started") inner += `<div class="sys-line call">📞 ${t("call_started")}</div>`;
     else if (m.type === "call_ended") inner += `<div class="sys-line call">📞 ${t("call_ended")} — ${escapeHtml(m.text)}</div>`;
@@ -3947,6 +3949,28 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   if (!mine && m.id && !sysType) setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0);
   if (scroll) scrollDown();
 }
+// Telegram/WhatsApp-style grouping: a run of messages from the same person, each within
+// GROUP_GAP of the one before, sits tight together and only the last one shows the time (and,
+// in groups, only the first one the name). A longer pause, another sender, a system line or a
+// day/unread separator starts a new group. Recomputed in one pass whenever messages are added.
+const GROUP_GAP = 3 * 60 * 1000;
+let _groupRaf = 0;
+function regroupMessages() {
+  _groupRaf = 0;
+  let prev = null;
+  for (const el of messagesEl.children) {
+    const isMsg = el.classList.contains("msg") && !el.classList.contains("sys") && !el.classList.contains("dtm");
+    if (!isMsg) { if (prev) prev.classList.remove("g-more"); prev = null; continue; }
+    const cont = !!prev && prev.dataset.from && prev.dataset.from === el.dataset.from
+      && Math.abs((+el.dataset.ts || 0) - (+prev.dataset.ts || 0)) < GROUP_GAP;
+    el.classList.toggle("g-cont", cont);
+    if (prev) prev.classList.toggle("g-more", cont);
+    prev = el;
+  }
+  if (prev) prev.classList.remove("g-more");
+}
+new MutationObserver(() => { if (!_groupRaf) _groupRaf = requestAnimationFrame(regroupMessages); })
+  .observe(messagesEl, { childList: true });
 // ================== Reply · forward · pin · select · search · drafts ==================
 // All of this hangs off the open room (myRoom) and is cleared by openChat, so nothing leaks
 // from one chat into the next.

@@ -6792,3 +6792,14 @@ body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { b
 .dtm-tag { font-size: 11px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-dim); }
 .dtm-text { color: var(--text); font-size: 14px; line-height: 1.45; }
 .dtm-x { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: var(--text-dim); cursor: pointer; border-radius: var(--r-2); display: grid; place-items: center; }
+
+/* Grouped messages (regroupMessages in app.js): same sender within 3 min → tight stack, the time
+   only under the last one, the sender name only above the first. Corners on the joined side
+   tighten a little, like Telegram. */
+.msg.g-cont { margin-top: 2px; }
+.msg.g-more > .time { display: none; }
+.msg.g-cont > .who { display: none; }
+.msg.g-more:not(.me) > .bubble { border-bottom-left-radius: calc(6px * var(--rk)); }
+.msg.g-cont:not(.me) > .bubble { border-top-left-radius: calc(6px * var(--rk)); }
+.msg.me.g-more > .bubble { border-bottom-right-radius: calc(6px * var(--rk)); }
+.msg.me.g-cont > .bubble { border-top-right-radius: calc(6px * var(--rk)); }
