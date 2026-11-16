@@ -3831,7 +3831,8 @@ socket.on("dm-ping", ({ room, fromLogin, fromName, mention, ts, last }) => {
       ntSound(() => (mention ? sfx.mention() : msgSoundAllowed(false) && msgSfxForTheme()()));
       ntVibrate(mention ? 60 : 25);
       const line = mention ? t("mention_ping", { name: fromName }) : t("dm_ping", { name: fromName });
-      ntToast(line, room);
+      const grp = !isDm && c ? (c.name || c.title || "") : "";
+      ntToast(line, room, { name: fromName, login: fromLogin, group: grp, body: NT.preview && last ? preview(last) : line });
       ntDesktop(fromName, line, room);
     }
   }
@@ -7056,7 +7057,7 @@ function ntQuietNow() {
 function ntAllows(kind) { return NT[kind] !== false && !ntQuietNow(); }
 function ntSound(fn) { if (NT.sound && !ntQuietNow()) try { fn(); } catch {} }
 function ntVibrate(ms) { if (NT.vibrate && !ntQuietNow() && navigator.vibrate) try { navigator.vibrate(ms); } catch {} }
-function ntToast(text, room) { if (NT.toast && !ntQuietNow()) notify(text, room); }
+function ntToast(text, room, o) { if (NT.toast && !ntQuietNow()) notify(text, room, o); }
 // System notification, only when Dialog isn't the window being looked at.
 function ntDesktop(title, body, room) {
   if (!NT.desktop || ntQuietNow() || document.visibilityState === "visible") return;
@@ -8040,10 +8041,55 @@ document.addEventListener("submit", (e) => {
 
 function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function linkify(s) { return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:#7dffaf">$1</a>'); }
-function notify(text, room) { let el = $("notifyToast"); if (!el) { el = document.createElement("div"); el.id = "notifyToast"; el.className = "notify-toast"; document.body.appendChild(el); } el.textContent = text; el.dataset.room = room || ""; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3500); }
+// In-app notifications: a small stack of cards (newest on top), not a single text pill.
+// notify(text) → a system notice; notify(text, room, { name, login, body }) → a message card with
+// the sender's avatar and a preview that opens the chat on click. Hover pauses the timer.
+const NOTIF_MS = 4500, NOTIF_MAX = 3;
+function notifStack() {
+  let st = $("notifStack");
+  if (!st) { st = document.createElement("div"); st.id = "notifStack"; st.className = "notif-stack"; st.setAttribute("aria-live", "polite"); document.body.appendChild(st); }
+  const host = document.fullscreenElement || document.body;   // fullscreen hides body-level layers
+  if (st.parentNode !== host) host.appendChild(st);
+  return st;
+}
+function notify(text, room, o = {}) {
+  if (!text) return;
+  const st = notifStack();
+  // The same chat pinging again refreshes its card instead of stacking duplicates.
+  const dup = [...st.children].find((c) => !c.classList.contains("out") && (room ? c.dataset.room === room : !c.dataset.room && c.dataset.text === text));
+  if (dup) closeNotif(dup, true);
+  const el = document.createElement("div");
+  el.className = "notif" + (room ? " notif-msg" : ""); el.dataset.room = room || ""; el.dataset.text = text;
+  el.setAttribute("role", "status");
+  const title = o.name || "", body = o.body || "";
+  const ava = room
+    ? `<span class="notif-ava">${o.login ? `<img src="${avaUrl(o.login)}" alt="" data-fallback="remove">` : ""}<span>${escapeHtml(initials(title || o.group || "?"))}</span></span>`
+    : `<span class="notif-ico">${(window.ICON && ICON.bell) || ""}</span>`;
+  el.innerHTML = ava + `<div class="notif-txt">` +
+    (room && title ? `<div class="notif-title">${escapeHtml(title)}${o.group ? `<span class="notif-where"> · ${escapeHtml(o.group)}</span>` : ""}</div><div class="notif-body">${escapeHtml(body || text)}</div>`
+                   : `<div class="notif-body notif-solo">${escapeHtml(text)}</div>`) +
+    `</div><button class="notif-x" type="button" aria-label="${escapeHtml(t("close") || "Close")}">${(window.ICON && ICON.close) || "✕"}</button><i class="notif-bar"></i>`;
+  el.querySelector(".notif-x").onclick = (e) => { e.stopPropagation(); closeNotif(el); };
+  if (room) el.onclick = () => { closeNotif(el); if (room !== myRoom) openRoomByKey(room); };
+  st.prepend(el);
+  while (st.children.length > NOTIF_MAX) st.lastElementChild.remove();
+  // Timer that pauses while hovered (the bar shows what's left).
+  let left = NOTIF_MS, startedAt = Date.now();
+  el.style.setProperty("--nt-left", NOTIF_MS + "ms");   // the bar pauses/resumes in step with the timer
+  const arm = () => { startedAt = Date.now(); clearTimeout(el._t); el._t = setTimeout(() => closeNotif(el), left); el.classList.remove("paused"); };
+  el.onmouseenter = () => { clearTimeout(el._t); left = Math.max(0, left - (Date.now() - startedAt)); el.classList.add("paused"); };
+  el.onmouseleave = arm;
+  requestAnimationFrame(() => { el.classList.add("in"); arm(); });
+}
+function closeNotif(el, instant) {
+  if (!el || el.classList.contains("out")) return;
+  clearTimeout(el._t);
+  if (instant) { el.remove(); return; }
+  el.classList.add("out"); setTimeout(() => el.remove(), 260);
+}
 function dismissNotif(room) {
-  const el = $("notifyToast");
-  if (el && el.dataset.room === room) { el.classList.remove("show"); clearTimeout(el._t); }
+  const st = $("notifStack");
+  if (st) st.querySelectorAll(".notif").forEach((el) => { if (el.dataset.room === room) closeNotif(el); });
   if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.ready.then((reg) =>
       reg.getNotifications().then((ns) => { ns.filter((n) => n.tag === "call:" + room || n.tag === "msg:" + room).forEach((n) => n.close()); })
@@ -8681,6 +8727,40 @@ document.addEventListener("click", (e) => {
 // the UI font doesn't have — each platform drew its own fallback glyph at its own size. Swap
 // it for the Lucide icon and tag the button .x-btn (styling in style.css), including ✕s that
 // are created later (menus, previews, rows), via one cheap observer.
+// ---------- Hover tooltips ----------
+// One floating pill on the top layer for every [data-tip] element. The old CSS ::after pills
+// lived inside their button, so any later sibling (the search row under the header, a panel,
+// an overflow:hidden parent) painted over them or clipped them. This one is positioned from the
+// button's on-screen rect, flips below when there's no room above, and clamps to the window.
+const tipLayer = (() => {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return null;
+  document.documentElement.classList.add("js-tips");
+  const el = document.createElement("div"); el.className = "tip-layer"; el.setAttribute("role", "tooltip");
+  let cur = null, showT = 0;
+  const hide = () => { clearTimeout(showT); cur = null; el.classList.remove("on"); };
+  const place = (target) => {
+    const text = target.getAttribute("data-tip"); if (!text) return hide();
+    const host = document.fullscreenElement || document.body; if (el.parentNode !== host) host.appendChild(el);
+    el.textContent = text; el.classList.remove("below");
+    const r = target.getBoundingClientRect(), w = zw(el), h = zh(el), gap = 8;
+    let top = r.top - h - gap; const below = top < 6; if (below) top = r.bottom + gap;
+    const left = Math.max(6, Math.min(innerWidth - w - 6, r.left + r.width / 2 - w / 2));
+    el.style.left = zpos(left) + "px"; el.style.top = zpos(top) + "px";
+    el.classList.toggle("below", below); el.classList.add("on");
+  };
+  document.addEventListener("pointerover", (e) => {
+    if (e.pointerType && e.pointerType !== "mouse") return;
+    const target = e.target.closest && e.target.closest("[data-tip]");
+    if (target === cur) return;
+    hide(); if (!target || !target.getAttribute("data-tip")) return;
+    cur = target; showT = setTimeout(() => { if (cur === target && target.isConnected) place(target); }, 250);
+  }, true);
+  document.addEventListener("pointerout", (e) => { if (cur && (!e.relatedTarget || !cur.contains(e.relatedTarget))) hide(); }, true);
+  ["pointerdown", "wheel", "keydown"].forEach((ev) => document.addEventListener(ev, hide, true));
+  window.addEventListener("blur", hide); document.addEventListener("scroll", hide, true);
+  return { hide };
+})();
+
 function xify(root) {
   const scan = (el) => {
     if (el.nodeType !== 1 || el.classList.contains("x-btn")) return;

@@ -6925,3 +6925,74 @@ body:not([data-theme="aero"]) .app.cl-collapsed .cl-head { border-right: 0; }
 body:not([data-theme="aero"]) .app.cl-collapsed:not(:has(#chatHead.hidden)) .cl-head { background: transparent; }
 /* The bar under the list is exactly as tall as the composer, so its top line continues the composer's. */
 body:not([data-theme="aero"]) .app:has(#composer:not(.hidden)) .cl-foot { box-sizing: border-box; min-height: var(--composer-h, 0px); }
+
+/* ===== Hover tooltips: one floating pill on the top layer (see tipLayer in app.js) =====
+   The per-button ::after/::before pills got painted over by later siblings or clipped by
+   overflow:hidden parents — e.g. the header's "Switch account" tip sat under the search box. */
+html.js-tips [data-tip]::after, html.js-tips .call-btn[data-tip]::before { display: none !important; }
+.tip-layer {
+  position: fixed; left: 0; top: 0; z-index: 2147483000; pointer-events: none;
+  max-width: 260px; padding: 5px 10px; border-radius: calc(8px * var(--rk));
+  background: color-mix(in srgb, var(--bg-3) 92%, #000); color: var(--text-strong, #fff);
+  border: 1px solid var(--border-2); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font: 600 12px/1.35 var(--font, inherit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transform: translateY(3px); transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tip-layer.below { transform: translateY(-3px); }
+.tip-layer.on { opacity: 1; transform: none; }
+
+/* ===== In-app notifications: stacked cards, top-right (top-centre on phones) ===== */
+.notif-stack {
+  position: fixed; z-index: 2147482000; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px;
+  width: min(352px, calc(100vw / var(--zf, 1) - 28px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.notif {
+  position: relative; overflow: hidden; pointer-events: auto;
+  display: flex; align-items: center; gap: 11px; padding: 11px 10px 11px 12px;
+  background: color-mix(in srgb, var(--bg-2) 94%, transparent); color: var(--text);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--border-2); border-radius: calc(14px * var(--rk));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.25);
+  opacity: 0; transform: translateY(-10px) scale(0.97);
+  transition: opacity 0.22s var(--ease-out, ease), transform 0.26s var(--ease-out, ease);
+}
+.notif.in { opacity: 1; transform: none; }
+.notif.out { opacity: 0; transform: translateX(24px); transition-duration: 0.22s; }
+.notif-msg { cursor: pointer; }
+@media (hover: hover) { .notif-msg:hover { border-color: var(--border-3); } }
+.notif-ava, .notif-ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; position: relative; overflow: hidden; }
+.notif-ava { border-radius: calc(50% * var(--rc)); background: var(--bg-3); color: var(--accent-200); font-weight: 700; font-size: 14px; }
+.notif-ava img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+body.ava-rounded .notif-ava { border-radius: calc(10px * var(--rk)); }
+body.ava-square .notif-ava { border-radius: 0; }
+.notif-ico { border-radius: calc(11px * var(--rk)); background: var(--accent-faint); color: var(--accent-300); }
+.notif-ico svg { width: 19px; height: 19px; }
+.notif-txt { flex: 1; min-width: 0; }
+.notif-title { font-weight: 700; font-size: 13.5px; color: var(--text-strong, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notif-where { font-weight: 500; color: var(--text-dim); }
+.notif-body { font-size: 13px; color: var(--text-dim); line-height: 1.35; margin-top: 1px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.notif-body.notif-solo { color: var(--text); font-weight: 500; margin: 0; }
+.notif-x { flex: none; align-self: flex-start; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: calc(50% * var(--rc)); background: transparent; color: var(--text-dim); cursor: pointer;
+  opacity: 0.55; transition: opacity 0.15s ease, background 0.15s ease; }
+.notif-x svg { width: 14px; height: 14px; }
+.notif:hover .notif-x, .notif-x:focus-visible { opacity: 1; }
+.notif-x:hover { background: var(--surface-3, rgba(255, 255, 255, 0.08)); color: var(--text); }
+/* Time left: a hairline that drains along the bottom edge; freezes while hovered. */
+.notif-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--accent-400); opacity: 0.7;
+  transform-origin: left; animation: notifDrain var(--nt-left, 4500ms) linear forwards; }
+.notif.paused .notif-bar { animation-play-state: paused; }
+@keyframes notifDrain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
+  .notif-stack { right: 50%; transform: translateX(50%); top: calc(8px + env(safe-area-inset-top, 0px)); }
+  .notif.out { transform: translateY(-14px); }
+}
+@media (prefers-reduced-motion: reduce) { .notif, .notif.out { transform: none; } .notif-bar { animation: none; } }
+/* Minimized rail: the Discover button sits on the same centre line as the avatars below it. */
+@media (min-width: 721px) and (pointer: fine) {
+  .app.cl-collapsed .cl-searchrow { margin: 10px 0 8px; justify-content: center; }
+  /* …and a scrollbar mustn't eat into the rail and shove the avatars off that line (it still scrolls). */
+  .app.cl-collapsed .chats { scrollbar-width: none; }
+  .app.cl-collapsed .chats::-webkit-scrollbar { display: none; }
+}
