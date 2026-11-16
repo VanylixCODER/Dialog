@@ -51,15 +51,14 @@ export function renderErrorPage(code, opts = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex" />
 <title>${esc(opts.title || `${code} · ${tx[lang][0]}`)} — Dialog</title>
-<meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#1a1a18" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#00ff5a" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 ${style}
 </head>
 <body>
-<nav class="nav"><div class="wrap"><a class="brand-row" href="/"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" style="fill:var(--text)"/><path d="M7 9.5a2.5 2.5 0 0 1 2.5-2.5h7A2.5 2.5 0 0 1 19 9.5v4a2.5 2.5 0 0 1-2.5 2.5H12l-3.5 3v-3A2.5 2.5 0 0 1 7 13.5z" style="fill:var(--page)"/><circle cx="18.5" cy="7.5" r="3" style="fill:var(--green);stroke:var(--page);stroke-width:1.5"/></svg>Dialog</a></div></nav>
+<nav class="err-nav"><div class="wrap"><a class="err-brand" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="4" width="22" height="18" rx="5" fill="none" stroke="#00ff5a" stroke-width="2.4"/><circle cx="8" cy="13" r="1.8" fill="#00ff5a"/><circle cx="12" cy="13" r="1.8" fill="#00ff5a"/><circle cx="16" cy="13" r="1.8" fill="#00ff5a"/><path d="M7 22l-2 4 6-4" fill="#00ff5a"/><path d="M21 2.5a6 6 0 0 1 4.5 4.5M21 6a2.5 2.5 0 0 1 1.5 1.5" fill="none" stroke="#00ff5a" stroke-width="2" stroke-linecap="round"/></svg>Dialog</a></div></nav>
 <main class="err">
   <div class="err-box">
     ${codeHtml}
