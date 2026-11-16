@@ -6907,3 +6907,21 @@ body[data-theme="flashbang"] .msg.me .vp-dl, body[data-theme="flashbang"] .msg.m
 }
 @keyframes waPipIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
 @keyframes waBigIn { from { opacity: 0.6; } to { opacity: 1; } }
+
+/* Dividers, take two: the list / chat / info seams come back, but only BELOW the 81px top bar, so
+   the header row reads as one band. They meet the chat header's bottom line in a clean corner. */
+@media (min-width: 721px) and (pointer: fine) {
+body:not([data-theme="aero"]) .chatlist::after,
+body:not([data-theme="aero"]) .info-panel::after { content: ""; position: absolute; z-index: 3; pointer-events: none;
+  top: calc(81px + env(safe-area-inset-top, 0px)); bottom: 0; width: 1px; background: var(--border-1); }
+body:not([data-theme="aero"]) .chatlist::after { right: 0; }
+body:not([data-theme="aero"]) .info-panel { position: relative; }
+body:not([data-theme="aero"]) .info-panel::after { left: 0; }
+}
+/* Minimized: no seam inside the floating top bar between "me" and the open chat's name. */
+body:not([data-theme="aero"]) .app.cl-collapsed .cl-head { border-right: 0; }
+/* …and it's see-through, so the chat header (which runs under it from the rail) shows as one band,
+   its bottom line meeting the rail's divider in a corner. With no chat open it keeps a solid bar. */
+body:not([data-theme="aero"]) .app.cl-collapsed:not(:has(#chatHead.hidden)) .cl-head { background: transparent; }
+/* The bar under the list is exactly as tall as the composer, so its top line continues the composer's. */
+body:not([data-theme="aero"]) .app:has(#composer:not(.hidden)) .cl-foot { box-sizing: border-box; min-height: var(--composer-h, 0px); }

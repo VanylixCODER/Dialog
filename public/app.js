@@ -5904,6 +5904,10 @@ function syncBarFit() {
 }
 if (window.ResizeObserver) new ResizeObserver(() => syncBarFit()).observe($("callStage"));
 if (window.ResizeObserver) new ResizeObserver(() => scheduleFsLayout()).observe(vGrid);
+// The list's bottom bar mirrors the composer's height so their top lines form one straight seam.
+if (window.ResizeObserver) new ResizeObserver(() => {
+  const h = $("composer").offsetHeight; if (h) document.querySelector(".app").style.setProperty("--composer-h", h + "px");
+}).observe($("composer"));
 
 // Small, auto-fading hint telling the user how to leave the spotlight.
 function showGridHint() {
