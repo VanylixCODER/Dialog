@@ -3609,6 +3609,7 @@ socket.on("history", (list) => {
   if (c && last) { c.last = preview(last); c.ts = last.ts; renderChatList($("searchInput").value); }
   placeUnreadDivider(list.length);
   flushPendingForward();   // a forward waiting on this room's join
+  renderDtmNotesFor(myRoom);
   settleThenReveal();
   stickBottomDuringMedia();
   updateJumpBtn();
@@ -6466,9 +6467,32 @@ socket.on("call-ring", (p) => {
 // reconnecting. Only if it's the call we're in.
 socket.on("call-auto-end", ({ room, reason } = {}) => {
   if (!call.active || (room && room !== call.roomKey)) return;
+  const r = call.roomKey;
   endCall();
-  if (reason === "alone" || reason === "ended") notify(t("call_ended_alone"));
+  if (reason === "alone") addDtmNote(r, t("dtm_alone"));
+  else if (reason === "ended") notify(t("call_ended_alone"));
 });
+// ---------- DTM — DialogTrafficManager ----------
+// Local, dismissible notes dropped into a chat (only you see them, like Discord's Clyde). Kept on
+// this device until dismissed with ✕.
+const DTM_KEY = "dialog_dtm";
+const dtmNotes = () => { try { return JSON.parse(localStorage.getItem(DTM_KEY) || "[]"); } catch { return []; } };
+const dtmSave = (a) => { try { localStorage.setItem(DTM_KEY, JSON.stringify(a.slice(-30))); } catch {} };
+function addDtmNote(room, text) {
+  const n = { id: String(Date.now()), room, text, ts: Date.now() };
+  const a = dtmNotes(); a.push(n); dtmSave(a);
+  if (myRoom === room) { renderDtmNote(n); scrollDown(); }
+}
+function renderDtmNote(n) {
+  const el = document.createElement("div"); el.className = "msg dtm"; el.dataset.dtm = n.id;
+  el.innerHTML = `<div class="dtm-card"><div class="dtm-ava">DTM</div><div class="dtm-body">` +
+    `<div class="dtm-head"><b>DTM</b><span class="dtm-full">DialogTrafficManager</span><span class="dtm-tag">${escapeHtml(t("dtm_only_you"))}</span>` +
+    `<span class="dtm-time">${new Date(n.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>` +
+    `<div class="dtm-text">${escapeHtml(n.text)}</div></div><button class="dtm-x" type="button" aria-label="${escapeHtml(t("dtm_dismiss"))}">✕</button></div>`;
+  el.querySelector(".dtm-x").onclick = () => { dtmSave(dtmNotes().filter((x) => x.id !== n.id)); el.remove(); };
+  messagesEl.appendChild(el);
+}
+function renderDtmNotesFor(room) { dtmNotes().filter((n) => n.room === room).forEach(renderDtmNote); }
 // Owner moderation, target side (cooperative).
 socket.on("call-forced", ({ action, by } = {}) => {
   if (action === "mute" && call.active && call.micOn) { setMic(false); notify(t("mod_muted_by", { name: by || "" })); }

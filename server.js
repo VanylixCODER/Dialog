@@ -1909,7 +1909,9 @@ function broadcastCallState(room) {
 // How long someone may sit alone in a call that WAS answered before it ends for them.
 // 1-on-1: the other side hung up → at once; their connection dropped → a short grace, so a
 // network blip (they rejoin on reconnect) doesn't end the call. Group: a while, people return.
-const ALONE_GRACE_DROP_MS = 15000, ALONE_GRACE_GROUP_MS = 120000;
+// Owner's call: 3 minutes alone, however the others left (hung up or dropped, 1-to-1 or group) —
+// long enough to come back, short enough that nobody sits in an empty call "for ages".
+const ALONE_GRACE_MS = Number(process.env.CALL_ALONE_MS) || 3 * 60 * 1000;   // env override for tests
 function scheduleAloneEnd(room, delay) {
   const meta = callMeta.get(room); if (!meta) return;
   clearTimeout(meta.aloneTimer);
@@ -1928,7 +1930,7 @@ function removeFromCall(room, sid, dropped = false) {
   c.delete(sid);
   const meta0 = callMeta.get(room);
   if (c.size && meta0 && meta0.answered && new Set([...c.values()].map((v) => v.login)).size < 2) {
-    scheduleAloneEnd(room, room.startsWith("@grp:") ? ALONE_GRACE_GROUP_MS : dropped ? ALONE_GRACE_DROP_MS : 0);
+    scheduleAloneEnd(room, ALONE_GRACE_MS);
   }
   if (!c.size) {
     callRooms.delete(room);
