@@ -28,6 +28,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public/errors:/srv/errors:ro
       - dialog-caddy-data:/data
     depends_on:
       - app

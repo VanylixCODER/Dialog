@@ -18,6 +18,7 @@
 //   Prod (managed/TLS):  DB_HOST=mysql.example.com DB_PORT=3306 DB_USER=app DB_PASS=*** DB_NAME=dialog DB_SSL=true
 // =====================================================================
 import "dotenv/config";
+import { renderErrorPage, pickLang } from "./errors.js";
 import express from "express";
 import { createServer as createHttp } from "http";
 import { createServer as createHttps } from "https";
@@ -200,7 +201,7 @@ app.use(express.json({ limit: B64_BUFFER_MB + "mb" }));
 
 // IP-ban gate — refuse everything from a banned IP (checked against the in-memory mirror).
 app.use((req, res, next) => {
-  if (ipIsBanned(normIp(req.ip))) return res.status(403).send("Your IP has been banned.");
+  if (ipIsBanned(normIp(req.ip))) return sendError(req, res, 403, { heading: "This network is blocked", headingRu: "Эта сеть заблокирована", body: "Access from your IP address has been blocked by the Dialog moderators.", bodyRu: "Доступ с вашего IP-адреса заблокирован модераторами Dialog.", error: "ip_banned" });
   next();
 });
 
@@ -543,16 +544,7 @@ async function consumeToken(raw, purpose) {
   return row;
 }
 function htmlPage(title, heading, body, ok) {
-  const color = ok ? "#2ec96b" : "#ff5252";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
-  <body style="margin:0;background:#050b06;color:#d6e6dc;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:grid;place-items:center;min-height:100vh">
-    <div style="max-width:420px;text-align:center;padding:28px 24px;background:#0b140d;border:1px solid #1c3324;border-radius:16px">
-      <div style="color:#2ec96b;font-weight:800;font-size:20px">Dialog</div>
-      <h1 style="font-size:20px;margin:16px 0 6px;color:${color}">${heading}</h1>
-      <p style="color:#a9c2b3;font-size:14px;line-height:1.5">${body}</p>
-      <a href="${APP_ORIGIN}/login" style="display:inline-block;margin-top:18px;background:#2ec96b;color:#04180c;text-decoration:none;font-weight:700;padding:11px 22px;border-radius:10px">Open Dialog</a>
-    </div>
-  </body></html>`;
+  return renderErrorPage(ok ? 200 : 400, { title, heading, body, showCode: false, action: { href: "/login", en: "Open Dialog", ru: "Открыть Dialog" } });
 }
 
 // Click-through from the verification email.
@@ -3407,10 +3399,36 @@ const APP_CSP = [
   "manifest-src 'self'",
 ].join("; ");
 
-// SPA fallback — serve index.html for all non-API paths (needed for /en/@user, /ru/group/1, etc.)
-app.get(/^\/(?!api\/|src\/|js\/|css\/|socket\.io\/)/, (req, res) => {
+// The messenger SPA owns exactly these paths: /login, /app (+ /signup, /register), and the
+// language-prefixed chat URLs /en/…, /ru/… (/en/@login, /ru/group/12). Everything else that
+// isn't a page or a file above is a real 404 — it used to silently load the app instead.
+const SPA_PATH = /^\/(?:(?:login|app|signup|register)(?:\/.*)?|(?:en|ru)(?:\/.*)?)$/;
+app.get(SPA_PATH, (req, res) => {
   res.setHeader("Content-Security-Policy", APP_CSP);
   res.sendFile(join(__dirname, "public", "index.html"));
+});
+
+// ---------- Errors ----------
+// Browsers get a proper page; API callers and assets get JSON / an empty body.
+function sendError(req, res, code, opts = {}) {
+  if (res.headersSent) return;
+  const wantsHtml = !req.path.startsWith("/api/") && !req.path.startsWith("/socket.io/") && req.accepts(["html", "json"]) === "html";
+  res.status(code);
+  if (!wantsHtml) return req.path.startsWith("/api/") ? res.json({ error: opts.error || (code === 404 ? "not_found" : "error") }) : res.end();
+  res.set("Cache-Control", "no-store");
+  res.type("html").send(renderErrorPage(code, { lang: pickLang(req.headers["accept-language"]), ...opts }));
+}
+// Unknown address (any method) → 404; a known path with the wrong method → 405.
+app.use((req, res) => {
+  if (req.method !== "GET" && req.method !== "HEAD" && !req.path.startsWith("/api/") && (req.path === "/" || SPA_PATH.test(req.path))) return sendError(req, res, 405);
+  sendError(req, res, 404);
+});
+// Anything thrown inside a route, or a body-parser failure (bad JSON → 400, too large → 413).
+app.use((err, req, res, _next) => {
+  const code = err && (err.status || err.statusCode);
+  if (code && code >= 400 && code < 500) return sendError(req, res, code, { error: err.type || "bad_request" });
+  console.error("unhandled", req.method, req.path, err && err.message);
+  sendError(req, res, 500);
 });
 
 // ---------- Старт ----------

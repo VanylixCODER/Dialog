@@ -41,7 +41,7 @@
         e.target.classList.remove("aos-in");
       }
     }
-  }, { rootMargin: "0px 0px -12% 0px", threshold: 0.05 });
+  }, { rootMargin: "0px 0px 8% 0px", threshold: 0 });   // start just before it's on screen, so a fast flick can't skip it
 
   function scan() {
     var nodes = document.querySelectorAll("[data-aos]:not([data-aos-seen])");
@@ -64,7 +64,9 @@
     var nodes = document.querySelectorAll("[data-aos]:not(.aos-in)");
     for (var i = 0; i < nodes.length; i++) {
       var r = nodes[i].getBoundingClientRect();
-      if (r.top < innerHeight && r.bottom > 0) { reveal(nodes[i]); io.unobserve(nodes[i]); }
+      // On screen, or already scrolled past (a fast scroll can jump over it without it ever
+      // being reported as intersecting) — either way it should be visible now.
+      if (r.top < innerHeight) { reveal(nodes[i]); io.unobserve(nodes[i]); }
     }
   }
   addEventListener("scroll", function () {
