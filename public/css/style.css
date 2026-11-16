@@ -6818,3 +6818,49 @@ body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { b
    sit on a hair-lighter surface instead. (AeroDialog keeps its framed glass look.) */
 body:not([data-theme="aero"]) .cl-head { border-bottom: 0; }
 body:not([data-theme="aero"]) :is(.chatlist, .info-panel) { border-left: 0; border-right: 0; background-color: color-mix(in srgb, var(--bg-1) 70%, var(--bg-2)); }
+
+/* ═════════════ Info panel v2 (renderInfoTop / renderMembers) ═════════════ */
+#infoPanel { display: flex; flex-direction: column; }
+#infoPanel:not(.hidden) { overflow-y: auto; }
+#infoPanel .info-head { border-bottom: 0; }
+#infoPanel #infoAddBtn { display: none; }   /* the "Add" action lives in the action row now */
+.info-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 6px 16px 14px; }
+.info-card .info-ava { width: 84px; height: 84px; font-size: 32px; margin-bottom: 8px; }
+.info-name { font-size: 17px; font-weight: 700; color: var(--text-strong); word-break: break-word; }
+.info-sub { font-size: 12.5px; color: var(--text-dim); }
+.info-actions { display: flex; justify-content: center; gap: 8px; padding: 0 12px 14px; flex-wrap: wrap; }
+.info-act {
+  flex: 1 1 0; min-width: 70px; max-width: 96px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 6px; border: 0; cursor: pointer; border-radius: var(--r-3); background: var(--bg-3); color: var(--text);
+  font: 600 11.5px/1.2 var(--font-ui);
+}
+.info-act .ia-ico svg { width: 19px; height: 19px; display: block; }
+.info-act .ia-ico { color: var(--accent-300); }
+@media (hover: hover) { .info-act:hover { background: var(--surface-3); } }
+.info-act.danger .ia-ico, .info-act.danger { color: var(--danger); }
+.info-sec { padding: 4px 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.info-sec:empty { display: none; }
+#members .member { display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 14px; margin: 0 6px; border-radius: var(--r-2); cursor: pointer; }
+@media (hover: hover) { #members .member:hover { background: var(--surface-2); } }
+#members .member.empty { cursor: default; opacity: 0.6; }
+#members .m-ava { position: relative; width: 34px; height: 34px; font-size: 13px; flex: none; overflow: visible; }
+#members .m-ava .st-dot { position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border: 2px solid var(--bg-1); }
+#members .m-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#members .m-name { font-size: 13.5px; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#members .m-you { color: var(--text-dim); font-weight: 400; }
+#members .m-st { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-dim); }
+#members .m-st.incall { color: var(--accent-300); }
+#members .m-st svg { width: 12px; height: 12px; }
+#members .m-more {
+  flex: none; width: 30px; height: 30px; border: 0; background: transparent; color: var(--text-dim); cursor: pointer;
+  border-radius: calc(50% * var(--rc)); font-size: 18px; line-height: 1; display: grid; place-items: center;
+}
+@media (hover: hover) { #members .m-more:hover { background: var(--surface-3); color: var(--text-strong); } }
+.im-menu {
+  position: fixed; z-index: 1300; min-width: 180px; padding: 6px; display: flex; flex-direction: column;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: var(--r-3); box-shadow: var(--shadow-lg);
+}
+.im-menu button { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; background: transparent; color: var(--text); font: 500 13.5px/1 var(--font-ui); cursor: pointer; border-radius: var(--r-2); text-align: left; }
+.im-menu button svg { width: 16px; height: 16px; flex: none; }
+@media (hover: hover) { .im-menu button:hover { background: var(--surface-3); } }
+.im-menu button.danger { color: var(--danger); }

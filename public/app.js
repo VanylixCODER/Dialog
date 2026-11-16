@@ -2277,7 +2277,7 @@ function openChat(c) {
   // боковая панель участников для групп (на десктопе)
   groupMembers = [];
   $("infoBtn").classList.toggle("hidden", c.type !== "group");
-  if (c.type === "group") { loadGroupMembers(); if (!isMobile()) { $("infoTitle").textContent = t("info"); $("infoPanel").classList.remove("hidden"); } }
+  if (c.type === "group") { loadGroupMembers(); if (!isMobile()) { $("infoTitle").textContent = t("group_info"); $("infoPanel").classList.remove("hidden"); } }
   else if (c.type === "dm") $("infoPanel").classList.add("hidden");
   renderChatList($("searchInput").value);
   if (call.active && c.key === call.roomKey) call.minimized = false; // вернулись в чат звонка
@@ -2329,12 +2329,7 @@ $("muteBtn").onclick = () => { if (!myRoom) return; openMuteMenu($("muteBtn"), m
 $("infoBtn").onclick = () => {
   if (!myRoom) return;
   renderMembers();
-  // A bot is an account, not a member of the conversation — count them apart.
-  const bots = (groupMembers || []).filter((m) => m.is_bot).length;
-  const people = Math.max(0, (groupMembers || []).length - bots);
-  $("infoTitle").textContent = curKind === "group"
-    ? t("members_count", { n: people }) + (bots ? " · " + t("bots_count", { n: bots }) : "")
-    : t("info");
+  $("infoTitle").textContent = curKind === "group" ? (curChannel ? t("channel_info") : t("group_info")) : t("info");
   $("infoPanel").classList.toggle("hidden");
 };
 $("infoClose").onclick = () => $("infoPanel").classList.add("hidden");
@@ -3444,60 +3439,98 @@ async function loadGroupMembers() {
     applyChannelUI();
   }
 }
+// ---------- Info panel ----------
+// Top card (who/what this chat is) → labelled actions → people. Every member action lives in
+// one ⋯ menu per row with words, instead of unlabelled ✕ / hover-only flag icons (the report
+// flag was invisible until hover, i.e. never on touch screens).
+function renderInfoTop() {
+  const card = $("infoCard"), acts = $("infoActions"); if (!card || !acts) return;
+  const c = chats.get(myRoom) || {};
+  const bots = (groupMembers || []).filter((m) => m.is_bot).length;
+  const people = Math.max(0, (groupMembers || []).length - bots);
+  let ava, name = escapeHtml(c.name || curTitle || ""), sub;
+  if (curKind === "group") {
+    ava = `<div class="avatar grp info-ava"><img src="/api/group-avatar/${escapeHtml(String(c.id || myRoom.slice(5)))}?v=${avaVer}" data-fallback="group"></div>`;
+    sub = (curChannel ? t("channel_sub") + " · " : "") + t("members_count", { n: people }) + (bots ? " · " + t("bots_count", { n: bots }) : "");
+  } else {
+    const login = c.login || dmPeer(myRoom);
+    ava = `<div class="avatar info-ava" data-login="${escapeHtml(login || "")}"><img src="${avaUrl(login)}" data-fallback="remove">${initials(c.name || login)}</div>`;
+    const st = presence.get(login); sub = st ? t("status_" + st) : t("room_sub_dm");
+  }
+  card.innerHTML = `${ava}<div class="info-name">${name}</div><div class="info-sub">${escapeHtml(sub)}</div>`;
+  acts.innerHTML = "";
+  const act = (icon, label, fn, cls) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "info-act" + (cls ? " " + cls : "");
+    b.innerHTML = `<span class="ia-ico">${window.ICON[icon] || ""}</span><span class="ia-lbl">${escapeHtml(label)}</span>`;
+    b.onclick = fn; acts.appendChild(b);
+  };
+  const muted = isMuted(myRoom);
+  if (curKind === "group") {
+    if ($("infoAddBtn") && !$("infoAddBtn").classList.contains("hidden")) act("userPlus", t("info_add"), () => openAddMembers());
+    if (groupOwner) act("settings", curChannel ? t("channel_settings") : t("group_settings"), () => openSettings("groups", true));
+    act(muted ? "bell" : "bellOff", muted ? t("info_unmute") : t("info_mute"), () => { infoToggleMute(); });
+  } else {
+    const login = c.login || dmPeer(myRoom);
+    act("user", t("info_profile"), () => openMiniProfile(login));
+    act(muted ? "bell" : "bellOff", muted ? t("info_unmute") : t("info_mute"), () => { infoToggleMute(); });
+    if (login && login !== profile.login) act("flag", t("info_report"), () => openReportModal({ target: login, targetName: c.name || login }), "danger");
+  }
+}
+function infoToggleMute() {
+  toggleMute(myRoom);
+  const mb = $("muteBtn"); if (mb) mb.innerHTML = isMuted(myRoom) ? window.ICON.bellOff : window.ICON.bell;   // header bell in sync
+  scheduleChatList(); renderInfoTop();
+}
+let _imMenu = null;
+function closeMemberMenu() { if (_imMenu) { _imMenu.remove(); _imMenu = null; } }
+function openMemberMenu(btn, login, name) {
+  closeMemberMenu();
+  const m = document.createElement("div"); m.className = "im-menu";
+  const item = (icon, label, fn, danger) => {
+    const b = document.createElement("button"); b.type = "button"; if (danger) b.className = "danger";
+    b.innerHTML = `${window.ICON[icon] || ""}<span>${escapeHtml(label)}</span>`;
+    b.onclick = (e) => { e.stopPropagation(); closeMemberMenu(); fn(); }; m.appendChild(b);
+  };
+  item("user", t("im_view_profile"), () => openMiniProfile(login));
+  if (login !== profile.login) item("flag", t("im_report"), () => openReportModal({ target: login, targetName: name }));
+  if (groupOwner && curKind === "group" && login !== profile.login) item("trash", t("im_remove"), async () => {
+    if (!confirm(t("remove") + " " + name + "?")) return;
+    const { ok, data } = await api("/api/groups/" + myRoom.slice(5) + "/members", { remove: login });
+    if (!ok) notify((data && data.error) || "Couldn't remove");
+  }, true);
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.right - mw)) + "px";
+  m.style.top = (r.bottom + 4 + mh > innerHeight ? r.top - mh - 4 : r.bottom + 4) + "px";
+  _imMenu = m;
+}
+document.addEventListener("click", (e) => { if (_imMenu && !_imMenu.contains(e.target) && !e.target.closest(".m-more")) closeMemberMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMemberMenu(); });
 function renderMembers() {
+  renderInfoTop();
   const ul = $("members"); if (!ul) return; ul.innerHTML = "";
+  const sec = $("infoMembersTitle");
   const inCall = new Set((activeCalls.get(myRoom) || {}).logins || []);
   const byLogin = new Map();
   const botLogins = new Set();
   if (curKind === "group") for (const m of groupMembers) { byLogin.set(m.login, m.name); if (m.is_bot) botLogins.add(m.login); } // все участники группы
   for (const [, info] of peers) if (info.login) byLogin.set(info.login, info.name);    // + присутствующие
   inCall.forEach((l) => { if (!byLogin.has(l)) byLogin.set(l, l); });
-  if (byLogin.size === 0) { ul.innerHTML = `<li class="member" style="opacity:.5"><span class="m-name">${t("alone")}</span></li>`; return; }
+  if (sec) sec.textContent = curKind === "group" ? t("info_members", { n: byLogin.size }) : (byLogin.size ? t("info_here_now") : "");
+  if (byLogin.size === 0) { if (curKind === "group") ul.innerHTML = `<li class="member empty"><span class="m-name">${t("alone")}</span></li>`; return; }
   for (const [login, name] of byLogin) {
     const li = document.createElement("li"); li.className = "member";
     const online = login === profile.login ? (myStatus === "invisible" ? "offline" : myStatus) : (presence.get(login) || "offline");
-    const callIcon = inCall.has(login) ? `<span class="m-incall" title="${t("in_call")}">${window.ICON.phone}</span>` : `<span class="st-dot st-${statusClass(online)}"></span>`;
-    const crown = login === groupOwnerLogin ? `<span class="m-crown">👑</span>` : "";
+    const stTxt = inCall.has(login) ? t("in_call") : t("status_" + statusClass(online)) || "";
+    const crown = login === groupOwnerLogin ? `<span class="m-crown" title="${escapeHtml(t("owner") || "")}">👑</span>` : "";
     const botTag = botLogins.has(login) ? ` <span class="bot-badge">BOT</span>` : "";
-    li.innerHTML = `<div class="avatar" data-login="${login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(login)}" data-fallback="remove">${initials(name)}</div><span class="m-name">${crown}${escapeHtml(name)}${botTag}</span>${callIcon}`;
-    // Inline remove для овнера: раньше единственный путь «удалить участника» был Settings → Groups,
-    // что далеко от списка, который сейчас у пользователя перед глазами. groupOwner уже учитывает
-    // ds.owner === profile.login (см. loadGroupMembers) → self-сравнение login !== profile.login
-    // одновременно исключает овнера из жертв и работает семантически «не удаляй самого себя».
-    if (groupOwner && curKind === "group" && login !== profile.login) {
-      const rm = document.createElement("button");
-      rm.className = "member-remove";
-      rm.title = t("remove");
-      rm.textContent = "✕";
-      rm.onclick = async (e) => {
-        // stopPropagation — иначе клик «пройдёт» на li.onclick → открылся бы мини-профиль удалённого.
-        e.stopPropagation();
-        if (!confirm(t("remove") + " " + name + "?")) return;
-        const gid = myRoom.slice(5);
-        const { ok, data } = await api("/api/groups/" + gid + "/members", { remove: login });
-        if (!ok) { notify(data.error || "Couldn't remove"); return; }
-        // group-updated от сервера триггерит loadGroupMembers через socket handler — этот list
-        // обновится автоматически. Дополнительный setTimeout отсутствует, ничего лишнего.
-      };
-      li.appendChild(rm);
-    }
-    // Report this member (anyone but yourself). Small flag; stops propagation so the row's
-    // click (open mini-profile) doesn't also fire.
-    if (login !== profile.login) {
-      const rep = document.createElement("button");
-      rep.className = "member-report"; rep.title = t("report_user");
-      rep.innerHTML = window.ICON.flag || "!";
-      rep.onclick = (e) => { e.stopPropagation(); openReportModal({ target: login, targetName: name }); };
-      li.appendChild(rep);
-    }
-    // Клавиатурная навигация по сайдпанели участников: Tab → focus (кольцо из .member:focus-visible), Enter/Space → то же, что и клик.
+    const you = login === profile.login ? ` <span class="m-you">${escapeHtml(t("you_suffix"))}</span>` : "";
+    li.innerHTML = `<div class="avatar m-ava" data-login="${login}"><img src="${avaUrl(login)}" data-fallback="remove">${initials(name)}<span class="st-dot st-${inCall.has(login) ? "online" : statusClass(online)}"></span></div>` +
+      `<span class="m-text"><span class="m-name">${crown}${escapeHtml(name)}${botTag}${you}</span><span class="m-st${inCall.has(login) ? " incall" : ""}">${inCall.has(login) ? window.ICON.phone : ""}${escapeHtml(stTxt)}</span></span>` +
+      `<button class="m-more" type="button" aria-label="${escapeHtml(t("t_more"))}">⋯</button>`;
+    li.querySelector(".m-more").onclick = (e) => { e.stopPropagation(); openMemberMenu(e.currentTarget, login, name); };
     li.tabIndex = 0; li.setAttribute("role", "button");
-    li.onkeydown = (e) => {
-      const t_ = e.target;
-      // Если фокус на кнопке удаления — пусть у неё свой обработчик (Enter/Space). Иначе открываем профиль.
-      if (t_ && t_.classList && t_.classList.contains("member-remove")) return;
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMiniProfile(login); }
-    };
+    li.onkeydown = (e) => { if (e.target === li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openMiniProfile(login); } };
     li.onclick = () => openMiniProfile(login);
     ul.appendChild(li);
   }
