@@ -7319,3 +7319,39 @@ body.ava-rounded .dsc-ava:not(.grp) { border-radius: calc(12px * var(--rk)); }
 }
 /* A note you stopped part-way keeps its progress visible. */
 .bubble.voice.resume:not(.playing) .vp-time { color: var(--accent-300); }
+
+/* ===== Phone: ongoing-call bar pinned to the top of the screen (chat AND chat list) ===== */
+.mc-bar {
+  position: fixed; z-index: 110; left: 0; right: 0; top: 0;
+  display: flex; align-items: center; gap: 8px; height: calc(52px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 10px 0 12px; box-sizing: border-box;
+  background: color-mix(in srgb, var(--accent-400) 16%, var(--bg-1)); border-bottom: 1px solid color-mix(in srgb, var(--accent-400) 35%, var(--border-1));
+  color: var(--text); animation: mcIn 0.22s var(--ease-out, ease);
+}
+@keyframes mcIn { from { transform: translateY(-100%); } }
+.mc-bar.hidden { display: none; }
+body.has-mcbar .app { box-sizing: border-box; padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
+body.has-mcbar .app .chat-head { padding-top: 14px; }
+body.has-mcbar .app .cl-head { padding-top: 12px; }
+.mc-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mc-pulse { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--accent-400); animation: mcPulse 1.6s ease-out infinite; }
+@keyframes mcPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-400) 70%, transparent); } 80%, 100% { box-shadow: 0 0 0 8px transparent; } }
+.mc-txt { display: flex; flex-direction: column; min-width: 0; }
+.mc-who { font-size: 14px; font-weight: 700; color: var(--text-strong, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-sub { font-size: 12px; color: var(--accent-200, var(--text-dim)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.mc-btn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.mc-btn svg { width: 19px; height: 19px; }
+.mc-btn.off { background: var(--text); color: var(--bg-1); }
+.mc-end { background: var(--danger, #f04848); color: #fff; }
+.hangup-card { width: min(340px, calc(92vw / var(--zf, 1))); align-items: center; text-align: center; gap: 8px; }
+.hangup-ico { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--danger, #f04848) 16%, transparent); color: var(--danger, #f04848); margin-bottom: 4px; }
+.hangup-ico svg { width: 26px; height: 26px; }
+.hangup-sub { font-size: 13.5px; color: var(--text-dim); margin-bottom: 8px; }
+.hangup-acts { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.hangup-acts button { width: 100%; height: 44px; }
+.hangup-quit { background: var(--danger, #f04848) !important; color: #fff !important; }
+/* The chat pane / list carry their own full-viewport heights on phones — take the bar's 52px off. */
+body.has-mcbar .app > .chat, body.has-mcbar .app > .chatlist {
+  height: calc(100dvh / var(--zf, 1) - 52px - env(safe-area-inset-top, 0px)); max-height: calc(100dvh / var(--zf, 1) - 52px - env(safe-area-inset-top, 0px)); }
+body.has-mcbar #voiceBar { display: none; }   /* the top bar replaces the in-list one on phones */

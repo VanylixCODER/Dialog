@@ -98,6 +98,24 @@
   </div>
 
   <!-- ПРИЛОЖЕНИЕ -->
+  <!-- Phones: an ongoing call you've stepped out of stays pinned at the very top, over the chat
+       AND the chat list — who's in it, how long, mute, hang up. Tap the left part to go back. -->
+  <div id="mcBar" class="mc-bar hidden" role="region" aria-label="Ongoing call">
+    <button type="button" class="mc-main" id="mcOpen"><span class="mc-pulse"></span><span class="mc-txt"><span class="mc-who" id="mcWho"></span><span class="mc-sub"><span id="mcTime">00:00</span><span id="mcWhere"></span></span></span></button>
+    <button type="button" class="mc-btn" id="mcMic" aria-label="Mute"></button>
+    <button type="button" class="mc-btn mc-end" id="mcEnd" aria-label="Hang up"></button>
+  </div>
+  <div id="hangupModal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="hangupTitle">
+    <div class="modal-card hangup-card">
+      <div class="hangup-ico" id="hangupIco"></div>
+      <div class="modal-title" id="hangupTitle" data-i18n="hangup_q">Do you want to hang up?</div>
+      <div class="hangup-sub" id="hangupSub"></div>
+      <div class="hangup-acts">
+        <button type="button" class="btn-primary hangup-quit" id="hangupQuit" data-i18n="hangup_quit">Quit call</button>
+        <button type="button" class="btn-ghost" id="hangupStay" data-i18n="hangup_stay">Stay in call</button>
+      </div>
+    </div>
+  </div>
   <div id="app" class="app hidden">
     <aside class="chatlist">
       <div class="cl-pinzone" id="clPinzone">📌 <span data-i18n="drop_to_pin">Drop to pin</span></div>

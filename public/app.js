@@ -6312,6 +6312,7 @@ function showGridHint() {
 }
 function updateCallCount() { $("callCount").textContent = vGrid.querySelectorAll(".tile:not(.screen):not(.tile-leaving)").length; if (typeof syncWa === "function") syncWa(); }
 function updateCallStatus() {
+  renderMcBar();
   const el = $("callStatus"); if (!el) return;
   if (!call.active) { el.textContent = ""; el.className = "call-status"; return; }
   let s;
@@ -6585,7 +6586,7 @@ $("callJoinBanner") && ($("callJoinBanner").onclick = () => { if (!call.active |
 // Звонок = левая колонка переписки (ПК): сообщения адаптивно справа, не под звонком. Телефон — стек сверху.
 function syncCallUI() {
   const stage = $("callStage"), vb = $("voiceBar"), pane = $("chatPane");
-  if (!call.active) { stage.classList.add("hidden"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); pane.classList.remove("has-call"); return; }
+  if (!call.active) { stage.classList.add("hidden"); stage.classList.remove("fullscreen"); vb.classList.add("hidden"); pane.classList.remove("has-call"); renderMcBar(); $("hangupModal") && $("hangupModal").classList.add("hidden"); return; }
   const here = myRoom === call.roomKey;
   const showStage = here && !(isMobile() && call.minimized);
   stage.classList.toggle("hidden", !showStage);
@@ -6599,7 +6600,40 @@ function syncCallUI() {
   vb.classList.toggle("hidden", showStage);
   updateVoiceBar();
   syncWa();
+  renderMcBar();
 }
+// ---- Phone call bar (see #mcBar) ----
+function mcPeerNames() { return call.peers ? [...call.peers.values()].filter((m) => !m.unreachable).map((m) => m.name).filter(Boolean) : []; }
+function renderMcBar() {
+  const bar = $("mcBar"); if (!bar) return;
+  const show = !!(call.active && isMobile() && $("callStage").classList.contains("hidden"));
+  bar.classList.toggle("hidden", !show);
+  document.body.classList.toggle("has-mcbar", show);
+  if (!show) return;
+  const names = mcPeerNames(), title = call.roomTitle || "";
+  const group = (call.roomKey || "").startsWith("@grp:");
+  $("mcWho").textContent = names.length ? names.join(", ") : title;
+  $("mcWhere").textContent = group && names.length && title ? t("mc_in", { name: title }) : "";
+  $("mcMic").innerHTML = window.ICON[call.micOn ? "mic" : "micOff"];
+  $("mcMic").classList.toggle("off", !call.micOn);
+  $("mcMic").setAttribute("aria-label", t(call.micOn ? "mute_mic" : "unmute_mic"));
+  $("mcEnd").innerHTML = window.ICON.phoneOff;
+  $("mcOpen").setAttribute("aria-label", t("mc_back"));
+}
+function askHangUp() {
+  const names = mcPeerNames();
+  $("hangupIco").innerHTML = window.ICON.phoneOff;
+  $("hangupSub").textContent = t("hangup_sub", { name: names.length ? names.join(", ") : call.roomTitle || "" });
+  $("hangupModal").classList.remove("hidden");
+  $("hangupStay").focus();
+}
+$("mcOpen") && ($("mcOpen").onclick = () => { call.minimized = false; const c = chats.get(call.roomKey); if (c && myRoom !== call.roomKey) openChat(c); else if (myRoom !== call.roomKey && call.roomKey) openRoomByKey(call.roomKey, call.roomTitle); syncCallUI(); });
+$("mcMic") && ($("mcMic").onclick = () => setMic(!call.micOn));
+window.addEventListener("resize", () => { if (call.active) renderMcBar(); });
+$("mcEnd") && ($("mcEnd").onclick = askHangUp);
+$("hangupStay") && ($("hangupStay").onclick = () => $("hangupModal").classList.add("hidden"));
+$("hangupQuit") && ($("hangupQuit").onclick = () => { $("hangupModal").classList.add("hidden"); endCall(); });
+$("hangupModal") && $("hangupModal").addEventListener("click", (e) => { if (e.target === $("hangupModal")) $("hangupModal").classList.add("hidden"); });
 function updateVoiceBar() {
   if (!call.active) return;
   $("vbInfo").querySelector(".vb-label").textContent = call.roomTitle || "";
@@ -6901,10 +6935,10 @@ function endCall() {
       $("chatPane").classList.remove("has-call", "fullscreen-call");
     }, 260);
   })();
-  $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
+  $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden"); $("hangupModal") && $("hangupModal").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
-  tileOrder.length = 0; waSwapped = false;
+  tileOrder.length = 0; waSwapped = false; renderMcBar();   // after call.active = false
   delete call.declinedBy;
   if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
@@ -6926,6 +6960,7 @@ function startCallTimer() {
     const s = Math.floor((Date.now() - _callStart) / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
     const el = $("callTimer"); if (el) el.textContent = mm + ":" + ss;
+    const mt = $("mcTime"); if (mt) mt.textContent = mm + ":" + ss;
   };
   tick(); clearInterval(_callTimer); _callTimer = setInterval(tick, 1000);
 }
@@ -7015,7 +7050,7 @@ async function setMic(on, quiet) {
   else if (call.room) { try { await call.room.localParticipant.setMicrophoneEnabled(on); } catch {} } // legacy
   p2pBroadcast({ mic: on });   // tell peers so their mic indicator on my tile updates
   $("toggleMic").classList.toggle("off", !on); $("toggleMic").innerHTML = window.ICON[on ? "mic" : "micOff"];
-  setMicIndicator("me", !on); bumpBtn($("toggleMic"));
+  setMicIndicator("me", !on); bumpBtn($("toggleMic")); renderMcBar();
   if (!quiet) (on ? sfx.unmute : sfx.mute)();
 }
 $("toggleMic").onclick = () => { if (!call.active) return; setMic(!call.micOn); };
