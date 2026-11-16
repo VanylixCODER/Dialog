@@ -108,12 +108,10 @@
           <!-- Status pill (рядом с никнеймом). Клик → открывает #meStatusMenu; по умолчанию "online". -->
           <button id="meStatus" class="me-status" type="button" data-i18n-title="set_status" title="Set status"></button>
         </div>
-        <button id="newGroupBtn" class="hicon-btn" data-i18n-title="new_group" title="New group">＋</button>
         <button id="installBtn" class="hicon-btn hidden" data-i18n-title="install_app" title="Install app">⬇</button>
         <button id="adminBtn" class="hicon-btn hidden" data-i18n-title="admin_panel" title="Admin panel">🛡</button>
         <button id="accountBtn" class="hicon-btn" data-i18n-title="switch_account" title="Switch account">⇄</button>
         <button id="contactsBtn" class="hicon-btn" data-i18n-title="contacts" title="Contacts">👥</button>
-        <button id="discoverBtn" class="hicon-btn" data-i18n-title="directory" title="Discover">🧭</button>
       </div>
       <div id="voiceBar" class="voice-bar hidden">
         <div class="vb-info" id="vbInfo"><span class="vb-dot"></span><span class="vb-label"></span></div>
@@ -121,7 +119,12 @@
         <button class="vb-btn" id="vbDeafen" data-i18n-title="t_deafen" title="Deafen"></button>
         <button class="vb-btn end" id="vbHang" data-i18n-title="t_hangup" title="Leave"></button>
       </div>
-      <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
+      <!-- Search + Discover share one row: a rounded search pill, the round Discover button beside it.
+           (Create group lives in the empty-state CTA and Settings → Groups.) -->
+      <div class="cl-searchrow">
+        <input id="searchInput" class="field cl-search" data-i18n-ph="search" autocomplete="off" />
+        <button id="discoverBtn" class="hicon-btn cl-discover" data-i18n-title="directory" title="Discover">🧭</button>
+      </div>
       <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="online" data-i18n="filter_online">Online</button><button class="clf-btn" data-filter="pinned" data-i18n="filter_pinned">Pinned</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
       <ul id="chatList" class="chats"></ul>
       <div id="chatsEmpty" class="chats-empty">

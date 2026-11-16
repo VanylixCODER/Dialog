@@ -6646,9 +6646,12 @@ body:not([data-theme="aero"]) :is(.chat-head, .composer) { background-color: var
 body:not([data-theme="aero"]) .cl-head { background: transparent; }
 body:not([data-theme="aero"]) .chat-item.active { background: var(--surface-3); }
 body:not([data-theme="aero"]) :is(.avatar, .tile-avatar, .tile) { background-image: none; background-color: var(--bg-3); }
-body:not([data-theme="aero"]) :is(.chatlist::before, .chat::before, .chat-head::after, .composer::before, .call-stage::after,
-  .voice-bar::before, .contacts-sec-title::after, .btn-primary::after) { display: none; }
-body:not([data-theme="aero"]) :is(.day-sep::before, .day-sep::after) { background: var(--border-1); }
+/* (Pseudo-elements can't go inside :is() — a list like that invalidates the whole rule.) */
+body:not([data-theme="aero"]) .chatlist::before, body:not([data-theme="aero"]) .chat::before,
+body:not([data-theme="aero"]) .chat-head::after, body:not([data-theme="aero"]) .composer::before,
+body:not([data-theme="aero"]) .call-stage::after, body:not([data-theme="aero"]) .voice-bar::before,
+body:not([data-theme="aero"]) .contacts-sec-title::after, body:not([data-theme="aero"]) .btn-primary::after { display: none; }
+body:not([data-theme="aero"]) .day-sep::before, body:not([data-theme="aero"]) .day-sep::after { background: var(--border-1); }
 body[data-page="chat"]:not([data-theme="aero"]) { background-image: none; }
 
 /* Settings header: no tinted band and no line under it — the title just sits on the card. */
@@ -6803,3 +6806,15 @@ body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { b
 .msg.g-cont:not(.me) > .bubble { border-top-left-radius: calc(6px * var(--rk)); }
 .msg.me.g-more > .bubble { border-bottom-right-radius: calc(6px * var(--rk)); }
 .msg.me.g-cont > .bubble { border-top-right-radius: calc(6px * var(--rk)); }
+
+/* Chat list: search pill + round Discover button on one row. */
+.cl-searchrow { display: flex; align-items: center; gap: 8px; margin: 10px 12px 8px; }
+.cl-searchrow .cl-search { flex: 1; min-width: 0; margin: 0; height: 40px; padding: 0 16px; border-radius: var(--r-pill); background: var(--bg-3); border: 1px solid transparent; }
+.cl-searchrow .cl-search:focus { border-color: var(--border-3); box-shadow: none; }
+.cl-searchrow .cl-discover { flex: none; width: 40px; height: 40px; border-radius: calc(50% * var(--rc)); background: var(--bg-3); border: 1px solid transparent; }
+@media (hover: hover) { .cl-searchrow .cl-discover:hover { border-color: var(--border-3); } }
+
+/* No "walls": the list, chat and info panel aren't boxed in by lines any more — the side panels
+   sit on a hair-lighter surface instead. (AeroDialog keeps its framed glass look.) */
+body:not([data-theme="aero"]) .cl-head { border-bottom: 0; }
+body:not([data-theme="aero"]) :is(.chatlist, .info-panel) { border-left: 0; border-right: 0; background-color: color-mix(in srgb, var(--bg-1) 70%, var(--bg-2)); }
