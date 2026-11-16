@@ -2347,6 +2347,8 @@ function openChat(c) {
   // (пейн «groups»). Ставим напрямую .title — applyI18n() бежит только в init, поэтому меняем
   // по факту смены чата, а не через data-i18n-title.
   $("chatAva").title = t(c.type === "group" ? "group_settings" : "open_profile");
+  // DM: the name in the header opens their profile too (like Discord's header).
+  const ct = $("chatTitle"); if (ct) { if (c.type === "dm" && c.login) { ct.setAttribute("data-profile", c.login); ct.setAttribute("role", "button"); ct.tabIndex = 0; } else { ct.removeAttribute("data-profile"); ct.removeAttribute("role"); ct.removeAttribute("tabindex"); } }
   updateBotCmds(c);
   $("muteBtn").innerHTML = isMuted(c.key) ? window.ICON.bellOff : window.ICON.bell;
   restoreDraft();
@@ -2629,7 +2631,7 @@ async function populateGroupSettingsPane() {
   data.members.forEach((m) => {
     const row = document.createElement("div"); row.className = "contact-row";
     const ownerTag = m.login === data.owner ? `<span class="owner-tag">(${t("owner")})</span>` : "";
-    row.innerHTML = `<div class="avatar" data-login="${m.login}" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(m.login)}" data-fallback="remove">${initials(m.name)}</div><span class="c-name">${escapeHtml(m.name)}</span>${ownerTag}`;
+    row.innerHTML = `<div class="avatar" data-login="${m.login}" data-profile="${m.login}" role="button" tabindex="0" style="width:30px;height:30px;font-size:13px"><img src="${avaUrl(m.login)}" data-fallback="remove">${initials(m.name)}</div><span class="c-name" data-profile="${m.login}" role="button" tabindex="0">${escapeHtml(m.name)}</span>${ownerTag}`;
     if (gsOwner && m.login !== data.owner) { const b = document.createElement("button"); b.className = "danger"; b.textContent = t("remove"); b.onclick = () => removeGroupMember(m.login); row.appendChild(b); }
     box.appendChild(row);
   });
@@ -3200,7 +3202,7 @@ function contactRow(login, buttons) {
   const row = document.createElement("div"); row.className = "contact-row";
   const st = presence.get(login) || "offline";
   row.innerHTML =
-    `<div class="ava-wrap c-ava-wrap"><div class="avatar" data-login="${login}" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(login)}" data-fallback="remove">${initials(login)}</div>` +
+    `<div class="ava-wrap c-ava-wrap"><div class="avatar" data-login="${login}" data-profile="${login}" role="button" tabindex="0" style="width:34px;height:34px;font-size:13px"><img src="${avaUrl(login)}" data-fallback="remove">${initials(login)}</div>` +
     `<span class="st-dot c-status st-${statusClass(st)}"></span></div>` +
     `<span class="c-name">${escapeHtml(login)}</span>`;
   row.onclick = (e) => { if (e.target.closest("button")) return; openDM(login); };
@@ -3308,22 +3310,38 @@ $("contactSearch") && ($("contactSearch").addEventListener("input", (e) => { con
 async function friend(target, action) { await api("/api/friend", { target, action }); loadRelations(); }
 async function block(target, action) { await api("/api/relations", { target, action }); loadRelations(); }
 
-// ---------- Мини-профиль ----------
+// ---------- Profile card (Discord-style popout) ----------
+// Banner (or a name-seeded gradient), big avatar with a status ring, name/@login/badges, then
+// tabs: About · Mutual friends · Mutual groups. Others get "Message @name" right in the card
+// (it opens the DM and sends); you get "Edit profile". Opens for ANY login — your own included.
+let mpLogin = null, mpSeq = 0;
 async function openMiniProfile(login) {
-  if (!login || login === profile.login) return;
-  const [{ ok, data }] = await Promise.all([api("/api/profile/" + login, null, "GET"), loadRelations()]);
-  if (!ok) return;
+  login = String(login || "").trim().toLowerCase();
+  if (!login || !profile) return;
+  const seq = ++mpSeq;
+  const [{ ok, data }] = await Promise.all([api("/api/profile/" + encodeURIComponent(login), null, "GET"), loadRelations()]);
+  if (!ok || seq !== mpSeq) { if (!ok) notify(t("err_user_not_found")); return; }
+  mpLogin = login;
+  const self = login === profile.login, card = document.querySelector("#mpModal .mp-card");
+  card.classList.toggle("is-self", self); card.classList.toggle("is-bot", !!data.isBot);
   $("mpModal").classList.remove("hidden");
-  $("mpAva").setAttribute("data-login", login);
-  loadAwards(login, $("mpAwards"));
-  $("mpAva").innerHTML = `<img src="${avaUrl(login)}" data-fallback="remove"><span class="ava-fallback">${initials(data.name)}</span>`;
-  if (data.isBot) botLoginCache.add(login); else botLoginCache.delete(login);
-  $("mpName").innerHTML = escapeHtml(data.name) + (data.isBot ? ' <span class="bot-badge">BOT</span>' : ""); $("mpLogin").textContent = data.login;
+  closeMpMore(); mpShowTab("about");
+  // Banner: their image, or a gradient seeded by who they are.
   const banner = $("mpBanner"), bannerImg = $("mpBannerImg");
-  bannerImg.onload = () => banner.classList.remove("hidden");
-  bannerImg.onerror = () => banner.classList.add("hidden");
-  banner.classList.add("hidden"); bannerImg.src = bannerUrl(login);
-  // "Unstable" moderation tag — a red block icon; hover reveals the reason + ban length.
+  banner.setAttribute("style", dirGradient((data.name || login) + "b" + login));
+  banner.classList.remove("has-img");
+  bannerImg.onload = () => banner.classList.add("has-img");
+  bannerImg.onerror = () => { banner.classList.remove("has-img"); bannerImg.removeAttribute("src"); };
+  bannerImg.src = bannerUrl(login);
+  $("mpAva").setAttribute("data-login", login);
+  $("mpAva").innerHTML = `<img src="${avaUrl(login)}" data-fallback="remove"><span class="ava-fallback">${initials(data.name)}</span>`;
+  const st = self ? (myStatus === "invisible" ? "offline" : myStatus) : (data.status === "offline" ? "offline" : data.status);
+  $("mpStDot").className = "mp-st st-" + statusClass(st);
+  if (data.isBot) botLoginCache.add(login); else botLoginCache.delete(login);
+  $("mpName").innerHTML = escapeHtml(data.name || login) + (data.isBot ? ' <span class="bot-badge">BOT</span>' : "");
+  $("mpLogin").textContent = "@" + data.login;
+  $("mpStatus").textContent = self ? t("mp_you") : t("status_" + (data.status === "offline" ? "offline" : data.status));
+  loadAwards(login, $("mpAwards"));
   const tag = $("mpTag");
   if (tag) {
     const unstable = data.accountStatus === "unstable" && data.reportReason;
@@ -3333,23 +3351,102 @@ async function openMiniProfile(login) {
       $("mpTagTip").textContent = t("unstable_tip", { reason: t("dcg_" + data.reportReason) || data.reportReason, time: banTimeLabel(data.reportBanMs) });
     }
   }
-  $("mpStatus").textContent = t("status_" + (data.status === "offline" ? "offline" : data.status));
   const act = $("mpActivity"); act.textContent = data.activity || ""; act.classList.toggle("hidden", !data.activity);
-  $("mpDesc").textContent = data.description || "";
-  $("mpJoined").textContent = data.created_at ? t("joined", { date: new Date(data.created_at).toLocaleDateString() }) : "";
-  // Mutual friends (skip self/bots — no meaningful overlap).
-  const mp = $("mpMutual"); if (mp) { mp.classList.add("hidden"); mp.textContent = ""; }
-  if (mp && !data.isBot) api("/api/mutual/" + login, null, "GET").then(({ ok, data: md }) => {
-    if (!ok || !md.mutual || !md.mutual.length) return;
-    const names = md.mutual.slice(0, 3).join(", ") + (md.mutual.length > 3 ? "…" : "");
-    mp.innerHTML = `<span class="mpm-ico">${window.ICON.users || ""}</span>${t("mutual_friends", { n: md.mutual.length })} · ${escapeHtml(names)}`;
-    mp.classList.remove("hidden");
+  $("mpDesc").textContent = data.description || t("mp_no_about");
+  $("mpDesc").classList.toggle("empty", !data.description);
+  const cmds = Array.isArray(data.commands) ? data.commands : [];
+  $("mpCmdSec").classList.toggle("hidden", !cmds.length);
+  $("mpCmds").innerHTML = cmds.slice(0, 12).map((c) => `<div class="mp-cmd"><b>/${escapeHtml(c.command || c.cmd || "")}</b><span>${escapeHtml(c.description || c.desc || "")}</span></div>`).join("");
+  $("mpJoined").textContent = data.created_at ? new Date(data.created_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "—";
+  // Mutual friends / groups (tabs show the counts; hidden for yourself).
+  $("mpTabFriends").textContent = t("mp_mutual_friends", { n: "…" }); $("mpTabGroups").textContent = t("mp_mutual_groups", { n: "…" });
+  $("mpMutual").innerHTML = ""; $("mpGroups").innerHTML = "";
+  if (!self) api("/api/mutual/" + encodeURIComponent(login), null, "GET").then(({ ok: mok, data: md }) => {
+    if (seq !== mpSeq) return;
+    const fr = (mok && md.mutual) || [], gr = (mok && md.groups) || [];
+    $("mpTabFriends").textContent = t("mp_mutual_friends", { n: fr.length });
+    $("mpTabGroups").textContent = t("mp_mutual_groups", { n: gr.length });
+    $("mpMutual").innerHTML = fr.length ? fr.map((l) => `<button type="button" class="mp-row" data-profile="${escapeHtml(l)}"><span class="avatar mp-row-ava" data-login="${escapeHtml(l)}"><img src="${avaUrl(l)}" data-fallback="remove">${initials(l)}</span><span class="mp-row-name">${escapeHtml((chats.get(dmKey(l)) || {}).name || l)}</span><span class="mp-row-sub">@${escapeHtml(l)}</span></button>`).join("")
+      : `<div class="mp-empty">${escapeHtml(t("mp_none_friends"))}</div>`;
+    $("mpGroups").innerHTML = gr.length ? gr.map((g) => `<button type="button" class="mp-row" data-room="@grp:${g.id}"><span class="avatar grp mp-row-ava"><img src="/api/group-avatar/${g.id}?v=${avaVer}" data-fallback="group"></span><span class="mp-row-name">${escapeHtml(g.name)}</span><span class="mp-row-sub">${escapeHtml(t(g.channel ? "dsc_channel" : "dsc_group"))}</span></button>`).join("")
+      : `<div class="mp-empty">${escapeHtml(t("mp_none_groups"))}</div>`;
   });
-  $("mpMessage").onclick = () => { $("mpModal").classList.add("hidden"); openDM(login); };
-  $("mpReport").onclick = () => { $("mpModal").classList.add("hidden"); openReportModal({ target: login, targetName: data.name }); };
-  // Bots can be friended too — they auto-accept instantly (server side), so the button
-  // just flips straight to "friends".
-  renderMpFriendButton(login);
+  // Actions
+  const icon = (k) => (window.ICON && ICON[k]) || "";
+  $("mpMessage").innerHTML = icon("messageSquare"); $("mpMore").textContent = "⋯";
+  $("mpMessage").onclick = () => { closeMiniProfile(); openDM(login); };
+  $("mpCopy").innerHTML = icon("copy") + `<span>${escapeHtml(t("mp_copy"))}</span>`;
+  $("mpCopy").onclick = () => { copyToClipboard(login); notify(t("copied")); closeMpMore(); };
+  const isB = blocked.has(login);
+  $("mpBlock").innerHTML = icon("block") + `<span>${escapeHtml(t(isB ? "mp_unblock" : "mp_block"))}</span>`;
+  $("mpBlock").onclick = async () => { closeMpMore(); await block(login, isB ? "unblock" : "block"); openMiniProfile(login); };
+  $("mpReport").innerHTML = icon("flag") + `<span>${escapeHtml(t("report_user"))}</span>`;
+  $("mpReport").onclick = () => { closeMiniProfile(); openReportModal({ target: login, targetName: data.name }); };
+  $("mpEdit").onclick = () => { closeMiniProfile(); openSettings("profile"); };
+  $("mpSelf").classList.toggle("hidden", !self);
+  const form = $("mpMsgForm"); form.classList.toggle("hidden", self || isB);
+  $("mpMsgInput").value = ""; $("mpMsgInput").placeholder = t("mp_msg_ph", { name: data.name || login });
+  $("mpMsgSend").innerHTML = icon("send");
+  if (!self) renderMpFriendButton(login); else $("mpAddFriend").classList.add("hidden");
+}
+function closeMiniProfile() { $("mpModal").classList.add("hidden"); closeMpMore(); mpLogin = null; }
+function closeMpMore() { const m = $("mpMoreMenu"); if (m) m.classList.add("hidden"); }
+function mpShowTab(tab) {
+  document.querySelectorAll("#mpTabs .mp-tab").forEach((b) => b.classList.toggle("active", b.dataset.mptab === tab));
+  document.querySelectorAll("#mpModal .mp-pane").forEach((p) => p.classList.toggle("hidden", p.dataset.mppane !== tab));
+}
+$("mpTabs") && $("mpTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-mptab]"); if (b) mpShowTab(b.dataset.mptab); });
+$("mpMore") && ($("mpMore").onclick = (e) => { e.stopPropagation(); $("mpMoreMenu").classList.toggle("hidden"); });
+$("mpModal") && $("mpModal").addEventListener("click", (e) => {
+  if (!e.target.closest("#mpMoreMenu, #mpMore")) closeMpMore();
+  if (e.target === $("mpModal")) { closeMiniProfile(); return; }
+  const g = e.target.closest(".mp-row[data-room]");
+  if (g) { closeMiniProfile(); openRoomByKey(g.dataset.room); }
+});
+// "Message @name": open the DM, wait until the server has us in that room (its history
+// arrives), then send. If that takes too long the text is left in the composer, not lost.
+$("mpMsgForm") && ($("mpMsgForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("mpMsgInput").value.trim(), login = mpLogin; if (!text || !login) return;
+  closeMiniProfile();
+  const key = dmKey(login), inp = $("msgInput"); if (!inp) return;
+  if (myRoom === key) { inp.value = text; inp.dispatchEvent(new Event("input")); sendText(); return; }
+  let onHist;
+  const ready = new Promise((res) => {
+    const tm = setTimeout(() => { socket.off("history", onHist); res(false); }, 4000);
+    onHist = () => { clearTimeout(tm); socket.off("history", onHist); res(true); };
+    socket.on("history", onHist);
+  });
+  await openDM(login);
+  if (myRoom !== key) { socket.off("history", onHist); return; }
+  inp.value = text; inp.dispatchEvent(new Event("input"));
+  if ((await ready) && myRoom === key) setTimeout(() => { if (myRoom === key && inp.value.trim() === text) sendText(); }, 0);
+  else inp.focus();
+});
+
+// ---------- Open a profile from anywhere ----------
+// Anything carrying data-profile="<login>" opens that person's card: names in group messages,
+// @mentions, "forwarded from", join/leave lines, member/contact rows, call tiles' names, the
+// chat header in a DM, rows inside the card itself… One delegated listener, so new UI just adds
+// the attribute.
+document.addEventListener("click", (e) => {
+  const el = e.target.closest && e.target.closest("[data-profile]");
+  if (!el || el.closest(".msg-actions, .chat-item")) return;
+  const login = el.getAttribute("data-profile"); if (!login) return;
+  e.preventDefault(); e.stopPropagation();
+  openMiniProfile(login);
+}, true);
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-profile]:not(button)")) { e.preventDefault(); e.target.click(); }
+});
+// @mention → login: "@alice" is a login; "@Alice Smith"-style display names resolve through
+// the people we know about (group members, DMs).
+function mentionLogin(word) {
+  const w = String(word || "").toLowerCase(); if (!w || w === "all") return "";
+  for (const m of groupMembers || []) if (m.login === w || String(m.name || "").toLowerCase() === w) return m.login;
+  for (const c of chats.values()) if (c.type === "dm" && (c.login === w || String(c.name || "").toLowerCase() === w)) return c.login;
+  if (profile && (w === profile.login || w === String(profile.name || "").toLowerCase())) return profile.login;
+  return /^[a-z0-9_.]{2,24}$/.test(w) ? w : "";
 }
 
 // Add-friend button on the mini-profile: hidden once you're friends, "Accept request"
@@ -3373,7 +3470,7 @@ function renderMpFriendButton(login) {
     await loadRelations(); renderMpFriendButton(login);
   };
 }
-$("mpCancel").onclick = () => $("mpModal").classList.add("hidden");
+$("mpCancel").onclick = () => closeMiniProfile();
 $("chatAva").onclick = () => {
   // DM: открывает мини-профиль собеседника. Группа: открывает settings overlay на пейне «groups»
   // с её составом, инвайтами и pending (как у myName → «Open profile», только это групповая страница).
@@ -3551,7 +3648,7 @@ function renderInfoTop() {
     sub = (curChannel ? t("channel_sub") + " · " : "") + t("members_count", { n: people }) + (bots ? " · " + t("bots_count", { n: bots }) : "");
   } else {
     const login = c.login || dmPeer(myRoom);
-    ava = `<div class="avatar info-ava" data-login="${escapeHtml(login || "")}"><img src="${avaUrl(login)}" data-fallback="remove">${initials(c.name || login)}</div>`;
+    ava = `<div class="avatar info-ava" data-login="${escapeHtml(login || "")}" data-profile="${escapeHtml(login || "")}" role="button" tabindex="0"><img src="${avaUrl(login)}" data-fallback="remove">${initials(c.name || login)}</div>`;
     const st = presence.get(login); sub = st ? t("status_" + st) : t("room_sub_dm");
   }
   // Banner across the top of the card (group banner, or the person's/bot's profile banner);
@@ -3929,7 +4026,7 @@ socket.on("dm-blocked", (d) => { const r = d && d.reason; notify(r === "blocked_
 socket.on("channel-readonly", () => notify(t("channel_readonly")));
 socket.on("call-refused", ({ reason } = {}) => notify(reason === "channel" ? t("no_calls_in_channel") : t("err_generic")));
 function isPingForMe(m) { if (m.type !== "text" || !profile) return false; const x = (m.text || "").toLowerCase(); if (/(^|\s)@all(?![\w-])/.test(x)) return true; return x.includes("@" + profile.login.toLowerCase()) || (profile.name && x.includes("@" + profile.name.toLowerCase())); }
-function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); return `<span class="mention${me ? " me" : ""}">${full}</span>`; }); }
+function highlightMentions(html) { return html.replace(/@([\w.Ѐ-ӿ]+)/g, (full, name) => { const n = name.toLowerCase(); const me = n === "all" || (profile && (n === profile.login.toLowerCase() || n === (profile.name || "").toLowerCase())); const lg = mentionLogin(name); return `<span class="mention${me ? " me" : ""}"${lg ? ` data-profile="${lg}" role="button" tabindex="0"` : ""}>${full}</span>`; }); }
 // Безопасное форматирование: сначала прячем URL в плейсхолдеры (чтобы упоминания не резали href), потом упоминания, потом возвращаем ссылки
 // Inline Markdown (bold / italic / strike / spoiler) applied to ALREADY-escaped text —
 // only this fixed set of tags is ever emitted, so no user HTML can slip through.
@@ -4020,13 +4117,14 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     if (m.type === "call_started") inner += `<div class="sys-line call">📞 ${t("call_started")}</div>`;
     else if (m.type === "call_ended") inner += `<div class="sys-line call">📞 ${t("call_ended")} — ${escapeHtml(m.text)}</div>`;
     else if (m.type === "call_missed") inner += `<div class="sys-line call missed">📞 ${t("call_missed")} (${escapeHtml(m.text)})</div>`;
-    else if (m.type === "join") inner += `<div class="sys-line join">→ ${name} ${t("joined_chat")}</div>`;
-    else if (m.type === "leave") inner += `<div class="sys-line leave">← ${name} ${t("left_chat")}</div>`;
+    const who = m.fromLogin ? `<span class="sys-who" data-profile="${escapeHtml(m.fromLogin)}" role="button" tabindex="0">${name}</span>` : name;
+    if (m.type === "join") inner += `<div class="sys-line join">→ ${who} ${t("joined_chat")}</div>`;
+    else if (m.type === "leave") inner += `<div class="sys-line leave">← ${who} ${t("left_chat")}</div>`;
   } else {
-    if (!mine && curKind === "group") inner += `<div class="who">${escapeHtml(m.name)}</div>`;
+    if (!mine && curKind === "group") inner += `<div class="who"><span class="who-name" data-profile="${escapeHtml(m.fromLogin || "")}" role="button" tabindex="0">${escapeHtml(m.name)}</span></div>`;
     // Forward attribution + the quoted line of a reply. The quote is clickable: it scrolls to
     // the parent, fetching a window around it when it's outside what's loaded.
-    if (m.fwdFrom) inner += `<div class="fwd-tag">${window.ICON.forward || "↪"} ${t("forwarded_from", { name: escapeHtml(m.fwdName || m.fwdFrom) })}</div>`;
+    if (m.fwdFrom) inner += `<div class="fwd-tag">${window.ICON.forward || "↪"} ${t("forwarded_from", { name: `<span class="fwd-who" data-profile="${escapeHtml(m.fwdFrom)}" role="button" tabindex="0">${escapeHtml(m.fwdName || m.fwdFrom)}</span>` })}</div>`;
     if (m.replyTo) {
       const rn = escapeHtml(m.replyName || "");
       const rt = m.replyText ? escapeHtml(m.replyText) : (m.replyType && m.replyType !== "text" ? t("pv_" + (m.replyType === "image" || m.replyType === "gif" ? "photo" : m.replyType === "video" ? "video" : m.replyType === "audio" ? "voice" : m.replyType === "sticker" ? "sticker" : "file")) : t("reply_gone"));
@@ -5085,9 +5183,11 @@ function vpLoad(src) {
     let buf;
     if (src.startsWith("data:")) { const b64 = src.slice(src.indexOf(",") + 1), bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); buf = u8.buffer; }
     else buf = await (await fetch(src)).arrayBuffer();
-    const ab = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(buf);   // no user gesture needed
+    // Decoded at 8 kHz: 64 waveform peaks don't need more, and a 15-minute note at 44.1 kHz
+    // would be ~160 MB of samples (phones choke). Duration is unaffected.
+    const ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(buf);   // no user gesture needed
     const ch = ab.getChannelData(0), N = 64, step = Math.floor(ch.length / N) || 1, peaks = [];
-    for (let i = 0; i < N; i++) { let m = 0; for (let j = i * step; j < (i + 1) * step && j < ch.length; j += 16) m = Math.max(m, Math.abs(ch[j])); peaks.push(m); }
+    for (let i = 0; i < N; i++) { let m = 0; for (let j = i * step; j < (i + 1) * step && j < ch.length; j += 3) m = Math.max(m, Math.abs(ch[j])); peaks.push(m); }
     const top = Math.max(...peaks) || 1;
     return { peaks: peaks.map((p) => Math.max(0.08, p / top)), dur: ab.duration };
   })().catch(() => ({ peaks: Array.from({ length: 64 }, (_, i) => 0.25 + 0.2 * Math.abs(Math.sin(i * 1.7))), dur: 0 })));
@@ -5178,7 +5278,7 @@ let mediaRecorder, recChunks = [], recStream, recTimer, recSec = 0, recStartedAt
 let recState = "idle";            // idle | starting | recording
 let recCancelled = false, recLocked = false, recAfterStart = null;   // what to do once the mic opens
 let recViz = null;                 // { src, an, buf, raf, level, wave[], lastPush }
-const REC_CANCEL_DX = -100, REC_LOCK_DY = -80, REC_TAP_MS = 300, REC_MIN_MS = 500, REC_MAX_S = 60;
+const REC_CANCEL_DX = -100, REC_LOCK_DY = -80, REC_TAP_MS = 300, REC_MIN_MS = 500, REC_MAX_S = 15 * 60;   // voice notes up to 15 minutes
 function isMicMode() { return $("sendBtn").classList.contains("mic-mode"); }
 function updateSendMode() {
   if (recState !== "idle") return;
@@ -5203,7 +5303,8 @@ async function startRec() {
   try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
   catch { recState = "idle"; recLocked = false; recUI(false); updateSendMode(); alert(t("err_mic_voice")); return; }
   if (recAfterStart === "cancel") { recStream.getTracks().forEach((tr) => tr.stop()); recState = "idle"; recLocked = false; recUI(false); updateSendMode(); return; }
-  mediaRecorder = new MediaRecorder(recStream);
+  // 64 kbps Opus is plenty for speech and keeps a full 15-minute note around 7 MB.
+  try { mediaRecorder = new MediaRecorder(recStream, { audioBitsPerSecond: 64000 }); } catch { mediaRecorder = new MediaRecorder(recStream); }
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     clearInterval(recTimer); stopRecViz();
@@ -5212,13 +5313,15 @@ async function startRec() {
     recState = "idle"; recLocked = false; recUI(false); updateSendMode();
     if (cancelled || ms < REC_MIN_MS) return;
     const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-    if (blob.size < 600 || blob.size > 20 * 1024 * 1024) return;
+    if (blob.size < 600 || blob.size > MAX_FILE_BYTES) { if (blob.size > MAX_FILE_BYTES) notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB })); return; }
     sendVoice(blob);
   };
   mediaRecorder.start(); recState = "recording"; recStartedAt = Date.now();
   const sb = $("sendBtn"); if (sb) sb.innerHTML = window.ICON.send;
   startRecViz(); updateRecOverlay();
-  recTimer = setInterval(() => { recSec++; updateRecOverlay(); if (recSec >= REC_MAX_S) stopRec(true); }, 1000);
+  // Wall-clock, not tick counting: background tabs throttle intervals, which made the timer
+  // (and the cap) drift on long notes.
+  recTimer = setInterval(() => { recSec = Math.floor((Date.now() - recStartedAt) / 1000); updateRecOverlay(); if (recSec >= REC_MAX_S) stopRec(true); }, 500);
   if (recAfterStart === "send") stopRec(true);
   else if (recAfterStart === "lock") lockRec();
 }
@@ -5600,7 +5703,7 @@ function ensureTile(identity, name, isMe) {
     tile.dataset.identity = identity;
     tile.innerHTML = `<video autoplay playsinline ${isMe ? "muted" : ""}></video>` +
       `<div class="tile-avatar" data-login="${isMe ? profile.login : identity}"><img src="${avaUrl(identity)}" data-fallback="hide"><span>${initials(name)}</span></div>` +
-      `<div class="tile-name">${escapeHtml(name)}</div>` +
+      `<div class="tile-name"><span class="tile-who" data-profile="${escapeHtml(isMe ? profile.login : identity)}" role="button" tabindex="0">${escapeHtml(name)}</span></div>` +
       `<button class="tile-expand" title="${t("t_window")}" aria-label="${t("t_window")}">${window.ICON.expand}</button>` +
       (isMe ? "" : `<div class="tile-ctrl"><button class="tctrl-mute" title="${t("mute_user")}">${window.ICON.volume}</button><input class="tctrl-vol" type="range" min="0" max="1" step="0.05" value="1" title="${t("volume")}"></div>`);
     vGrid.appendChild(tile);
@@ -8719,7 +8822,7 @@ $("contactsBtn").onclick = () => openSettings("contacts", true);
 // #myName получают tabindex=0 и role="button" в HTML (см. <div class="cl-head">) — здесь
 // навешиваем Enter/Space-активацию для клавиатурной навигации. Сам onclick переживает ре-рендер
 // содержимого в setMyAvatar() (там меняется только innerHTML, сам узел и его листенеры остаются).
-function openMyProfile() { openSettings("profile"); }
+function openMyProfile() { openMiniProfile(profile.login); }   // your own card (Edit profile is one click away)
 $("myAvatar").onclick = openMyProfile;
 $("myName").onclick = openMyProfile;
 ["myAvatar", "myName"].forEach((id) => {

@@ -7151,3 +7151,97 @@ body.ava-rounded .dsc-ava:not(.grp) { border-radius: calc(12px * var(--rk)); }
 }
 .info-banner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .info-card .info-ava { position: relative; z-index: 1; border: 4px solid var(--bg-1); box-sizing: content-box; }
+
+/* ===================== Profile card (Discord-style popout) ===================== */
+.mp-card.mp2 {
+  width: min(400px, calc(94vw / var(--zf, 1))); padding: 0; gap: 0; align-items: stretch; text-align: left;
+  max-height: calc(90vh / var(--zf, 1)); overflow: hidden auto; background: var(--bg-1);
+}
+.mp2 .mp-banner {
+  position: relative; height: 120px; margin: 0; border-radius: 0; flex: none; overflow: hidden;
+  background: radial-gradient(circle at 18% 120%, rgba(255, 255, 255, 0.16), transparent 45%), linear-gradient(135deg, var(--g1, var(--bg-3)), var(--g2, var(--bg-2)));
+}
+.mp2 .mp-banner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+.mp2 .mp-banner.has-img img { display: block; }
+.mp2 .mp-close { z-index: 4; background: rgba(0, 0, 0, 0.45); color: #fff; border-radius: calc(50% * var(--rc)); }
+.mp2 .mp-top { position: relative; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 16px; height: 46px; }
+.mp2 .mp-ava-wrap { position: relative; margin-top: -46px; align-self: flex-start; }
+.mp2 .mp-ava { width: 92px; height: 92px; font-size: 34px; margin: 0; border: 6px solid var(--bg-1); box-shadow: none; box-sizing: content-box; }
+.mp2 .mp-st { position: absolute; right: 4px; bottom: 4px; width: 18px; height: 18px; border-radius: 50%; border: 5px solid var(--bg-1); background: var(--text-dim); }
+.mp2 .mp-st.st-online { background: var(--accent-400); }
+.mp2 .mp-st.st-dnd { background: var(--danger, #f04848); }
+.mp2 .mp-st.st-offline { background: #80848e; }
+.mp2 .mp-top-acts { display: flex; align-items: center; gap: 6px; padding-bottom: 2px; }
+.mp2 .mp-pill { height: 32px; padding: 0 14px; border-radius: var(--r-pill, 999px); border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700;
+  background: var(--accent-400); color: var(--bg-0, #000); }
+.mp2 .mp-pill:disabled { background: var(--bg-3); color: var(--text-dim); cursor: default; }
+.mp2 .mp-icon-btn { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; cursor: pointer; font: inherit; font-size: 18px; line-height: 1;
+  border-radius: calc(50% * var(--rc)); border: 1px solid var(--border-2); background: var(--bg-2); color: var(--text); transition: background 0.15s ease, border-color 0.15s ease; }
+.mp2 .mp-icon-btn svg { width: 16px; height: 16px; }
+@media (hover: hover) { .mp2 .mp-icon-btn:hover { background: var(--bg-3); border-color: var(--border-3); } }
+.mp2.is-self .mp-top-acts { display: none; }
+.mp2 .mp-more-menu { position: absolute; z-index: 5; right: 16px; top: 44px; min-width: 190px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: calc(12px * var(--rk)); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); }
+.mp2 .mp-more-menu.hidden { display: none; }
+.mp2 .mp-more-menu button { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: calc(8px * var(--rk));
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.mp2 .mp-more-menu button svg { width: 16px; height: 16px; flex: none; opacity: 0.85; }
+.mp2 .mp-more-menu button:hover { background: var(--surface-2, var(--bg-3)); }
+.mp2 .mp-more-menu button.danger { color: var(--danger, #f04848); }
+.mp2 .mp-body { margin: 10px 12px 12px; padding: 14px 14px 12px; background: var(--bg-2); border: 1px solid var(--border-1); border-radius: calc(12px * var(--rk)); display: flex; flex-direction: column; gap: 12px; }
+.mp2 .mp-id { display: flex; flex-direction: column; gap: 4px; }
+.mp2 .mp-name { font-size: 20px; font-weight: 800; color: var(--text-strong, var(--text)); line-height: 1.2; word-break: break-word; }
+.mp2 .mp-handle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--text-dim); }
+.mp2 .mp-handle #mpLogin { color: var(--text); font-weight: 500; }
+.mp2 .mp-sep { opacity: 0.5; }
+.mp2 .mp-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.mp2 .mp-badges:not(:has(> :not(.hidden))) { display: none; }
+.mp2 .award-row { margin: 0; justify-content: flex-start; }
+.mp2 .mp-activity { align-self: flex-start; margin-top: 4px; }
+.mp2 .mp-tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--border-1); overflow-x: auto; scrollbar-width: none; }
+.mp2 .mp-tabs::-webkit-scrollbar { display: none; }
+.mp2.is-self .mp-tab:not([data-mptab="about"]) { display: none; }
+.mp2 .mp-tab { position: relative; flex: none; padding: 6px 0 9px; border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.mp2 .mp-tab:hover { color: var(--text); }
+.mp2 .mp-tab.active { color: var(--text-strong, var(--text)); }
+.mp2 .mp-tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent-400); }
+.mp2 .mp-panes { min-height: 92px; max-height: 240px; overflow-y: auto; }
+.mp2 .mp-sec + .mp-sec { margin-top: 12px; }
+.mp2 .mp-sec-title { font-size: 12px; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; }
+.mp2 .mp-desc { max-width: none; font-size: 13.5px; line-height: 1.45; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.mp2 .mp-desc.empty { color: var(--text-dim); font-style: italic; }
+.mp2 .mp-joined { font-size: 13px; letter-spacing: 0; color: var(--text); }
+.mp2 .mp-cmds { display: flex; flex-direction: column; gap: 4px; }
+.mp2 .mp-cmd { display: flex; gap: 8px; font-size: 12.5px; }
+.mp2 .mp-cmd b { color: var(--accent-300); font-weight: 700; }
+.mp2 .mp-cmd span { color: var(--text-dim); }
+.mp2 .mp-list { display: flex; flex-direction: column; gap: 2px; }
+.mp2 .mp-row { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 6px 8px; margin: 0 -8px;
+  border: 0; border-radius: calc(8px * var(--rk)); background: none; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+.mp2 .mp-row:hover { background: var(--surface-2, var(--bg-3)); }
+.mp2 .mp-row-ava { grid-row: 1 / 3; width: 34px; height: 34px; font-size: 13px; }
+.mp2 .mp-row-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp2 .mp-row-sub { font-size: 11.5px; color: var(--text-dim); }
+.mp2 .mp-empty { padding: 18px 0; text-align: center; font-size: 13px; color: var(--text-dim); }
+.mp2 .mp-msg { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 6px 0 14px; border-radius: calc(10px * var(--rk));
+  background: var(--bg-1); border: 1px solid var(--border-1); transition: border-color 0.15s ease; }
+.mp2 .mp-msg:focus-within { border-color: var(--accent-400); }
+.mp2 .mp-msg.hidden { display: none; }
+.mp2 .mp-msg input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; }
+.mp2 .mp-msg button { width: 32px; height: 32px; flex: none; display: grid; place-items: center; padding: 0; border: 0; border-radius: calc(50% * var(--rc)); cursor: pointer;
+  background: var(--accent-400); color: var(--bg-0, #000); }
+.mp2 .mp-msg button svg { width: 15px; height: 15px; }
+.mp2 .mp-msg:not(:has(input:not(:placeholder-shown))) button { background: var(--bg-3); color: var(--text-dim); }
+.mp2 .mp-self .btn-primary { width: 100%; }
+/* Anything that opens a profile reads as clickable. */
+[data-profile] { cursor: pointer; }
+.who-name:hover, .sys-who:hover, .fwd-who:hover, .tile-who:hover, #chatTitle[data-profile]:hover, .mention[data-profile]:hover, #gsMembers .c-name[data-profile]:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sys-who, .fwd-who { font-weight: 600; }
+.tile-who { pointer-events: auto; }
+@media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
+  .mp-card.mp2 { width: calc(100vw / var(--zf, 1) - 20px); }
+}
+/* Group messages with an author line: the hover action bar used to sit right on top of the
+   name, so the name (→ profile) couldn't be clicked. Park it at the far end of the name row
+   instead (Discord-style), where it covers neither the name nor anything above. */
+.msg:not(.me):not(.g-cont):has(> .who) .msg-actions { top: -10px; left: auto; right: 0; }

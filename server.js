@@ -44,7 +44,7 @@ import {
   createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
   queueBotUpdate, getBotUpdates, deleteBotUpdatesBelow, pruneBotUpdates,
   setRelation, removeRelation, getRelationsFull, getFriendLogins, areFriends, shareGroup, isBlockedBy,
-  sendFriendRequest, acceptFriend, declineFriend, removeFriend, cancelFriendRequest, haveMutualFriend, mutualFriends, mutualCounts,
+  sendFriendRequest, acceptFriend, declineFriend, removeFriend, cancelFriendRequest, haveMutualFriend, mutualFriends, mutualGroups, mutualCounts,
   getPrefs, setPrefs, dmOpen, bumpInviteUse,
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
   getUserDMs, saveUserDMs,
@@ -1266,7 +1266,11 @@ app.post("/api/friend", async (req, res) => {
 // Mutual friends: a per-contact list, and a one-shot map of counts for all my friends.
 app.get("/api/mutual/:login", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
-  try { res.json({ ok: true, mutual: await mutualFriends(me.login, String(req.params.login).toLowerCase()) }); }
+  try {
+    const other = String(req.params.login).toLowerCase();
+    const [mutual, groups] = await Promise.all([mutualFriends(me.login, other), other === me.login ? [] : mutualGroups(me.login, other)]);
+    res.json({ ok: true, mutual, groups });
+  }
   catch (e) { console.error("mutual", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.get("/api/mutuals", async (req, res) => {

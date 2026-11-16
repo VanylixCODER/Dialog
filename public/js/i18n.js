@@ -272,7 +272,10 @@ const I18N = {
     export_title: "Export your data", export_btn: "Download export", export_hint: "A JSON file with your profile, contacts, groups and messages.",
     // ── Directory, scheduled posts, theme sharing ──
     directory: "Discover", dir_channels: "Channels", dir_bots: "Bots", dir_empty: "Nothing listed yet.",
-    dir_open: "Open", dir_members: "{n} members", dir_all: "All", dir_groups: "Groups",
+    dir_open: "Open", dir_members: "{n} members", dir_all: "All", dir_groups: "Groups", mp_about: "About", mp_mutual_friends: "Mutual friends · {n}", mp_mutual_groups: "Mutual groups · {n}",
+    mp_member_since: "Member since", mp_commands: "Commands", mp_edit: "Edit profile", mp_msg_ph: "Message @{name}",
+    mp_copy: "Copy username", mp_block: "Block", mp_unblock: "Unblock", mp_none_friends: "No friends in common yet.",
+    mp_none_groups: "No groups in common yet.", mp_no_about: "Nothing here yet.", mp_you: "This is you",
     dsc_title: "Find your people", dsc_sub: "Channels, groups and bots that are open to everyone.",
     dsc_featured: "Popular right now", dsc_more: "More to explore", dsc_results: "Results for “{q}”",
     dsc_join: "Join", dsc_chat: "Chat", dsc_joined: "Joined", dsc_join_fail: "Couldn't join — try again",
@@ -693,7 +696,10 @@ const I18N = {
     export_title: "Экспорт данных", export_btn: "Скачать архив", export_hint: "JSON с профилем, контактами, группами и сообщениями.",
     // ── Каталог, отложенные посты, темы ──
     directory: "Обзор", dir_channels: "Каналы", dir_bots: "Боты", dir_empty: "Пока ничего нет.",
-    dir_open: "Открыть", dir_members: "{n} участников", dir_all: "Всё", dir_groups: "Группы",
+    dir_open: "Открыть", dir_members: "{n} участников", dir_all: "Всё", dir_groups: "Группы", mp_about: "О себе", mp_mutual_friends: "Общие друзья · {n}", mp_mutual_groups: "Общие группы · {n}",
+    mp_member_since: "С нами с", mp_commands: "Команды", mp_edit: "Редактировать профиль", mp_msg_ph: "Написать @{name}",
+    mp_copy: "Скопировать логин", mp_block: "Заблокировать", mp_unblock: "Разблокировать", mp_none_friends: "Общих друзей пока нет.",
+    mp_none_groups: "Общих групп пока нет.", mp_no_about: "Здесь пока пусто.", mp_you: "Это вы",
     dsc_title: "Найдите своих", dsc_sub: "Каналы, группы и боты, открытые для всех.",
     dsc_featured: "Популярное сейчас", dsc_more: "Ещё интересное", dsc_results: "Результаты по запросу «{q}»",
     dsc_join: "Вступить", dsc_chat: "Написать", dsc_joined: "Вы вступили", dsc_join_fail: "Не удалось вступить — попробуйте ещё раз",

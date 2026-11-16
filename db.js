@@ -950,6 +950,14 @@ export async function mutualFriends(a, b) {
   );
   return r.map((x) => x.target);
 }
+// Groups/channels both people are in (the asker is a member, so nothing private leaks).
+export async function mutualGroups(a, b) {
+  return await query(
+    "SELECT g.id, g.name, g.channel FROM group_members ma JOIN group_members mb ON ma.group_id = mb.group_id " +
+    "JOIN chat_groups g ON g.id = ma.group_id WHERE ma.login=? AND mb.login=? ORDER BY g.name LIMIT 50",
+    [a, b]
+  );
+}
 // One query → { friendLogin: mutualCount } for every friend of `me`. Counts how many
 // of me's friends each of my friends also has as a friend (excluding me/them).
 export async function mutualCounts(me) {

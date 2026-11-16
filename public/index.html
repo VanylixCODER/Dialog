@@ -838,23 +838,45 @@
 
   <!-- Мини-профиль -->
 
-  <div id="mpModal" class="modal hidden"><div class="modal-card mp-card">
-    <div class="mp-banner hidden" id="mpBanner"><img id="mpBannerImg" alt="" /></div>
-    <button id="mpCancel" class="hub-close">✕</button>
-    <div class="profile-ava avatar ava mp-ava-overlap" id="mpAva"><span class="ava-fallback">?</span></div>
-    <div class="mp-name" id="mpName">—</div>
-    <div class="unstable-tag hidden" id="mpTag" tabindex="0"><span class="ut-ic"></span><span data-i18n="unstable_tag">Unstable</span><span class="ut-tip" id="mpTagTip"></span></div>
-    <div class="profile-login" id="mpLogin">login</div>
-    <div class="mp-status" id="mpStatus"></div>
-    <div class="mp-activity hidden" id="mpActivity"></div>
-    <div class="award-row hidden" id="mpAwards"></div>
-    <div class="mp-desc" id="mpDesc"></div>
-    <div class="mp-mutual hidden" id="mpMutual"></div>
-    <div class="mp-joined" id="mpJoined"></div>
-    <div class="modal-actions">
-      <button id="mpAddFriend" class="btn-primary hidden" data-i18n="add_friend">Add friend</button>
-      <button id="mpMessage" class="btn-primary" data-i18n="message_btn">Message</button>
-      <button id="mpReport" class="btn-ghost mp-report" data-i18n="report_user">Report</button>
+  <div id="mpModal" class="modal hidden"><div class="modal-card mp-card mp2" role="dialog" aria-modal="true" aria-labelledby="mpName">
+    <div class="mp-banner" id="mpBanner"><img id="mpBannerImg" alt="" /></div>
+    <button id="mpCancel" class="hub-close mp-close" data-i18n-title="close" title="Close">✕</button>
+    <div class="mp-top">
+      <div class="mp-ava-wrap"><div class="profile-ava avatar ava mp-ava" id="mpAva"><span class="ava-fallback">?</span></div><span class="mp-st" id="mpStDot"></span></div>
+      <div class="mp-top-acts">
+        <button id="mpAddFriend" class="mp-pill hidden" data-i18n="add_friend">Add friend</button>
+        <button id="mpMessage" class="mp-icon-btn" data-tip="Message" data-i18n-title="message_btn" title="Message"></button>
+        <button id="mpMore" class="mp-icon-btn" data-tip="More" aria-haspopup="menu"></button>
+      </div>
+      <div class="mp-more-menu hidden" id="mpMoreMenu" role="menu">
+        <button type="button" id="mpCopy" role="menuitem"></button>
+        <button type="button" id="mpBlock" role="menuitem"></button>
+        <button type="button" id="mpReport" class="danger" role="menuitem"></button>
+      </div>
+    </div>
+    <div class="mp-body">
+      <div class="mp-id">
+        <div class="mp-name" id="mpName">—</div>
+        <div class="mp-handle"><span id="mpLogin">login</span><span class="mp-sep">•</span><span id="mpStatus"></span></div>
+        <div class="mp-badges"><div class="unstable-tag hidden" id="mpTag" tabindex="0"><span class="ut-ic"></span><span data-i18n="unstable_tag">Unstable</span><span class="ut-tip" id="mpTagTip"></span></div><div class="award-row hidden" id="mpAwards"></div></div>
+        <div class="mp-activity hidden" id="mpActivity"></div>
+      </div>
+      <div class="mp-tabs" id="mpTabs" role="tablist">
+        <button class="mp-tab active" data-mptab="about" data-i18n="mp_about">About</button>
+        <button class="mp-tab" data-mptab="friends" id="mpTabFriends"></button>
+        <button class="mp-tab" data-mptab="groups" id="mpTabGroups"></button>
+      </div>
+      <div class="mp-panes">
+        <div class="mp-pane" data-mppane="about">
+          <div class="mp-sec" id="mpDescSec"><div class="mp-sec-title" data-i18n="about_label">About me</div><div class="mp-desc" id="mpDesc"></div></div>
+          <div class="mp-sec hidden" id="mpCmdSec"><div class="mp-sec-title" data-i18n="mp_commands">Commands</div><div class="mp-cmds" id="mpCmds"></div></div>
+          <div class="mp-sec"><div class="mp-sec-title" data-i18n="mp_member_since">Member since</div><div class="mp-joined" id="mpJoined"></div></div>
+        </div>
+        <div class="mp-pane hidden" data-mppane="friends"><div class="mp-list" id="mpMutual"></div></div>
+        <div class="mp-pane hidden" data-mppane="groups"><div class="mp-list" id="mpGroups"></div></div>
+      </div>
+      <form class="mp-msg" id="mpMsgForm" autocomplete="off"><input id="mpMsgInput" maxlength="4000" /><button type="submit" id="mpMsgSend" aria-label="Send"></button></form>
+      <div class="mp-self hidden" id="mpSelf"><button id="mpEdit" class="btn-primary" data-i18n="mp_edit">Edit profile</button></div>
     </div>
   </div></div>
 
