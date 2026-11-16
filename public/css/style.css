@@ -7269,3 +7269,53 @@ body.ava-rounded .dsc-ava:not(.grp) { border-radius: calc(12px * var(--rk)); }
 .act-file .af-doc { animation: actFile 1.4s cubic-bezier(0.45, 0, 0.3, 1) infinite; }
 @keyframes actFile { 0% { transform: translateY(-9px); opacity: 0; } 20% { opacity: 1; } 65% { transform: translateY(5px); opacity: 1; } 80%, 100% { transform: translateY(7px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .act-dots i, .act-waves i, .act-file .af-doc { animation-duration: 3s; } }
+
+/* ===== Voice player: speed + volume dropdown ===== */
+.vp-menu {
+  position: fixed; z-index: 2147482500; width: 232px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: calc(12px * var(--rk)); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  animation: popIn 0.14s var(--ease-out, ease);
+}
+.vpm-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
+.vpm-rates { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 4px; }
+.vpm-rates button { height: 28px; padding: 0; border: 1px solid var(--border-1); border-radius: calc(7px * var(--rk)); background: var(--bg-3); color: var(--text); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.vpm-rates button:hover { border-color: var(--border-3); }
+.vpm-rates button.on { background: var(--accent-400); border-color: var(--accent-400); color: var(--bg-0, #000); }
+.vpm-vol { display: flex; align-items: center; gap: 8px; }
+.vpm-mute { width: 28px; height: 28px; flex: none; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--bg-3); color: var(--text); cursor: pointer; }
+.vpm-mute svg { width: 15px; height: 15px; }
+.vpm-vol input[type="range"] { flex: 1; min-width: 0; height: 4px; -webkit-appearance: none; appearance: none; border-radius: 4px; cursor: pointer;
+  background: linear-gradient(90deg, var(--accent-400) var(--p, 100%), var(--bg-3) var(--p, 100%)); }
+.vpm-vol input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.vpm-vol input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; }
+.vpm-pct { width: 36px; text-align: right; font-size: 11.5px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* ===== Now-playing mini player at the top of the chat list ===== */
+.cl-player {
+  position: relative; display: flex; align-items: center; gap: 6px; margin: 2px 10px 8px; padding: 6px 6px 6px 8px; overflow: hidden;
+  background: color-mix(in srgb, var(--accent-400) 9%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--accent-400) 30%, var(--border-1));
+  border-radius: calc(12px * var(--rk)); animation: clpIn 0.22s var(--ease-out, ease);
+}
+@keyframes clpIn { from { opacity: 0; transform: translateY(-6px); } }
+.cl-player.hidden { display: none; }
+.clp-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.clp-ava { width: 32px; height: 32px; flex: none; font-size: 12px; }
+.cl-player.playing .clp-ava { box-shadow: 0 0 0 2px var(--accent-400); }
+.clp-txt { display: flex; flex-direction: column; min-width: 0; }
+.clp-who { font-size: 13px; font-weight: 700; color: var(--text-strong, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clp-sub { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.clp-btn { flex: none; height: 30px; min-width: 30px; display: grid; place-items: center; padding: 0 6px; border: 0; border-radius: var(--r-pill, 999px); cursor: pointer;
+  background: transparent; color: var(--text); font: inherit; font-size: 11.5px; font-weight: 700; }
+.clp-btn:hover { background: var(--surface-2, var(--bg-3)); }
+.clp-btn svg { width: 15px; height: 15px; }
+.clp-play { width: 32px; height: 32px; padding: 0; background: var(--accent-400); color: var(--bg-0, #000); }
+.clp-play:hover { background: var(--accent-400); filter: brightness(1.1); }
+.clp-x { color: var(--text-dim); }
+.clp-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent-400); transform-origin: left; transform: scaleX(0); transition: transform 0.25s linear; }
+/* Minimized rail: just the round play button, centred. */
+@media (min-width: 721px) and (pointer: fine) {
+  .app.cl-collapsed .cl-player { margin: 2px 0 8px; padding: 6px 0; justify-content: center; background: none; border: 0; }
+  .app.cl-collapsed .cl-player .clp-main, .app.cl-collapsed .cl-player .clp-speed, .app.cl-collapsed .cl-player .clp-x { display: none; }
+}
+/* A note you stopped part-way keeps its progress visible. */
+.bubble.voice.resume:not(.playing) .vp-time { color: var(--accent-300); }

@@ -2327,7 +2327,7 @@ function openChat(c) {
   pendingUnread = Number(c.unread) || 0;
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0; c.mentioned = false;
   // Nothing from the previous chat may survive the switch.
-  clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null; clearTyping();
+  clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null; clearTyping(); vpCur = null; renderClPlayer();
   const csb = $("chatSearch"); if (csb) csb.classList.add("hidden");
   const cfb = $("chatFavs"); if (cfb) cfb.classList.add("hidden");
   loadFavIds();   // which messages in this room are starred
@@ -5234,7 +5234,7 @@ function voiceBubbleHTML(m) {
   const dl = `<a class="vp-dl" href="${escapeHtml(src)}" download="${escapeHtml(dlName)}" title="${escapeHtml(t("download"))}" aria-label="${escapeHtml(t("download"))}">${window.ICON.download || "⤓"}</a>`;
   const head = isVoice ? "" : `<div class="vp-file"><span class="vp-file-ico">${window.ICON.music || "♪"}</span><span class="vp-file-name">${escapeHtml(m.mediaName)}</span></div>`;
   return `<div class="bubble voice${isVoice ? "" : " audio-file"}" data-src="${escapeHtml(src)}"><button class="vp-play" type="button" aria-label="${t("vp_play")}">${window.ICON.play || "▶"}</button>` +
-    `<div class="vp-body">${head}<canvas class="vp-wave"></canvas><div class="vp-meta"><span class="vp-time">0:00</span><span class="vp-right"><button class="vp-speed" type="button">${vpRate}×</button>${dl}</span></div></div></div>`;
+    `<div class="vp-body">${head}<canvas class="vp-wave"></canvas><div class="vp-meta"><span class="vp-time">0:00</span><span class="vp-right"><button class="vp-speed" type="button" aria-haspopup="menu">${fmtRate(vpRate)}</button>${dl}</span></div></div></div>`;
 }
 const vpFmt = (s) => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 function vpLoad(src) {
@@ -5270,63 +5270,208 @@ function vpDraw(el, progress = 0) {
 const vpObserver = "IntersectionObserver" in window ? new IntersectionObserver((ents) => {
   for (const e of ents) if (e.isIntersecting) { vpObserver.unobserve(e.target); vpPrepare(e.target); }
 }, { rootMargin: "200px" }) : null;
+// ---- Player engine ----
+// The player follows a TRACK (room + message id + sender), not a DOM node: it keeps playing when
+// you leave the chat (the chat-list mini player is its remote), re-attaches to the bubble when you
+// come back, remembers where you stopped each note, and autoplays only the voice notes that come
+// directly after the one you started.
+let vpTrack = null, vpQueue = [];
+let vpVol = (() => { const v = parseFloat(localStorage.getItem("dialog_vp_vol")); return isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; })();
+const VP_POS_KEY = "dialog_vp_pos";
+let vpPos = (() => { try { return JSON.parse(localStorage.getItem(VP_POS_KEY) || "{}") || {}; } catch { return {}; } })();
+let vpPosSaveT = 0;
+function vpSavePos(key, sec) {
+  if (!key) return;
+  if (sec == null || sec < 0.5) delete vpPos[key]; else vpPos[key] = Math.round(sec * 10) / 10;
+  const keys = Object.keys(vpPos); if (keys.length > 300) keys.slice(0, keys.length - 300).forEach((k) => delete vpPos[k]);
+  clearTimeout(vpPosSaveT); vpPosSaveT = setTimeout(() => { try { localStorage.setItem(VP_POS_KEY, JSON.stringify(vpPos)); } catch {} }, 400);
+}
+// Identity of a bubble: its room + message id (falls back to the source for unsent ones).
+function vpKeyOf(el) { const m = el.closest(".msg"); const id = m && m.dataset.id; return (el.dataset.room || myRoom || "") + ":" + (id || el.dataset.src.slice(-40)); }
+function vpTrackOf(el) {
+  const m = el.closest(".msg") || {}; const ds = m.dataset || {};
+  return { key: vpKeyOf(el), room: el.dataset.room || myRoom, id: Number(ds.id) || 0, src: el.dataset.src, login: ds.from || "", name: ds.fromname || ds.from || "",
+    voice: !el.classList.contains("audio-file"), title: el.querySelector(".vp-file-name")?.textContent || "" };
+}
+function vpEl() {   // the bubble of the current track, if it's on screen
+  if (!vpTrack) return null;
+  if (vpCur && vpCur.isConnected) return vpCur;
+  vpCur = null;
+  for (const el of messagesEl.querySelectorAll(".bubble.voice")) if (vpKeyOf(el) === vpTrack.key) { vpCur = el; break; }
+  return vpCur;
+}
+function vpPaintBubble(el, playing) {
+  if (!el) return;
+  el.classList.toggle("playing", !!playing);
+  el.querySelector(".vp-play").innerHTML = playing ? (window.ICON.pause || "❚❚") : (window.ICON.play || "▶");
+}
+function vpRestoreBubble(el) {   // saved position (or the live one) on a freshly rendered bubble
+  const key = vpKeyOf(el), live = vpTrack && vpTrack.key === key && vpAudio;
+  const at = live ? vpAudio.currentTime : vpPos[key];
+  if (live) { vpCur = el; vpPaintBubble(el, !vpAudio.paused); }
+  if (at && el._vp && el._vp.dur) { vpDraw(el, at / el._vp.dur); el.querySelector(".vp-time").textContent = vpFmt(at); el.classList.add("resume"); }
+}
 async function vpPrepare(el) {
   if (el._vp) return el._vp;
   el._vp = await vpLoad(el.dataset.src);
   el.querySelector(".vp-time").textContent = vpFmt(el._vp.dur);
-  vpDraw(el, el === vpCur && vpAudio ? vpAudio.currentTime / (el._vp.dur || 1) : 0);
+  vpDraw(el, 0);
+  vpRestoreBubble(el);
   return el._vp;
 }
-function vpWatch(root) { root.querySelectorAll(".bubble.voice:not([data-vpw])").forEach((el) => { el.dataset.vpw = "1"; if (vpObserver) vpObserver.observe(el); else vpPrepare(el); }); }
-new MutationObserver(() => vpWatch(messagesEl)).observe(messagesEl, { childList: true, subtree: true });
-function vpStop() {
-  cancelAnimationFrame(vpRaf);
-  if (vpAudio) vpAudio.pause();
-  if (vpCur) { vpCur.classList.remove("playing"); vpCur.querySelector(".vp-play").innerHTML = window.ICON.play || "▶"; vpDraw(vpCur, 0); if (vpCur._vp) vpCur.querySelector(".vp-time").textContent = vpFmt(vpCur._vp.dur); }
-  vpCur = null;
+function vpWatch(root) {
+  root.querySelectorAll(".bubble.voice:not([data-vpw])").forEach((el) => {
+    el.dataset.vpw = "1"; if (!el.dataset.room) el.dataset.room = myRoom || "";
+    if (vpTrack && vpKeyOf(el) === vpTrack.key) vpPrepare(el);   // the playing one: attach now
+    else if (vpObserver) vpObserver.observe(el); else vpPrepare(el);
+  });
 }
-async function vpPlay(el, at) {
-  const d = await vpPrepare(el);
-  if (vpCur !== el) { vpStop(); vpAudio = vpAudio || new Audio(); vpAudio.src = el.dataset.src; vpCur = el; }
-  const dur = d.dur || vpAudio.duration || 0;
-  if (at != null && dur) vpAudio.currentTime = at * dur;
-  vpAudio.playbackRate = vpRate;
-  vpAudio.onended = vpStop;
-  try { await vpAudio.play(); } catch { return; }
-  el.classList.add("playing"); el.querySelector(".vp-play").innerHTML = window.ICON.pause || "❚❚";
+new MutationObserver(() => vpWatch(messagesEl)).observe(messagesEl, { childList: true, subtree: true });
+function vpEnsureAudio() {
+  if (vpAudio) return vpAudio;
+  vpAudio = new Audio(); vpAudio.preload = "auto";
+  vpAudio.addEventListener("timeupdate", () => { if (vpTrack) vpSavePos(vpTrack.key, vpAudio.currentTime); renderClPlayer(); });
+  vpAudio.addEventListener("play", () => { vpPaintBubble(vpEl(), true); renderClPlayer(); vpTickStart(); });
+  vpAudio.addEventListener("pause", () => { vpPaintBubble(vpEl(), false); renderClPlayer(); });
+  vpAudio.addEventListener("ended", vpEnded);
+  return vpAudio;
+}
+function vpTickStart() {
+  cancelAnimationFrame(vpRaf);
   const tick = () => {
-    if (vpCur !== el || vpAudio.paused) return;
-    const total = d.dur || vpAudio.duration || 1;
-    vpDraw(el, vpAudio.currentTime / total); el.querySelector(".vp-time").textContent = vpFmt(vpAudio.currentTime);
+    if (!vpTrack || !vpAudio || vpAudio.paused) return;
+    const el = vpEl();
+    if (el && el._vp) { const total = el._vp.dur || vpAudio.duration || 1; vpDraw(el, vpAudio.currentTime / total); el.querySelector(".vp-time").textContent = vpFmt(vpAudio.currentTime); }
     vpRaf = requestAnimationFrame(tick);
   };
-  cancelAnimationFrame(vpRaf); vpRaf = requestAnimationFrame(tick);
+  vpRaf = requestAnimationFrame(tick);
 }
-function vpPause(el) {
-  if (vpCur !== el || !vpAudio) return;
-  vpAudio.pause(); cancelAnimationFrame(vpRaf);
-  el.classList.remove("playing"); el.querySelector(".vp-play").innerHTML = window.ICON.play || "▶";
+// Voice notes directly after this one, in order (stops at the first message that isn't one).
+function vpBuildQueue(el) {
+  const out = []; let m = el.closest(".msg");
+  if (el.classList.contains("audio-file")) return out;
+  while ((m = m && m.nextElementSibling)) {
+    if (!m.classList.contains("msg")) continue;            // day separators / unread line
+    const b = m.querySelector(":scope > .bubble.voice:not(.audio-file), .bubble.voice:not(.audio-file)");
+    if (!b || m.classList.contains("sys")) break;
+    if (!b.dataset.room) b.dataset.room = myRoom || "";
+    out.push(vpTrackOf(b));
+  }
+  return out;
 }
+function vpStartTrack(tr, at) {
+  const a = vpEnsureAudio();
+  if (!vpTrack || vpTrack.key !== tr.key) { vpPaintBubble(vpEl(), false); vpTrack = tr; vpCur = null; a.src = tr.src; }
+  a.playbackRate = vpRate; a.volume = vpVol;
+  const go = () => { if (at != null) { try { a.currentTime = at; } catch {} } a.play().catch(() => {}); };
+  if (a.readyState >= 1) go(); else a.addEventListener("loadedmetadata", go, { once: true });
+  renderClPlayer();
+}
+async function vpPlay(el, frac) {
+  const d = await vpPrepare(el);
+  const tr = vpTrackOf(el);
+  const same = vpTrack && vpTrack.key === tr.key;
+  if (!same) vpQueue = vpBuildQueue(el);
+  vpCur = el;
+  const dur = d.dur || 0;
+  const at = frac != null && dur ? frac * dur : same ? null : (vpPos[tr.key] && vpPos[tr.key] < dur - 0.3 ? vpPos[tr.key] : 0);
+  vpStartTrack(tr, at);
+}
+function vpPause() { if (vpAudio) vpAudio.pause(); }
+function vpEnded() {
+  if (vpTrack) vpSavePos(vpTrack.key, null);           // finished → next time it starts over
+  const el = vpEl(); if (el && el._vp) { vpDraw(el, 0); el.querySelector(".vp-time").textContent = vpFmt(el._vp.dur); el.classList.remove("resume"); }
+  vpPaintBubble(el, false);
+  const next = vpQueue.shift();
+  if (next) { vpStartTrack(next, 0); const nel = vpEl(); if (nel) nel.closest(".msg")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+  vpStop();
+}
+function vpStop() {
+  cancelAnimationFrame(vpRaf);
+  if (vpAudio) { vpAudio.pause(); }
+  const el = vpEl(); vpPaintBubble(el, false);
+  vpTrack = null; vpCur = null; vpQueue = [];
+  renderClPlayer();
+}
+function vpSetRate(r) {
+  vpRate = r; try { localStorage.setItem("dialog_vp_rate", String(vpRate)); } catch {}
+  document.querySelectorAll(".vp-speed, #clpSpeed").forEach((b) => b.textContent = fmtRate(vpRate));
+  if (vpAudio) vpAudio.playbackRate = vpRate;
+}
+function vpSetVol(v) {
+  vpVol = Math.min(1, Math.max(0, v)); try { localStorage.setItem("dialog_vp_vol", String(vpVol)); } catch {}
+  if (vpAudio) vpAudio.volume = vpVol;
+}
+const fmtRate = (r) => String(r).replace(/^0\./, ".") + "×";
+// Speed + volume dropdown (opened from any bubble's speed button or the mini player).
+function openVpMenu(anchor) {
+  closeVpMenu();
+  const m = document.createElement("div"); m.className = "vp-menu"; m.id = "vpMenu";
+  const rates = [0.5, 1, 1.25, 1.5, 1.75, 2];
+  m.innerHTML = `<div class="vpm-title">${escapeHtml(t("vp_speed"))}</div><div class="vpm-rates">${rates.map((r) => `<button type="button" data-rate="${r}" class="${r === vpRate ? "on" : ""}">${fmtRate(r)}</button>`).join("")}</div>` +
+    `<div class="vpm-title">${escapeHtml(t("volume"))}</div><div class="vpm-vol"><button type="button" class="vpm-mute">${vpVol ? (window.ICON.volume || "🔊") : (window.ICON.volumeMute || "🔇")}</button>` +
+    `<input type="range" min="0" max="1" step="0.01" value="${vpVol}" aria-label="${escapeHtml(t("volume"))}"><span class="vpm-pct">${Math.round(vpVol * 100)}%</span></div>`;
+  (document.fullscreenElement || document.body).appendChild(m);
+  const r = anchor.getBoundingClientRect(), w = zw(m), h = zh(m);
+  let top = r.bottom + 6; if (top + h > innerHeight - 8) top = r.top - h - 6;
+  const left = r.left + w <= innerWidth - 8 ? r.left : r.right - w;   // open rightwards when it fits
+  m.style.left = zpos(Math.max(8, Math.min(innerWidth - w - 8, left))) + "px"; m.style.top = zpos(Math.max(8, top)) + "px";
+  const rng = m.querySelector("input"), pct = m.querySelector(".vpm-pct"), mute = m.querySelector(".vpm-mute");
+  let before = vpVol || 1;
+  const paint = () => { rng.style.setProperty("--p", (vpVol * 100) + "%"); pct.textContent = Math.round(vpVol * 100) + "%"; mute.innerHTML = vpVol ? (window.ICON.volume || "🔊") : (window.ICON.volumeMute || "🔇"); };
+  paint();
+  rng.oninput = () => { vpSetVol(parseFloat(rng.value)); if (vpVol) before = vpVol; paint(); };
+  mute.onclick = () => { vpSetVol(vpVol ? 0 : before); rng.value = vpVol; paint(); };
+  m.querySelectorAll("[data-rate]").forEach((b) => b.onclick = () => { vpSetRate(parseFloat(b.dataset.rate)); m.querySelectorAll("[data-rate]").forEach((x) => x.classList.toggle("on", x === b)); });
+  setTimeout(() => document.addEventListener("pointerdown", vpMenuOutside, true), 0);
+}
+function vpMenuOutside(e) { if (!e.target.closest("#vpMenu, .vp-speed, #clpSpeed")) closeVpMenu(); }
+function closeVpMenu() { const m = $("vpMenu"); if (m) m.remove(); document.removeEventListener("pointerdown", vpMenuOutside, true); }
 messagesEl.addEventListener("click", (e) => {
   const el = e.target.closest(".bubble.voice"); if (!el) return;
-  if (e.target.closest(".vp-play")) { (vpCur === el && vpAudio && !vpAudio.paused) ? vpPause(el) : vpPlay(el); }
-  else if (e.target.closest(".vp-speed")) {
-    vpRate = vpRate === 1 ? 1.5 : vpRate === 1.5 ? 2 : 1;
-    try { localStorage.setItem("dialog_vp_rate", String(vpRate)); } catch {}
-    messagesEl.querySelectorAll(".vp-speed").forEach((b) => b.textContent = vpRate + "×");
-    if (vpAudio) vpAudio.playbackRate = vpRate;
-  }
+  if (e.target.closest(".vp-play")) { (vpTrack && vpTrack.key === vpKeyOf(el) && vpAudio && !vpAudio.paused) ? vpPause() : vpPlay(el); }
+  else if (e.target.closest(".vp-speed")) { const b = e.target.closest(".vp-speed"); $("vpMenu") ? closeVpMenu() : openVpMenu(b); }
 });
 messagesEl.addEventListener("pointerdown", (e) => {
   const cv = e.target.closest(".vp-wave"); if (!cv) return;
   const el = cv.closest(".bubble.voice");
-  const seek = (ev) => { const r = cv.getBoundingClientRect(); vpPlay(el, Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width))); };
-  seek(e);
-  const move = (ev) => { if (vpCur === el && el._vp && vpAudio) { const r = cv.getBoundingClientRect(); const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)); vpAudio.currentTime = f * (el._vp.dur || vpAudio.duration || 0); vpDraw(el, f); } };
+  const frac = (ev) => { const r = cv.getBoundingClientRect(); return Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)); };
+  vpPlay(el, frac(e));
+  const move = (ev) => { if (vpTrack && vpTrack.key === vpKeyOf(el) && el._vp && vpAudio) { const f = frac(ev); vpAudio.currentTime = f * (el._vp.dur || vpAudio.duration || 0); vpDraw(el, f); } };
   const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
   window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
 });
-window.addEventListener("resize", () => messagesEl.querySelectorAll(".bubble.voice").forEach((el) => vpDraw(el, el === vpCur && vpAudio && el._vp ? vpAudio.currentTime / (el._vp.dur || 1) : 0)));
+window.addEventListener("resize", () => messagesEl.querySelectorAll(".bubble.voice").forEach((el) => { if (!el._vp) return; const live = vpTrack && vpTrack.key === vpKeyOf(el) && vpAudio; const at = live ? vpAudio.currentTime : vpPos[vpKeyOf(el)] || 0; vpDraw(el, at / (el._vp.dur || 1)); }));
+// ---- Mini player in the chat list: shows while a track is loaded and its chat isn't open ----
+function renderClPlayer() {
+  const box = $("clPlayer"); if (!box) return;
+  // Shown when its chat isn't on screen: another chat is open, or (phones) you're back on the list.
+  const show = !!(vpTrack && vpAudio && (vpTrack.room !== myRoom || (isMobileView() && !document.querySelector(".app.in-chat"))));
+  box.classList.toggle("hidden", !show);
+  document.querySelector(".app")?.classList.toggle("has-clp", show);
+  if (!show) return;
+  const tr = vpTrack;
+  if (box.dataset.key !== tr.key) {
+    box.dataset.key = tr.key;
+    $("clpAva").innerHTML = tr.login ? `<img src="${avaUrl(tr.login)}" data-fallback="remove">${initials(tr.name)}` : initials(tr.name || "?");
+    $("clpWho").textContent = tr.name || "—";
+    $("clpKind").textContent = tr.voice ? t("vp_voice") : (tr.title || t("vp_audio"));
+    $("clpSpeed").textContent = fmtRate(vpRate);
+    $("clpClose").innerHTML = window.ICON.close || "✕";
+  }
+  const dur = vpAudio.duration && isFinite(vpAudio.duration) ? vpAudio.duration : 0;
+  $("clpTime").textContent = vpFmt(vpAudio.currentTime) + (dur ? " / " + vpFmt(dur) : "");
+  $("clpBar").style.transform = `scaleX(${dur ? Math.min(1, vpAudio.currentTime / dur) : 0})`;
+  const playing = !vpAudio.paused;
+  $("clpPlay").innerHTML = playing ? (window.ICON.pause || "❚❚") : (window.ICON.play || "▶");
+  $("clpPlay").setAttribute("aria-label", t(playing ? "vp_pause" : "vp_play"));
+  box.classList.toggle("playing", playing);
+}
+{ const appEl = document.querySelector(".app"); if (appEl) new MutationObserver(() => renderClPlayer()).observe(appEl, { attributes: true, attributeFilter: ["class"] }); }
+$("clpPlay") && ($("clpPlay").onclick = () => { if (!vpAudio || !vpTrack) return; vpAudio.paused ? vpAudio.play().catch(() => {}) : vpAudio.pause(); });
+$("clpSpeed") && ($("clpSpeed").onclick = (e) => { $("vpMenu") ? closeVpMenu() : openVpMenu(e.currentTarget); });
+$("clpClose") && ($("clpClose").onclick = () => vpStop());
+$("clpOpen") && ($("clpOpen").onclick = () => { if (!vpTrack) return; const tr = vpTrack; if (tr.room !== myRoom) openRoomByKey(tr.room); if (tr.id) setTimeout(() => jumpToMessage(tr.id), 500); });
 
 // ---------- Voice messages (WhatsApp / Telegram logic) ----------
 // Empty input ⇒ the round button is a mic.

@@ -126,6 +126,14 @@
         <button id="discoverBtn" class="hicon-btn cl-discover" data-i18n-title="directory" title="Discover">🧭</button>
       </div>
       <div class="cl-filters" id="chatFilters"><button class="clf-btn active" data-filter="all" data-i18n="filter_all">All</button><button class="clf-btn" data-filter="dm" data-i18n="filter_dm">DMs</button><button class="clf-btn" data-filter="online" data-i18n="filter_online">Online</button><button class="clf-btn" data-filter="pinned" data-i18n="filter_pinned">Pinned</button><button class="clf-btn" data-filter="group" data-i18n="filter_group">Groups</button></div>
+      <!-- Now playing: a voice note / audio keeps going after you leave its chat; this is its remote. -->
+      <div class="cl-player hidden" id="clPlayer">
+        <button type="button" class="clp-main" id="clpOpen"><span class="avatar clp-ava" id="clpAva"></span><span class="clp-txt"><span class="clp-who" id="clpWho"></span><span class="clp-sub"><span id="clpKind"></span> · <span id="clpTime">0:00</span></span></span></button>
+        <button type="button" class="clp-btn clp-play" id="clpPlay" aria-label="Play"></button>
+        <button type="button" class="clp-btn clp-speed" id="clpSpeed">1×</button>
+        <button type="button" class="clp-btn clp-x" id="clpClose" data-i18n-title="close" title="Close"></button>
+        <i class="clp-bar" id="clpBar"></i>
+      </div>
       <ul id="chatList" class="chats"></ul>
       <div id="chatsEmpty" class="chats-empty">
         <div data-i18n="no_chats">No chats yet</div>
