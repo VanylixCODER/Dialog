@@ -6510,7 +6510,7 @@ function endCall() {
   $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
-  tileOrder.length = 0;
+  tileOrder.length = 0; waSwapped = false;
   delete call.declinedBy;
   if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
@@ -7368,31 +7368,42 @@ function waEligible() {
     && vGrid.querySelectorAll(".tile:not(.screen):not(.tile-leaving)").length === 2;   // you + one peer
 }
 let waCorner = (() => { try { return localStorage.getItem("dialog_wa_corner") || "tr"; } catch { return "tr"; } })();
+// Who's big and who's the thumbnail. Tap the thumbnail to swap (WhatsApp/Telegram) — you can
+// look at yourself full screen and your friend small, and back.
+let waSwapped = false, waSwapAt = 0;
+function waRoles() {
+  const me = $("tile-me"), other = vGrid.querySelector(".tile:not(.me):not(.screen):not(.tile-leaving)");
+  return waSwapped ? { big: me, pip: other } : { big: other, pip: me };
+}
 function applyWaCorner() {
-  const me = $("tile-me"); if (!me) return;
-  me.classList.remove("wa-tl", "wa-tr", "wa-bl", "wa-br");
-  me.classList.add("wa-" + waCorner);
-  me.style.left = me.style.top = me.style.right = me.style.bottom = "";   // let the corner class position it
+  vGrid.querySelectorAll(".tile").forEach((t) => { t.classList.remove("wa-tl", "wa-tr", "wa-bl", "wa-br"); });
+  const { pip } = waRoles(); if (!pip) return;
+  pip.classList.add("wa-" + waCorner);
+  pip.style.left = pip.style.top = pip.style.right = pip.style.bottom = "";   // let the corner class position it
 }
 function syncWa() {
   const st = $("callStage"), on = waEligible();
   st.classList.toggle("wa-call", on);
-  if (on) applyWaCorner(); else st.classList.remove("wa-hide");
+  vGrid.querySelectorAll(".tile").forEach((t) => t.classList.remove("wa-big", "wa-pip"));
+  if (on) { const { big, pip } = waRoles(); if (big) big.classList.add("wa-big"); if (pip) pip.classList.add("wa-pip"); applyWaCorner(); }
+  else st.classList.remove("wa-hide");
   if ($("pipBtn")) $("pipBtn").classList.toggle("hidden", !(call.active && PIP_OK));
 }
 // Drag the self-view PiP and snap it to the nearest corner (remembered).
 let waDrag = null;
 vGrid.addEventListener("pointerdown", (e) => {
   const st = $("callStage"); if (!st.classList.contains("wa-call")) return;
-  const me = e.target.closest(".tile.me"); if (!me) return;
+  const me = e.target.closest(".tile.wa-pip"); if (!me) return;   // the thumbnail (you, or them when swapped)
   e.preventDefault();
   const r = me.getBoundingClientRect();
-  waDrag = { id: e.pointerId, me, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
+  waDrag = { id: e.pointerId, me, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height, x0: e.clientX, y0: e.clientY, moved: false };
   try { me.setPointerCapture(e.pointerId); } catch {}
   me.classList.add("dragging");
 });
 vGrid.addEventListener("pointermove", (e) => {
   if (!waDrag || e.pointerId !== waDrag.id) return;
+  if (!waDrag.moved && Math.hypot(e.clientX - waDrag.x0, e.clientY - waDrag.y0) < 6) return;   // still a tap
+  waDrag.moved = true;
   const sr = $("callStage").getBoundingClientRect();
   let x = e.clientX - waDrag.dx - sr.left, y = e.clientY - waDrag.dy - sr.top;
   x = Math.max(6, Math.min(sr.width - waDrag.w - 6, x));
@@ -7403,6 +7414,7 @@ function waDragEnd(e) {
   if (!waDrag || e.pointerId !== waDrag.id) return;
   const me = waDrag.me, sr = $("callStage").getBoundingClientRect();
   me.classList.remove("dragging");
+  if (!waDrag.moved) { waDrag = null; waSwapped = !waSwapped; waSwapAt = Date.now(); syncWa(); return; }   // a tap swaps big ↔ small
   const cx = (parseFloat(me.style.left) || 0) * uiZoom + waDrag.w / 2;   // style px are zoomed-page px
   const cy = (parseFloat(me.style.top) || 0) * uiZoom + waDrag.h / 2;
   waCorner = (cy < sr.height / 2 ? "t" : "b") + (cx < sr.width / 2 ? "l" : "r");
@@ -7501,7 +7513,8 @@ vGrid.addEventListener("click", (e) => {
     // The self PiP is drag-only (its click target is itself); tapping the big
     // remote toggles the chrome. A drag ends with the click on the self tile, so
     // the me-check already stops a drag from toggling — no timing guard needed.
-    if (!tile.classList.contains("me")) st.classList.toggle("wa-hide");
+    // (the click that follows a swap-tap lands on what is now the BIG tile — not a chrome toggle)
+    if (!tile.classList.contains("wa-pip") && Date.now() - waSwapAt > 400) st.classList.toggle("wa-hide");
     return;
   }
   clearTimeout(tileClickTimer);
