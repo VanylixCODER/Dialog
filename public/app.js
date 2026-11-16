@@ -1381,15 +1381,16 @@ function statusOf(el) {
   if (!acked || !id) { setStatus(icon, "pending"); return; }
   const others = othersInRoom();
   if (!others.length) { setStatus(icon, "sent"); return; }
-  let minDelivered = Infinity, minSeen = Infinity;
+  // Read/delivered as soon as ANYONE else has it (Telegram-style). Waiting for every member
+  // meant group ticks basically never turned — one inactive member held them back forever.
+  let maxDelivered = 0, maxSeen = 0;
   for (const l of others) {
-    const w = watermarks.get(l);
-    if (!w) { minDelivered = 0; minSeen = 0; break; }
-    if (w.delivered < minDelivered) minDelivered = w.delivered;
-    if (w.seen < minSeen) minSeen = w.seen;
+    const w = watermarks.get(l); if (!w) continue;
+    if (w.delivered > maxDelivered) maxDelivered = w.delivered;
+    if (w.seen > maxSeen) maxSeen = w.seen;
   }
-  if (minSeen >= id) setStatus(icon, "read");
-  else if (minDelivered >= id) setStatus(icon, "delivered");
+  if (maxSeen >= id) setStatus(icon, "read");
+  else if (maxDelivered >= id) setStatus(icon, "delivered");
   else setStatus(icon, "sent");
 }
 // Статусы доставки монотонны: галочки «не откатываются» назад при обновлении курсоров.
@@ -1426,8 +1427,23 @@ function lastVisiblePartnerId() {
   }
   return 0;
 }
+// "Seen" for messages that land while you're looking: chat open, window focused, scrolled to
+// the bottom. Debounced; also fires on focus/visibility and when you scroll down to new ones.
+let _seenT = 0, _seenSent = { room: "", id: 0 };
+function scheduleSeen() {
+  clearTimeout(_seenT);
+  _seenT = setTimeout(() => {
+    if (!myRoom || document.visibilityState !== "visible" || !document.hasFocus() || !atBottom()) return;
+    const id = lastVisiblePartnerId();
+    if (!id || (_seenSent.room === myRoom && _seenSent.id >= id)) return;
+    markDeliveredSeenUpToLast();
+  }, 150);
+}
+window.addEventListener("focus", scheduleSeen);
+document.addEventListener("visibilitychange", scheduleSeen);
 function markDeliveredSeenUpToLast() {
   const id = lastVisiblePartnerId();
+  if (id && myRoom && document.visibilityState === "visible") _seenSent = { room: myRoom, id };
   if (id && !isDnd() && myRoom) {
     socket.emit("delivery", { maxId: id });
     // Respect the "read receipts" preference — if off, don't tell others we've read.
@@ -2311,7 +2327,7 @@ function openChat(c) {
   pendingUnread = Number(c.unread) || 0;
   activeKey = c.key; myRoom = c.key; curKind = c.type; curTitle = c.name; c.unread = 0; c.mentioned = false;
   // Nothing from the previous chat may survive the switch.
-  clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null;
+  clearReply(); exitSelectMode(); renderPinned(null); pendingJumpId = null; clearTyping();
   const csb = $("chatSearch"); if (csb) csb.classList.add("hidden");
   const cfb = $("chatFavs"); if (cfb) cfb.classList.add("hidden");
   loadFavIds();   // which messages in this room are starred
@@ -3940,6 +3956,7 @@ messagesEl.addEventListener("scroll", () => {
   // One geometry read per scroll event (atBottom() was evaluated three times per event).
   const bottom = atBottom();
   const jb = $("jumpNewer"); if (jb) jb.classList.toggle("show", !bottom);
+  if (bottom) scheduleSeen();
   if (_stickBottom) { if (!bottom) scrollDown(); return; }   // still pinned: content grew → follow it
   if (bottom) pruneOldChunks();
   // Prefetch the next older chunk WELL BEFORE the top (no debounce) so it's
@@ -3979,6 +3996,7 @@ socket.on("message", (m) => {
 });
 // Сервер подтвердил сохранение нашего сообщения — снимаем «pending».
 socket.on("msg-ack", ({ localId, id, room: ackRoom }) => {
+  if (localId != null) fileSent(Number(localId));
   if (!ackRoom || ackRoom !== myRoom) return;
   const el = messagesEl.querySelector(`.msg.me[data-localid="${localId}"]`);
   if (el) { el.dataset.id = id != null ? id : (el.dataset.id || ""); el.dataset.acked = "1"; statusOf(el); }
@@ -4180,7 +4198,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
   // (the server must not see the URL) or for encrypted bubbles.
   if (m.type === "text" && !isB && !isSecret(m.room || myRoom)) addLinkExtras(wrap, m.text);
   // Для входящих сразу же отправляем ACK доставки (на любое сообщение, в т.ч. live broadcast).
-  if (!mine && m.id && !sysType) setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0);
+  if (!mine && m.id && !sysType) { setTimeout(() => socket.emit("delivery", { maxId: m.id }), 0); if (!instant) scheduleSeen(); }
   if (scroll) scrollDown();
 }
 // Telegram/WhatsApp-style grouping: a run of messages from the same person, each within
@@ -4914,8 +4932,46 @@ $("msgInput").addEventListener("contextmenu", (e) => {
   inputMenu.style.left = zpos(Math.max(8, Math.min(e.clientX, innerWidth - mw - 8))) + "px";
   inputMenu.style.top = zpos(Math.max(8, Math.min(e.clientY, innerHeight - mh - 8))) + "px";
 });
-const typingUsers = new Set();
-socket.on("typing", ({ name, isTyping }) => { if (isTyping) typingUsers.add(name); else typingUsers.delete(name); const arr = [...typingUsers]; $("typingIndicator").textContent = arr.length ? (arr.length === 1 ? t("typing_one", { name: arr[0] }) : t("typing_many", { names: arr.join(", ") })) : ""; });
+// ---- Live activity in the header: typing (bouncing dots), recording a voice note (waves),
+// sending a file (a page dropping into a folder, on loop). Keyed by socket id; each entry
+// expires on its own after a few seconds of silence, so a lost "stopped" can't leave it stuck.
+const typingUsers = new Map();   // id → { name, kind, until }
+const ACT_TTL = { text: 6000, voice: 8000, file: 20000 };
+let typingSweep = 0;
+socket.on("typing", ({ id, name, isTyping, kind }) => {
+  const k = id || name;
+  if (isTyping) typingUsers.set(k, { name, kind: kind || "text", until: Date.now() + (ACT_TTL[kind] || 6000) });
+  else typingUsers.delete(k);
+  renderTyping();
+});
+function clearTyping() { typingUsers.clear(); renderTyping(); }
+function renderTyping() {
+  const el = $("typingIndicator"); if (!el) return;
+  const now = Date.now();
+  for (const [k, v] of typingUsers) if (v.until < now) typingUsers.delete(k);
+  const list = [...typingUsers.values()];
+  clearTimeout(typingSweep);
+  if (list.length) typingSweep = setTimeout(renderTyping, 1000);
+  el.closest(".ch-info")?.classList.toggle("is-typing", list.length > 0);
+  if (!list.length) { el.innerHTML = ""; el.removeAttribute("data-kind"); return; }
+  // One kind wins the animation: voice > file > text.
+  const kind = list.some((x) => x.kind === "voice") ? "voice" : list.some((x) => x.kind === "file") ? "file" : "text";
+  const who = list.filter((x) => x.kind === kind).map((x) => x.name);
+  const key = (kind === "voice" ? "act_voice" : kind === "file" ? "act_file" : "typing") + (who.length === 1 ? "_one" : "_many");
+  const anim = kind === "voice" ? `<span class="act-waves"><i></i><i></i><i></i><i></i><i></i></span>`
+    : kind === "file" ? `<span class="act-file"><svg viewBox="0 0 24 20" aria-hidden="true"><path class="af-back" d="M2 4.5A1.5 1.5 0 0 1 3.5 3h5l2 2.2h10A1.5 1.5 0 0 1 22 6.7v10.8a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5z"/><g class="af-doc"><rect x="8" y="1" width="8" height="10" rx="1.2"/><path d="M10 4.5h4M10 7h3"/></g><path class="af-front" d="M2 9.2h20v8.3a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 17.5z"/></svg></span>`
+    : `<span class="act-dots"><i></i><i></i><i></i></span>`;
+  el.dataset.kind = kind;
+  el.innerHTML = anim + `<span class="act-txt">${escapeHtml(who.length === 1 ? t(key, { name: who[0] }) : t(key, { names: who.join(", ") }))}</span>`;
+}
+// What I'm doing right now, sent to the room. Voice/file keep re-announcing while they last.
+let myAct = "", myActKeep = 0;
+function setMyActivity(kind) {
+  if (kind === myAct) return;
+  myAct = kind; clearInterval(myActKeep);
+  socket.emit("typing", kind || false);
+  if (kind === "voice" || kind === "file") myActKeep = setInterval(() => socket.emit("typing", kind), 3000);
+}
 
 // ---------- Медиа / файлы / прогресс ----------
 const MAX_FILE_SIZE_MB = 75;
@@ -5005,10 +5061,13 @@ function sendFile(file, caption) {
   // Captions only attach to visual media (image/gif/video), Telegram-style; capped at 1024.
   const cap = (type === "image" || type === "gif" || type === "video") ? String(caption || "").trim().slice(0, 1024) : "";
   const localId = ++localIdCounter;
-  uploadingCount++;
+  uploadingCount++; fileSendIds.add(localId); setMyActivity("file");
   (type === "image" ? compressImage(file) : Promise.resolve(file)).then((f) => readFileForSend(f, type, cap, localId));
   return null;
 }
+// "Sending a file…" lasts until the server has the file (its ack), not just until we've read it.
+const fileSendIds = new Set();
+function fileSent(localId) { if (fileSendIds.delete(localId) && !fileSendIds.size && myAct === "file") setMyActivity(""); }
 function readFileForSend(file, type, cap, localId) {
   const reader = new FileReader();
   reader.onprogress = (e) => {
@@ -5024,8 +5083,10 @@ function readFileForSend(file, type, cap, localId) {
     };
     renderMessage(optimistic, true, false);
     socket.emit("message", { type, media: reader.result, mediaName: file.name, text: cap, localId });
+    setTimeout(() => fileSent(localId), 90000);   // fallback if the ack never comes
   };
   reader.onerror = () => {
+    fileSent(localId);
     uploadingCount = Math.max(0, uploadingCount - 1);
     if (uploadingCount <= 0) hideProgress();
     notify("File read error");
@@ -5307,7 +5368,7 @@ async function startRec() {
   try { mediaRecorder = new MediaRecorder(recStream, { audioBitsPerSecond: 64000 }); } catch { mediaRecorder = new MediaRecorder(recStream); }
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
-    clearInterval(recTimer); stopRecViz();
+    clearInterval(recTimer); stopRecViz(); setMyActivity("");
     try { recStream.getTracks().forEach((tr) => tr.stop()); } catch {}
     const cancelled = recCancelled, ms = Date.now() - recStartedAt;
     recState = "idle"; recLocked = false; recUI(false); updateSendMode();
@@ -5316,7 +5377,7 @@ async function startRec() {
     if (blob.size < 600 || blob.size > MAX_FILE_BYTES) { if (blob.size > MAX_FILE_BYTES) notify(t("file_too_big_alert", { mb: MAX_FILE_SIZE_MB })); return; }
     sendVoice(blob);
   };
-  mediaRecorder.start(); recState = "recording"; recStartedAt = Date.now();
+  mediaRecorder.start(); recState = "recording"; recStartedAt = Date.now(); setMyActivity("voice");
   const sb = $("sendBtn"); if (sb) sb.innerHTML = window.ICON.send;
   startRecViz(); updateRecOverlay();
   // Wall-clock, not tick counting: background tabs throttle intervals, which made the timer

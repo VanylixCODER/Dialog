@@ -781,6 +781,11 @@ export async function lastMessagesFor(rooms) {
     rooms
   );
 }
+// Newest message id per room (one indexed query) — used to catch up "delivered" on reconnect.
+export async function lastMessageIds(rooms) {
+  if (!rooms.length) return [];
+  return await query(`SELECT room, MAX(id) AS id FROM messages WHERE room IN (${rooms.map(() => "?").join(",")}) GROUP BY room`, rooms);
+}
 export async function getUserGroups(login) {
   return await query(
     `SELECT g.id, g.name, g.owner FROM chat_groups g

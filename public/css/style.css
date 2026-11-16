@@ -7245,3 +7245,27 @@ body.ava-rounded .dsc-ava:not(.grp) { border-radius: calc(12px * var(--rk)); }
    name, so the name (→ profile) couldn't be clicked. Park it at the far end of the name row
    instead (Discord-style), where it covers neither the name nor anything above. */
 .msg:not(.me):not(.g-cont):has(> .who) .msg-actions { top: -10px; left: auto; right: 0; }
+
+/* ===== Live activity in the chat header: typing dots · voice waves · file → folder ===== */
+.typing { gap: 6px; height: 16px; }
+.typing::before { display: none; }                       /* the old pulsing dot */
+.ch-info.is-typing .chat-sub { display: none; }          /* the activity replaces the subtitle, Telegram-style */
+.typing .act-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.act-dots { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.act-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: actDot 1.2s ease-in-out infinite; }
+.act-dots i:nth-child(2) { animation-delay: 0.15s; } .act-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes actDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-4px); opacity: 1; } }
+.act-waves { display: inline-flex; align-items: center; gap: 2px; height: 14px; flex: none; }
+.act-waves i { width: 2.5px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: center; animation: actWave 0.9s ease-in-out infinite; }
+.act-waves i:nth-child(1) { animation-delay: -0.6s; } .act-waves i:nth-child(2) { animation-delay: -0.2s; }
+.act-waves i:nth-child(3) { animation-delay: -0.75s; } .act-waves i:nth-child(4) { animation-delay: -0.35s; } .act-waves i:nth-child(5) { animation-delay: -0.5s; }
+@keyframes actWave { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+.act-file { display: inline-grid; width: 18px; height: 15px; flex: none; }
+.act-file svg { width: 100%; height: 100%; overflow: visible; }
+.act-file .af-back { fill: color-mix(in srgb, currentColor 35%, transparent); }
+.act-file .af-front { fill: currentColor; }
+.act-file .af-doc rect { fill: var(--bg-1, #111); stroke: currentColor; stroke-width: 1.2; }
+.act-file .af-doc path { stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; }
+.act-file .af-doc { animation: actFile 1.4s cubic-bezier(0.45, 0, 0.3, 1) infinite; }
+@keyframes actFile { 0% { transform: translateY(-9px); opacity: 0; } 20% { opacity: 1; } 65% { transform: translateY(5px); opacity: 1; } 80%, 100% { transform: translateY(7px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .act-dots i, .act-waves i, .act-file .af-doc { animation-duration: 3s; } }

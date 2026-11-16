@@ -37,7 +37,7 @@ import { AccessToken } from "livekit-server-sdk";
 import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, editMessageMarkup, getMessageMeta, toggleReaction,
-  createGroup, getUserGroups, lastMessagesFor, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
+  createGroup, getUserGroups, lastMessagesFor, lastMessageIds, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
   isGroupOwner, getGroupAvatar, getGroupBanner, setGroupBanner, isGroupPublic, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser, searchUsers,
@@ -2336,6 +2336,25 @@ async function applyWatermarkBump(room, logins, { delivered, seen } = {}) {
   }) });
 }
 
+// "Delivered" is the server's call, not the recipient's open chat: the moment a message is
+// stored, everyone in the room who is online on ANY device has it (their client gets the ping
+// and the chat list update). Recipients that were offline catch up when they reconnect.
+async function deliverToOnline(room, from, id) {
+  try {
+    const dm = dmPartner(room, from);
+    const logins = dm ? [dm] : room.startsWith("@grp:") ? (await getGroupMembers(room.slice(5))).filter((l) => l !== from) : [];
+    const online = logins.filter((l) => userSockets.has(l));
+    if (online.length) await applyWatermarkBump(room, online, { delivered: id });
+  } catch (e) { console.error("deliverToOnline", e.message); }
+}
+async function catchUpDelivered(login) {
+  try {
+    const [dms, groups] = await Promise.all([getUserDMs(login), getUserGroups(login)]);
+    const rooms = [...dms.slice(0, 40).map((d) => d.key), ...groups.slice(0, 40).map((g) => "@grp:" + g.id)];
+    for (const r of await lastMessageIds(rooms)) await applyWatermarkBump(r.room, [login], { delivered: Number(r.id) });
+  } catch (e) { console.error("catchUpDelivered", e.message); }
+}
+
 const SERVER_REGION = process.env.SERVER_REGION || "local";
 
 // Анти-спам (авторитетно на сервере; клиент дублирует для мгновенного UX).
@@ -2375,7 +2394,9 @@ io.on("connection", (socket) => {
     if (typeof ack === "function") ack(true);   // client waits for this before rejoining a call
     socket._token = token; socket._authLogin = userLogin;
     setUserLastIp(userLogin, sockIp).catch(() => {});
+    const cameOnline = !userSockets.has(userLogin);
     addUserSocket(userLogin, socket.id);
+    if (cameOnline) catchUpDelivered(userLogin);
     userDevice.set(userLogin, deviceFromUa(socket.handshake.headers["user-agent"]));
     if (!userStatus.has(userLogin)) { try { userStatus.set(userLogin, await getStatus(userLogin)); } catch {} }
     broadcastPresence(userLogin);
@@ -2516,6 +2537,7 @@ io.on("connection", (socket) => {
     if (!payload) { socket.emit("file-rejected", { reason: "save_failed" }); return; }
     // Возвращаем автору ACK с id, чтобы клиент снял статус «отправляется».
     socket.emit("msg-ack", { localId: payload.localId, id: payload.id, room: currentRoom, ts: payload.ts });
+    deliverToOnline(currentRoom, userLogin, payload.id);
   });
 
   // ---------- Activities (watch together / games) ----------
@@ -2576,7 +2598,13 @@ io.on("connection", (socket) => {
     broadcastPresence(userLogin).catch(() => {});
   });
 
-  socket.on("typing", (isTyping) => { if (currentRoom) socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping }); });
+  // Activity: false (stopped) or a kind — "text" (typing), "voice" (recording), "file" (sending a
+  // file). Old clients send true, which means "text".
+  socket.on("typing", (st) => {
+    if (!currentRoom) return;
+    const kind = st === true ? "text" : ["text", "voice", "file"].includes(st) ? st : "";
+    socket.to(currentRoom).emit("typing", { id: socket.id, name: userName, isTyping: !!kind, kind: kind || undefined });
+  });
   // Курсоры доставки / просмотра
   // — delivery: получатель подтверждает, что сообщения долетели до его устройства.
   // — seen:     получатель подтверждает, что реально просмотрел переписку (чат открыт/сфокусирован).
