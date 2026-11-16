@@ -1,6 +1,6 @@
 // Error pages for the public site — one renderer, two uses:
 //   • server.js renders them live (400, 401, 403, 404, 405, 413, 429, 500, …);
-//   • scripts/build-error-pages.mjs writes standalone copies to public/errors/ that Caddy serves
+//   • `node errors.js --build` writes standalone copies to public/errors/ that Caddy serves
 //     when the app itself is down (502/503/504), with the CSS inlined since /css won't load then.
 // Both languages ship in the page; a tiny inline script picks the visitor's (same `dialog_lang`
 // key the app and the landing use), so static copies work without the server.
@@ -83,4 +83,19 @@ ${style}
 </script>
 </body>
 </html>`;
+}
+
+// `node errors.js --build` → public/errors/{500,502,503,504}.html with site.css inlined.
+// Re-run after changing this file or public/css/site.css, and commit the output.
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/")) && process.argv.includes("--build")) {
+  const { readFileSync, writeFileSync, mkdirSync } = await import("fs");
+  const { fileURLToPath } = await import("url");
+  const { dirname, join } = await import("path");
+  const root = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(root, "public/css/site.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ");
+  mkdirSync(join(root, "public/errors"), { recursive: true });
+  for (const code of [500, 502, 503, 504]) {
+    writeFileSync(join(root, "public/errors", `${code}.html`), renderErrorPage(code, { css }));
+    console.log(`public/errors/${code}.html`);
+  }
 }

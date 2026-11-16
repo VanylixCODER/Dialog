@@ -1,7 +1,7 @@
 dialogmsg.xyz {
 	reverse_proxy app:3000
 	# While the app is down or restarting (deploys!), show our own page instead of a blank error.
-	# Built by scripts/build-error-pages.mjs; the status code stays 502/503/504.
+	# Built by `node errors.js --build`; the status code stays 502/503/504.
 	handle_errors {
 		@down expression `{err.status_code} in [502, 503, 504]`
 		handle @down {
