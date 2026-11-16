@@ -6864,3 +6864,17 @@ body:not([data-theme="aero"]) :is(.chatlist, .info-panel) { border-left: 0; bord
 .im-menu button svg { width: 16px; height: 16px; flex: none; }
 @media (hover: hover) { .im-menu button:hover { background: var(--surface-3); } }
 .im-menu button.danger { color: var(--danger); }
+
+/* Voice note vs audio file (voiceBubbleHTML): a file shows a music icon + its name and a square
+   play button; both carry a download button beside the speed chip. */
+.vp-right { display: inline-flex; align-items: center; gap: 6px; }
+.vp-dl { width: 24px; height: 24px; display: grid; place-items: center; color: var(--text-dim); border-radius: calc(50% * var(--rc)); }
+.vp-dl svg { width: 15px; height: 15px; }
+@media (hover: hover) { .vp-dl:hover { color: var(--accent-300); background: var(--surface-2); } }
+.bubble.voice.audio-file { min-width: 260px; }
+.bubble.voice.audio-file .vp-play { border-radius: var(--r-3); }
+.vp-file { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.vp-file-ico { flex: none; color: var(--accent-300); display: grid; }
+.vp-file-ico svg { width: 15px; height: 15px; }
+.vp-file-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-theme="flashbang"] .msg.me .vp-dl, body[data-theme="flashbang"] .msg.me .vp-file, body[data-theme="flashbang"] .msg.me .vp-file-ico { color: rgba(255, 255, 255, 0.85); }

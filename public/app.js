@@ -3935,7 +3935,7 @@ function renderMessage(m, scroll = true, ping = false, instant = false) {
     else if (m.type === "sticker") inner += `<div class="bubble sticker"><img src="${m.media}" alt="${escapeHtml(m.mediaName || "")}" loading="lazy" decoding="async"></div>`;
     else if (m.type === "image" || m.type === "gif") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><img src="${m.media}" alt="" loading="lazy" decoding="async"><div class="media-ov"><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "image.png")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
     else if (m.type === "video") inner += `<div class="bubble media${m.text ? " has-cap" : ""}"><video src="${m.media}" controls preload="none"></video><div class="media-ov"><button class="media-btn media-expand" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("fullscreen")}">${window.ICON.maximize || "⛶"}</button><button class="media-btn media-dl" data-name="${escapeHtml(m.mediaName || "video.mp4")}" title="${t("download")}">${window.ICON.download || "⬇"}</button></div>${m.text ? `<div class="media-cap">${formatMessage(m.text)}</div>` : ""}</div>`;
-    else if (m.type === "audio") inner += voiceBubbleHTML(m.media);
+    else if (m.type === "audio") inner += voiceBubbleHTML(m);
     else if (m.type === "file") {
       const safeName = escapeHtml(m.mediaName || t("file_untitled"));
       const sizeBytes = m.mediaSize || mediaBytesFromDataUrl(m.media);
@@ -4963,9 +4963,16 @@ socket.on("file-rejected", ({ reason, maxMb } = {}) => {
 const vpData = new Map();   // src -> Promise<{ peaks: number[], dur }>
 let vpAudio = null, vpCur = null, vpRaf = 0;
 let vpRate = parseFloat(localStorage.getItem("dialog_vp_rate")) || 1;
-function voiceBubbleHTML(src) {
-  return `<div class="bubble voice" data-src="${escapeHtml(src || "")}"><button class="vp-play" type="button" aria-label="${t("vp_play")}">${window.ICON.play || "▶"}</button>` +
-    `<div class="vp-body"><canvas class="vp-wave"></canvas><div class="vp-meta"><span class="vp-time">0:00</span><button class="vp-speed" type="button">${vpRate}×</button></div></div></div>`;
+// Voice notes (recorded here, mediaName "voice") and audio FILES (an mp3 someone attached) share
+// the player but not the look: a file shows a music icon + its name; both can be downloaded.
+function voiceBubbleHTML(m) {
+  const src = m.media || "", isVoice = !m.mediaName || m.mediaName === "voice";
+  const ext = (/^data:audio\/([a-z0-9]+)/i.exec(src) || [])[1] || (src.split(".").pop() || "webm").slice(0, 5);
+  const dlName = isVoice ? `voice-${new Date(m.ts || Date.now()).toISOString().slice(0, 16).replace(/[:T]/g, "-")}.${ext === "mpeg" ? "mp3" : ext}` : m.mediaName;
+  const dl = `<a class="vp-dl" href="${escapeHtml(src)}" download="${escapeHtml(dlName)}" title="${escapeHtml(t("download"))}" aria-label="${escapeHtml(t("download"))}">${window.ICON.download || "⤓"}</a>`;
+  const head = isVoice ? "" : `<div class="vp-file"><span class="vp-file-ico">${window.ICON.music || "♪"}</span><span class="vp-file-name">${escapeHtml(m.mediaName)}</span></div>`;
+  return `<div class="bubble voice${isVoice ? "" : " audio-file"}" data-src="${escapeHtml(src)}"><button class="vp-play" type="button" aria-label="${t("vp_play")}">${window.ICON.play || "▶"}</button>` +
+    `<div class="vp-body">${head}<canvas class="vp-wave"></canvas><div class="vp-meta"><span class="vp-time">0:00</span><span class="vp-right"><button class="vp-speed" type="button">${vpRate}×</button>${dl}</span></div></div></div>`;
 }
 const vpFmt = (s) => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 function vpLoad(src) {
