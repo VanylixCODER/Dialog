@@ -174,6 +174,8 @@ export async function initSchema() {
   // enough SQL dialects that naming a column it is asking for trouble later.
   try { await pool.query("ALTER TABLE chat_groups ADD COLUMN is_public TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE chat_groups ADD COLUMN about VARCHAR(190) NULL"); } catch {}
+  // Group / channel banner (data URL, like the avatar). NULL = none; the client draws a gradient.
+  try { await pool.query("ALTER TABLE chat_groups ADD COLUMN banner LONGTEXT NULL"); } catch {}
 
   await pool.query(`CREATE TABLE IF NOT EXISTS group_members (
     group_id BIGINT NOT NULL, login VARCHAR(24) NOT NULL,
@@ -809,6 +811,9 @@ export async function addGroupMembers(id, logins) {
 export async function removeGroupMember(id, login) { await execute("DELETE FROM group_members WHERE group_id=? AND login=?", [id, login]); }
 export async function renameGroup(id, name) { await execute("UPDATE chat_groups SET name=? WHERE id=?", [name, id]); }
 export async function setGroupAvatar(id, avatar) { await execute("UPDATE chat_groups SET avatar=? WHERE id=?", [avatar, id]); }
+export async function getGroupBanner(id) { const r = await query("SELECT banner FROM chat_groups WHERE id=?", [id]); return r[0] ? r[0].banner : null; }
+export async function setGroupBanner(id, banner) { await execute("UPDATE chat_groups SET banner=? WHERE id=?", [banner || null, id]); }
+export async function isGroupPublic(id) { const r = await query("SELECT 1 FROM chat_groups WHERE id=? AND is_public=1", [id]); return r.length > 0; }
 // Смена владельца (используется при /api/groups/:id/leave, когда уходит овнер с другими участниками).
 // chat_groups.owner — единственный VARCHAR, поэтому при уходе овнера надо явно передать владение
 // кому-то из оставшихся, иначе все owner-only маршруты начнут возвращать 403.
@@ -1322,15 +1327,17 @@ export async function setBotPublic(login, owner, isPublic) {
 export async function listPublicGroups(limit = 60) {
   const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 60));
   return await query(
-    `SELECT g.id, g.name, g.owner, g.about, g.channel,
-            (SELECT COUNT(*) FROM group_members m WHERE m.group_id=g.id) AS members
+    `SELECT g.id, g.name, g.owner, g.about, g.channel, (g.banner IS NOT NULL) AS has_banner,
+            UNIX_TIMESTAMP(g.created_at) * 1000 AS created,
+            (SELECT COUNT(*) FROM group_members m WHERE m.group_id=g.id) AS members,
+            (SELECT x.ts FROM messages x WHERE x.room=CONCAT('@grp:', g.id) ORDER BY x.id DESC LIMIT 1) AS last_ts
      FROM chat_groups g WHERE g.is_public=1 ORDER BY members DESC, g.id DESC LIMIT ${lim}`
   );
 }
 export async function listPublicBots(limit = 60) {
   const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 60));
   return await query(
-    `SELECT login, name, description, bot_miniapp AS miniapp FROM users
+    `SELECT login, name, description, bot_miniapp AS miniapp, (banner IS NOT NULL) AS has_banner FROM users
      WHERE is_bot=1 AND bot_public=1 AND banned=0 ORDER BY login ASC LIMIT ${lim}`
   );
 }

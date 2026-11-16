@@ -38,7 +38,7 @@ import * as auth from "./auth.js";
 import {
   initSchema, waitForDb, saveMessage, recentMessages, messagesBefore, deleteMessage, editMessage, editMessageMarkup, getMessageMeta, toggleReaction,
   createGroup, getUserGroups, lastMessagesFor, isGroupMember, getGroupMembers, getGroup, leaveGroup, regenGroupHook,
-  isGroupOwner, getGroupAvatar, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
+  isGroupOwner, getGroupAvatar, getGroupBanner, setGroupBanner, isGroupPublic, getGroupMembersDetailed, addGroupMembers, removeGroupMember, renameGroup, setGroupAvatar, setGroupOwner, deleteGroup,
   createGroupInvite, getGroupInvites, revokeGroupInvite, getInviteByHash, createPendingInvite, getGroupPending, deletePendingInvite,
   updateProfile, getAvatar, getBanner, getProfileCard, getStatus, getUser, searchUsers,
   createBot, isBot, getBotByTokenHash, getBot, listBotsByOwner, countBotsByOwner, updateBot, setBotTokenHash, deleteBot,
@@ -793,6 +793,17 @@ app.get("/api/group-avatar/:id", async (req, res) => {
     res.send(Buffer.from(m[2], "base64"));
   } catch { sendPfpDefault(res); }
 });
+// Group / channel banner — unset = 404 (the client falls back to a gradient).
+app.get("/api/group-banner/:id", async (req, res) => {
+  try {
+    if (!/^\d+$/.test(req.params.id)) return res.status(404).end();
+    const dataUrl = await getGroupBanner(req.params.id);
+    const m = dataUrl && /^data:(image\/[\w.+-]+);base64,(.*)$/.exec(dataUrl);
+    if (!m) return res.status(404).end();
+    res.set("Content-Type", m[1]); res.set("Cache-Control", "public, max-age=60");
+    res.send(Buffer.from(m[2], "base64"));
+  } catch { res.status(404).end(); }
+});
 app.get("/api/user/:login", async (req, res) => {
   try {
     const u = await getUser(req.params.login.toLowerCase());
@@ -952,9 +963,14 @@ app.post("/api/groups/:id", async (req, res) => {
   const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
   const id = req.params.id;
   if (!(await isGroupOwner(id, me.login))) return res.status(403).json({ error: "not owner" });
-  const { name, avatar } = req.body || {};
+  const { name, avatar, banner } = req.body || {};
   if (typeof name === "string" && name.trim()) await renameGroup(id, name.trim().slice(0, 64));
   if (typeof avatar === "string") await setGroupAvatar(id, avatar.slice(0, 5_000_000));
+  // banner: a data:image URL sets it, "" removes it.
+  if (typeof banner === "string") {
+    if (banner && !/^data:image\/[\w.+-]+;base64,/.test(banner)) return res.status(400).json({ error: "bad_banner" });
+    await setGroupBanner(id, banner ? banner.slice(0, 5_000_000) : null);
+  }
   await notifyGroup(id, "group-updated", { id }); res.json({ ok: true });
 });
 app.post("/api/groups/:id/members", async (req, res) => {
@@ -1704,6 +1720,12 @@ app.post("/api/dev/bots/:login", async (req, res) => {
     patch.miniapp = url ? url.slice(0, 300) : null;
   }
   await updateBot(bot.login, patch);
+  // Bot banner lives on its users row, like any account's — shown on its profile and in Discover.
+  if (typeof req.body.banner === "string") {
+    const b = req.body.banner;
+    if (b && !/^data:image\/[\w.+-]+;base64,/.test(b)) return res.status(400).json({ error: "bad_banner" });
+    await updateProfile(bot.login, { banner: b ? b.slice(0, 5_000_000) : null });
+  }
   if (patch.name) { try { notifyUser(me.login, "profile-updated", { login: bot.login, name: patch.name }); } catch {} }
   res.json({ ok: true, webhookSecret: patch.webhookSecret || bot.bot_webhook_secret || null });
 });
@@ -3251,6 +3273,21 @@ app.post("/api/groups/:id/public", async (req, res) => {
     await setGroupPublic(id, !!req.body.on, req.body.about);
     res.json({ ok: true });
   } catch (e) { console.error("group public", e.message); res.status(500).json({ error: "server error" }); }
+});
+// Join a group/channel its owner listed in Discover — the listing is the invitation.
+app.post("/api/groups/:id/join", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const id = req.params.id;
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: "bad id" });
+    if (!(await isGroupPublic(id))) return res.status(403).json({ error: "not_public" });
+    const room = "@grp:" + id;
+    if ((await getGroupMembers(id)).includes(me.login)) return res.json({ ok: true, status: "already", room });
+    await addGroupMembers(id, [me.login]);
+    saveSystemMessage(room, me.login, me.name, "join", "");
+    await notifyGroup(id, "group-updated", { id });
+    res.json({ ok: true, status: "joined", room });
+  } catch (e) { console.error("public join", e.message); res.status(500).json({ error: "server error" }); }
 });
 app.post("/api/bots/:login/public", async (req, res) => {
   try {

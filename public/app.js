@@ -1759,15 +1759,21 @@ function openSavedMessages() {
   openChat(c);
 }
 
-// ---- Discover: opt-in channels + bots ----
-let dirTab = "channels", dirData = { groups: [], bots: [] };
+// ---- Discover: channels, groups and bots their owners listed publicly ----
+// A hero with search + keyword chips, tabs (All / Channels / Groups / Bots), a "Popular right now"
+// row of big banner cards, then a grid. Every card has one clear action: Join (public groups —
+// the listing is the invitation), Open (already a member) or Chat (bots).
+let dirTab = "all", dirData = { groups: [], bots: [] }, dirLoaded = false;
 async function openDirectory() {
   $("directoryModal").classList.remove("hidden");
-  $("dirList").innerHTML = "";
+  const ico = (id, k) => { const e = $(id); if (e && window.ICON) e.innerHTML = ICON[k] || ""; };
+  ico("dscKickerIco", "compass"); ico("dscSearchIco", "search"); ico("dscEmptyIco", "compass");
   dirQuery = ""; const ds = $("dirSearch"); if (ds) ds.value = "";
+  dirLoaded = false; renderDirectory();                     // skeleton cards while it loads
   const { ok, data } = await api("/api/directory", null, "GET");
   dirData = ok ? { groups: data.groups || [], bots: data.bots || [] } : { groups: [], bots: [] };
-  renderDirectory();
+  dirLoaded = true; renderDirectory();
+  if (ds && matchMedia("(pointer: fine)").matches) ds.focus({ preventScroll: true });
 }
 // Search ranks by where the hit is (name beats description) and offers keyword chips built
 // from what's actually listed — so the suggestions lead somewhere instead of guessing.
@@ -1781,8 +1787,6 @@ function dirScore(r, q) {
   if (about.includes(q)) return 1;
   return 0;
 }
-// Keyword chips: the most common words across every listing, minus noise and anything already
-// typed. Tapping one searches for it.
 function dirKeywords() {
   const stop = new Set(["the","and","for","with","your","you","this","that","are","from","all","bot","channel","канал","бот","для","это","все"]);
   const freq = new Map();
@@ -1798,7 +1802,7 @@ function dirKeywords() {
 function renderDirSuggest() {
   const box = $("dirSuggest"); if (!box) return;
   box.innerHTML = "";
-  const words = dirKeywords().filter((w) => !dirQuery || w.startsWith(dirQuery));
+  const words = dirKeywords().filter((w) => !dirQuery || (w.startsWith(dirQuery) && w !== dirQuery));
   for (const w of words.slice(0, 6)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "dir-chip"; b.textContent = w;
@@ -1808,56 +1812,108 @@ function renderDirSuggest() {
   box.classList.toggle("hidden", !box.children.length);
 }
 $("dirSearch") && ($("dirSearch").oninput = (e) => { dirQuery = e.target.value.trim().toLowerCase(); renderDirectory(); });
-function renderDirectory() {
-  const box = $("dirList"); if (!box) return;
-  box.innerHTML = "";
-  renderDirSuggest();
-  let rows = dirTab === "channels" ? dirData.groups : dirData.bots;
-  if (dirQuery) {
-    // A query searches BOTH tabs and auto-switches if the other one is where the hits are.
-    const here = rows.map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
-    const other = (dirTab === "channels" ? dirData.bots : dirData.groups).map((r) => [r, dirScore(r, dirQuery)]).filter(([, sc]) => sc > 0);
-    if (!here.length && other.length) {
-      dirTab = dirTab === "channels" ? "bots" : "channels";
-      $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b.dataset.dirtab === dirTab));
-      rows = other.sort((a, b) => b[1] - a[1]).map(([r]) => r);
-    } else rows = here.sort((a, b) => b[1] - a[1]).map(([r]) => r);
-  }
-  $("dirEmpty").classList.toggle("hidden", rows.length > 0);
-  for (const r of rows) {
-    const row = document.createElement("button");
-    row.type = "button"; row.className = "dir-row";
-    const sub = dirTab === "channels" ? (r.about || t("dir_members", { n: r.members || 0 })) : (r.description || "@" + r.login);
-    const ava = dirTab === "channels"
-      ? `<div class="avatar grp" style="width:36px;height:36px"><img src="/api/group-avatar/${r.id}?v=${avaVer}" data-fallback="group"></div>`
-      : `<div class="avatar" style="width:36px;height:36px;font-size:14px"><img src="${avaUrl(r.login)}" data-fallback="remove">${initials(r.name)}</div>`;
-    row.innerHTML = ava + `<div class="dir-body"><div class="dir-name">${escapeHtml(r.name)}</div><div class="dir-sub">${escapeHtml(sub)}</div></div>`;
-    row.onclick = () => {
-      $("directoryModal").classList.add("hidden");
-      if (dirTab === "channels") {
-        const key = "@grp:" + r.id;
-        const existing = chats.get(key);
-        if (existing) openChat(existing);
-        else notify(t("dir_join_hint") || t("redeem_pending"));   // not a member yet → owner invites
-      } else openDM(r.login);
-    };
-    box.appendChild(row);
-  }
+// Every listing as one shape: { kind: channel|group|bot, key, name, about, … }.
+function dirItems() {
+  const g = dirData.groups.map((r) => ({ kind: r.channel ? "channel" : "group", key: "g" + r.id, id: r.id, name: r.name, about: r.about || "",
+    members: Number(r.members) || 0, banner: !!Number(r.has_banner), lastTs: Number(r.last_ts) || 0, created: Number(r.created) || 0, raw: r }));
+  const b = dirData.bots.map((r) => ({ kind: "bot", key: "b" + r.login, login: r.login, name: r.name || r.login, about: r.description || "",
+    banner: !!Number(r.has_banner), miniapp: !!r.miniapp, members: 0, lastTs: 0, created: 0, raw: r }));
+  return [...g, ...b];
 }
+function dirTabFilter(it) { return dirTab === "all" || (dirTab === "bots" ? it.kind === "bot" : dirTab === "channels" ? it.kind === "channel" : it.kind === "group"); }
+// A stable two-tone gradient per name, for listings without a banner image.
+function dirGradient(seed) {
+  let h = 0; for (const ch of String(seed || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const a = h % 360, b = (a + 35 + (h >> 9) % 50) % 360;
+  return `--g1:hsl(${a} 62% 34%);--g2:hsl(${b} 70% 16%)`;
+}
+function dirAction(it) {
+  if (it.kind === "bot") return { label: t("dsc_chat"), cls: "chat" };
+  return chats.has("@grp:" + it.id) ? { label: t("dir_open"), cls: "open" } : { label: t("dsc_join"), cls: "join" };
+}
+function dirCardHTML(it, big) {
+  const banner = it.kind === "bot" ? (it.banner ? bannerUrl(it.login) : "") : (it.banner ? `/api/group-banner/${it.id}?v=${avaVer}` : "");
+  const ava = it.kind === "bot"
+    ? `<img src="${avaUrl(it.login)}" alt="" data-fallback="remove"><span>${escapeHtml(initials(it.name))}</span>`
+    : `<img src="/api/group-avatar/${it.id}?v=${avaVer}" alt="" data-fallback="group">`;
+  const day = 864e5, now = Date.now();
+  const tags = [];
+  if (it.kind !== "bot" && it.lastTs && now - it.lastTs < day) tags.push(`<span class="dsc-tag live"><i></i>${escapeHtml(t("dsc_active"))}</span>`);
+  if (it.created && now - it.created < 7 * day) tags.push(`<span class="dsc-tag new">${escapeHtml(t("dsc_new"))}</span>`);
+  if (it.miniapp) tags.push(`<span class="dsc-tag">${escapeHtml(t("dsc_miniapp"))}</span>`);
+  const kindIco = it.kind === "bot" ? "code" : it.kind === "channel" ? "speaker" : "users";
+  const meta = it.kind === "bot" ? "@" + it.login : t("dir_members", { n: it.members });
+  const act = dirAction(it);
+  return `<article class="dsc-item${big ? " big" : ""}" data-key="${escapeHtml(it.key)}" tabindex="0" role="button" aria-label="${escapeHtml(it.name)}">
+    <div class="dsc-banner" style="${dirGradient(it.name + it.key)}">${banner ? `<img src="${banner}" alt="" loading="lazy" data-fallback="remove">` : ""}
+      <span class="dsc-kind">${(window.ICON && ICON[kindIco]) || ""}${escapeHtml(t("dsc_" + it.kind))}</span></div>
+    <div class="dsc-ava${it.kind === "bot" ? "" : " grp"}">${ava}</div>
+    <div class="dsc-body">
+      <div class="dsc-name">${escapeHtml(it.name)}</div>
+      <div class="dsc-about">${escapeHtml(it.about || meta)}</div>
+      <div class="dsc-meta"><span class="dsc-count">${escapeHtml(meta)}</span>${tags.join("")}</div>
+    </div>
+    <button type="button" class="dsc-act ${act.cls}">${escapeHtml(act.label)}</button>
+  </article>`;
+}
+function renderDirectory() {
+  const list = $("dirList"), feat = $("dirFeatured"), featWrap = $("dirFeaturedWrap"); if (!list) return;
+  $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b.dataset.dirtab === dirTab));
+  if (!dirLoaded) {
+    featWrap.classList.add("hidden"); $("dirEmpty").classList.add("hidden"); $("dirListTitle").textContent = "";
+    list.innerHTML = Array.from({ length: 4 }, () => `<div class="dsc-item skel"><div class="dsc-banner"></div><div class="dsc-ava"></div><div class="dsc-body"><i></i><i></i></div></div>`).join("");
+    return;
+  }
+  renderDirSuggest();
+  let items = dirItems();
+  if (dirQuery) {
+    // A query searches every tab; if the current tab has nothing, jump to "All".
+    const scored = items.map((it) => [it, dirScore(it.raw, dirQuery)]).filter(([, sc]) => sc > 0).sort((a, b) => b[1] - a[1]).map(([it]) => it);
+    if (!scored.some(dirTabFilter)) dirTab = "all";
+    items = scored.filter(dirTabFilter);
+    $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b.dataset.dirtab === dirTab));
+  } else items = items.filter(dirTabFilter);
+  // Featured: the 3 biggest active communities (bots ride along when on the Bots tab).
+  let featured = [];
+  if (!dirQuery && items.length > 4) {
+    featured = [...items].sort((a, b) => (b.members - a.members) || (b.lastTs - a.lastTs) || (b.banner - a.banner)).slice(0, 3);
+  }
+  featWrap.classList.toggle("hidden", !featured.length);
+  feat.innerHTML = featured.map((it) => dirCardHTML(it, true)).join("");
+  const rest = items.filter((it) => !featured.includes(it));
+  $("dirListTitle").textContent = dirQuery ? t("dsc_results", { q: dirQuery }) : featured.length ? t("dsc_more") : "";
+  list.innerHTML = rest.map((it) => dirCardHTML(it, false)).join("");
+  $("dirEmptyTxt").textContent = dirQuery ? t("dsc_empty_q", { q: dirQuery }) : t("dir_empty");
+  $("dirEmpty").classList.toggle("hidden", items.length > 0);
+}
+async function dirActivate(key, btn) {
+  const it = dirItems().find((x) => x.key === key); if (!it) return;
+  if (it.kind === "bot") { $("directoryModal").classList.add("hidden"); openDM(it.login); return; }
+  const room = "@grp:" + it.id;
+  if (chats.has(room)) { $("directoryModal").classList.add("hidden"); openChat(chats.get(room)); return; }
+  if (btn) { btn.disabled = true; btn.classList.add("busy"); }
+  const { ok, data } = await api("/api/groups/" + it.id + "/join", {});
+  if (!ok) { if (btn) { btn.disabled = false; btn.classList.remove("busy"); } notify((data && data.error) === "not_public" ? t("dir_join_hint") : t("dsc_join_fail")); return; }
+  if (btn) { btn.classList.remove("busy"); btn.classList.add("done"); btn.textContent = t("dsc_joined"); }
+  await loadGroups();
+  setTimeout(() => { $("directoryModal").classList.add("hidden"); openRoomByKey(room, it.name); }, 450);
+}
+$("directoryModal") && $("directoryModal").addEventListener("click", (e) => {
+  if (e.target === $("directoryModal")) { $("directoryModal").classList.add("hidden"); return; }
+  const tab = e.target.closest("[data-dirtab]");
+  if (tab) { dirTab = tab.dataset.dirtab; renderDirectory(); $("dscScroll") && ($("dscScroll").scrollTop = 0); return; }
+  const card = e.target.closest(".dsc-item:not(.skel)");
+  if (card) dirActivate(card.dataset.key, card.querySelector(".dsc-act"));
+});
+$("directoryModal") && $("directoryModal").addEventListener("keydown", (e) => {
+  const card = e.target.closest && e.target.closest(".dsc-item:not(.skel)");
+  if (card && (e.key === "Enter" || e.key === " ") && e.target === card) { e.preventDefault(); dirActivate(card.dataset.key, card.querySelector(".dsc-act")); }
+});
 $("discoverBtn") && ($("discoverBtn").onclick = openDirectory);
 // Saved messages sits next to Discover: long-press/right-click Discover is too hidden, so it
 // gets its own affordance in the chat list's empty state and the account menu.
 $("discoverBtn") && $("discoverBtn").addEventListener("contextmenu", (e) => { e.preventDefault(); openSavedMessages(); });
 $("dirClose") && ($("dirClose").onclick = () => $("directoryModal").classList.add("hidden"));
-$("directoryModal") && $("directoryModal").addEventListener("click", (e) => {
-  if (e.target === $("directoryModal")) { $("directoryModal").classList.add("hidden"); return; }
-  const tab = e.target.closest("[data-dirtab]");
-  if (tab) {
-    dirTab = tab.dataset.dirtab;
-    $("directoryModal").querySelectorAll("[data-dirtab]").forEach((b) => b.classList.toggle("active", b === tab));
-    renderDirectory();
-  }
-});
 
 // ---- Scheduled posts (channel owners) ----
 async function openSchedule() {
@@ -2539,7 +2595,7 @@ $("amConfirm").onclick = async () => {
 };
 
 // ---------- Настройки группы (живёт в settingsOverlay → пейн groups) ----------
-let gsId = null, gsOwner = false, gsAvatar = null, gsAdd = new Set();
+let gsId = null, gsOwner = false, gsAvatar = null, gsBanner, gsAdd = new Set();   // gsBanner: undefined = untouched, "" = remove, data URL = new
 // Заполняет пейн groups в #settingsOverlay. Если группа не открыта — показывает placeholder.
 async function populateGroupSettingsPane() {
   refreshGroupInvites();   // invitations show regardless of whether a group is open
@@ -2549,7 +2605,7 @@ async function populateGroupSettingsPane() {
     if (body) body.classList.add("hidden");
     return { ok: true, noGroup: true }; // placeholder — это успешный рендер (без API-вызова), кешируем
   }
-  gsId = myRoom.slice(5); gsAvatar = null; gsAdd.clear();
+  gsId = myRoom.slice(5); gsAvatar = null; gsBanner = undefined; gsAdd.clear();
   if (placeholder) placeholder.classList.add("hidden");
   if (body) body.classList.remove("hidden");
   const { ok, data } = await api("/api/groups/" + gsId, null, "GET");
@@ -2568,6 +2624,7 @@ async function populateGroupSettingsPane() {
   $("gsAvaImg").src = "/api/group-avatar/" + gsId + "?v=" + Date.now();
   $("gsAvaImg").onerror = () => { $("gsAvaImg").style.display = "none"; $("gsAvaInit").style.display = "block"; };
   $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none";
+  showGsBanner("/api/group-banner/" + gsId + "?v=" + Date.now(), data.name);
   const box = $("gsMembers"); box.innerHTML = "";
   data.members.forEach((m) => {
     const row = document.createElement("div"); row.className = "contact-row";
@@ -2602,9 +2659,27 @@ $("gsAvaFile").onchange = async (e) => {
   if (!out) return;
   gsAvatar = out; $("gsAvaImg").src = out; $("gsAvaImg").style.display = "block"; $("gsAvaInit").style.display = "none";
 };
+// Group banner: no image → the same name-seeded gradient Discover uses.
+function showGsBanner(src, name) {
+  const wrap = $("gsBanner"), img = $("gsBannerImg"); if (!wrap || !img) return;
+  wrap.setAttribute("style", dirGradient((name || "") + "g" + gsId));
+  img.onload = () => { wrap.classList.add("has-banner"); $("gsBannerRemove").classList.toggle("hidden", !gsOwner); };
+  img.onerror = () => { wrap.classList.remove("has-banner"); img.removeAttribute("src"); $("gsBannerRemove").classList.add("hidden"); };
+  wrap.classList.remove("has-banner"); $("gsBannerRemove").classList.add("hidden");
+  if (src) img.src = src; else img.removeAttribute("src");
+}
+$("gsBannerBtn") && ($("gsBannerBtn").onclick = () => $("gsBannerFile").click());
+$("gsBannerFile") && ($("gsBannerFile").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { $("gsError").textContent = t("err_avatar_too_big"); return; }
+  const out = await editImage(f, { shape: "free", sizes: [512, 1024, 1600], size: 1024 });
+  if (!out) return;
+  gsBanner = out; showGsBanner(out, $("gsName").value);
+});
+$("gsBannerRemove") && ($("gsBannerRemove").onclick = () => { gsBanner = ""; showGsBanner("", $("gsName").value); });
 $("gsSave").onclick = async () => {
   if (!gsOwner) return;
-  const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar;
+  const body = { name: $("gsName").value.trim() }; if (gsAvatar) body.avatar = gsAvatar; if (gsBanner !== undefined) body.banner = gsBanner;
   await api("/api/groups/" + gsId, body);
   if (gsAdd.size) await api("/api/groups/" + gsId + "/members", { add: [...gsAdd] });
   avaVer = Date.now(); closeSettings(); loadGroups();
@@ -3479,7 +3554,12 @@ function renderInfoTop() {
     ava = `<div class="avatar info-ava" data-login="${escapeHtml(login || "")}"><img src="${avaUrl(login)}" data-fallback="remove">${initials(c.name || login)}</div>`;
     const st = presence.get(login); sub = st ? t("status_" + st) : t("room_sub_dm");
   }
-  card.innerHTML = `${ava}<div class="info-name">${name}</div><div class="info-sub">${escapeHtml(sub)}</div>`;
+  // Banner across the top of the card (group banner, or the person's/bot's profile banner);
+  // without one, a gradient seeded by the name so every chat still gets a bit of identity.
+  const gid = curKind === "group" ? String(c.id || myRoom.slice(5)) : "";
+  const bsrc = gid ? `/api/group-banner/${encodeURIComponent(gid)}?v=${avaVer}` : bannerUrl(c.login || dmPeer(myRoom));
+  const seed = gid ? (c.name || "") + "g" + gid : (c.name || "") + "b" + (c.login || dmPeer(myRoom) || "");
+  card.innerHTML = `<div class="info-banner" style="${dirGradient(seed)}"><img src="${bsrc}" alt="" data-fallback="remove"></div>${ava}<div class="info-name">${name}</div><div class="info-sub">${escapeHtml(sub)}</div>`;
   acts.innerHTML = "";
   const act = (icon, label, fn, cls) => {
     const b = document.createElement("button"); b.type = "button"; b.className = "info-act" + (cls ? " " + cls : "");
@@ -8331,6 +8411,11 @@ async function refreshDevPane() {
 }
 function botCardHTML(b) {
   return `<div class="bot-card" data-login="${escapeHtml(b.login)}">
+    <div class="bot-banner" style="${dirGradient(b.name + "b" + b.login)}">
+      <img class="bot-banner-img" alt="" src="${bannerUrl(b.login)}">
+      <div class="bot-banner-acts"><button type="button" class="gs-banner-btn bot-banner-btn" data-i18n="edit_banner">Change banner</button><button type="button" class="gs-banner-btn gs-banner-x bot-banner-x hidden" data-i18n-title="remove_banner" title="Remove banner">✕</button></div>
+      <input type="file" class="bot-f-banner" accept="image/*" hidden>
+    </div>
     <div class="bot-head">
       <div class="avatar bot-ava"><img src="${avaUrl(b.login)}" data-fallback="remove"><span class="ava-fallback">${initials(b.name)}</span></div>
       <div class="bot-meta"><b>${escapeHtml(b.name)}</b> <span class="bot-badge">BOT</span><div class="profile-login">${escapeHtml(b.login)}</div></div>
@@ -8355,6 +8440,21 @@ function botCardHTML(b) {
 function wireBotCard(b) {
   const card = document.querySelector(`.bot-card[data-login="${CSS.escape(b.login)}"]`); if (!card) return;
   const err = card.querySelector(".bot-err");
+  // Banner: undefined = untouched, "" = remove, data URL = new.
+  let pendingBotBanner;
+  const bWrap = card.querySelector(".bot-banner"), bImg = card.querySelector(".bot-banner-img"), bX = card.querySelector(".bot-banner-x");
+  bImg.onload = () => { bWrap.classList.add("has-banner"); bX.classList.remove("hidden"); };
+  bImg.onerror = () => { bWrap.classList.remove("has-banner"); bImg.removeAttribute("src"); bX.classList.add("hidden"); };
+  if (bImg.complete && bImg.naturalWidth) bImg.onload();
+  card.querySelector(".bot-banner-btn").onclick = () => card.querySelector(".bot-f-banner").click();
+  card.querySelector(".bot-f-banner").onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { err.textContent = t("err_avatar_too_big"); return; }
+    const out = await editImage(f, { shape: "free", sizes: [512, 1024, 1600], size: 1024 });
+    if (!out) return;
+    pendingBotBanner = out; bImg.src = out;
+  };
+  bX.onclick = () => { pendingBotBanner = ""; bImg.onerror(); };
   card.querySelector(".bot-save").onclick = async () => {
     err.textContent = "";
     const body = {
@@ -8365,9 +8465,11 @@ function wireBotCard(b) {
       miniapp: card.querySelector(".bot-f-miniapp").value.trim(),
       privacy: card.querySelector(".bot-f-privacy").checked,
     };
+    if (pendingBotBanner !== undefined) body.banner = pendingBotBanner;
     const { ok, data } = await api("/api/dev/bots/" + b.login, body);
     if (!ok) { err.textContent = data.error === "bad_webhook" ? t("bot_bad_webhook") : data.error === "bad_miniapp" ? t("bot_bad_miniapp") : (data.error || t("err_generic")); return; }
     await api("/api/bots/" + b.login + "/public", { on: card.querySelector(".bot-f-public").checked });
+    if (pendingBotBanner !== undefined) avaVer = Date.now();
     notify(t("saved") || "Saved"); refreshDevPane();
   };
   card.querySelector(".bot-regen").onclick = async () => {

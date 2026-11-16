@@ -696,6 +696,15 @@
           <div id="groupPanelPlaceholder" class="contacts-empty" data-i18n="pick_chat">Select a group chat to manage its settings</div>
           <div id="groupSettingsBody" class="hidden gs-body">
             <!-- Header: logo + name together -->
+            <!-- Banner (owner can change it): shown in the info panel and on Discover cards. -->
+            <div class="gs-banner" id="gsBanner">
+              <img id="gsBannerImg" alt="" />
+              <div class="gs-banner-acts gs-owner">
+                <button type="button" id="gsBannerBtn" class="gs-banner-btn" data-i18n="edit_banner">Change banner</button>
+                <button type="button" id="gsBannerRemove" class="gs-banner-btn gs-banner-x hidden" data-i18n-title="remove_banner" title="Remove banner">✕</button>
+              </div>
+              <input id="gsBannerFile" type="file" accept="image/*" hidden />
+            </div>
             <div class="gs-header">
               <div class="profile-ava avatar ava gs-ava" id="gsAva"><img id="gsAvaImg" alt="" /><span class="ava-fallback" id="gsAvaInit"><img src="/src/group.svg" alt="" /></span></div>
               <div class="gs-head-main">
@@ -1087,19 +1096,32 @@
     </div>
   </div>
 
-  <!-- Public directory: opt-in channels and bots to discover. -->
-  <div id="directoryModal" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card wide">
+  <!-- Discover: channels, groups and bots their owners opened up to everyone. -->
+  <div id="directoryModal" class="modal hidden dsc" role="dialog" aria-modal="true" aria-labelledby="dscTitle">
+    <div class="modal-card dsc-card">
       <button id="dirClose" class="hub-close" data-i18n-title="close" title="Close">✕</button>
-      <div class="modal-title" data-i18n="directory">Discover</div>
-      <input id="dirSearch" class="field" data-i18n-ph="dir_search_ph" autocomplete="off" />
-      <div id="dirSuggest" class="dir-suggest"></div>
-      <div class="settings-subtabs cont-subtabs">
-        <button class="settings-subtab active" data-dirtab="channels" data-i18n="dir_channels">Channels</button>
-        <button class="settings-subtab" data-dirtab="bots" data-i18n="dir_bots">Bots</button>
+      <header class="dsc-hero">
+        <div class="dsc-kicker"><span class="dsc-kicker-ico" id="dscKickerIco"></span><span data-i18n="directory">Discover</span></div>
+        <h2 class="dsc-title" id="dscTitle" data-i18n="dsc_title">Find your people</h2>
+        <p class="dsc-sub" data-i18n="dsc_sub">Channels, groups and bots that are open to everyone.</p>
+        <label class="dsc-search"><span class="dsc-search-ico" id="dscSearchIco"></span><input id="dirSearch" type="search" data-i18n-ph="dir_search_ph" autocomplete="off" /></label>
+        <div id="dirSuggest" class="dir-suggest"></div>
+      </header>
+      <div class="dsc-tabs" role="tablist">
+        <button class="dsc-tab active" data-dirtab="all" data-i18n="dir_all">All</button>
+        <button class="dsc-tab" data-dirtab="channels" data-i18n="dir_channels">Channels</button>
+        <button class="dsc-tab" data-dirtab="groups" data-i18n="dir_groups">Groups</button>
+        <button class="dsc-tab" data-dirtab="bots" data-i18n="dir_bots">Bots</button>
       </div>
-      <div id="dirList" class="dir-list"></div>
-      <div id="dirEmpty" class="dir-empty hidden" data-i18n="dir_empty">Nothing listed yet.</div>
+      <div class="dsc-scroll" id="dscScroll">
+        <section class="dsc-featured-wrap hidden" id="dirFeaturedWrap">
+          <div class="dsc-sec-title" data-i18n="dsc_featured">Popular right now</div>
+          <div id="dirFeatured" class="dsc-featured"></div>
+        </section>
+        <div class="dsc-sec-title" id="dirListTitle"></div>
+        <div id="dirList" class="dsc-grid"></div>
+        <div id="dirEmpty" class="dsc-empty hidden"><div class="dsc-empty-ico" id="dscEmptyIco"></div><div class="dsc-empty-txt" id="dirEmptyTxt"></div><div class="dsc-empty-hint" data-i18n="dsc_list_yours">List your own channel or bot from its settings.</div></div>
+      </div>
     </div>
   </div>
 
