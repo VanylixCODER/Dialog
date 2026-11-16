@@ -6884,3 +6884,8 @@ body[data-theme="flashbang"] .msg.me .vp-dl, body[data-theme="flashbang"] .msg.m
 .pref-scale .ps-end { font-weight: 700; font-size: 12px; color: var(--text-dim); }
 .pref-scale .ps-end.big { font-size: 18px; }
 .pref-scale .ps-val { min-width: 44px; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* Dragging a call tile to rearrange (desktop gallery). */
+#callStage .video-grid.gal > .tile { cursor: grab; }
+#callStage .video-grid.gal > .tile.dragging { cursor: grabbing; z-index: 20; transition: none; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45); opacity: 0.96; }
+#callStage .video-grid.rearranging { user-select: none; }

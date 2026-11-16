@@ -5526,7 +5526,7 @@ function ensureTile(identity, name, isMe) {
     if (!isMe) wireTileControls(tile, identity);
     if (vGrid.classList.contains("has-focus")) relocateNewTile(tile);
   }
-  updateCallCount(); scheduleFsLayout(); return tile;
+  applyTileOrder(); updateCallCount(); scheduleFsLayout(); return tile;
 }
 // Громкость/мут конкретного участника (локально, через LiveKit setVolume).
 // Persisted by login → the level/mute you set for someone carries across every future call.
@@ -6510,6 +6510,7 @@ function endCall() {
   $("callStage").classList.remove("fullscreen"); $("voiceBar").classList.add("hidden");
   $("startCallBtn").classList.remove("in-call");
   Object.assign(call, { active: false, sharing: false, micOn: true, camOn: false, ns: true, deaf: false, micWasOn: true, roomKey: null, minimized: false });
+  tileOrder.length = 0;
   delete call.declinedBy;
   if (call.screenStream) { for (const tr of call.screenStream.getTracks()) { try { tr.stop(); } catch {} } call.screenStream = null; }
   screenTrack = null; screenAudioTrack = null; closeScreenModal(); // демонстрация экрана: сброс при выходе из звонка
@@ -7419,6 +7420,73 @@ function relayoutCall() { cancelAnimationFrame(_callRelayoutRaf); _callRelayoutR
 window.addEventListener("resize", relayoutCall);
 window.addEventListener("orientationchange", () => setTimeout(relayoutCall, 250));
 
+// ── Drag to rearrange (desktop gallery) ─────────────────────────────────────
+// Grab a tile, drag it, drop it where you want it: it follows the pointer, the others slide
+// aside (FLIP animation) and the order sticks for this call (people who join later go at the
+// end and don't reshuffle anyone). A press that doesn't travel 6 px stays a normal click.
+let tileDrag = null, tileDragJustEnded = 0;
+const tileOrder = [];   // tile ids in the user's order, for this call
+function flipTiles(mutate) {
+  const tiles = [...vGrid.querySelectorAll(":scope > .tile:not(.dragging)")];
+  const before = new Map(tiles.map((t) => [t, t.getBoundingClientRect()]));
+  mutate();
+  for (const t of tiles) {
+    const a = before.get(t), b = t.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (dx || dy) t.animate([{ transform: `translate(${zpos(dx)}px, ${zpos(dy)}px)` }, { transform: "none" }], { duration: 180, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+  }
+}
+vGrid.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !vGrid.classList.contains("gal") || isMobile()) return;
+  if (e.target.closest(".tile-ctrl, .tile-expand, button, input, .vz-chip")) return;
+  const tile = e.target.closest(".tile"); if (!tile || tile.parentElement !== vGrid) return;
+  tileDrag = { tile, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
+});
+window.addEventListener("pointermove", (e) => {
+  const d = tileDrag; if (!d || e.pointerId !== d.id) return;
+  const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+  if (!d.on) {
+    if (Math.hypot(dx, dy) < 6) return;
+    d.on = true; d.tile.classList.add("dragging"); vGrid.classList.add("rearranging");
+    try { d.tile.setPointerCapture(e.pointerId); } catch {}
+  }
+  d.tile.style.transform = `translate(${zpos(dx)}px, ${zpos(dy)}px) scale(1.03)`;
+  // Which tile is under the pointer? Drop before it on its left half, after it on its right.
+  d.tile.style.pointerEvents = "none";
+  const over = document.elementFromPoint(e.clientX, e.clientY);
+  d.tile.style.pointerEvents = "";
+  const target = over && over.closest(".tile");
+  if (!target || target === d.tile || target.parentElement !== vGrid) return;
+  const r = target.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+  const ref = after ? target.nextSibling : target;
+  if (ref === d.tile || (ref && ref.previousSibling === d.tile && !after)) return;
+  const prev = d.tile.getBoundingClientRect();
+  flipTiles(() => vGrid.insertBefore(d.tile, ref));
+  // Keep the dragged tile under the pointer after it moved in the DOM.
+  const now = d.tile.getBoundingClientRect();
+  d.x0 += now.left - prev.left; d.y0 += now.top - prev.top;
+  d.tile.style.transform = `translate(${zpos(e.clientX - d.x0)}px, ${zpos(e.clientY - d.y0)}px) scale(1.03)`;
+});
+function endTileDrag(e) {
+  const d = tileDrag; if (!d || (e && e.pointerId !== d.id)) return;
+  tileDrag = null;
+  if (!d.on) return;
+  tileDragJustEnded = Date.now();
+  const t = d.tile, from = t.getBoundingClientRect();
+  t.style.transform = ""; t.classList.remove("dragging"); vGrid.classList.remove("rearranging");
+  const to = t.getBoundingClientRect();
+  t.animate([{ transform: `translate(${zpos(from.left - to.left)}px, ${zpos(from.top - to.top)}px) scale(1.03)` }, { transform: "none" }], { duration: 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+  tileOrder.length = 0; vGrid.querySelectorAll(":scope > .tile").forEach((x) => x.id && tileOrder.push(x.id));
+}
+window.addEventListener("pointerup", endTileDrag);
+window.addEventListener("pointercancel", endTileDrag);
+// A drop must not also count as a click (which would spotlight / toggle the tile).
+vGrid.addEventListener("click", (e) => { if (Date.now() - tileDragJustEnded < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
+// Re-apply the user's order when a tile is (re)created mid-call; unknown tiles keep their place at the end.
+function applyTileOrder() {
+  if (!tileOrder.length) return;
+  for (const id of tileOrder) { const el = document.getElementById(id); if (el && el.parentElement === vGrid) vGrid.appendChild(el); }
+}
 let tileClickTimer = 0;
 vGrid.addEventListener("click", (e) => {
   if (e.target.closest(".tile-ctrl")) return; // per-user mute/volume
