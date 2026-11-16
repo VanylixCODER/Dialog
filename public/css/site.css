@@ -260,4 +260,4 @@ pre code .c { color: var(--dim); }      /* comment */
 .err-nav { border-bottom: 1px solid var(--line); }
 .err-nav .wrap { display: flex; align-items: center; height: 64px; }
 .err-brand { display: inline-flex; align-items: center; gap: 10px; font: 600 17px Inter, sans-serif; color: var(--text); text-decoration: none; }
-.err-brand svg { width: 28px; height: 28px; }
+.err-brand img { height: 36px; width: auto; display: block; }

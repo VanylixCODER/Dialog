@@ -58,7 +58,7 @@ export function renderErrorPage(code, opts = {}) {
 ${style}
 </head>
 <body>
-<nav class="err-nav"><div class="wrap"><a class="err-brand" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="4" width="22" height="18" rx="5" fill="none" stroke="#00ff5a" stroke-width="2.4"/><circle cx="8" cy="13" r="1.8" fill="#00ff5a"/><circle cx="12" cy="13" r="1.8" fill="#00ff5a"/><circle cx="16" cy="13" r="1.8" fill="#00ff5a"/><path d="M7 22l-2 4 6-4" fill="#00ff5a"/><path d="M21 2.5a6 6 0 0 1 4.5 4.5M21 6a2.5 2.5 0 0 1 1.5 1.5" fill="none" stroke="#00ff5a" stroke-width="2" stroke-linecap="round"/></svg>Dialog</a></div></nav>
+<nav class="err-nav"><div class="wrap"><a class="err-brand" href="/"><img src="/src/landing/logo.webp" alt="Dialog" width="111" height="48" /></a></div></nav>
 <main class="err">
   <div class="err-box">
     ${codeHtml}
