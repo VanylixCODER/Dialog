@@ -89,8 +89,8 @@ body {
   font-family: var(--font-ui);
   background: var(--bg-1);
   color: var(--text);
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh / var(--zf, 1));
+  height: calc(100dvh / var(--zf, 1));
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
@@ -359,13 +359,13 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 .auth-stage {
   position: relative; z-index: 2;
   display: flex; align-items: flex-start; justify-content: center; gap: 70px;
-  width: min(1100px, 94vw);
+  width: min(1100px, calc(94vw / var(--zf, 1)));
   transition: gap var(--os-slow) var(--os-ease), width var(--os-slow) var(--os-ease);
 }
 /* Terminal dismissed → the form takes the stage and settles in the middle. */
-.auth-stage.solo { gap: 0; width: min(420px, 92vw); }
+.auth-stage.solo { gap: 0; width: min(420px, calc(92vw / var(--zf, 1))); }
 .login-card {
-  position: relative; z-index: 2; flex: 0 0 auto; width: min(376px, 92vw); padding-top: 8px;
+  position: relative; z-index: 2; flex: 0 0 auto; width: min(376px, calc(92vw / var(--zf, 1))); padding-top: 8px;
   transition: transform var(--os-slow) var(--os-ease);
 }
 .login-auth { display: flex; flex-direction: column; }
@@ -461,7 +461,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 
 /* ---- Terminal window ---- */
 .auth-terminal {
-  position: relative; z-index: 3; flex: 1 1 594px; max-width: 594px; height: 520px; max-height: 76vh;
+  position: relative; z-index: 3; flex: 1 1 594px; max-width: 594px; height: 520px; max-height: calc(76vh / var(--zf, 1));
   display: flex; flex-direction: column; overflow: hidden;
   background: #000; border: 1px solid #0c0f0d; border-radius: calc(8px * var(--rk));
   box-shadow: 0 18px 60px rgba(0, 0, 0, .7);
@@ -539,7 +539,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 @media (max-width: 900px), (max-height: 500px) and (pointer: coarse) {
   /* Phones: the form only, per the design's mobile board. */
   .auth-terminal, .term-open { display: none !important; }
-  .auth-stage { gap: 0; width: min(420px, 92vw); }
+  .auth-stage { gap: 0; width: min(420px, calc(92vw / var(--zf, 1))); }
   .login-card { width: 100%; }
   .lang-switch { top: 12px; right: 14px; }
   .auth-form .field { padding: 14px 48px 14px 0; font-size: 15px; }
@@ -587,7 +587,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 .lang-row > span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
 
 /* ============ App grid (Telegram-style) ============ */
-.app { display: grid; grid-template-columns: var(--cl-w, 340px) 1fr; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
+.app { display: grid; grid-template-columns: var(--cl-w, 340px) 1fr; height: calc(100vh / var(--zf, 1)); height: calc(100dvh / var(--zf, 1)); overflow: hidden; position: relative; }
 .app:has(#infoPanel:not(.hidden)) { grid-template-columns: var(--cl-w, 340px) 1fr 280px; }
 .app.cl-collapsed { --cl-w: 76px; }
 
@@ -834,7 +834,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 /* ============ Chat (thread) ============ */
 .chat {
   display: flex; flex-direction: column;
-  height: 100vh; height: 100dvh; min-width: 0;
+  height: calc(100vh / var(--zf, 1)); height: calc(100dvh / var(--zf, 1)); min-width: 0;
   overflow: hidden; position: relative;
   background: var(--bg-1);
   isolation: isolate;
@@ -858,7 +858,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
   animation: stPulse 2.5s var(--ease) infinite;
   letter-spacing: 6px;
 }
-.es-logo img { height: 64px; width: auto; max-width: 80vw; object-fit: contain; filter: drop-shadow(var(--glow-md)); display: block; }
+.es-logo img { height: 64px; width: auto; max-width: calc(80vw / var(--zf, 1)); object-fit: contain; filter: drop-shadow(var(--glow-md)); display: block; }
 .es-cta {
   font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
   color: var(--text-dim); font-weight: 700;
@@ -1727,7 +1727,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
   background: none !important; border: none !important; box-shadow: none !important;
   padding: 0 !important; max-width: 160px;
 }
-.bubble.sticker img { width: 160px; max-width: 40vw; height: auto; display: block; }
+.bubble.sticker img { width: 160px; max-width: calc(40vw / var(--zf, 1)); height: auto; display: block; }
 
 /* Side panels */
 .info-panel {
@@ -1764,8 +1764,8 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 @keyframes modalIn { from { opacity: 0; } to { opacity: 1; } }
 .modal-card {
   position: relative;
-  width: min(420px, 92vw);
-  max-height: 88vh; overflow-y: auto;
+  width: min(420px, calc(92vw / var(--zf, 1)));
+  max-height: calc(88vh / var(--zf, 1)); overflow-y: auto;
   padding: 28px 26px 24px;
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
   border: 1px solid var(--border-2);
@@ -1774,7 +1774,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
   display: flex; flex-direction: column; gap: 12px;
   animation: popIn var(--t-pop) var(--ease-pop) backwards; /* not `both` — see "Closing animations" */
 }
-.modal-card.wide { width: min(480px, 94vw); }
+.modal-card.wide { width: min(480px, calc(94vw / var(--zf, 1))); }
 .modal-title {
   font-weight: 800; font-size: 16px; color: var(--accent-200);
   text-align: center; letter-spacing: 2px; text-transform: uppercase;
@@ -1971,7 +1971,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
    Структурно похож на #addMemberModal но крупнее и интерактивнее: аватар
    + поиск + мультивыбор с подсчётом + селект-всё. === */
 .cg-card {
-  width: min(440px, 94vw);
+  width: min(440px, calc(94vw / var(--zf, 1)));
   padding: 26px 26px 22px;
   gap: 14px;
 }
@@ -2085,7 +2085,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 
 /* Add-member mini-modal: компактнее обычного модала, ровно одна колонка выбора друзей + Add. */
 .am-card {
-  width: min(380px, 94vw);
+  width: min(380px, calc(94vw / var(--zf, 1)));
   padding: 24px 22px 18px;
   gap: 12px;
 }
@@ -2109,7 +2109,7 @@ body[data-theme="flashbang"] .login, body[data-theme="aero"] .login, body[data-t
 .call-stage {
   position: relative;
   display: flex; flex-direction: column;
-  max-height: 46vh; overflow: hidden;
+  max-height: calc(46vh / var(--zf, 1)); overflow: hidden;
   background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), var(--bg-2));
   border-bottom: 1px solid var(--border-1);
   z-index: 2;
@@ -2250,13 +2250,13 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
    Stream fills the top, participants sit UNDER it in a strip you can hide;
    the controls float as one row and auto-hide (cursor hides with them). */
 #callStage.fs-call {
-  max-height: none; height: 100vh; background: var(--bg-1);
+  max-height: none; height: calc(100vh / var(--zf, 1)); background: var(--bg-1);
   cursor: none;
 }
 /* iOS / no element-fullscreen: pin the stage over everything. */
 #callStage.manual-fs {
-  position: fixed; inset: 0; z-index: 200; width: 100vw; height: 100vh;
-  height: 100dvh;
+  position: fixed; inset: 0; z-index: 200; width: calc(100vw / var(--zf, 1)); height: calc(100vh / var(--zf, 1));
+  height: calc(100dvh / var(--zf, 1));
 }
 #callStage.fs-call.controls-on { cursor: auto; }
 /* Docking chrome is irrelevant in fullscreen. */
@@ -2270,7 +2270,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 #callStage.fs-call .call-bar {
   position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 26px);
   flex-direction: row; align-items: center; gap: 10px;
-  width: auto; max-width: 96vw; padding: 8px 12px;
+  width: auto; max-width: calc(96vw / var(--zf, 1)); padding: 8px 12px;
   background: rgba(0, 6, 2, 0.82); border: 1px solid var(--border-1);
   border-radius: calc(999px * var(--rc)); backdrop-filter: blur(14px);
   container-type: normal;
@@ -2323,7 +2323,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   transition: height 0.3s var(--ease), opacity 0.3s var(--ease);
 }
 #callStage.fs-call .video-grid.fs > .faces-strip > .tile {
-  flex: 0 0 auto; height: 15vh; width: auto; aspect-ratio: 16 / 9;
+  flex: 0 0 auto; height: calc(15vh / var(--zf, 1)); width: auto; aspect-ratio: 16 / 9;
   max-height: none; min-width: 0; margin: 0; cursor: pointer;
 }
 /* Hide-participants toggle: collapse the strip; the stream fills — animated. */
@@ -2388,10 +2388,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 .video-grid.pip-grid.has-focus .tile.focused {
   order: -1; flex: 1 1 100%;
   width: 100%;
-  aspect-ratio: auto; max-height: none; height: 62vh; cursor: zoom-out;
+  aspect-ratio: auto; max-height: none; height: calc(62vh / var(--zf, 1)); cursor: zoom-out;
 }
 .video-grid.pip-grid.has-focus .tile:not(.focused) {
-  flex: 0 1 auto; aspect-ratio: 16 / 9; height: 18vh; width: auto; cursor: pointer;
+  flex: 0 1 auto; aspect-ratio: 16 / 9; height: calc(18vh / var(--zf, 1)); width: auto; cursor: pointer;
 }
 /* Prominent name pill on a focused stream. */
 .video-grid.pip-grid.has-focus .tile.focused .tile-name { font-size: 15px; padding: 5px 14px; }
@@ -2439,7 +2439,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   border: 2px solid var(--border-1);
   border-radius: var(--r-3);
   aspect-ratio: 1 / 1;          /* square by default (voice grid, avatars only) */
-  max-height: 38vh;
+  max-height: calc(38vh / var(--zf, 1));
   flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center;
   transition: border-color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), transform var(--t-base) var(--ease-out);
@@ -2510,7 +2510,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 
 .tile.screen {
   width: 100%;
-  aspect-ratio: 16/9; max-height: 36vh;
+  aspect-ratio: 16/9; max-height: calc(36vh / var(--zf, 1));
   order: -1;
   border-color: var(--accent-400);
   box-shadow: none;
@@ -2766,7 +2766,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   border: 1px solid var(--border-2);
   border-radius: var(--r-3);
   padding: 8px 0;
-  min-width: 240px; max-width: 86vw;
+  min-width: 240px; max-width: calc(86vw / var(--zf, 1));
   z-index: 10;
   box-shadow: var(--shadow-md);
   display: none;
@@ -3002,7 +3002,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   display: grid; place-items: center; overflow: hidden;
   cursor: zoom-out;
 }
-.lightbox img { max-width: 92vw; max-height: 88vh; cursor: grab; transition: transform 0.08s linear; border-radius: calc(4px * var(--rk)); }
+.lightbox img { max-width: calc(92vw / var(--zf, 1)); max-height: calc(88vh / var(--zf, 1)); cursor: grab; transition: transform 0.08s linear; border-radius: calc(4px * var(--rk)); }
 .lightbox-hint {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
   color: var(--text-dim); font-size: 12px; letter-spacing: 1px;
@@ -3031,7 +3031,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   /* Compact one-line pill: it must never wrap and bury the chat header on phones. */
   position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%;
   transform: translate(-50%, calc(-100% - 16px)); z-index: 200;
-  max-width: calc(100vw - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: calc(calc(100vw / var(--zf, 1)) - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: var(--bg-1);
   border: 1px solid rgba(255, 82, 82, 0.55);
   border-radius: calc(999px * var(--rc));
@@ -3223,7 +3223,7 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
   .chat { display: none; }
   .app.in-chat .chat { display: flex; }
   .info-panel { position: fixed; inset: 0; width: auto; z-index: 120; }
-  .emoji-picker, .gif-panel { width: calc(100vw - 28px); left: 14px; height: 60vh; }
+  .emoji-picker, .gif-panel { width: calc(calc(100vw / var(--zf, 1)) - 28px); left: 14px; height: calc(60vh / var(--zf, 1)); }
   .messages, .composer { padding-left: 14px; padding-right: 14px; }
   .chat-head { padding-left: 8px; padding-right: 8px; gap: 6px; }
   .chat-head .avatar.ch-ava { width: 44px; height: 44px; font-size: 17px; }
@@ -3261,10 +3261,10 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
      pill that scrolls sideways instead of overflowing off-screen. */
   #callStage.fs-call .video-grid.fs { gap: 8px; padding: 8px; }
   #callStage.fs-call .video-grid.fs.has-focus { padding: 8px; gap: 8px; }
-  #callStage.fs-call .video-grid.fs > .faces-strip > .tile { height: 12vh; }
+  #callStage.fs-call .video-grid.fs > .faces-strip > .tile { height: calc(12vh / var(--zf, 1)); }
   #callStage.fs-call .call-bar {
     --cbtn: 44px; gap: 8px; bottom: calc(18px + env(safe-area-inset-bottom));
-    max-width: 94vw; overflow-x: auto; overflow-y: hidden; justify-content: flex-start;
+    max-width: calc(94vw / var(--zf, 1)); overflow-x: auto; overflow-y: hidden; justify-content: flex-start;
     scrollbar-width: none;
   }
   #callStage.fs-call .call-bar::-webkit-scrollbar { display: none; }
@@ -3348,8 +3348,8 @@ body.call-resizing, body.call-resizing * { cursor: ns-resize !important; user-se
 }
 .settings-card {
   position: relative;
-  width: min(80vw, 980px);
-  height: min(80vh, 720px);
+  width: min(calc(80vw / var(--zf, 1)), 980px);
+  height: min(calc(80vh / var(--zf, 1)), 720px);
   display: grid;
   /* Rows: settings-head, settings-tabs, body (.settings-panes / .ts-body / .admin-body —
      1fr + min 0 so it fills the card and scrolls INSIDE it instead of stretching it). */
@@ -3521,8 +3521,8 @@ body.motion-off .settings-pane.active, body.motion-off .ts-pane.active { animati
     /* Flex column (not grid) so whichever of the list / pane is shown simply fills the
        card — no dependence on grid track counts. */
     display: flex; flex-direction: column;
-    width: calc(100vw - 16px);
-    height: min(96dvh, 880px);
+    width: calc(calc(100vw / var(--zf, 1)) - 16px);
+    height: min(calc(96dvh / var(--zf, 1)), 880px);
     border-radius: calc(16px * var(--rk)) calc(16px * var(--rk)) calc(4px * var(--rk)) calc(4px * var(--rk));
     border-bottom: none;
     /* The open animation is set in the motion section (sheetIn) — a `.settings-overlay >
@@ -4256,7 +4256,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(255, 82, 82, 0.32);
   transform: none;
 }
-.fb-confirm-card { width: min(420px, 92vw); }
+.fb-confirm-card { width: min(420px, calc(92vw / var(--zf, 1))); }
 .fb-confirm-body {
   margin: 0;
   padding: 8px 12px;
@@ -4352,7 +4352,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 /* ===================== Account switcher ===================== */
 /* Self-contained look — solid surfaces (not theme-accent tints) so it reads in every theme. */
 .account-menu {
-  position: fixed; z-index: 1900; width: 300px; max-width: calc(100vw - 24px);
+  position: fixed; z-index: 1900; width: 300px; max-width: calc(calc(100vw / var(--zf, 1)) - 24px);
   background: #0b0f0d; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: calc(16px * var(--rk));
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(var(--primary-rgb), 0.12);
   padding: 8px; display: flex; flex-direction: column; gap: 4px;
@@ -4405,7 +4405,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 
 /* ===================== Admin panel ===================== */
 .admin-card {
-  width: min(94vw, 920px); height: min(88vh, 800px);
+  width: min(calc(94vw / var(--zf, 1)), 920px); height: min(calc(88vh / var(--zf, 1)), 800px);
   grid-template-rows: auto auto 1fr;
 }
 .admin-body { overflow-y: auto; padding: 20px 22px 26px; min-height: 0; background: #070a09; }
@@ -4511,7 +4511,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 .admin-logs {
   background: #05080a; color: #9fe6b6; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: calc(12px * var(--rk));
   padding: 16px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
-  white-space: pre-wrap; word-break: break-word; max-height: 62vh; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; max-height: calc(62vh / var(--zf, 1)); overflow: auto;
   box-shadow: none;
 }
 
@@ -4754,7 +4754,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
   /* Floating self-view thumbnail. */
   #callStage.wa-call .video-grid .tile.me {
     position: absolute; z-index: 6;
-    width: 30vw; max-width: 132px; height: auto; aspect-ratio: 3 / 4; max-height: 30vh;
+    width: calc(30vw / var(--zf, 1)); max-width: 132px; height: auto; aspect-ratio: 3 / 4; max-height: calc(30vh / var(--zf, 1));
     flex: none; min-width: 0; min-height: 0;   /* ignore the .pip-grid min-width:200 clamp */
     margin: 0; border-radius: calc(16px * var(--rk)); overflow: hidden;
     border: 1.5px solid rgba(255,255,255,0.35); box-shadow: 0 10px 28px rgba(0,0,0,0.55);
@@ -4801,7 +4801,7 @@ body[data-theme="aero"] .theme-opt.active { box-shadow: 0 0 0 2px rgba(var(--pri
 
 /* ===================== Theme Studio ===================== */
 .ts-open { margin-top: 14px; }
-.ts-card { width: min(92vw, 760px); height: min(88vh, 820px); grid-template-rows: auto auto 1fr; }
+.ts-card { width: min(calc(92vw / var(--zf, 1)), 760px); height: min(calc(88vh / var(--zf, 1)), 820px); grid-template-rows: auto auto 1fr; }
 .ts-body { overflow-y: auto; padding: 18px 22px 24px; min-height: 0; background: var(--bg-1); }
 .ts-pane { display: none; flex-direction: column; gap: 12px; }
 .ts-pane.active { display: flex; }
@@ -5028,7 +5028,7 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 /* ============================================================
    Batch 7 — universal send-preview tray + tap-to-record recBar
    ============================================================ */
-.send-preview { border-top: 1px solid var(--border-1); background: var(--bg-2); padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow: auto; }
+.send-preview { border-top: 1px solid var(--border-1); background: var(--bg-2); padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; max-height: calc(42vh / var(--zf, 1)); overflow: auto; }
 .sp-items { display: flex; gap: 8px; flex-wrap: wrap; }
 .sp-item { position: relative; max-width: 260px; border: 1px solid var(--border-1); border-radius: var(--r-2); overflow: hidden; background: var(--bg-3); }
 .sp-item img, .sp-item video { display: block; max-width: 180px; max-height: 150px; object-fit: cover; }
@@ -5133,7 +5133,7 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 }
 .miniapp-frame {
   display: flex; flex-direction: column; overflow: hidden;
-  width: min(460px, 96vw); height: min(820px, 92vh);
+  width: min(460px, calc(96vw / var(--zf, 1))); height: min(820px, calc(92vh / var(--zf, 1)));
   background: var(--bg-1); border: 1px solid var(--border-2);
   border-radius: calc(18px * var(--rk)); box-shadow: var(--shadow-lg);
 }
@@ -5149,7 +5149,7 @@ body.custom-border .icon-btn, body.custom-border .btn-ghost {
 body.miniapp-open { overflow: hidden; }
 @media (max-width: 560px) {
   .miniapp-overlay { backdrop-filter: none; }
-  .miniapp-frame { width: 100vw; height: 100vh; height: 100dvh; border: none; border-radius: 0; }
+  .miniapp-frame { width: calc(100vw / var(--zf, 1)); height: calc(100vh / var(--zf, 1)); height: calc(100dvh / var(--zf, 1)); border: none; border-radius: 0; }
 }
 
 /* ============================================================================
@@ -5282,7 +5282,7 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 .cont-subpane { display: none; }
 .cont-subpane.active { display: block; animation: fadeUp 0.18s var(--ease-out) both; }
 /* The list scrolls inside the pane instead of stretching the settings card. */
-.cont-subpane .contacts-list { max-height: min(46vh, 420px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.cont-subpane .contacts-list { max-height: min(calc(46vh / var(--zf, 1)), 420px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
 
 .c-ava-wrap { position: relative; flex: none; }
 .contact-row .c-status { position: absolute; right: -2px; bottom: -2px; border: 2px solid var(--bg-2); border-radius: calc(50% * var(--rc)); }
@@ -5333,7 +5333,7 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 .lb-btn { display: grid; place-items: center; width: 42px; height: 42px; border-radius: calc(12px * var(--rk)); border: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.4); color: #fff; cursor: pointer; text-decoration: none; }
 .lb-btn:hover { background: rgba(0,0,0,0.7); border-color: var(--accent-400); color: var(--accent-300); }
 .lb-btn svg { width: 20px; height: 20px; }
-.lightbox video.lb-media { max-width: 92vw; max-height: 84vh; border-radius: calc(6px * var(--rk)); background: #000; }
+.lightbox video.lb-media { max-width: calc(92vw / var(--zf, 1)); max-height: calc(84vh / var(--zf, 1)); border-radius: calc(6px * var(--rk)); background: #000; }
 
 /* ===== Incoming-call screen: audio-reactive polish (#cavaCanvas drives --ring-level) ===== */
 .call-incoming { --ring-level: 0; }
@@ -5414,15 +5414,15 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
   .chat-item .avatar { width: 40px; height: 40px; }
 
   /* --- Call pill: shrink so ~6 controls fit, and never clip if they don't --- */
-  #callStage .call-actions { gap: 5px; padding: 8px 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 20px); }
+  #callStage .call-actions { gap: 5px; padding: 8px 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(calc(100vw / var(--zf, 1)) - 20px); }
   #callStage .call-actions::-webkit-scrollbar { display: none; }
   #callStage .call-btn, #callStage .call-btn.end { width: 44px; height: 44px; flex: 0 0 auto; }
   #callStage .call-btn svg { width: 19px; height: 19px; }
 
   /* --- Overlays / panels --- */
-  .settings-card { width: 100vw; border-radius: calc(14px * var(--rk)) calc(14px * var(--rk)) 0 0; }
+  .settings-card { width: calc(100vw / var(--zf, 1)); border-radius: calc(14px * var(--rk)) calc(14px * var(--rk)) 0 0; }
   .settings-panes { padding-left: 11px; padding-right: 11px; }
-  .mp-card, .modal-card { width: calc(100vw - 20px); }
+  .mp-card, .modal-card { width: calc(calc(100vw / var(--zf, 1)) - 20px); }
   .cont-subtabs .settings-subtab { padding: 8px 5px; font-size: 11px; }
   .c-icon-btn { width: 36px; height: 36px; }
 }
@@ -5443,7 +5443,7 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
 @media (max-height: 480px) and (max-width: 900px) {
   .ci-ava { width: 84px; height: 84px; font-size: 34px; }
   .ci-actions { margin-top: 18px; gap: 28px; }
-  .settings-card { height: 96dvh; }
+  .settings-card { height: calc(96dvh / var(--zf, 1)); }
 }
 
 /* Audio-output picker (call bar → speaker button) */
@@ -5513,7 +5513,7 @@ body.motion-off .settings-card.mob-backing .settings-tabs { animation: none !imp
     height: calc(81px + env(safe-area-inset-top, 0px)); z-index: 40; /* == .chat-head height, so the two top bars align */
     background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
     border-right: 1px solid var(--border-1); }
-  .app.cl-collapsed:has(#chatHead.hidden) .cl-head { width: 100vw; border-right: none; }  /* no chat open → the bar spans the whole top */
+  .app.cl-collapsed:has(#chatHead.hidden) .cl-head { width: calc(100vw / var(--zf, 1)); border-right: none; }  /* no chat open → the bar spans the whole top */
   .app.cl-collapsed .chat-head {                                   /* push partner name/avatar clear of the floating header */
     padding-left: calc(var(--cl-full, 340px) - var(--cl-w) + 20px); }
   .app.cl-collapsed .cl-search,
@@ -5753,7 +5753,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
 @media (hover: none) { .stk-star { opacity: .85; } }
 
 /* Forward picker + directory + scheduled queue lists. */
-.fwd-list, .dir-list, .sch-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; margin-top: 8px; }
+.fwd-list, .dir-list, .sch-list { display: flex; flex-direction: column; gap: 4px; max-height: calc(46vh / var(--zf, 1)); overflow-y: auto; margin-top: 8px; }
 .fwd-row, .dir-row {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
   background: var(--surface-1); border: 1px solid var(--border-1); border-radius: var(--r-2);
@@ -6384,7 +6384,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   #callToast.call-incoming { background: var(--bg-1); backdrop-filter: none; }
   #callToast .ci-card {
     height: 100%; max-width: 440px; justify-content: flex-start; gap: 8px; animation: none;
-    padding: calc(16vh + env(safe-area-inset-top)) 28px calc(48px + env(safe-area-inset-bottom));
+    padding: calc(calc(16vh / var(--zf, 1)) + env(safe-area-inset-top)) 28px calc(48px + env(safe-area-inset-bottom));
   }
   #callToast .ci-ava-wrap { margin-bottom: 18px; }
   #callToast .ci-ava { width: 112px; height: 112px; font-size: 42px; }
@@ -6693,7 +6693,7 @@ body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { b
    left (name + Desktop/Phone switch above a mock of the app, painted by the live tokens), an
    inspector on the right (Start from · Colors · Shape · Surface · Type · Background) with a
    pinned action bar. Stacks on phones. */
-#themeStudio .ts-card { width: min(96vw, 1080px); height: min(90vh, 780px); display: flex; flex-direction: column; }
+#themeStudio .ts-card { width: min(calc(96vw / var(--zf, 1)), 1080px); height: min(calc(90vh / var(--zf, 1)), 780px); display: flex; flex-direction: column; }
 #themeStudio .ts-top { display: flex; align-items: center; gap: 14px; padding: 12px 56px 12px 20px; }
 #themeStudio .ts-top h2 { flex: 0 0 auto; }
 .ts-seg { display: inline-flex; gap: 2px; padding: 3px; margin: 0 auto; background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--r-pill); }
@@ -6774,7 +6774,7 @@ body[data-theme="flashbang"] :is(.chat-head, .composer, .chatlist, .cl-head) { b
 #themeStudio .ts-actions .btn-ghost, #themeStudio .ts-actions .btn-primary { width: auto; padding: 10px 16px; }
 
 @media (max-width: 720px), (max-height: 500px) and (pointer: coarse) {
-  #themeStudio .ts-card { width: 100vw; height: 100dvh; }
+  #themeStudio .ts-card { width: calc(100vw / var(--zf, 1)); height: calc(100dvh / var(--zf, 1)); }
   #themeStudio .ts-top { padding: 10px 52px 10px 14px; gap: 8px; }
   #themeStudio .ts-top h2 { display: none; }
   #themeStudio .ts-seg { margin: 0; }
@@ -6878,3 +6878,9 @@ body:not([data-theme="aero"]) :is(.chatlist, .info-panel) { border-left: 0; bord
 .vp-file-ico svg { width: 15px; height: 15px; }
 .vp-file-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body[data-theme="flashbang"] .msg.me .vp-dl, body[data-theme="flashbang"] .msg.me .vp-file, body[data-theme="flashbang"] .msg.me .vp-file-ico { color: rgba(255, 255, 255, 0.85); }
+/* Interface size slider (Preferences → Display). */
+.pref-scale { align-items: center; gap: 10px !important; flex-wrap: nowrap !important; }
+.pref-scale input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent-400); }
+.pref-scale .ps-end { font-weight: 700; font-size: 12px; color: var(--text-dim); }
+.pref-scale .ps-end.big { font-size: 18px; }
+.pref-scale .ps-val { min-width: 44px; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text); }

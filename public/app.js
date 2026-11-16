@@ -571,12 +571,25 @@ function renderThemes() {
 // Glow was removed (kept at 0). Borders now live in the Theme Studio, not here.
 // Display preferences (per device): interface size (CSS zoom on the root) and avatar shape.
 // Corner roundness is no longer a setting — each theme sets it (AeroDialog is square).
-const UI_SCALES = [[0.9, "pref_scale_s"], [1, "pref_scale_m"], [1.1, "pref_scale_l"], [1.25, "pref_scale_xl"]];
+// Interface size is a continuous slider (80–150 %), applied as CSS zoom on <html>. Two things
+// zoom doesn't do for us: viewport units scale with it (100dvh became 125 % of the window and
+// pushed the composer off-screen) — so every vh/dvh/vw in style.css is divided by --zf — and
+// on-screen coordinates (getBoundingClientRect, clientX, innerWidth) are in screen px while a
+// style.left inside the zoomed page is multiplied by the zoom — so positions set from screen
+// coordinates go through zpos().
+const UI_SCALE_MIN = 0.8, UI_SCALE_MAX = 1.5;
+let uiZoom = 1;
+function zpos(v) { return v / uiZoom; }
+// An element's size as it appears ON SCREEN (offsetWidth is in zoomed-page px) — for clamping
+// a popover against innerWidth/innerHeight, which are screen px.
+const zw = (el) => (el ? el.offsetWidth * uiZoom : 0), zh = (el) => (el ? el.offsetHeight * uiZoom : 0);
 const AVA_SHAPES = [["theme", "pref_ava_theme"], ["circle", "pref_ava_circle"], ["rounded", "pref_ava_rounded"], ["square", "pref_ava_square"]];
-const uiScale = () => { const v = parseFloat(localStorage.getItem("dialog_ui_scale")); return UI_SCALES.some((x) => x[0] === v) ? v : 1; };
+const uiScale = () => { const v = parseFloat(localStorage.getItem("dialog_ui_scale")); return Number.isFinite(v) ? Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, v)) : 1; };
 const avaShape = () => { const v = localStorage.getItem("dialog_ava_shape"); return AVA_SHAPES.some((x) => x[0] === v) ? v : "theme"; };
 function applyDisplayPrefs() {
-  const z = uiScale(); document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  const z = uiScale(); uiZoom = z;
+  document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  document.documentElement.style.setProperty("--zf", String(z));
   document.body.classList.remove("ava-circle", "ava-rounded", "ava-square");
   if (avaShape() !== "theme") document.body.classList.add("ava-" + avaShape());
   if (typeof scheduleFsLayout === "function") scheduleFsLayout();
@@ -591,7 +604,16 @@ function renderChips(boxId, items, cur, onPick) {
   }
 }
 function renderDisplayPrefs() {
-  renderChips("prefScaleOpts", UI_SCALES, uiScale(), (v) => { try { localStorage.setItem("dialog_ui_scale", String(v)); } catch {} applyDisplayPrefs(); });
+  const box = $("prefScaleOpts");
+  if (box && !box.querySelector("input")) {
+    box.classList.add("pref-scale");
+    box.innerHTML = `<span class="ps-end">A</span><input type="range" id="prefScale" min="${UI_SCALE_MIN}" max="${UI_SCALE_MAX}" step="0.05" aria-label="${escapeHtml(t("pref_ui_scale"))}"><span class="ps-end big">A</span><span class="ps-val" id="prefScaleVal"></span><button type="button" class="ld-opt" id="prefScaleReset">${escapeHtml(t("pref_scale_m"))}</button>`;
+    const r = $("prefScale");
+    // Live while dragging (so you see it), saved when you let go.
+    r.oninput = () => { try { localStorage.setItem("dialog_ui_scale", r.value); } catch {} applyDisplayPrefs(); $("prefScaleVal").textContent = Math.round(r.value * 100) + "%"; };
+    $("prefScaleReset").onclick = () => { r.value = 1; r.oninput(); };
+  }
+  if ($("prefScale")) { $("prefScale").value = uiScale(); $("prefScaleVal").textContent = Math.round(uiScale() * 100) + "%"; }
   renderChips("prefAvaOpts", AVA_SHAPES, avaShape(), (v) => { try { localStorage.setItem("dialog_ava_shape", v); } catch {} applyDisplayPrefs(); });
 }
 function applyAppearance() {
@@ -1062,9 +1084,9 @@ function toggleAccountMenu() {
   menu.classList.remove("hidden");
   menu._openedAt = Date.now();
   const r = btn.getBoundingClientRect();
-  const mw = menu.offsetWidth || 240;
-  menu.style.top = (r.bottom + 6) + "px";
-  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - mw - 8)) + "px";
+  const mw = zw(menu) || 240;
+  menu.style.top = zpos((r.bottom + 6)) + "px";
+  menu.style.left = zpos(Math.max(8, Math.min(r.left, innerWidth - mw - 8))) + "px";
 }
 $("accountBtn") && ($("accountBtn").onclick = (e) => { e.stopPropagation(); toggleAccountMenu(); });
 $("addAcctBack") && ($("addAcctBack").onclick = () => { sessionStorage.removeItem("dialog_add_account"); location.reload(); });
@@ -1316,8 +1338,8 @@ function openMuteMenu(anchor, room) {
   }
   menu.classList.remove("hidden");
   const r = anchor.getBoundingClientRect();
-  menu.style.top = (r.bottom + 4) + "px";
-  menu.style.left = Math.max(8, Math.min(r.right - (menu.offsetWidth || 180), innerWidth - (menu.offsetWidth || 180) - 8)) + "px";
+  menu.style.top = zpos((r.bottom + 4)) + "px";
+  menu.style.left = zpos(Math.max(8, Math.min(r.right - (zw(menu) || 180), innerWidth - (zw(menu) || 180) - 8))) + "px";
   menu._openedAt = Date.now();
 }
 document.addEventListener("click", (e) => {
@@ -1525,9 +1547,9 @@ function openChatMenu(c, x, y) {
   item(c.type === "dm" ? t("delete_chat") : t("leave_group"), "trash", () => deleteChat(c), true);
   menu.classList.remove("hidden");
   menu._openedAt = Date.now();
-  const mw = menu.offsetWidth || 180, mh = menu.offsetHeight || 140;
-  menu.style.left = Math.max(8, Math.min(x, innerWidth - mw - 8)) + "px";
-  menu.style.top = Math.max(8, Math.min(y, innerHeight - mh - 8)) + "px";
+  const mw = zw(menu) || 180, mh = zh(menu) || 140;
+  menu.style.left = zpos(Math.max(8, Math.min(x, innerWidth - mw - 8))) + "px";
+  menu.style.top = zpos(Math.max(8, Math.min(y, innerHeight - mh - 8))) + "px";
 }
 document.addEventListener("click", (e) => {
   const m = $("rowMenu"); if (!m || m.classList.contains("hidden")) return;
@@ -1607,7 +1629,7 @@ $("clCollapse") && ($("clCollapse").onclick = () => {
     try { rz.setPointerCapture(e.pointerId); } catch {} e.preventDefault();
   });
   rz.addEventListener("pointermove", (e) => {
-    if (!dragging) return; clW = Math.max(296, Math.min(520, Math.round(e.clientX)));  // seam follows the cursor
+    if (!dragging) return; clW = Math.max(296, Math.min(520, Math.round(zpos(e.clientX))));  // seam follows the cursor (screen px → page px)
     app.style.setProperty("--cl-w", clW + "px"); app.style.setProperty("--cl-full", clW + "px");
   });
   const stop = () => { if (!dragging) return; dragging = false; rz.classList.remove("active"); app.classList.remove("cl-resizing"); localStorage.setItem("dialog_cl_w", String(clW)); };
@@ -1654,7 +1676,7 @@ document.addEventListener("keydown", (e) => {
   }
   function updateDrag(e) {
     const g = drag.ghost;
-    g.style.left = (e.clientX - drag.ox) + "px"; g.style.top = (e.clientY - drag.oy) + "px";
+    g.style.left = zpos((e.clientX - drag.ox)) + "px"; g.style.top = zpos((e.clientY - drag.oy)) + "px";
     const listR = ul.getBoundingClientRect();
     const oob = e.clientX < listR.left - 60 || e.clientX > listR.right + 60 || e.clientY < listR.top - 80 || e.clientY > listR.bottom + 80;
     drag.oob = oob; g.style.opacity = oob ? "0.55" : "1";
@@ -1673,7 +1695,7 @@ document.addEventListener("keydown", (e) => {
     ul.classList.remove("drag-active"); if (pz) pz.classList.remove("show", "hot");
     const finish = () => { g.remove(); li.classList.remove("drag-src"); setTimeout(() => { li._suppressClick = false; }, 60); };
     if (drag.oob) {                                   // spring back, restore canonical order
-      g.classList.add("returning"); g.style.left = drag.srcRect.left + "px"; g.style.top = drag.srcRect.top + "px";
+      g.classList.add("returning"); g.style.left = zpos(drag.srcRect.left) + "px"; g.style.top = zpos(drag.srcRect.top) + "px";
       setTimeout(() => { finish(); renderChatList($("searchInput").value); }, 330);
     } else {
       if (drag.pin) { const c = chats.get(li._chatKey); if (c && !c.pinned) { c.pinned = true; savePins(); } }
@@ -2438,8 +2460,8 @@ $("chatMenuBtn").onclick = (e) => {
   menu.classList.remove("hidden");
   // позиционируем фикс-меню под кнопкой, прижимая к правому краю (не вылезает за экран)
   const r = $("chatMenuBtn").getBoundingClientRect();
-  menu.style.top = (r.bottom + 4) + "px";
-  menu.style.left = Math.max(8, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top = zpos((r.bottom + 4)) + "px";
+  menu.style.left = zpos(Math.max(8, Math.min(r.right - zw(menu), innerWidth - zw(menu) - 8))) + "px";
 };
 document.addEventListener("click", (e) => { if (!e.target.closest(".chat-menu-wrap") && !e.target.closest(".chat-menu")) $("chatMenu").classList.add("hidden"); });
 function leaveCurrentGroup() { const c = chats.get(myRoom); if (c) deleteChat(c); }
@@ -3499,9 +3521,9 @@ function openMemberMenu(btn, login, name) {
     if (!ok) notify((data && data.error) || "Couldn't remove");
   }, true);
   document.body.appendChild(m);
-  const r = btn.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
-  m.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.right - mw)) + "px";
-  m.style.top = (r.bottom + 4 + mh > innerHeight ? r.top - mh - 4 : r.bottom + 4) + "px";
+  const r = btn.getBoundingClientRect(), mw = zw(m), mh = zh(m);
+  m.style.left = zpos(Math.max(8, Math.min(innerWidth - mw - 8, r.right - mw))) + "px";
+  m.style.top = zpos((r.bottom + 4 + mh > innerHeight ? r.top - mh - 4 : r.bottom + 4)) + "px";
   _imMenu = m;
 }
 document.addEventListener("click", (e) => { if (_imMenu && !_imMenu.contains(e.target) && !e.target.closest(".m-more")) closeMemberMenu(); });
@@ -4358,8 +4380,8 @@ function openReactPicker(btn, id) {
   }
   reactPicker._id = id; reactPicker.classList.remove("hidden");
   const r = btn.getBoundingClientRect();
-  reactPicker.style.left = Math.min(r.left, innerWidth - reactPicker.offsetWidth - 8) + "px";
-  reactPicker.style.top = (r.top - reactPicker.offsetHeight - 6) + "px";
+  reactPicker.style.left = zpos(Math.min(r.left, innerWidth - zw(reactPicker) - 8)) + "px";
+  reactPicker.style.top = zpos((r.top - zh(reactPicker) - 6)) + "px";
 }
 document.addEventListener("click", (e) => { if (reactPicker && !reactPicker.contains(e.target) && !e.target.closest(".ma-react")) reactPicker.classList.add("hidden"); });
 function startEdit(wrap) {
@@ -4430,7 +4452,7 @@ function openMsgMenu(e, wrap) {
     b.onclick = () => { msgMenu.classList.add("hidden"); fn(); };
     msgMenu.appendChild(b);
   };
-  item(t("react"), "smile", () => { const rb = wrap.querySelector(".ma-react"); if (rb) openReactPicker(rb, id); else { const fake = document.createElement("div"); fake.style.position = "fixed"; fake.style.left = e.clientX + "px"; fake.style.top = e.clientY + "px"; document.body.appendChild(fake); openReactPicker(fake, id); document.body.removeChild(fake); } });
+  item(t("react"), "smile", () => { const rb = wrap.querySelector(".ma-react"); if (rb) openReactPicker(rb, id); else { const fake = document.createElement("div"); fake.style.position = "fixed"; fake.style.left = zpos(e.clientX) + "px"; fake.style.top = zpos(e.clientY) + "px"; document.body.appendChild(fake); openReactPicker(fake, id); document.body.removeChild(fake); } });
   item(t("reply"), "reply", () => startReply(wrap));
   item(t("forward"), "forward", () => openForward([id]));
   if (canPinHere()) item(pinnedId === id ? t("unpin_message") : t("pin_message"), "pin", () => pinMessageId(pinnedId === id ? null : id));
@@ -4452,9 +4474,9 @@ function openMsgMenu(e, wrap) {
   }
   msgMenu.classList.remove("hidden");
   msgMenu._openedAt = Date.now();
-  const mw = msgMenu.offsetWidth || 200, mh = msgMenu.offsetHeight || 180;
-  msgMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
-  msgMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - mh - 8)) + "px";
+  const mw = zw(msgMenu) || 200, mh = zh(msgMenu) || 180;
+  msgMenu.style.left = zpos(Math.max(8, Math.min(e.clientX, innerWidth - mw - 8))) + "px";
+  msgMenu.style.top = zpos(Math.max(8, Math.min(e.clientY, innerHeight - mh - 8))) + "px";
 }
 messagesEl.addEventListener("contextmenu", (e) => {
   const wrap = e.target.closest(".msg");
@@ -4656,9 +4678,9 @@ function renderMentionMenu() {
     `</button>`).join("");
   el.classList.remove("hidden");
   const r = $("msgInput").getBoundingClientRect();
-  el.style.left = Math.round(r.left) + "px";
+  el.style.left = zpos(Math.round(r.left)) + "px";
   el.style.width = Math.min(340, Math.round(r.width)) + "px";
-  el.style.top = Math.round(r.top - el.offsetHeight - 8) + "px";
+  el.style.top = zpos(Math.round(r.top - zh(el) - 8)) + "px";
   el.querySelectorAll(".mm-item").forEach((b) => { b.onmousedown = (ev) => { ev.preventDefault(); acceptMention(Number(b.dataset.i)); }; });
 }
 function acceptMention(i) {
@@ -4709,9 +4731,9 @@ $("msgInput").addEventListener("contextmenu", (e) => {
   item(t("t_send"), "send", () => sendText());
   inputMenu.classList.remove("hidden");
   inputMenu._openedAt = Date.now();
-  const mw = inputMenu.offsetWidth || 180, mh = inputMenu.offsetHeight || 140;
-  inputMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
-  inputMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - mh - 8)) + "px";
+  const mw = zw(inputMenu) || 180, mh = zh(inputMenu) || 140;
+  inputMenu.style.left = zpos(Math.max(8, Math.min(e.clientX, innerWidth - mw - 8))) + "px";
+  inputMenu.style.top = zpos(Math.max(8, Math.min(e.clientY, innerHeight - mh - 8))) + "px";
 });
 const typingUsers = new Set();
 socket.on("typing", ({ name, isTyping }) => { if (isTyping) typingUsers.add(name); else typingUsers.delete(name); const arr = [...typingUsers]; $("typingIndicator").textContent = arr.length ? (arr.length === 1 ? t("typing_one", { name: arr[0] }) : t("typing_many", { names: arr.join(", ") })) : ""; });
@@ -5584,9 +5606,9 @@ function openStreamVolPopup(tile, identity, e) {
   streamVolPopup.classList.remove("hidden");
   streamVolPopup._openedAt = Date.now();
   requestAnimationFrame(() => {
-    const mw = streamVolPopup.offsetWidth || 180, mh = streamVolPopup.offsetHeight || 80;
-    streamVolPopup.style.left = Math.max(8, Math.min(e.clientX, innerWidth - mw - 8)) + "px";
-    streamVolPopup.style.top = Math.max(8, Math.min(e.clientY - 10, innerHeight - mh - 8)) + "px";
+    const mw = zw(streamVolPopup) || 180, mh = zh(streamVolPopup) || 80;
+    streamVolPopup.style.left = zpos(Math.max(8, Math.min(e.clientX, innerWidth - mw - 8))) + "px";
+    streamVolPopup.style.top = zpos(Math.max(8, Math.min(e.clientY - 10, innerHeight - mh - 8))) + "px";
   });
 }
 function applyTileVol(identity) {
@@ -6101,8 +6123,8 @@ function openCallReactPicker(e) {
   reactPop.classList.toggle("hidden");
   if (!reactPop.classList.contains("hidden")) {
     const r = $("reactBtn").getBoundingClientRect();
-    reactPop.style.left = Math.max(8, Math.min(r.left + r.width / 2 - reactPop.offsetWidth / 2, innerWidth - reactPop.offsetWidth - 8)) + "px";
-    reactPop.style.top = (r.top - reactPop.offsetHeight - 10) + "px";
+    reactPop.style.left = zpos(Math.max(8, Math.min(r.left + r.width / 2 - zw(reactPop) / 2, innerWidth - zw(reactPop) - 8))) + "px";
+    reactPop.style.top = zpos((r.top - zh(reactPop) - 10)) + "px";
     reactPop._openedAt = Date.now();
   }
 }
@@ -7188,8 +7210,8 @@ $("toggleSpeaker") && ($("toggleSpeaker").onclick = (e) => {
   menu.querySelectorAll("button").forEach((b) => (b.onclick = () => setAudioOut(b.dataset.spk === "1")));
   const r = $("toggleSpeaker").getBoundingClientRect();
   menu.classList.remove("hidden");
-  menu.style.left = Math.max(8, Math.min(r.left - 40, innerWidth - 180)) + "px";
-  menu.style.bottom = (innerHeight - r.top + 10) + "px";
+  menu.style.left = zpos(Math.max(8, Math.min(r.left - 40, innerWidth - 180))) + "px";
+  menu.style.bottom = zpos((innerHeight - r.top + 10)) + "px";
 });
 document.addEventListener("click", (e) => { const m = $("speakerMenu"); const b = $("toggleSpeaker"); if (m && !m.contains(e.target) && b && !b.contains(e.target)) m.classList.add("hidden"); });
 async function populateDevices() {
@@ -7374,14 +7396,14 @@ vGrid.addEventListener("pointermove", (e) => {
   let x = e.clientX - waDrag.dx - sr.left, y = e.clientY - waDrag.dy - sr.top;
   x = Math.max(6, Math.min(sr.width - waDrag.w - 6, x));
   y = Math.max(6, Math.min(sr.height - waDrag.h - 6, y));
-  Object.assign(waDrag.me.style, { left: x + "px", top: y + "px", right: "auto", bottom: "auto" });
+  Object.assign(waDrag.me.style, { left: zpos(x) + "px", top: zpos(y) + "px", right: "auto", bottom: "auto" });
 });
 function waDragEnd(e) {
   if (!waDrag || e.pointerId !== waDrag.id) return;
   const me = waDrag.me, sr = $("callStage").getBoundingClientRect();
   me.classList.remove("dragging");
-  const cx = (parseFloat(me.style.left) || 0) + waDrag.w / 2;
-  const cy = (parseFloat(me.style.top) || 0) + waDrag.h / 2;
+  const cx = (parseFloat(me.style.left) || 0) * uiZoom + waDrag.w / 2;   // style px are zoomed-page px
+  const cy = (parseFloat(me.style.top) || 0) * uiZoom + waDrag.h / 2;
   waCorner = (cy < sr.height / 2 ? "t" : "b") + (cx < sr.width / 2 ? "l" : "r");
   try { localStorage.setItem("dialog_wa_corner", waCorner); } catch {}
   applyWaCorner();
@@ -8092,7 +8114,7 @@ $("botCmdBtn") && ($("botCmdBtn").onclick = (e) => {
   menu.querySelectorAll("button").forEach((b) => b.onclick = () => { const i = $("msgInput"); i.value = "/" + b.dataset.cmd + " "; i.focus(); menu.classList.add("hidden"); });
   const r = $("botCmdBtn").getBoundingClientRect();
   menu.classList.remove("hidden");
-  menu.style.left = r.left + "px"; menu.style.bottom = (window.innerHeight - r.top + 8) + "px";
+  menu.style.left = zpos(r.left) + "px"; menu.style.bottom = zpos((window.innerHeight - r.top + 8)) + "px";
 });
 document.addEventListener("click", (e) => { const m = $("botCmdMenu"); if (m && !m.contains(e.target) && e.target !== $("botCmdBtn")) m.classList.add("hidden"); });
 
@@ -8516,8 +8538,8 @@ function openStatusMenu() {
   menu.classList.remove("hidden");
   // Позиционируем под пиллой, прижимаем к левому краю чтобы не вылезало за экран.
   const r = $("meStatus").getBoundingClientRect();
-  menu.style.top = (r.bottom + 4) + "px";
-  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - 240 - 8)) + "px";
+  menu.style.top = zpos((r.bottom + 4)) + "px";
+  menu.style.left = zpos(Math.max(8, Math.min(r.left, innerWidth - 240 - 8))) + "px";
 }
 function closeStatusMenu() { const m = $("meStatusMenu"); if (m) m.classList.add("hidden"); }
 async function setMyStatus(key) {
