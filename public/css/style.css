@@ -7358,3 +7358,17 @@ body.has-mcbar #voiceBar { display: none; }   /* the top bar replaces the in-lis
 .react-picker .rp-more { font-size: 15px; opacity: .8; } .react-picker .rp-more svg { width: 18px; height: 18px; }
 .react-picker.full { padding: 8px; }
 .react-picker .rp-all { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: min(340px, calc(100vw / var(--zf, 1) - 24px)); max-height: 240px; overflow-y: auto; }
+
+/* Phones: reply is a swipe (or the hold menu), so the hover action bar drops its reply button. */
+@media (pointer: coarse) { .msg-actions .ma-reply { display: none; } }
+/* Readability over a wallpaper / photo: quotes, names, times and chips get a solid backing. */
+.quote { background: var(--bg-3); }
+.quote .q-text { color: var(--text); opacity: .85; }
+.chat.has-wallpaper .messages { background: rgba(0, 0, 0, 0.55); }
+.chat.has-wallpaper .msg .who, .chat.has-wallpaper .msg .time, .chat.has-wallpaper .fwd-tag, .chat.has-wallpaper .day-sep span {
+  background: var(--bg-2); color: var(--text); padding: 1px 7px; border-radius: var(--r-pill, 999px); }
+.chat.has-wallpaper .reaction { background: var(--bg-3); }
+@media (max-width: 720px) {
+  .quote .q-name { font-size: 12.5px; } .quote .q-text { font-size: 13px; }
+  .msg .time { font-size: 11.5px; } .msg .who { font-size: 12.5px; }
+}

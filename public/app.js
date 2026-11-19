@@ -4261,7 +4261,7 @@ function startReply(wrap) {
 function clearReply() { replyTarget = null; const bar = $("replyBar"); if (bar) bar.classList.add("hidden"); }
 $("replyCancel") && ($("replyCancel").onclick = clearReply);
 
-// ---- Swipe a message: left to reply, right to forward ----
+// ---- Swipe a message left or right to reply (hold for the menu: forward, copy, …) ----
 // Only after the gesture is clearly horizontal, so it never steals a scroll. The bubble
 // follows the finger and an icon fades in, so it's obvious what will happen on release.
 (function initMessageSwipe() {
@@ -4288,7 +4288,7 @@ $("replyCancel") && ($("replyCancel").onclick = clearReply);
     // Resist past the trigger so the travel stays small and the intent stays legible.
     sw.dx = Math.abs(dx) > TRIGGER ? Math.sign(dx) * (TRIGGER + (Math.abs(dx) - TRIGGER) * 0.25) : dx;
     sw.wrap.style.transform = `translateX(${sw.dx}px)`;
-    sw.wrap.dataset.swipe = sw.dx < 0 ? "reply" : "forward";
+    sw.wrap.dataset.swipe = "reply";
     sw.wrap.classList.toggle("swipe-armed", Math.abs(sw.dx) >= TRIGGER);
   }, { passive: false });
   const end = () => {
@@ -4296,7 +4296,7 @@ $("replyCancel") && ($("replyCancel").onclick = clearReply);
     const { wrap, dx } = sw;
     if (Math.abs(dx) >= TRIGGER) {
       const id = Number(wrap.dataset.id);
-      if (dx < 0) startReply(wrap); else openForward([id]);
+      startReply(wrap);   // either direction replies; Forward lives in the hold menu
       if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
     }
     reset();
