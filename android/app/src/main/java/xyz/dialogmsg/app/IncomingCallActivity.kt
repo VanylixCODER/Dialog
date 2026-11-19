@@ -49,27 +49,38 @@ class IncomingCallActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Color.parseColor("#050b06"))
+            setBackgroundColor(Color.parseColor("#0e1210"))
             setPadding(dp(28), dp(72), dp(28), dp(48))
         }
 
         val caller = TextView(this).apply {
             text = name
             setTextColor(Color.WHITE)
-            textSize = 30f
+            textSize = 32f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
             gravity = Gravity.CENTER
+            setPadding(0, dp(18), 0, 0)
+        }
+        val avatar = TextView(this).apply {
+            text = name.trim().take(1).uppercase()
+            setTextColor(Color.parseColor("#00ff5a"))
+            textSize = 44f
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(28).toFloat(); setColor(Color.parseColor("#111614")); setStroke(dp(1), Color.parseColor("#00ff5a")) }
+            layoutParams = LinearLayout.LayoutParams(dp(112), dp(112))
         }
         val sub = TextView(this).apply {
             text = if (isGroup) "Incoming group call" else "Incoming call"
-            setTextColor(Color.parseColor("#88ffaa"))
+            setTextColor(Color.parseColor("#98a29c"))
             textSize = 15f
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, 0)
         }
         val brand = TextView(this).apply {
             text = "DIALOG"
-            setTextColor(Color.parseColor("#3a5a48"))
-            textSize = 13f
+            setTextColor(Color.parseColor("#5d6a63"))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
             letterSpacing = 0.3f
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(40))
@@ -81,11 +92,11 @@ class IncomingCallActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        buttons.addView(actionButton("Decline", "#ff5252") { onDecline() })
-        buttons.addView(actionButton("Answer", "#2ec96b") { onAnswer() })
+        buttons.addView(actionButton("Decline", "#ff5252", outline = true) { onDecline() })
+        buttons.addView(actionButton("Answer", "#00ff5a", outline = true) { onAnswer() })
 
-        val dnd = actionButton("Decline & Do Not Disturb", "#1a2a20") { onDeclineDnd() }.apply {
-            setTextColor(Color.parseColor("#cfe6d8"))
+        val dnd = actionButton("Decline & Do Not Disturb", "#3a443e", outline = true) { onDeclineDnd() }.apply {
+            setTextColor(Color.parseColor("#98a29c"))
             val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
             lp.topMargin = dp(16); lp.leftMargin = dp(8); lp.rightMargin = dp(8)
             layoutParams = lp
@@ -93,6 +104,7 @@ class IncomingCallActivity : Activity() {
 
         root.addView(brand)
         root.addView(spacer)
+        root.addView(avatar)
         root.addView(caller)
         root.addView(sub)
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) }
@@ -102,15 +114,15 @@ class IncomingCallActivity : Activity() {
         setContentView(root)
     }
 
-    private fun actionButton(label: String, colorHex: String, onClick: () -> Unit): Button {
+    private fun actionButton(label: String, colorHex: String, outline: Boolean = false, onClick: () -> Unit): Button {
         val b = Button(this)
         b.text = label
         b.isAllCaps = false
         b.textSize = 15f
-        b.setTextColor(Color.WHITE)
+        b.setTextColor(if (outline) Color.parseColor(colorHex) else Color.WHITE)
         val bg = GradientDrawable().apply {
-            cornerRadius = dp(28).toFloat()
-            setColor(Color.parseColor(colorHex))
+            cornerRadius = dp(10).toFloat()
+            if (outline) { setColor(Color.parseColor("#111614")); setStroke(dp(1), Color.parseColor(colorHex)) } else setColor(Color.parseColor(colorHex))
         }
         b.background = bg
         val lp = LinearLayout.LayoutParams(0, dp(56), 1f)

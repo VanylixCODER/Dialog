@@ -101,6 +101,14 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(newIntent: Intent) {
         super.onNewIntent(newIntent)
         setIntent(newIntent)
+        // Tapped a message notification while the app is running → open THAT chat.
+        val chat = newIntent.getStringExtra("chatId")
+        if (!chat.isNullOrBlank()) {
+            newIntent.removeExtra("chatId")
+            val safe = chat.replace("\\", "").replace("'", "")
+            evalJs("window.openRoomByKey && openRoomByKey('$safe')")
+            return
+        }
         val u = startUrl(newIntent)
         if (u != BuildConfig.APP_URL) webView.loadUrl(u)
     }
@@ -109,6 +117,9 @@ class MainActivity : AppCompatActivity() {
     //   https://dialogmsg.xyz/invite/<code>  → open that exact page
     //   dialog://join/<code>  |  dialog://invite/<code>  → /login?invite=<code>
     private fun startUrl(src: Intent?): String {
+        // Cold start from a message notification → the page opens that chat (?room=).
+        val chat = src?.getStringExtra("chatId")
+        if (!chat.isNullOrBlank()) return BuildConfig.APP_URL + (if (BuildConfig.APP_URL.contains("?")) "&" else "?") + "room=" + Uri.encode(chat)
         val data: Uri? = src?.data
         if (data != null) {
             if (data.scheme == "dialog") {

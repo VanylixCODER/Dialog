@@ -201,6 +201,11 @@ async function fcmAccessToken() {
   _fcmTok = j.access_token; _fcmTokExp = Date.now() + (j.expires_in || 3600) * 1000;
   return _fcmTok;
 }
+// Stop ringing for this person everywhere (socket tabs/apps, and the Android app if it's closed).
+function cancelRing(login, room) {
+  notifyUser(login, "call-cancelled", { room });
+  sendFcm(login, { kind: "call-cancel", room }).catch(() => {});
+}
 async function sendFcm(login, payload) {
   if (!fcmOn) return;
   let tokens = [];
@@ -1997,7 +2002,7 @@ function removeFromCall(room, sid, dropped = false) {
       else {
         saveSystemMessage(room, meta.initiatorLogin, meta.initiatorName, "call_missed", fmtDuration(dur));
         // Caller left before anyone answered → stop the callees' ringtone/popup.
-        for (const login of (meta.recips || [])) notifyUser(login, "call-cancelled", { room });
+        for (const login of (meta.recips || [])) cancelRing(login, room);
       }
       callMeta.delete(room);
     }
@@ -2758,6 +2763,8 @@ io.on("connection", (socket) => {
     c.set(socket.id, { name: userName, login: userLogin });
     { const mA = callMeta.get(currentRoom); if (mA && new Set([...c.values()].map((v) => v.login)).size >= 2) { clearTimeout(mA.aloneTimer); mA.aloneTimer = null; } }
     broadcastCallState(currentRoom);
+    // Answered from this device → every OTHER device of this person stops ringing (phone, other tab).
+    cancelRing(userLogin, currentRoom);
     // Mute-on-entry: a non-owner joining an ongoing group call starts muted if the owner set it.
     if (!wasEmpty && currentRoom.startsWith("@grp:")) {
       const mMoe = callMeta.get(currentRoom);
@@ -2791,7 +2798,7 @@ io.on("connection", (socket) => {
         const meta2 = callMeta.get(room);
         if (c2 && c2.size < 2 && meta2 && !meta2.answered) {
           io.to(room).emit("call-auto-end", { reason: "no_answer" });
-          for (const login of (meta2.recips || [])) notifyUser(login, "call-cancelled", { room });
+          for (const login of (meta2.recips || [])) cancelRing(login, room);
           saveSystemMessage(room, meta2.initiatorLogin, meta2.initiatorName, "call_missed", fmtDuration(60000));
           c2.clear();
           callRooms.delete(room);
@@ -2823,7 +2830,7 @@ io.on("connection", (socket) => {
   // In a group, one person declining is nobody else's business.
   socket.on("call-decline", async ({ room } = {}) => {
     if (!userLogin || typeof room !== "string" || !(await mayUseRoom(room))) return;
-    notifyUser(userLogin, "call-cancelled", { room });
+    cancelRing(userLogin, room);
     const meta = callMeta.get(room), c = callRooms.get(room);
     if (!meta || meta.answered || !c || !room.startsWith("@dm:")) return;
     clearTimeout(meta.ringTimer); meta.ringTimer = null; meta.declined = true;

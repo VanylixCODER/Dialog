@@ -26,11 +26,13 @@ class FcmService : FirebaseMessagingService() {
         val room = d["room"] ?: ""
         val icon = d["icon"] ?: ""
         // onMessageReceived runs on a background thread, so the short avatar fetch is fine here.
-        val avatar = if (icon.isNotBlank()) fetchCircleBitmap(icon) else null
+        val avatar = if (icon.isNotBlank() && kind != "call-cancel") fetchCircleBitmap(icon) else null
         val n = NotificationHelper(this)
         when (kind) {
             // A call push while closed → full-screen incoming-call treatment.
             "call" -> n.showIncomingCall(room, title, room.startsWith("@grp:"), avatar)
+            // Answered/declined on another device, or the caller hung up → stop ringing here.
+            "call-cancel" -> { n.cancelIncoming(); RingController.stop(this); IncomingCallActivity.dismiss(this) }
             else -> n.show(title, body, room, avatar)
         }
     }
