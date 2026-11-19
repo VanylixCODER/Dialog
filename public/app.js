@@ -1186,7 +1186,7 @@ function enterApp() {
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
-  initPush(); requestMediaPermissions();
+  initPush(); requestMediaPermissions(); syncPushPrefs();
   setTimeout(maybeShowEmailNag, 1200); // gentle email reminder after the app settles
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
@@ -1318,8 +1318,8 @@ function isMuted(room) {
   const all = mutedMap(); delete all[room]; lsSet("dialog_muted", all);  // expired → self-heal
   return false;
 }
-function muteUntil(room, ms) { const all = mutedMap(); all[room] = ms ? Date.now() + ms : 0; lsSet("dialog_muted", all); }
-function unmute(room) { const all = mutedMap(); delete all[room]; lsSet("dialog_muted", all); }
+function muteUntil(room, ms) { const all = mutedMap(); all[room] = ms ? Date.now() + ms : 0; lsSet("dialog_muted", all); syncPushPrefs(); }
+function unmute(room) { const all = mutedMap(); delete all[room]; lsSet("dialog_muted", all); syncPushPrefs(); }
 function toggleMute(room) { if (isMuted(room)) unmute(room); else muteUntil(room, 0); }
 // The bell opens a duration menu instead of a blind toggle (muting "for an hour" is the common
 // case; muting forever by accident is the annoying one).
@@ -7511,7 +7511,7 @@ const NT_DEFAULTS = {
 };
 let NT = { ...NT_DEFAULTS };
 try { NT = { ...NT_DEFAULTS, ...JSON.parse(localStorage.getItem(NT_KEY) || "{}") }; } catch {}
-function ntSave() { try { localStorage.setItem(NT_KEY, JSON.stringify(NT)); } catch {} }
+function ntSave() { try { localStorage.setItem(NT_KEY, JSON.stringify(NT)); } catch {} syncPushPrefs(); }
 // Inside quiet hours? Handles windows that cross midnight.
 function ntQuietNow() {
   if (!NT.quiet) return false;
@@ -8382,7 +8382,20 @@ async function initPush() {
   } catch (e) { console.log("SW", e.message); }
 }
 function urlB64ToUint8(b) { const pad = "=".repeat((4 - (b.length % 4)) % 4); const raw = atob((b + pad).replace(/-/g, "+").replace(/_/g, "/")); const a = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; }
+// Tell the server what to push (a closed app can't be asked): mutes, quiet hours, kinds, previews.
+let _pp = 0;
+function syncPushPrefs() {
+  clearTimeout(_pp);
+  _pp = setTimeout(() => {
+    if (!token || !profile) return;
+    const now = Date.now(), muted = {};
+    for (const [r, u] of Object.entries(mutedMap())) if (!u || u > now) muted[r] = u;
+    api("/api/push/prefs", { muted, dm: NT.dm !== false, group: NT.group !== false, mention: NT.mention !== false, call: NT.call !== false, preview: NT.preview !== false,
+      quiet: { on: !!NT.quiet, from: NT.quietFrom, to: NT.quietTo, tz: new Date().getTimezoneOffset() } }).catch(() => {});
+  }, 800);
+}
 async function subscribePush() {
+  syncPushPrefs();
   if (!swReg || !token) return;
   try { const { key } = await (await fetch("/api/push/key")).json(); if (!key) return; let sub = await swReg.pushManager.getSubscription(); if (!sub) sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) }); await api("/api/push/subscribe", sub); } catch (e) { console.log("push", e.message); }
 }

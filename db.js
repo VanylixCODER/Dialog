@@ -79,6 +79,8 @@ export async function initSchema() {
   try { await pool.query("ALTER TABLE users ADD COLUMN pw_changed_at BIGINT NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN banned TINYINT NOT NULL DEFAULT 0"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN last_ip VARCHAR(45) NULL"); } catch {}
+  // Notification rules the server needs when the app is closed (mutes, quiet hours, which kinds): see /api/push/prefs.
+  try { await pool.query("ALTER TABLE users ADD COLUMN push_prefs TEXT NULL"); } catch {}
   // Report/moderation + account settings.
   try { await pool.query("ALTER TABLE users ADD COLUMN report_ban_until BIGINT NULL"); } catch {}
   try { await pool.query("ALTER TABLE users ADD COLUMN report_reason VARCHAR(190) NULL"); } catch {}
@@ -1048,6 +1050,13 @@ export async function listWorkshop(q = "", sort = "popular", limit = 60) {
 }
 export async function incThemeInstalls(id) { await execute("UPDATE themes SET installs = installs + 1 WHERE id=?", [id]); }
 export const THEME_LIMITS = { max: MAX_THEMES_PER_USER, published: MAX_PUBLISHED_PER_USER };
+
+// ---------- Push preferences ----------
+export async function getPushPrefs(login) {
+  const r = await query("SELECT push_prefs FROM users WHERE login=?", [login]);
+  try { return (r[0] && r[0].push_prefs && JSON.parse(r[0].push_prefs)) || {}; } catch { return {}; }
+}
+export async function setPushPrefs(login, prefs) { await execute("UPDATE users SET push_prefs=? WHERE login=?", [JSON.stringify(prefs).slice(0, 20000), login]); }
 
 // ---------- Web Push подписки ----------
 export async function savePushSub(login, sub) {

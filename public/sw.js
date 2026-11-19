@@ -6,10 +6,10 @@ self.addEventListener("push", (event) => {
   let data = {}; try { data = event.data.json(); } catch {}
   const isCall = data.kind === "call";
   const opts = {
-    body: data.body || "", icon: data.icon || "/icon.svg", badge: "/icon.svg",
+    body: data.body || "", icon: data.icon || "/src/lil_dialog.webp", badge: "/src/lil_dialog.webp",
     tag: (isCall ? "call:" : "msg:") + (data.room || ""), renotify: true,
     requireInteraction: isCall, vibrate: isCall ? [400, 200, 400, 200, 400] : [120],
-    actions: isCall ? [{ action: "accept", title: "✅ Принять" }, { action: "decline", title: "✖ Отклонить" }] : [],
+    actions: isCall ? (/^ru/i.test(self.navigator.language || "") ? [{ action: "accept", title: "Принять" }, { action: "decline", title: "Отклонить" }] : [{ action: "accept", title: "Answer" }, { action: "decline", title: "Decline" }]) : [],
     data: { room: data.room || "", kind: data.kind || "msg" },
   };
   event.waitUntil((async () => {
@@ -26,6 +26,6 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const c of all) if ("focus" in c) { c.postMessage({ type: "open-room", room: d.room, autojoin }); return c.focus(); }
-    if (self.clients.openWindow) return self.clients.openWindow("/?room=" + encodeURIComponent(d.room || "") + (autojoin ? "&autojoin=1" : ""));
+    if (self.clients.openWindow) return self.clients.openWindow("/app?room=" + encodeURIComponent(d.room || "") + (autojoin ? "&autojoin=1" : ""));
   })());
 });

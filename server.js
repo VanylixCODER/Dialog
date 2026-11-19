@@ -48,7 +48,7 @@ import {
   sendFriendRequest, acceptFriend, declineFriend, removeFriend, cancelFriendRequest, haveMutualFriend, mutualFriends, mutualGroups, mutualCounts,
   getPrefs, setPrefs, dmOpen, bumpInviteUse,
   getUserThemes, getTheme, saveTheme, deleteTheme, setThemePublished, countPublished, listWorkshop, incThemeInstalls, THEME_LIMITS,
-  getUserDMs, saveUserDMs,
+  getUserDMs, saveUserDMs, getPushPrefs, setPushPrefs,
   getPinnedChats, savePinnedChats,
   savePushSub, getPushSubs, deletePushSub, saveFcmToken, getFcmTokens, deleteFcmToken,
   getRoomWatermarks, bumpWatermarks,
@@ -125,7 +125,34 @@ const VAPID_PUBLIC = process.env.VAPID_PUBLIC || "";
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE || "";
 const pushOn = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 if (pushOn) webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@dialog.app", VAPID_PUBLIC, VAPID_PRIVATE);
+// What this person wants pushed: their mutes, quiet hours and per-kind switches (synced from the
+// app, since a closed app can't be asked). Cached; refreshed whenever they save.
+const pushPrefs = new Map();
+async function prefsFor(login) {
+  if (!pushPrefs.has(login)) { try { pushPrefs.set(login, await getPushPrefs(login)); } catch { pushPrefs.set(login, {}); } }
+  return pushPrefs.get(login);
+}
+function pushAllowed(p, payload) {
+  if (payload.kind === "call") return p.call !== false && !inQuiet(p);
+  if (inQuiet(p)) return false;
+  const isGroup = String(payload.room || "").startsWith("@grp:");
+  if (payload.mention) return p.mention !== false;                 // mentions ping through a mute
+  if (isGroup ? p.group === false : p.dm === false) return false;
+  const until = p.muted && p.muted[payload.room];
+  if (until !== undefined && (until === 0 || Date.now() < until)) return false;
+  return true;
+}
+function inQuiet(p) {
+  const q = p.quiet; if (!q || !q.on) return false;
+  const d = new Date(Date.now() - (Number(q.tz) || 0) * 60000), mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const parse = (v) => { const [h, m] = String(v || "0:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const a = parse(q.from), b = parse(q.to);
+  return a <= b ? mins >= a && mins < b : mins >= a || mins < b;
+}
 async function sendPush(login, payload) {
+  const prefs = await prefsFor(login);
+  if (!pushAllowed(prefs, payload)) return;
+  if (prefs.preview === false && payload.kind !== "call") payload = { ...payload, body: "New message" };
   try { // «не беспокоить» — не шлём уведомления
     const st = userStatus.has(login) ? userStatus.get(login) : await getStatus(login);
     if (st === "dnd") return;
@@ -1623,6 +1650,16 @@ app.get("/api/livekit/token", async (req, res) => {
 });
 
 // ---------- REST: Web Push ----------
+app.post("/api/push/prefs", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const b = req.body || {}, out = { muted: {}, quiet: null };
+    for (const k of ["dm", "group", "mention", "call", "preview"]) if (typeof b[k] === "boolean") out[k] = b[k];
+    if (b.muted && typeof b.muted === "object") for (const [r, u] of Object.entries(b.muted).slice(0, 500)) if (/^@(dm|grp):/.test(r)) out.muted[r] = Number(u) || 0;
+    if (b.quiet && typeof b.quiet === "object") out.quiet = { on: !!b.quiet.on, from: String(b.quiet.from || "23:00").slice(0, 5), to: String(b.quiet.to || "08:00").slice(0, 5), tz: Number(b.quiet.tz) || 0 };
+    await setPushPrefs(me.login, out); pushPrefs.set(me.login, out); res.json({ ok: true });
+  } catch (e) { console.error("push prefs", e.message); res.status(500).json({ error: "server error" }); }
+});
 app.get("/api/push/key", (req, res) => res.json({ key: pushOn ? VAPID_PUBLIC : "" }));
 app.post("/api/push/subscribe", async (req, res) => {
   try {
@@ -2102,7 +2139,7 @@ async function deliverMessage({ room, fromLogin, name, from, type, text, media, 
     notifyUser(login, "dm-ping", { room, fromLogin, fromName: name, mention: mentioned, ts: payload.ts,
       last: { type: payload.type, text: payload.type === "e2e" ? "" : String(payload.text || "").slice(0, 120), mediaName: payload.mediaName || null } });
     // A mention pushes even if the recipient is elsewhere; normal msgs push only when not in the room.
-    if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", title: name, body: (mentioned ? "@ " : "") + preview, room, icon: `${APP_ORIGIN}/api/avatar/${fromLogin}` });
+    if (mentioned || !isUserInRoom(login, room)) sendPush(login, { kind: "msg", mention: mentioned, title: name, body: (mentioned ? "@ " : "") + preview, room, icon: `${APP_ORIGIN}/api/avatar/${fromLogin}` });
   }
   maybeDeliverToBots(room, payload).catch((e) => console.error("bot fanout", e.message));
   return payload;
