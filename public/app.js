@@ -4112,7 +4112,14 @@ function renderKeyboard(rows, mid) {
   }
   return h + `</div>`;
 }
+// "Delete for me": hides someone else's message on this device only (nobody is told).
+let hiddenMsgs = new Set(); try { hiddenMsgs = new Set(JSON.parse(localStorage.getItem("dialog_hidden_msgs") || "[]")); } catch {}
+function hideMsgForMe(id) {
+  hiddenMsgs.add(Number(id)); try { localStorage.setItem("dialog_hidden_msgs", JSON.stringify([...hiddenMsgs].slice(-2000))); } catch {}
+  const el = messagesEl.querySelector(`.msg[data-id="${id}"]`); if (el) el.remove();
+}
 function renderMessage(m, scroll = true, ping = false, instant = false) {
+  if (m.id != null && hiddenMsgs.has(Number(m.id))) return;
   const mine = profile && m.fromLogin === profile.login;
   const isB = !mine && m.fromLogin && blocked.has(m.fromLogin);
   const wrap = document.createElement("div");
@@ -4567,18 +4574,37 @@ function renderReactions(wrap, reactions) {
     bar.appendChild(chip);
   }
 }
-const REACT_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "👎"];
+const REACT_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "❤️‍🔥", "🎉", "👎"];
+// The first slots are your own most-used reactions; the defaults fill in behind them.
+let reactFreq = {}; try { reactFreq = JSON.parse(localStorage.getItem("dialog_react_freq") || "{}") || {}; } catch {}
+function reactList() {
+  const top = Object.entries(reactFreq).sort((a, b) => b[1] - a[1]).map(([e]) => e).slice(0, 3);
+  return [...top, ...REACT_EMOJIS.filter((e) => !top.includes(e))].slice(0, 8);
+}
+function pickReaction(em) {
+  reactFreq[em] = (reactFreq[em] || 0) + 1; try { localStorage.setItem("dialog_react_freq", JSON.stringify(reactFreq)); } catch {}
+  socket.emit("msg-react", { id: reactPicker._id, emoji: em }); reactPicker.classList.add("hidden");
+}
 let reactPicker;
-function openReactPicker(btn, id) {
-  if (!reactPicker) {
-    reactPicker = document.createElement("div"); reactPicker.className = "react-picker hidden";
-    REACT_EMOJIS.forEach((em) => { const b = document.createElement("button"); b.textContent = em; b.onclick = () => { socket.emit("msg-react", { id: reactPicker._id, emoji: em }); reactPicker.classList.add("hidden"); }; reactPicker.appendChild(b); });
-    document.body.appendChild(reactPicker);
+function renderReactPicker(full) {
+  reactPicker.innerHTML = ""; reactPicker.classList.toggle("full", !!full);
+  if (full) {
+    const grid = document.createElement("div"); grid.className = "rp-all";
+    for (const cat of Object.keys(window.EMOJI)) window.EMOJI[cat].forEach((em) => { const b = document.createElement("button"); b.textContent = em; b.onclick = () => pickReaction(em); grid.appendChild(b); });
+    reactPicker.appendChild(grid); return;
   }
-  reactPicker._id = id; reactPicker.classList.remove("hidden");
-  const r = btn.getBoundingClientRect();
-  reactPicker.style.left = zpos(Math.min(r.left, innerWidth - zw(reactPicker) - 8)) + "px";
-  reactPicker.style.top = zpos((r.top - zh(reactPicker) - 6)) + "px";
+  reactList().forEach((em) => { const b = document.createElement("button"); b.textContent = em; b.onclick = () => pickReaction(em); reactPicker.appendChild(b); });
+  const more = document.createElement("button"); more.className = "rp-more"; more.title = t("react_more"); more.innerHTML = window.ICON.plus || "+";
+  more.onclick = (e) => { e.stopPropagation(); renderReactPicker(true); positionReactPicker(); }; reactPicker.appendChild(more);
+}
+function positionReactPicker() {
+  const r = reactPicker._btn.getBoundingClientRect();
+  reactPicker.style.left = zpos(Math.max(8, Math.min(r.left, innerWidth - zw(reactPicker) - 8))) + "px";
+  reactPicker.style.top = zpos(Math.max(8, r.top - zh(reactPicker) - 6)) + "px";
+}
+function openReactPicker(btn, id) {
+  if (!reactPicker) { reactPicker = document.createElement("div"); reactPicker.className = "react-picker hidden"; document.body.appendChild(reactPicker); }
+  reactPicker._id = id; reactPicker._btn = btn; renderReactPicker(false); reactPicker.classList.remove("hidden"); positionReactPicker(); return;
 }
 document.addEventListener("click", (e) => { if (reactPicker && !reactPicker.contains(e.target) && !e.target.closest(".ma-react")) reactPicker.classList.add("hidden"); });
 function startEdit(wrap) {
@@ -4665,6 +4691,7 @@ function openMsgMenu(e, wrap) {
   if (bubble && bubble.textContent) item(t("copy_message"), "copy", () => copyToClipboard(bubble.textContent.trim()));
   if (hasSel) item(t("copy_selected"), "copy", () => { try { document.execCommand("copy"); } catch { copyToClipboard(sel.toString()); } });
   if (mine) { item(t("edit"), "edit", () => startEdit(wrap)); item(t("delete_msg"), "trash", () => { if (confirm(t("confirm_delete"))) socket.emit("msg-delete", { id }); }, true); }
+  if (!mine && id) item(t("delete_for_me"), "trash", () => hideMsgForMe(id));
   // Report someone else's message (a message must be linked to a report).
   if (!mine && wrap.dataset.from) {
     item(t("report_message"), "flag", () => openReportModal({ target: wrap.dataset.from, targetName: wrap.dataset.fromname || wrap.dataset.from, messageId: id, room: myRoom || activeKey, preview: (bubble && bubble.textContent ? bubble.textContent.trim() : "") }), true);
@@ -5624,9 +5651,10 @@ function stopRecViz() {
   b.addEventListener("click", () => {
     if (Date.now() - lastPointerAt < 450) return;   // this click is the tail of a press we handled
     if (recState !== "idle") { stopRec(true); return; }
-    if (!isMicMode()) { sendText(); return; }
+    if (!isMicMode()) { sendText(); const mi = $("msgInput"); if (mi && matchMedia("(pointer: coarse)").matches) mi.focus(); return; }
     recLocked = true; startRec();                    // keyboard / assistive "click" → hands-free
   });
+  b.addEventListener("mousedown", (e) => { if (!isMicMode()) e.preventDefault(); });   // tapping send must not blur the box (keeps the phone keyboard up)
   b.addEventListener("contextmenu", (e) => { if (recState !== "idle" || isMicMode()) e.preventDefault(); });   // long-press menu on phones
   if (rc) rc.onclick = cancelRec;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && recState !== "idle") cancelRec(); });
@@ -9064,12 +9092,22 @@ $("contactsBtn").onclick = () => openSettings("contacts", true);
 // навешиваем Enter/Space-активацию для клавиатурной навигации. Сам onclick переживает ре-рендер
 // содержимого в setMyAvatar() (там меняется только innerHTML, сам узел и его листенеры остаются).
 function openMyProfile() { openMiniProfile(profile.login); }   // your own card (Edit profile is one click away)
-$("myAvatar").onclick = openMyProfile;
-$("myName").onclick = openMyProfile;
+function openMyMenu(anchor) {
+  const old = $("myMenu"); if (old) { old.remove(); return; }
+  const m = document.createElement("div"); m.id = "myMenu"; m.className = "msg-menu"; m.style.position = "fixed"; m.style.zIndex = 400;
+  const add = (icon, label, fn) => { const b = document.createElement("button"); b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { m.remove(); fn(); }; m.appendChild(b); };
+  add("user", t("info_profile"), openMyProfile); add("settings", t("settings"), () => openSettings("profile"));
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = zpos(Math.max(8, Math.min(r.left, innerWidth - zw(m) - 8))) + "px"; m.style.top = zpos(r.bottom + 6) + "px";
+  setTimeout(() => document.addEventListener("pointerdown", function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener("pointerdown", off, true); } }, true), 0);
+}
+$("myAvatar").onclick = () => openMyMenu($("myAvatar"));
+$("myName").onclick = () => openMyMenu($("myName"));
 ["myAvatar", "myName"].forEach((id) => {
   const el = $(id); if (!el) return;
   el.onkeydown = (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMyProfile(); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMyMenu(el); }
   };
 });
 // Табы / закрытие оверлея

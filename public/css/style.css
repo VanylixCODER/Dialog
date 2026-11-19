@@ -7355,3 +7355,6 @@ body.has-mcbar .app .cl-head { padding-top: 12px; }
 body.has-mcbar .app > .chat, body.has-mcbar .app > .chatlist {
   height: calc(100dvh / var(--zf, 1) - 52px - env(safe-area-inset-top, 0px)); max-height: calc(100dvh / var(--zf, 1) - 52px - env(safe-area-inset-top, 0px)); }
 body.has-mcbar #voiceBar { display: none; }   /* the top bar replaces the in-list one on phones */
+.react-picker .rp-more { font-size: 15px; opacity: .8; } .react-picker .rp-more svg { width: 18px; height: 18px; }
+.react-picker.full { padding: 8px; }
+.react-picker .rp-all { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: min(340px, calc(100vw / var(--zf, 1) - 24px)); max-height: 240px; overflow-y: auto; }
