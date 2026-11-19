@@ -5789,6 +5789,9 @@ function openPicker(mode) {
 }
 function toggleEmoji(e) { if (e) e.stopPropagation(); openPicker(); }
 $("emojiBtn").onclick = toggleEmoji;
+// Keep the phone keyboard up: pressing the emoji button or anything inside the picker must not
+// pull focus off the message box.
+[$("emojiBtn"), picker].forEach((el) => el && el.addEventListener("mousedown", (e) => { if (!e.target.closest("input, textarea")) e.preventDefault(); }));
 picker.querySelectorAll(".ep-mode").forEach((b) => {
   b.onclick = (e) => { e.stopPropagation(); setPickerMode(b.dataset.mode); };
 });
