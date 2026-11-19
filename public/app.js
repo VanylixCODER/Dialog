@@ -9094,7 +9094,7 @@ $("contactsBtn").onclick = () => openSettings("contacts", true);
 function openMyProfile() { openMiniProfile(profile.login); }   // your own card (Edit profile is one click away)
 function openMyMenu(anchor) {
   const old = $("myMenu"); if (old) { old.remove(); return; }
-  const m = document.createElement("div"); m.id = "myMenu"; m.className = "msg-menu"; m.style.position = "fixed"; m.style.zIndex = 400;
+  const m = document.createElement("div"); m.id = "myMenu"; m.className = "chat-menu row-menu";
   const add = (icon, label, fn) => { const b = document.createElement("button"); b.innerHTML = (window.ICON[icon] || "") + "<span>" + label + "</span>"; b.onclick = () => { m.remove(); fn(); }; m.appendChild(b); };
   add("user", t("info_profile"), openMyProfile); add("settings", t("settings"), () => openSettings("profile"));
   document.body.appendChild(m);
