@@ -886,7 +886,7 @@ function playAuthSuccess() {
   termBusy = true;
   const log = $("termLog");
   const done = () => { termBusy = false; enterApp(); };
-  if (!log) { done(); return; }
+  if (!log || isMobile()) { done(); return; }   // phones skip the terminal cutscene and go straight in
   const who = (activeAuthForm().elements.login || {}).value || (authMode === "register" ? "newuser" : "guest");
   const head = authMode === "register"
     ? "~$: creating account " + who + " …\n~$: keypair generated · stored locally"
