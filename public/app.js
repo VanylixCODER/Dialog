@@ -5751,14 +5751,20 @@ lbImg.addEventListener("pointerup", lbUp); lbImg.addEventListener("pointercancel
 
 // ---------- Эмодзи-пикер ----------
 const picker = $("emojiPicker");
+let recentEmoji = []; try { recentEmoji = JSON.parse(localStorage.getItem("dialog_recent_emoji") || "[]") || []; } catch {}
+const RECENT_DEFAULT = ["❤️‍🔥", "😂", "❤️", "👍", "🔥", "😍", "🥹", "🎉", "😭", "🙏", "😎", "💀"];
 function buildEmoji() {
   const tabs = $("emojiTabs"), grid = $("emojiGrid"); tabs.innerHTML = ""; grid.innerHTML = "";
-  const cats = Object.keys(window.EMOJI);
-  const show = (cat) => { grid.innerHTML = ""; window.EMOJI[cat].forEach((em) => { const b = document.createElement("button"); b.textContent = em; b.onclick = () => insertEmoji(em); grid.appendChild(b); }); [...tabs.children].forEach((c) => c.classList.toggle("active", c.dataset.cat === cat)); };
+  // "🕒" = recently used (falls back to a few favourites, ❤️‍🔥 first, until you've used some).
+  const E = { "🕒": [...recentEmoji, ...RECENT_DEFAULT.filter((e) => !recentEmoji.includes(e))].slice(0, 32), ...window.EMOJI };
+  const cats = Object.keys(E);
+  const show = (cat) => { grid.innerHTML = ""; E[cat].forEach((em) => { const b = document.createElement("button"); b.textContent = em; b.onclick = () => insertEmoji(em); grid.appendChild(b); }); [...tabs.children].forEach((c) => c.classList.toggle("active", c.dataset.cat === cat)); };
   cats.forEach((cat) => { const b = document.createElement("button"); b.textContent = cat; b.dataset.cat = cat; b.onclick = () => show(cat); tabs.appendChild(b); });
   show(cats[0]);
 }
-function insertEmoji(em) { const i = $("msgInput"); const s = i.selectionStart || i.value.length; i.value = i.value.slice(0, s) + em + i.value.slice(i.selectionEnd || s); i.focus(); }
+function insertEmoji(em) {
+  recentEmoji = [em, ...recentEmoji.filter((x) => x !== em)].slice(0, 32); try { localStorage.setItem("dialog_recent_emoji", JSON.stringify(recentEmoji)); } catch {}
+  const i = $("msgInput"); const s = i.selectionStart || i.value.length; i.value = i.value.slice(0, s) + em + i.value.slice(i.selectionEnd || s); i.focus(); }
 
 // The picker holds both emoji and stickers behind a switcher at the top, so the
 // composer keeps one button for "things you drop into a message that aren't files".
@@ -5775,7 +5781,7 @@ let pickerMode = "emoji";
 // picker's own switcher forces a side.
 function openPicker(mode) {
   $("gifPanel").classList.add("hidden");
-  if (!picker.dataset.built) { buildEmoji(); picker.dataset.built = "1"; }
+  if (!picker.dataset.built || picker.classList.contains("hidden")) { buildEmoji(); picker.dataset.built = "1"; }   // rebuilt on open so Recent is current
   const wasHidden = picker.classList.contains("hidden");
   if (mode && !wasHidden && mode !== pickerMode) { setPickerMode(mode); return; }  // switch, don't close
   picker.classList.toggle("hidden");
@@ -5805,7 +5811,12 @@ document.addEventListener("click", (e) => { if (!gifPanel.contains(e.target) && 
 // message with type "sticker"; the panel below is just a launcher. Favourites are
 // keyed by media URL, so you can star one somebody else sent you.
 let stickers = { mine: [], favs: [] };   // cache, refreshed when the tab opens
-let stickerTab = "favs";
+let stickerTab = "recent";
+let recentStk = []; try { recentStk = JSON.parse(localStorage.getItem("dialog_recent_stk") || "[]") || []; } catch {}
+function pushRecentSticker(s) {
+  recentStk = [{ media: s.media, name: s.name || "" }, ...recentStk.filter((x) => x.media !== s.media)].slice(0, 16);
+  try { localStorage.setItem("dialog_recent_stk", JSON.stringify(recentStk)); } catch { recentStk = recentStk.slice(0, 4); try { localStorage.setItem("dialog_recent_stk", JSON.stringify(recentStk)); } catch {} }
+}
 
 function isFavSticker(media) { return stickers.favs.some((s) => s.media === media); }
 
@@ -5817,11 +5828,11 @@ async function loadStickers() {
 
 function renderStickers() {
   const grid = $("stickerGrid"), note = $("stickerNote");
-  const list = stickerTab === "mine" ? stickers.mine : stickers.favs;
+  const list = stickerTab === "mine" ? stickers.mine : stickerTab === "recent" ? recentStk : stickers.favs;
   picker.querySelectorAll(".stk-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === stickerTab));
   grid.innerHTML = "";
   if (!list.length) {
-    note.textContent = t(stickerTab === "mine" ? "stk_none_mine" : "stk_none_favs");
+    note.textContent = t(stickerTab === "mine" ? "stk_none_mine" : stickerTab === "recent" ? "stk_none_recent" : "stk_none_favs");
     note.classList.remove("hidden");
     return;
   }
@@ -5864,6 +5875,7 @@ function renderStickers() {
 }
 
 function sendSticker(s) {
+  if (myRoom) pushRecentSticker(s);
   // Close either way — leaving the panel open on a no-op chat reads as a broken tap.
   if (myRoom) socket.emit("message", { type: "sticker", media: s.media, mediaName: s.name || "sticker" });
   picker.classList.add("hidden");
