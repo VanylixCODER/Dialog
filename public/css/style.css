@@ -6082,7 +6082,7 @@ body.motion-off #chatPane.anim-close #emptyState { animation: none; }
   font-size: 17px; color: var(--text-dim); opacity: 0.45; pointer-events: none;
 }
 .msg[data-swipe="reply"]::before { content: "↩"; right: -30px; }
-.msg[data-swipe="forward"]::before { content: "↪"; left: -30px; }
+.msg[data-swipe="reply-r"]::before { content: "↩"; left: -30px; }
 .msg.swipe-armed::before { opacity: 1; color: var(--accent-300); }
 
 /* ---- Image editor ---- */

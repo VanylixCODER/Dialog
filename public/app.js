@@ -4288,7 +4288,7 @@ $("replyCancel") && ($("replyCancel").onclick = clearReply);
     // Resist past the trigger so the travel stays small and the intent stays legible.
     sw.dx = Math.abs(dx) > TRIGGER ? Math.sign(dx) * (TRIGGER + (Math.abs(dx) - TRIGGER) * 0.25) : dx;
     sw.wrap.style.transform = `translateX(${sw.dx}px)`;
-    sw.wrap.dataset.swipe = "reply";
+    sw.wrap.dataset.swipe = sw.dx < 0 ? "reply" : "reply-r";
     sw.wrap.classList.toggle("swipe-armed", Math.abs(sw.dx) >= TRIGGER);
   }, { passive: false });
   const end = () => {
