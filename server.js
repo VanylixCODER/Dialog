@@ -1561,11 +1561,21 @@ app.post("/api/presence", async (req, res) => {
 
 // ---------- REST: ICE (STUN + TURN от Metered) ----------
 let cachedIce = null, iceExp = 0;
+// Our own coturn relay (docker-compose.prod.yml): TCP on port 80. Credentials are the standard
+// TURN REST scheme — username "<expiry>:<random>", password HMAC-SHA1(TURN_SECRET, username) —
+// so they expire on their own and nothing is stored.
+function ownTurn() {
+  const secret = process.env.TURN_SECRET; if (!secret) return [];
+  const user = (Math.floor(Date.now() / 1000) + 6 * 3600) + ":" + crypto.randomBytes(6).toString("hex");
+  const cred = crypto.createHmac("sha1", secret).update(user).digest("base64");
+  return [{ urls: ["turn:" + new URL(APP_ORIGIN).hostname + ":80?transport=tcp"], username: user, credential: cred }];
+}
 app.get("/api/ice", async (req, res) => {
   // Auth-gated: these are real TURN relay credentials. Unauthenticated, anyone
   // could pull them and use the relay's bandwidth on your dime.
   if (!(await authUser(req))) return res.status(401).json({ error: "unauth" });
-  if (cachedIce && Date.now() < iceExp) return res.json(cachedIce);
+  const own = ownTurn(); const withOwn = (c) => ({ iceServers: [...own, ...c.iceServers] });
+  if (cachedIce && Date.now() < iceExp) return res.json(withOwn(cachedIce));
   let servers = [];
   // Cloudflare Realtime TURN (free, 1 TB/month, works on 443/TCP+TLS so strict networks can't block it).
   // Needs CF_TURN_KEY_ID + CF_TURN_API_TOKEN from dash.cloudflare.com → Realtime → TURN.
@@ -1594,7 +1604,7 @@ app.get("/api/ice", async (req, res) => {
     if (process.env.TURN_URL) servers.push({ urls: process.env.TURN_URL, username: process.env.TURN_USER || "", credential: process.env.TURN_PASS || "" });
   }
   cachedIce = { iceServers: servers }; iceExp = Date.now() + 1800e3;   // short, so a fixed/rotated relay is picked up quickly
-  res.json(cachedIce);
+  res.json(withOwn(cachedIce));
 });
 
 // ---------- REST: GIPHY-прокси ----------

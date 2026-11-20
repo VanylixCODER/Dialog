@@ -1,3 +1,8 @@
+{
+	# Port 80 is the TURN relay's; Caddy keeps an internal-only HTTP port (certs renew over TLS-ALPN on 443).
+	http_port 8080
+}
+
 dialogmsg.xyz {
 	reverse_proxy app:3000
 	# While the app is down or restarting (deploys!), show our own page instead of a blank error.

@@ -24,14 +24,30 @@ services:
     container_name: dialog-caddy
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "443:443"          # port 80 now belongs to the TURN relay (see coturn below)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./public/errors:/srv/errors:ro
       - dialog-caddy-data:/data
     depends_on:
       - app
+
+  # Own TURN relay, so calls between networks that block direct connections still work — free,
+  # no quota, no third party. It listens on TCP 80 (already open on the host's cloud firewall,
+  # unlike 3478/UDP ranges), and both callers connect to it over TCP; the relay passes the media
+  # between them inside this container. Credentials are short-lived HMACs made by the app
+  # (TURN_SECRET in .env). It sits on its own network so it can't reach mysql/redis.
+  coturn:
+    image: coturn/coturn:latest
+    container_name: dialog-coturn
+    restart: unless-stopped
+    ports:
+      - "80:3478/tcp"
+    networks: [turnnet]
+    command: >
+      -n --log-file=stdout --no-tls --no-udp --listening-port=3478 --realm=dialogmsg.xyz
+      --use-auth-secret --static-auth-secret=${TURN_SECRET} --fingerprint --no-multicast-peers
+      --user-quota=8 --total-quota=300 --no-tcp-relay
 
   mysql:
     image: mysql:8
@@ -82,3 +98,6 @@ volumes:
   dialog-redis-data:
   dialog-certs:
   dialog-caddy-data:
+
+networks:
+  turnnet: {}
