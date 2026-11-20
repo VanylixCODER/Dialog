@@ -1567,16 +1567,25 @@ app.get("/api/ice", async (req, res) => {
   if (!(await authUser(req))) return res.status(401).json({ error: "unauth" });
   if (cachedIce && Date.now() < iceExp) return res.json(cachedIce);
   let servers = [];
+  // Cloudflare Realtime TURN (free, 1 TB/month, works on 443/TCP+TLS so strict networks can't block it).
+  // Needs CF_TURN_KEY_ID + CF_TURN_API_TOKEN from dash.cloudflare.com → Realtime → TURN.
+  if (process.env.CF_TURN_KEY_ID && process.env.CF_TURN_API_TOKEN) {
+    try {
+      const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${process.env.CF_TURN_KEY_ID}/credentials/generate-ice-servers`, {
+        method: "POST", headers: { Authorization: "Bearer " + process.env.CF_TURN_API_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ ttl: 86400 }),
+      });
+      const j = await r.json();
+      if (r.ok && Array.isArray(j.iceServers)) servers.push(...j.iceServers);
+      else console.error("cloudflare turn", r.status, JSON.stringify(j).slice(0, 200));
+    } catch (e) { console.error("cloudflare turn", e.message); }
+  }
   const mk = process.env.METERED_API_KEY;
   if (mk) {
     try {
       const r = await fetch(`https://dialogs.metered.live/api/v1/turn/credentials?apiKey=${mk}`);
       const creds = await r.json();
       if (Array.isArray(creds)) {
-        const stun = creds.find((c) => c.urls?.startsWith("stun:"));
-        const udp = creds.find((c) => c.urls?.startsWith("turn:") && !c.urls.includes("transport=tcp"));
-        const tls = creds.find((c) => c.urls?.startsWith("turns:"));
-        [stun, udp, tls].forEach((c) => c && servers.push(c));
+        servers.push(...creds.filter((c) => /^(stun|turn|turns):/.test(c.urls || "")));
       }
     } catch (e) { console.error("metered", e.message); }
   }
@@ -1584,7 +1593,7 @@ app.get("/api/ice", async (req, res) => {
     servers = [{ urls: "stun:stun.l.google.com:19302" }];
     if (process.env.TURN_URL) servers.push({ urls: process.env.TURN_URL, username: process.env.TURN_USER || "", credential: process.env.TURN_PASS || "" });
   }
-  cachedIce = { iceServers: servers }; iceExp = Date.now() + 3600e3;
+  cachedIce = { iceServers: servers }; iceExp = Date.now() + 1800e3;   // short, so a fixed/rotated relay is picked up quickly
   res.json(cachedIce);
 });
 
