@@ -30,7 +30,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # The runner image ships the Android SDK. android-actions/setup-android started failing
+      # ("Failed to find package 'tools'") against its newer sdkmanager, so use the preinstalled
+      # SDK and just accept the licenses so Gradle can fetch the platform it needs.
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager --licenses > /dev/null || true
 
       # google-services.json is gitignored (secret), so materialise it from the repo
       # secret — the google-services Gradle plugin fails the build without it.
