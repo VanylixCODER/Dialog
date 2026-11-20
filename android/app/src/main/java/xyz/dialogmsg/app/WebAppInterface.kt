@@ -60,6 +60,62 @@ class WebAppInterface(
         } catch (_: Exception) { /* Firebase not configured — push simply stays off */ }
     }
 
+    // ---- In-app updates ----
+    // The installed version, so the page can compare it with the latest release.
+    @JavascriptInterface
+    fun appVersion(): String = BuildConfig.VERSION_NAME
+
+    // Download the new APK (only from our own GitHub releases) and open the system installer.
+    // Progress and the outcome go back to the page via window.__dialogUpdate(state, pct).
+    @JavascriptInterface
+    fun installUpdate(url: String) {
+        if (!url.startsWith("https://github.com/VanylixCODER/Dialog/releases/download/")) {
+            MainActivity.evalJs("window.__dialogUpdate && window.__dialogUpdate('error', 0)"); return
+        }
+        // Android asks for "install unknown apps" once per app — send the user to that switch first.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+            runCatching {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + context.packageName))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            MainActivity.evalJs("window.__dialogUpdate && window.__dialogUpdate('needperm', 0)"); return
+        }
+        Thread {
+            try {
+                val dir = java.io.File(context.cacheDir, "updates").apply { mkdirs() }
+                val file = java.io.File(dir, "dialog-update.apk")
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 15000; conn.readTimeout = 30000; conn.instanceFollowRedirects = true
+                val total = conn.contentLengthLong
+                var done = 0L; var last = -1
+                conn.inputStream.use { input ->
+                    file.outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf); if (n < 0) break
+                            out.write(buf, 0, n); done += n
+                            if (total > 0) {
+                                val pct = (done * 100 / total).toInt()
+                                if (pct != last) { last = pct; MainActivity.evalJs("window.__dialogUpdate && window.__dialogUpdate('downloading', $pct)") }
+                            }
+                        }
+                    }
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                val install = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(install)
+                MainActivity.evalJs("window.__dialogUpdate && window.__dialogUpdate('installing', 100)")
+            } catch (e: Exception) {
+                MainActivity.evalJs("window.__dialogUpdate && window.__dialogUpdate('error', 0)")
+            }
+        }.start()
+    }
+
     @JavascriptInterface
     fun notify(title: String, body: String, chatId: String) {
         notifications.show(title, body, chatId)

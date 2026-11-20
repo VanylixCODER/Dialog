@@ -7398,3 +7398,14 @@ body.has-mcbar #voiceBar { display: none; }   /* the top bar replaces the in-lis
 .pip-name { font: 600 clamp(11px, 5vmin, 15px) Inter, sans-serif; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pip-time { font: 500 clamp(10px, 4vmin, 12px) "IBM Plex Mono", monospace; color: #98a29c; font-variant-numeric: tabular-nums; }
 body.pip-mode > *:not(#pipOverlay) { visibility: hidden; }
+
+/* New-version prompt */
+.upd-card { width: min(340px, calc(92vw / var(--zf, 1))); align-items: center; text-align: center; gap: 8px; }
+.upd-ico { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-faint); color: var(--accent-300); margin-bottom: 4px; }
+.upd-ico svg { width: 26px; height: 26px; }
+.upd-sub { font-size: 13.5px; color: var(--text-dim); margin-bottom: 6px; }
+.upd-bar { width: 100%; height: 6px; border-radius: 6px; background: var(--bg-3); overflow: hidden; margin-bottom: 6px; }
+.upd-bar.hidden { display: none; }
+.upd-bar i { display: block; height: 100%; width: 0; background: var(--accent-400); transition: width .2s linear; }
+.upd-acts { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.upd-acts button { width: 100%; height: 44px; }

@@ -1186,7 +1186,7 @@ function enterApp() {
   loadDevicePrefs();
   loadStoredChats(); loadGroups(); loadRelations(); renderChatList();
   refreshPresence(); // начальный снимок присутствия для DM/друзей; дальше клиент держится за socket «presence» ивенты — 25-сек poll убран, иначе он ре-фетчил /api/avatar моей авы в холодном HTTP-кеше (см. updateDots ниже).
-  initPush(); requestMediaPermissions(); syncPushPrefs();
+  initPush(); requestMediaPermissions(); syncPushPrefs(); setTimeout(checkForUpdate, 4000);
   setTimeout(maybeShowEmailNag, 1200); // gentle email reminder after the app settles
   // Если пользователь пришёл по ?invite= ссылке (код лежит в sessionStorage), redeem'им сейчас —
   // это первая пост-логин точка где есть валидный Authorization для /api/groups/redeem.
@@ -6994,6 +6994,37 @@ function endCall() {
   try { window.dispatchEvent(new CustomEvent("dialog-call-ended")); } catch {}
   stopPing();
 }
+// ---- In-app update prompt (Android app) ----
+// On launch (and every 3 hours while the app stays open) compare the installed version with the
+// latest release. "Not now" just closes it — it comes back next time, so it keeps reminding.
+const verParts = (v) => String(v || "0").split(".").map((n) => parseInt(n, 10) || 0);
+const verNewer = (a, b) => { const x = verParts(a), y = verParts(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+let updInfo = null, updBusy = false;
+async function checkForUpdate() {
+  if (!(NATIVE && NATIVE.appVersion && NATIVE.installUpdate) || updBusy || !token) return;
+  let cur = ""; try { cur = String(NATIVE.appVersion()); } catch { return; }
+  try {
+    const r = await fetch("/api/app-version", { cache: "no-store" }); const j = await r.json();
+    if (!j.version || !j.apk || !verNewer(j.version, cur)) return;
+    updInfo = { ...j, cur }; showUpdatePrompt();
+  } catch {}
+}
+function showUpdatePrompt() {
+  if (!updInfo) return;
+  $("updIco").innerHTML = window.ICON.download || "⤓";
+  $("updSub").textContent = t("upd_sub", { v: updInfo.version, cur: updInfo.cur });
+  $("updBar").classList.add("hidden"); $("updYes").disabled = false;
+}
+window.__dialogUpdate = function (state, pct) {
+  const sub = $("updSub"), bar = $("updBar");
+  if (state === "downloading") { updBusy = true; $("updYes").disabled = true; bar.classList.remove("hidden"); $("updFill").style.width = pct + "%"; sub.textContent = t("upd_downloading", { p: pct }); }
+  else if (state === "installing") { sub.textContent = t("upd_installing"); setTimeout(() => { updBusy = false; $("updYes").disabled = false; }, 4000); }
+  else if (state === "needperm") { updBusy = false; sub.textContent = t("upd_perm"); }
+  else { updBusy = false; $("updYes").disabled = false; bar.classList.add("hidden"); sub.textContent = t("upd_error"); }
+};
+$("updYes") && ($("updYes").onclick = () => { if (updInfo && !updBusy) { try { NATIVE.installUpdate(updInfo.apk); } catch { window.__dialogUpdate("error", 0); } } });
+$("updNo") && ($("updNo").onclick = () => { if (!updBusy) $("updateModal").classList.add("hidden"); });
+setInterval(() => { if ($("updateModal").classList.contains("hidden")) checkForUpdate(); }, 3 * 3600000);
 // ---- Picture-in-Picture (Android) ----
 // A tiny window can't hold the chat UI, so the page swaps to #pipOverlay: the other person's
 // video (or their avatar when the camera is off), their name and the call time. No buttons.

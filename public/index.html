@@ -856,6 +856,19 @@
     <div class="pip-ava" id="pipAva"></div>
     <div class="pip-meta"><span class="pip-name" id="pipName"></span><span class="pip-time" id="pipTime">00:00</span></div>
   </div>
+  <!-- New version prompt (Android app). -->
+  <div id="updateModal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="updTitle">
+    <div class="modal-card upd-card">
+      <div class="upd-ico" id="updIco"></div>
+      <div class="modal-title" id="updTitle" data-i18n="upd_title">A new version of Dialog is out</div>
+      <div class="upd-sub" id="updSub"></div>
+      <div class="upd-bar hidden" id="updBar"><i id="updFill"></i></div>
+      <div class="upd-acts">
+        <button type="button" class="btn-primary" id="updYes" data-i18n="upd_yes">Update now</button>
+        <button type="button" class="btn-ghost" id="updNo" data-i18n="upd_no">Not now</button>
+      </div>
+    </div>
+  </div>
   <div id="callToast" class="call-incoming hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
     <div class="ci-card">

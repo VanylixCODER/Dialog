@@ -1661,6 +1661,21 @@ app.get("/api/livekit/token", async (req, res) => {
 // ---------- REST: Web Push ----------
 // "Decline" pressed on a call notification (service worker → no socket): stop ringing everywhere
 // and, in a 1-to-1 call, tell the caller.
+// Latest published release, for the in-app "new version" prompt (Android app). Cached; the
+// browser can't ask GitHub itself (CSP), so the server does.
+let _relCache = { at: 0, data: null };
+app.get("/api/app-version", async (_req, res) => {
+  try {
+    if (!_relCache.data || Date.now() - _relCache.at > 10 * 60000) {
+      const r = await fetch("https://api.github.com/repos/VanylixCODER/Dialog/releases/latest", { headers: { "User-Agent": "dialog-server", Accept: "application/vnd.github+json" } });
+      if (r.ok) {
+        const j = await r.json(), apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name));
+        _relCache = { at: Date.now(), data: { version: String(j.tag_name || "").replace(/^v/, ""), apk: apk ? apk.browser_download_url : "", notes: String(j.body || "").slice(0, 600) } };
+      }
+    }
+    res.set("Cache-Control", "no-store").json(_relCache.data || { version: "", apk: "" });
+  } catch { res.json({ version: "", apk: "" }); }
+});
 app.post("/api/call/decline", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
