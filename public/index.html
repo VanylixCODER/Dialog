@@ -850,6 +850,12 @@
     </div>
   </div>
 
+  <!-- Android Picture-in-Picture: the whole app is swapped for this while the window is tiny. -->
+  <div id="pipOverlay" class="pip-overlay hidden" aria-hidden="true">
+    <video id="pipVideo" autoplay playsinline muted></video>
+    <div class="pip-ava" id="pipAva"></div>
+    <div class="pip-meta"><span class="pip-name" id="pipName"></span><span class="pip-time" id="pipTime">00:00</span></div>
+  </div>
   <div id="callToast" class="call-incoming hidden">
     <canvas id="cavaCanvas" class="cava"></canvas>
     <div class="ci-card">

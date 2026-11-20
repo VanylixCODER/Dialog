@@ -7385,3 +7385,16 @@ body.has-mcbar #voiceBar { display: none; }   /* the top bar replaces the in-lis
   .emoji-picker { left: 0; right: 0; width: auto; border-radius: calc(16px * var(--rk)) calc(16px * var(--rk)) 0 0; height: min(42vh, 340px); }
   .emoji-grid button { font-size: 28px; }
 }
+
+/* ===== Android Picture-in-Picture: just the caller, name and time ===== */
+.pip-overlay { position: fixed; inset: 0; z-index: 2147483000; background: #0b0f0c; display: grid; place-items: center; overflow: hidden; }
+.pip-overlay.hidden { display: none; }
+.pip-overlay video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pip-ava { position: relative; width: 42vmin; height: 42vmin; max-width: 160px; max-height: 160px; display: grid; place-items: center; overflow: hidden;
+  border-radius: 24%; background: #111614; border: 1px solid #00ff5a; color: #00ff5a; font: 600 16vmin/1 Inter, sans-serif; }
+.pip-ava img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pip-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, .65), transparent); color: #fff; text-align: center; }
+.pip-name { font: 600 clamp(11px, 5vmin, 15px) Inter, sans-serif; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pip-time { font: 500 clamp(10px, 4vmin, 12px) "IBM Plex Mono", monospace; color: #98a29c; font-variant-numeric: tabular-nums; }
+body.pip-mode > *:not(#pipOverlay) { visibility: hidden; }

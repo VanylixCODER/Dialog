@@ -7,7 +7,7 @@ self.addEventListener("push", (event) => {
   const isCall = data.kind === "call";
   const opts = {
     body: data.body || "", icon: data.icon || "/src/lil_dialog.webp", badge: "/src/lil_dialog.webp",
-    tag: (isCall ? "call:" : "msg:") + (data.room || ""), renotify: true,
+    tag: (isCall ? "call:" : data.kind === "msg" || !data.kind ? "msg:" : data.kind + ":") + (data.room || data.title || ""), renotify: true,
     requireInteraction: isCall, vibrate: isCall ? [400, 200, 400, 200, 400] : [120],
     actions: isCall ? (/^ru/i.test(self.navigator.language || "") ? [{ action: "accept", title: "Принять" }, { action: "decline", title: "Отклонить" }] : [{ action: "accept", title: "Answer" }, { action: "decline", title: "Decline" }]) : [],
     data: { room: data.room || "", kind: data.kind || "msg" },
@@ -21,8 +21,8 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  if (event.action === "decline") return;
   const d = event.notification.data || {}, autojoin = d.kind === "call";
+  if (event.action === "decline") { event.waitUntil(fetch("/api/call/decline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: d.room }) }).catch(() => {})); return; }
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const c of all) if ("focus" in c) { c.postMessage({ type: "open-room", room: d.room, autojoin }); return c.focus(); }

@@ -6994,6 +6994,28 @@ function endCall() {
   try { window.dispatchEvent(new CustomEvent("dialog-call-ended")); } catch {}
   stopPing();
 }
+// ---- Picture-in-Picture (Android) ----
+// A tiny window can't hold the chat UI, so the page swaps to #pipOverlay: the other person's
+// video (or their avatar when the camera is off), their name and the call time. No buttons.
+let _pipT = 0;
+window.__dialogPip = function (on) {
+  const ov = $("pipOverlay"); if (!ov) return;
+  clearInterval(_pipT);
+  if (!on || !call.active) { ov.classList.add("hidden"); document.body.classList.remove("pip-mode"); const v = $("pipVideo"); if (v) v.srcObject = null; return; }
+  const tiles = [...vGrid.querySelectorAll(".tile:not(.me):not(.tile-leaving)")];
+  const tile = tiles.find((x) => x.classList.contains("screen")) || tiles.find((x) => !x.classList.contains("show-avatar")) || tiles[0];
+  const vid = $("pipVideo"), src = tile && tile.querySelector("video");
+  const hasVideo = !!(tile && !tile.classList.contains("show-avatar") && src && src.srcObject);
+  vid.srcObject = hasVideo ? src.srcObject : null; if (hasVideo) vid.play().catch(() => {});
+  vid.style.display = hasVideo ? "block" : "none";
+  const login = tile ? (tile.dataset.identity || "") : "", name = (tile && tile.querySelector(".tile-name")?.textContent.trim()) || call.roomTitle || "";
+  $("pipAva").style.display = hasVideo ? "none" : "grid";
+  $("pipAva").innerHTML = (login ? `<img src="${avaUrl(login)}" data-fallback="remove">` : "") + `<span>${escapeHtml(initials(name))}</span>`;
+  $("pipName").textContent = name;
+  const tick = () => { const s = Math.floor((Date.now() - (_callStart || Date.now())) / 1000); $("pipTime").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+  tick(); _pipT = setInterval(tick, 1000);
+  document.body.classList.add("pip-mode"); ov.classList.remove("hidden");
+};
 // ---- Mobile call header: live duration timer ----
 let _callTimer = null, _callStart = 0;
 function startCallTimer() {
@@ -8390,7 +8412,7 @@ function syncPushPrefs() {
     if (!token || !profile) return;
     const now = Date.now(), muted = {};
     for (const [r, u] of Object.entries(mutedMap())) if (!u || u > now) muted[r] = u;
-    api("/api/push/prefs", { muted, dm: NT.dm !== false, group: NT.group !== false, mention: NT.mention !== false, call: NT.call !== false, preview: NT.preview !== false,
+    api("/api/push/prefs", { muted, dm: NT.dm !== false, group: NT.group !== false, mention: NT.mention !== false, call: NT.call !== false, friend: NT.friend !== false, invite: NT.invite !== false, preview: NT.preview !== false,
       quiet: { on: !!NT.quiet, from: NT.quietFrom, to: NT.quietTo, tz: new Date().getTimezoneOffset() } }).catch(() => {});
   }, 800);
 }

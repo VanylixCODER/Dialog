@@ -51,10 +51,17 @@ class MainActivity : AppCompatActivity() {
         if (isCallActive() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             runCatching {
                 enterPictureInPictureMode(
-                    PictureInPictureParams.Builder().setAspectRatio(Rational(3, 4)).build()
+                    PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16)).build()
                 )
             }
         }
+    }
+
+    // In the little PiP window the page swaps its whole UI for a clean view (caller video or
+    // avatar, name, time — no buttons); see window.__dialogPip in app.js.
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        evalJs("window.__dialogPip && window.__dialogPip(" + isInPictureInPictureMode + ")")
     }
 
     private val main = Handler(Looper.getMainLooper())

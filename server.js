@@ -135,6 +135,8 @@ async function prefsFor(login) {
 function pushAllowed(p, payload) {
   if (payload.kind === "call") return p.call !== false && !inQuiet(p);
   if (inQuiet(p)) return false;
+  if (payload.kind === "friend") return p.friend !== false;
+  if (payload.kind === "invite") return p.invite !== false;
   const isGroup = String(payload.room || "").startsWith("@grp:");
   if (payload.mention) return p.mention !== false;                 // mentions ping through a mute
   if (isGroup ? p.group === false : p.dm === false) return false;
@@ -1019,6 +1021,7 @@ app.post("/api/groups/:id/members", async (req, res) => {
         id: reqId, groupId: Number(id), groupName: g ? g.name : "", channel: !!(g && g.channel),
         fromLogin: me.login, fromName: me.name,
       });
+      sendPush(login, { kind: "invite", title: g ? g.name : "Group invite", body: me.name + " invited you to " + ((g && g.channel) ? "a channel" : "a group"), room: "", icon: `${APP_ORIGIN}/api/group-avatar/${id}` });
     }
     if (blocked.length && !logins.length) { res.json({ ok: false, error: "add_blocked", blocked }); return; }
     req._blockedAdds = blocked;
@@ -1276,8 +1279,9 @@ app.post("/api/friend", async (req, res) => {
     // Bots skip the privacy gate and auto-accept (handled in sendFriendRequest).
     if (!(await isBot(target)) && !(await canFriendRequest(me.login, target))) return res.status(403).json({ error: "req_blocked" });
     await sendFriendRequest(me.login, target);
+    if (!(await isBot(target))) sendPush(target, { kind: "friend", title: me.name, body: "wants to be your friend", room: "", icon: `${APP_ORIGIN}/api/avatar/${me.login}` });
   }
-  else if (action === "accept") await acceptFriend(me.login, target);
+  else if (action === "accept") { await acceptFriend(me.login, target); sendPush(target, { kind: "friend", title: me.name, body: "accepted your friend request", room: "", icon: `${APP_ORIGIN}/api/avatar/${me.login}` }); }
   else if (action === "decline") await declineFriend(me.login, target);
   else if (action === "remove") await removeFriend(me.login, target);
   // Take back a request you sent (the row is keyed the other way round from "decline").
@@ -1655,11 +1659,27 @@ app.get("/api/livekit/token", async (req, res) => {
 });
 
 // ---------- REST: Web Push ----------
+// "Decline" pressed on a call notification (service worker → no socket): stop ringing everywhere
+// and, in a 1-to-1 call, tell the caller.
+app.post("/api/call/decline", async (req, res) => {
+  try {
+    const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
+    const room = String(req.body && req.body.room || "");
+    if (!(await canAccessRoom(me.login, room))) return res.status(403).json({ error: "forbidden" });
+    cancelRing(me.login, room);
+    const meta = callMeta.get(room), c = callRooms.get(room);
+    if (meta && !meta.answered && c && room.startsWith("@dm:")) {
+      clearTimeout(meta.ringTimer); meta.ringTimer = null; meta.declined = true;
+      for (const [sid, info] of c) if (info.login !== me.login) io.to(sid).emit("call-declined", { room, login: me.login, name: me.name });
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error("call decline", e.message); res.status(500).json({ error: "server error" }); }
+});
 app.post("/api/push/prefs", async (req, res) => {
   try {
     const me = await authUser(req); if (!me) return res.status(401).json({ error: "unauth" });
     const b = req.body || {}, out = { muted: {}, quiet: null };
-    for (const k of ["dm", "group", "mention", "call", "preview"]) if (typeof b[k] === "boolean") out[k] = b[k];
+    for (const k of ["dm", "group", "mention", "call", "friend", "invite", "preview"]) if (typeof b[k] === "boolean") out[k] = b[k];
     if (b.muted && typeof b.muted === "object") for (const [r, u] of Object.entries(b.muted).slice(0, 500)) if (/^@(dm|grp):/.test(r)) out.muted[r] = Number(u) || 0;
     if (b.quiet && typeof b.quiet === "object") out.quiet = { on: !!b.quiet.on, from: String(b.quiet.from || "23:00").slice(0, 5), to: String(b.quiet.to || "08:00").slice(0, 5), tz: Number(b.quiet.tz) || 0 };
     await setPushPrefs(me.login, out); pushPrefs.set(me.login, out); res.json({ ok: true });
