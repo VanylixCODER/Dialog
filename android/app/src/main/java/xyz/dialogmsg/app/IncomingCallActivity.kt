@@ -139,11 +139,13 @@ class IncomingCallActivity : Activity() {
     private fun onAnswer() {
         RingController.stop(this)
         clearNotif()
-        MainActivity.evalJs("window.__dialogCall && window.__dialogCall.answer()")
-        // Bring the chat app to the front so the user lands in the call.
+        // Bring the app forward WITH the call's room: MainActivity joins that exact call, whether the
+        // page is already running or has to cold-start first (the old evalJs did nothing then).
+        val room = intent.getStringExtra(EXTRA_ROOM) ?: ""
         runCatching {
             startActivity(Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("callRoom", room)
             })
         }
         finish()

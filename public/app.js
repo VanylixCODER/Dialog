@@ -6647,7 +6647,20 @@ function syncCallUI() {
 }
 // ---- Phone call bar (see #mcBar) ----
 function mcPeerNames() { return call.peers ? [...call.peers.values()].filter((m) => !m.unreachable).map((m) => m.name).filter(Boolean) : []; }
+// Android: keep the "on a call" notification current — who's in the call, call timer, mic state.
+let _ncKey = "";
+function pushNativeCall() {
+  if (!(NATIVE && NATIVE.callUpdate)) return;
+  if (!call.active) { _ncKey = ""; return; }
+  const names = mcPeerNames();
+  const title = names.length ? names.join(", ") : (call.roomTitle || t("call_dm"));
+  const sub = (call.roomKey || "").startsWith("@grp:") && call.roomTitle ? call.roomTitle : "";
+  const key = [title, sub, call.micOn, call.roomKey].join("|");
+  if (key === _ncKey) return; _ncKey = key;
+  try { NATIVE.callUpdate(title, sub, !!call.micOn, Number(_callStart) || Date.now(), call.roomKey || ""); } catch (e) {}
+}
 function renderMcBar() {
+  pushNativeCall();
   const bar = $("mcBar"); if (!bar) return;
   const show = !!(call.active && isMobile() && $("callStage").classList.contains("hidden"));
   bar.classList.toggle("hidden", !show);
@@ -7583,8 +7596,8 @@ function ntDesktop(title, body, room) {
   if (!NT.desktop || ntQuietNow() || document.visibilityState === "visible") return;
   try {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const n = new Notification(title, { body: NT.preview ? body : t("nt_hidden_body"), tag: "msg:" + (room || ""), silent: true });
-    n.onclick = () => { window.focus(); n.close(); };
+    const n = new Notification(title, { body: NT.preview ? body : t("nt_hidden_body"), tag: "msg:" + (room || ""), silent: true, data: { chatId: room || "", room: room || "" } });
+    n.onclick = () => { window.focus(); n.close(); if (room) openRoomByKey(room); };
   } catch {}
 }
 // Play one sound at a given volume (Settings preview). Loops get a 3 s taste.
@@ -8380,6 +8393,15 @@ function unregisterFcm() {
 // Native calls these back from the IncomingCallActivity buttons.
 window.__dialogCall = {
   answer() { $("toastJoin").onclick && $("toastJoin").onclick(); },
+  // "Answer" from the native call screen / notification: join THAT call, even if the ring popup
+  // never reached the page (app was closed or asleep).
+  answerRoom(room) {
+    if (call.active && call.roomKey === room) return;
+    if (pendingCall && pendingCall.room === room) { $("toastJoin").onclick(); return; }
+    if (!room) return;
+    hideToast(); openRoomByKey(room);
+    let n = 0; const go = () => { if (call.active) return; if (!socket.connected && ++n < 40) { setTimeout(go, 250); return; } joinCall(); }; setTimeout(go, 300);
+  },
   decline(room) { declineCall(room); },
   declineDnd(room) { declineCall(room); try { setMyStatus("dnd"); } catch (e) {} },
   // Ongoing-call notification actions (Mute / End).
@@ -8471,7 +8493,21 @@ function openRoomByKey(room, title) {
   const useTitle = title && !(kind === "dm" && (title === myName || title === profile.login)) ? title : "";
   openChat({ key: room, type: kind, login: partner, id: kind === "group" ? room.slice(5) : undefined, name: known || useTitle || (kind === "dm" ? partner : "Group"), last: "", ts: Date.now(), unread: 0 });
 }
-window.addEventListener("load", () => { const p = new URLSearchParams(location.search); const r = p.get("room"); if (r) setTimeout(() => { if (profile) { openRoomByKey(r); if (p.get("autojoin")) setTimeout(() => { if (!call.active) joinCall(); }, 1200); } }, 800); });
+// Opened from a notification / the native call screen: /app?room=<key>[&autojoin=1]. Wait for the
+// session to be ready (cold starts log in first), open exactly that chat, then join the call.
+window.addEventListener("load", () => {
+  const p = new URLSearchParams(location.search), r = p.get("room"); if (!r) return;
+  let tries = 0;
+  const go = () => {
+    if (!profile || !socket.connected) { if (++tries < 60) setTimeout(go, 250); return; }
+    openRoomByKey(r);
+    if (p.get("autojoin")) setTimeout(() => { if (!call.active) joinCall(); }, 600);
+    try { history.replaceState(null, "", location.pathname); } catch {}
+  };
+  setTimeout(go, 400);
+});
+// Desktop app: clicking a notification focuses the window and asks the page to open that chat.
+if (window.dialogDesktop && window.dialogDesktop.onNavigateChat) window.dialogDesktop.onNavigateChat((room) => { if (room) openRoomByKey(room); });
 
 // ---------- Соединение ----------
 let connEl;

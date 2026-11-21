@@ -27,6 +27,16 @@ class CallService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i) else ctx.startService(i)
         }
 
+        // Refresh the ongoing notification (participants, mic state, timer start, call room).
+        fun update(ctx: Context, title: String, sub: String, micOn: Boolean, startMs: Long, room: String) {
+            val i = Intent(ctx, CallService::class.java).apply {
+                action = ACTION_START
+                putExtra("title", title); putExtra("sub", sub)
+                putExtra("micOn", micOn); putExtra("startMs", startMs); putExtra("room", room)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i) else ctx.startService(i)
+        }
+
         fun stop(ctx: Context) {
             ctx.startService(Intent(ctx, CallService::class.java).apply { action = ACTION_STOP })
         }
@@ -40,7 +50,10 @@ class CallService : Service() {
             else -> {
                 val title = intent?.getStringExtra("title") ?: "On a call"
                 val sub = intent?.getStringExtra("sub") ?: ""
-                val notif = NotificationHelper(this).buildOngoingCall(title, sub)
+                val micOn = intent?.getBooleanExtra("micOn", true) ?: true
+                val startMs = intent?.getLongExtra("startMs", 0L) ?: 0L
+                val room = intent?.getStringExtra("room") ?: ""
+                val notif = NotificationHelper(this).buildOngoingCall(title, sub, micOn, startMs, room)
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         startForeground(

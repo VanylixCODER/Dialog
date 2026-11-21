@@ -30,12 +30,12 @@ class CallActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_CALL_ANSWER -> {
                 RingController.stop(context)
-                MainActivity.evalJs("window.__dialogCall && window.__dialogCall.answer()")
                 NotificationManagerCompat.from(context).cancel(NotificationHelper.INCOMING_ID)
                 IncomingCallActivity.dismiss(context)
                 runCatching {
                     context.startActivity(Intent(context, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("callRoom", arg)   // arg = the call's room key
                     })
                 }
             }

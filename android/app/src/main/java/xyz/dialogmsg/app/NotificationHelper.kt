@@ -153,18 +153,23 @@ class NotificationHelper(private val context: Context) {
     fun cancelIncoming() { manager.cancel(INCOMING_ID) }
 
     // Ongoing "On a call" notification used by CallService (Mute / End actions).
-    fun buildOngoingCall(title: String, sub: String): android.app.Notification {
-        return NotificationCompat.Builder(context, CHANNEL_CALLS)
+    // Title = who is in the call, a live timer (chronometer), a Mute/Unmute toggle and End.
+    fun buildOngoingCall(
+        title: String, sub: String, micOn: Boolean = true, startMs: Long = 0L, room: String = ""
+    ): android.app.Notification {
+        val b = NotificationCompat.Builder(context, CHANNEL_CALLS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title.ifBlank { "On a call" })
             .setContentText(sub.ifBlank { "Tap to return to the call" })
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)
-            .setContentIntent(openAppIntent(""))
-            .addAction(R.drawable.ic_notification, "Mute", actionIntent(CallActionReceiver.ACTION_CALL_MUTE, ""))
-            .addAction(R.drawable.ic_notification, "End", actionIntent(CallActionReceiver.ACTION_CALL_END, ""))
-            .build()
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openAppIntent(room))
+            .addAction(R.drawable.ic_notification, if (micOn) "Mute" else "Unmute", actionIntent(CallActionReceiver.ACTION_CALL_MUTE, ""))
+            .addAction(R.drawable.ic_notification, "End call", actionIntent(CallActionReceiver.ACTION_CALL_END, ""))
+        if (startMs > 0L) b.setWhen(startMs).setShowWhen(true).setUsesChronometer(true)
+        return b.build()
     }
 
     // Ongoing, minimal "running in background" notification for ConnectionService.

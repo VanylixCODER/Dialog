@@ -151,6 +151,13 @@ class WebAppInterface(
         CallService.start(context, title, sub)
     }
 
+    // The page keeps the "on a call" notification current: who's in the call, mic on/off, when it began.
+    @JavascriptInterface
+    fun callUpdate(title: String, sub: String, micOn: Boolean, startMs: Long, room: String) {
+        if (!MainActivity.isCallActive()) return
+        CallService.update(context, title, sub, micOn, startMs, room)
+    }
+
     @JavascriptInterface
     fun callEnded() {
         MainActivity.setCallActive(false)
