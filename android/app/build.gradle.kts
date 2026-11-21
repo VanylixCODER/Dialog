@@ -12,8 +12,8 @@ android {
         applicationId = "xyz.dialogmsg.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.1.7"
+        versionCode = 14
+        versionName = "1.1.8"
 
         // The hosted web app the WebView loads — straight into the messenger
         // (/login), never the marketing landing page.
